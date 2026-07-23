@@ -4,11 +4,12 @@
 
 The system SHALL seed the master catalogue from an explicitly supplied workbook path, normalize the
 supported catalogue fields, upsert by barcode, preserve unavailable CH2 values as null, and report
-inserted, updated, unchanged, retired, reinstated, and error counts. Development and automated tests
+inserted, updated, unchanged, retired, reinstated, skipped blank-row, and error counts. Blank rows
+SHALL NOT be conflated with unchanged catalogue entries. Development and automated tests
 MAY use the checked-in 100-row sample; production SHALL require an explicitly supplied full curated
 workbook.
 
-Each seed run SHALL persist exactly one append-only provenance record capturing a monotonically
+Each successful live seed run SHALL persist exactly one append-only provenance record capturing a monotonically
 increasing version, the time seeded, the source workbook file name, and the full diff of the run.
 The provenance record and the catalogue it describes are global reference data and SHALL NOT be
 org-scoped. A seed run SHALL execute atomically: a mid-run failure SHALL leave neither a partial
@@ -30,6 +31,14 @@ exists and a live run's retirement set exceeds a configurable proportion of the 
 (default 10%), the run SHALL abort without mutating the catalogue or recording a provenance row
 unless retirement is explicitly confirmed. The first seed of an empty catalogue SHALL NOT be
 blocked by this guard regardless of how many entries it inserts.
+
+Malformed rows and duplicate normalized barcodes SHALL be validation errors. A dry-run SHALL report
+them alongside the prospective diff without writes. A live seed with any validation error SHALL
+throw a structured `CatalogueSeedValidationError` before opening a write transaction, and therefore
+SHALL NOT mutate catalogue data or persist provenance. Under this v1 fail-closed policy, persisted
+provenance `errorCount` SHALL be zero. `MASTER_CATALOGUE_RETIREMENT_THRESHOLD` SHALL default to
+`0.10`; configured malformed, negative, or greater-than-1 values SHALL be rejected, and a retirement
+ratio exactly equal to the threshold SHALL be allowed.
 
 #### Scenario: Re-running the same workbook is idempotent
 
@@ -80,6 +89,20 @@ blocked by this guard regardless of how many entries it inserts.
 - **WHEN** it is seeded with retirement explicitly confirmed
 - **THEN** the run proceeds, retiring the omitted entries and recording a provenance row
 
+#### Scenario: An invalid live workbook aborts before writing
+
+- **GIVEN** a workbook containing a malformed row or duplicate normalized barcode
+- **WHEN** it is seeded live
+- **THEN** `CatalogueSeedValidationError` reports the row and duplicate errors
+- **AND** no catalogue entry or provenance row is written
+
+#### Scenario: The operator previews or confirms a seed from npm
+
+- **WHEN** the operator runs `npm run seed:master-catalogue -- <workbook-path> --dry-run`
+- **THEN** the JSON dry-run result is printed without writes
+- **AND WHEN** an intentional over-threshold live seed is rerun with `--confirm-retirements`
+- **THEN** the confirmed seed is allowed to proceed
+
 ### Requirement: A curated master catalogue maps products to brand and supplier
 
 The system SHALL maintain a provider-curated master catalogue, keyed by barcode, that records each
@@ -112,6 +135,12 @@ with the catalogue's brand and a suggested supplier; an unmatched item SHALL sur
 - **THEN** the product does not match the retired entry
 - **AND** it surfaces in the "needs brand" state unless another active entry matches
 
+#### Scenario: An active shared-SKU entry wins independently of row order
+
+- **GIVEN** active and retired catalogue entries share the same wholesaler SKU
+- **WHEN** an uploaded product is enriched in either backend
+- **THEN** the active catalogue entry matches regardless of database row order
+
 #### Scenario: An unmatched item lands in needs-brand
 
 - **GIVEN** an uploaded product whose barcode and SKU match no active catalogue entry
@@ -123,12 +152,15 @@ with the catalogue's brand and a suggested supplier; an unmatched item SHALL sur
 ### Requirement: A platform administrator can review catalogue seed provenance
 
 The system SHALL expose the master-catalogue seed provenance to platform administrators only,
-returning the latest seed run and a bounded, newest-first history of prior runs, each with its
+returning the latest seed run and at most 20 newest-first prior runs, each with its
 version, time seeded, source workbook file name, and diff counts (inserted, updated, unchanged,
 retired, reinstated, errors). Authorization SHALL reuse the numeric `PLATFORM_ADMIN_USER_IDS`
 allowlist that gates central correction review; missing, blank, non-numeric, or otherwise malformed
 configuration SHALL deny access. The read SHALL be global and SHALL NOT be org-scoped, and both
-backend implementations SHALL return the same representation.
+backend implementations SHALL return the same representation with ISO date strings and numeric
+counts. Both organization-bootstrap responses SHALL expose `isPlatformAdmin`, derived from the
+bootstrapped numeric database user ID through the same fail-closed allowlist logic. This capability
+is for navigation and route presentation only; each platform endpoint SHALL authorize independently.
 
 #### Scenario: Missing platform allowlist denies provenance access
 
@@ -142,6 +174,12 @@ backend implementations SHALL return the same representation.
 - **WHEN** the administrator requests catalogue seed provenance
 - **THEN** the latest run and a newest-first history are returned
 - **AND** each run includes its version, time seeded, source file name, and diff counts
+
+#### Scenario: Bootstrap capability fails closed
+
+- **GIVEN** a missing, blank, zero, negative, mixed-validity, or non-numeric platform allowlist
+- **WHEN** an authenticated user bootstraps an organization
+- **THEN** `isPlatformAdmin` is false
 
 ### Requirement: A platform administrator triages catalogue corrections from a dedicated surface
 

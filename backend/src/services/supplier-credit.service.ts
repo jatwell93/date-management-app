@@ -423,6 +423,10 @@ export class SupplierCreditService {
     });
   }
 
+  getCatalogueProvenance() {
+    return this.repo.getCatalogueProvenance();
+  }
+
   async reviewCatalogueCorrection(id: number, status: 'ACCEPTED' | 'REJECTED') {
     if (status !== 'ACCEPTED' && status !== 'REJECTED') {
       throw new ValidationError('Correction status must be ACCEPTED or REJECTED');

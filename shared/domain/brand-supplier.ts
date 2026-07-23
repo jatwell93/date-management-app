@@ -118,6 +118,7 @@ export interface CatalogueMatchEntry {
   apiSku: string | null;
   sigmaSku: string | null;
   ch2Sku: string | null;
+  retiredAt?: Date | string | null;
 }
 
 export interface CatalogueMatchInput {
@@ -141,7 +142,11 @@ export function matchByBarcode<T extends CatalogueMatchEntry>(
 ): T | null {
   const normalized = normalizeBarcode(barcode);
   if (!normalized) return null;
-  return entries.find((entry) => normalizeBarcode(entry.barcode) === normalized) ?? null;
+  return (
+    entries.find(
+      (entry) => entry.retiredAt == null && normalizeBarcode(entry.barcode) === normalized,
+    ) ?? null
+  );
 }
 
 export function matchByWholesalerSku<T extends CatalogueMatchEntry>(
@@ -151,11 +156,13 @@ export function matchByWholesalerSku<T extends CatalogueMatchEntry>(
   const normalized = normalizeCatalogueSku(sku);
   if (!normalized) return null;
 
-  const matches = entries.filter((entry) =>
-    [entry.apiSku, entry.sigmaSku, entry.ch2Sku].some(
-      (candidate) => normalizeCatalogueSku(candidate) === normalized,
-    ),
-  );
+  const matches = entries
+    .filter((entry) => entry.retiredAt == null)
+    .filter((entry) =>
+      [entry.apiSku, entry.sigmaSku, entry.ch2Sku].some(
+        (candidate) => normalizeCatalogueSku(candidate) === normalized,
+      ),
+    );
   return matches.length === 1 ? matches[0] : null;
 }
 

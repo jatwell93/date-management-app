@@ -179,6 +179,61 @@ describe('brand-supplier shared domain', () => {
       expect(matchCatalogueEntry(entries, { barcode: null, sku: 'duplicate' })).toBeNull();
     });
 
+    it('completely excludes retired barcode and SKU candidates before matching', () => {
+      const candidates = [
+        {
+          id: 10,
+          barcode: '9300000000010',
+          apiSku: 'SHARED',
+          sigmaSku: null,
+          ch2Sku: null,
+          retiredAt: new Date('2026-07-01T00:00:00.000Z'),
+        },
+        {
+          id: 11,
+          barcode: '9300000000011',
+          apiSku: 'SHARED',
+          sigmaSku: null,
+          ch2Sku: null,
+          retiredAt: null,
+        },
+      ];
+
+      expect(matchByBarcode(candidates, '9300000000010')).toBeNull();
+      expect(matchByWholesalerSku(candidates, 'SHARED')?.id).toBe(11);
+      expect(matchByWholesalerSku([...candidates].reverse(), 'SHARED')?.id).toBe(11);
+    });
+
+    it('keeps multiple active shared SKUs ambiguous after filtering retired rows', () => {
+      const candidates = [
+        {
+          id: 10,
+          barcode: '10',
+          apiSku: 'SHARED',
+          sigmaSku: null,
+          ch2Sku: null,
+          retiredAt: null,
+        },
+        {
+          id: 11,
+          barcode: '11',
+          apiSku: 'SHARED',
+          sigmaSku: null,
+          ch2Sku: null,
+          retiredAt: null,
+        },
+        {
+          id: 12,
+          barcode: '12',
+          apiSku: 'SHARED',
+          sigmaSku: null,
+          ch2Sku: null,
+          retiredAt: new Date(),
+        },
+      ];
+      expect(matchByWholesalerSku(candidates, 'SHARED')).toBeNull();
+    });
+
     it('treats blank barcode and SKU values as misses', () => {
       expect(matchByBarcode(entries, '   ')).toBeNull();
       expect(matchByWholesalerSku(entries, '')).toBeNull();

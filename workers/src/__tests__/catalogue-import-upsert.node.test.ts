@@ -105,6 +105,48 @@ async function countProducts(org: string): Promise<number> {
 }
 
 describe('processCatalogueImportJob (real SQL via pglite)', () => {
+  it('ignores retired barcode and SKU matches while allowing an active shared SKU', async () => {
+    await harness.pg.query(
+      `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,
+      [ORG],
+    );
+    await harness.pg.query(`
+      INSERT INTO master_catalogue_entries
+        (barcode, description, api_sku, brand_name, retired_at)
+      VALUES
+        ('RETIRED-BARCODE', 'Retired barcode', 'RETIRED-SKU', 'Retired Brand', NOW()),
+        ('ACTIVE-BARCODE', 'Active shared SKU', 'RETIRED-SKU', 'Active Brand', NULL)
+    `);
+    const csv = [
+      'SKU,Name,Barcode,Cost',
+      'NO-SKU-MATCH,Retired barcode,RETIRED-BARCODE,1.00',
+      'RETIRED-SKU,Active shared SKU,STORE-BARCODE,1.00',
+      '',
+    ].join('\n');
+    const { env } = makeEnv(csv);
+    await processCatalogueImportJob(await insertUpload(), env, harness.db);
+
+    const products = await harness.pg.query(
+      `SELECT p.sku, b.name AS brand_name
+       FROM products p
+       LEFT JOIN brands b ON b.id = p.brand_id
+       WHERE p.organization_id = $1
+       ORDER BY p.sku`,
+      [ORG],
+    );
+    expect(products.rows).toEqual([
+      expect.objectContaining({ sku: 'NO-SKU-MATCH', brand_name: null }),
+      expect.objectContaining({ sku: 'RETIRED-SKU', brand_name: 'Active Brand' }),
+    ]);
+    const corrections = await harness.pg.query(
+      `SELECT barcode, kind FROM catalogue_corrections WHERE organization_id = $1`,
+      [ORG],
+    );
+    expect(corrections.rows).toEqual([
+      { barcode: 'RETIRED-BARCODE', kind: 'UNMATCHED' },
+    ]);
+  });
+
   it('enriches by barcode then wholesaler SKU, reuses org brands, and records true misses', async () => {
     await harness.pg.query(
       `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,

@@ -19,7 +19,7 @@ reversible.
 MasterCatalogueEntry (global, read-only reference, keyed on barcode)
   + retiredAt: DateTime?      // NULL = active; set = dropped from the latest seed
 
-CatalogueSeedRun (global, append-only)
+CatalogueSeedRun (global, append-only; successful live runs only)
   id, version (monotonic int, unique), seededAt, sourceFileName,
   inserted, updated, unchanged, retired, reinstated, errorCount
 ```
@@ -31,10 +31,15 @@ auth. Tenants never read `CatalogueSeedRun`; only the platform admin does.
 
 ## Seed algorithm (the superseding change)
 
-`seedMasterCatalogue(workbookPath)` becomes convergent rather than purely additive:
+`seedMasterCatalogue(workbookPath, { dryRun?, confirmRetirements? })` becomes convergent rather than
+purely additive. Parsing is a preflight: blank rows increment `skippedBlankRows`, while malformed
+rows and duplicate normalized barcodes are validation errors. A dry-run returns those errors and
+the prospective diff without writes; a live run throws `CatalogueSeedValidationError` before
+opening a write transaction when any validation error exists.
 
 ```
-parsed      = parseMasterCatalogueWorkbook(path)         # unchanged
+parsed      = parseMasterCatalogueWorkbook(path)
+validate malformed rows and duplicate normalized barcodes
 workbookBarcodes = set(parsed.entries.barcode)
 
 for entry in parsed.entries:                             # forward pass (existing loop, extended)
@@ -85,6 +90,12 @@ Key properties:
 The whole run executes in one transaction so a mid-seed failure neither half-retires the catalogue
 nor records a misleading run.
 
+`MasterCatalogueSeedResult` returns `inserted`, `updated`, `unchanged`, `retired`, `reinstated`,
+`skippedBlankRows`, `errorCount`, `errors`, sorted `retiredBarcodes`, and `dryRun`. It never
+conflates blank workbook rows with unchanged database entries. Because live validation and threshold
+failures abort before mutation, no provenance row is written for them and persisted `errorCount`
+is zero in v1.
+
 ## Mass-retirement guardrail
 
 The reverse pass is powerful in the wrong direction: seed a partial or wrong workbook and every
@@ -117,12 +128,20 @@ seedMasterCatalogue(workbookPath, { dryRun?, confirmRetirements? })
   by re-running with `confirmRetirements` after a dry-run confirms the intent.
 - `RetirementThresholdExceeded` is a structured error carrying the counts so the invocation can
   surface exactly what it refused to do.
+- `MASTER_CATALOGUE_RETIREMENT_THRESHOLD` defaults to `0.10`, but malformed, negative, or
+  greater-than-1 configured values are rejected. Only a proportion strictly greater than the
+  threshold requires confirmation; equality is allowed.
+- `npm run seed:master-catalogue -- <workbook-path> --dry-run` prints the JSON preview. A live
+  over-threshold run exits non-zero unless rerun with `--confirm-retirements`.
 
 ## Matching excludes retired entries (dual-backend parity)
 
 Retirement is meaningless unless retired rows stop matching. Both matchers gain a retired filter:
 
-- `shared/domain/*`: `matchByBarcode` / `matchByWholesalerSku` skip entries with `retiredAt != null`.
+- `shared/domain/*`: `matchByBarcode` / `matchByWholesalerSku` skip entries with `retiredAt != null`
+  before candidate selection, making results independent of row order.
+- Express raw SQL: the complete barcode-or-SKU predicate is parenthesized and combined with
+  `retired_at IS NULL`.
 - Worker SQL: `AND retired_at IS NULL` on the barcode and wholesaler-SKU lookups.
 - Conformance test (golden rule 5): a retired barcode, and a retired wholesaler-SKU-only hit, both
   fall through to the "needs brand" bucket identically across Neon/pglite and SQLite, including a
@@ -131,13 +150,19 @@ Retirement is meaningless unless retired rows stop matching. Both matchers gain 
 ## Provenance read & triage surface
 
 - **Read endpoint** (backend + worker parity): platform-admin-gated
-  `GET /platform/catalogue/provenance` → `{ latest: CatalogueSeedRun | null, history: CatalogueSeedRun[] }`
-  (bounded, newest-first). Authorized by the **same** `PLATFORM_ADMIN_USER_IDS` numeric-allowlist
+  `GET /api/platform/catalogue/provenance` →
+  `{ latest: CatalogueSeedRunDto | null, history: CatalogueSeedRunDto[] }`. Reads fetch 21 rows by
+  `version DESC`; `latest` is the first and `history` contains at most 20 prior rows. Dates are ISO
+  strings and numeric SQL fields are normalized to numbers. Authorized by the **same**
+  `PLATFORM_ADMIN_USER_IDS` numeric-allowlist
   guard already applied to `platformCatalogueCorrectionRouter`; missing/malformed config fails
   closed. No org scoping (global data).
 - **Correction triage** reuses the existing `GET /catalogue-corrections` +
   `PATCH /catalogue-corrections/:id`; no new backend contract, only a UI.
-- **Frontend:** one platform-admin route behind the existing allowlist-gated guard, with two sibling
+- **Bootstrap capability:** Express and Worker organization bootstrap responses include
+  `isPlatformAdmin`, computed from the numeric database user ID through one shared fail-closed
+  helper. It only controls presentation/navigation; platform endpoints authorize every request.
+- **Frontend:** one `/platform/catalogue` route behind the bootstrap capability guard, with two sibling
   panels — provenance/version history (latest version, seededAt, sourceFileName, the diff, and a
   retired-count callout) and the `PENDING` correction queue with batch accept/reject.
 
@@ -196,7 +221,7 @@ reference table**. Recorded so the omissions are intentional, not oversights:
 - `shared/domain/brand-supplier.ts`: retired-aware `matchByBarcode` / `matchByWholesalerSku`.
 - Conformance test compares Worker SQL vs SQLite/Express matching for retired barcode, retired
   wholesaler-SKU fallthrough, and active-wins-over-retired shared-SKU.
-- Schema triplicated: Prisma base + production, Neon SQL `0008` (+ rollback), SQLite `018`, pglite
+- Schema triplicated: Prisma base + production, Neon SQL `0009` (+ rollback), SQLite `019`, pglite
   harness — `retiredAt` and `CatalogueSeedRun` kept in sync across all four.
 
 ## Risks / open questions

@@ -19,6 +19,10 @@ import {
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
 import type { CreditType } from '../../shared/domain/supplier-policy';
 import {
+  buildCatalogueProvenanceResponse,
+  type CatalogueProvenanceResponse,
+} from '../../shared/domain/platform-catalogue';
+import {
   resolveSupplierContext,
   type CatalogueReviewState,
 } from '../../shared/domain/brand-supplier';
@@ -150,6 +154,7 @@ export interface Database {
     cursor?: number;
     limit: number;
   }): Promise<{ items: CatalogueCorrection[]; nextCursor: number | null }>;
+  getCatalogueProvenance(): Promise<CatalogueProvenanceResponse>;
   reviewCatalogueCorrection(
     id: number,
     status: 'ACCEPTED' | 'REJECTED',
@@ -428,6 +433,7 @@ export interface CatalogueCorrection {
   barcode: string | null;
   enteredBrandName: string | null;
   chosenSupplierId: number | null;
+  chosenSupplier: { id: number; name: string } | null;
   kind: string;
   status: string;
   createdByUserId: number | null;
@@ -1805,9 +1811,11 @@ export function createWorkersDatabase(env: Env): Database {
                cc.entered_brand_name AS "enteredBrandName",
                cc.chosen_supplier_id AS "chosenSupplierId", cc.kind, cc.status,
                cc.created_by_user_id AS "createdByUserId", cc.created_at AS "createdAt",
-               o.name AS "organizationName"
+               o.name AS "organizationName",
+               s.id AS "chosenSupplierRecordId", s.name AS "chosenSupplierName"
         FROM catalogue_corrections cc
         JOIN organizations o ON o.id = cc.organization_id
+        LEFT JOIN suppliers s ON s.id = cc.chosen_supplier_id
         WHERE cc.status = ${options.status} AND cc.id > ${cursor}
         ORDER BY cc.id ASC LIMIT ${options.limit + 1}
       `) as Array<Record<string, unknown>>;
@@ -1822,6 +1830,13 @@ export function createWorkersDatabase(env: Env): Database {
           barcode: (row.barcode as string | null) ?? null,
           enteredBrandName: (row.enteredBrandName as string | null) ?? null,
           chosenSupplierId: row.chosenSupplierId == null ? null : Number(row.chosenSupplierId),
+          chosenSupplier:
+            row.chosenSupplierRecordId == null
+              ? null
+              : {
+                  id: Number(row.chosenSupplierRecordId),
+                  name: String(row.chosenSupplierName),
+                },
           kind: String(row.kind),
           status: String(row.status),
           createdByUserId: row.createdByUserId == null ? null : Number(row.createdByUserId),
@@ -1833,6 +1848,30 @@ export function createWorkersDatabase(env: Env): Database {
         })),
         nextCursor: hasMore ? Number(page[page.length - 1]?.id) : null,
       };
+    },
+
+    async getCatalogueProvenance() {
+      const rows = (await sql`
+        SELECT id, version, seeded_at AS "seededAt",
+               source_file_name AS "sourceFileName",
+               inserted, updated, unchanged, retired, reinstated,
+               error_count AS "errorCount"
+        FROM catalogue_seed_runs
+        ORDER BY version DESC
+        LIMIT 21
+      `) as Array<{
+        id: number | string;
+        version: number | string;
+        seededAt: Date | string;
+        sourceFileName: string;
+        inserted: number | string;
+        updated: number | string;
+        unchanged: number | string;
+        retired: number | string;
+        reinstated: number | string;
+        errorCount: number | string;
+      }>;
+      return buildCatalogueProvenanceResponse(rows);
     },
 
     async reviewCatalogueCorrection(id, status) {

@@ -8,17 +8,13 @@ import {
   type SupplierInput,
 } from '../services/supplier-credit.service';
 import { AuthenticationError, AuthorizationError } from '../errors';
+import { isPlatformAdminUser as isSharedPlatformAdminUser } from '../../../shared/domain/platform-catalogue';
 
 export function isPlatformAdminUser(
   userId: number | undefined,
   configuration = process.env.PLATFORM_ADMIN_USER_IDS,
 ): boolean {
-  if (userId == null || !configuration) return false;
-  const tokens = configuration.split(',').map((token) => token.trim());
-  if (tokens.length === 0 || tokens.some((token) => !/^[1-9]\d*$/.test(token))) {
-    return false;
-  }
-  return tokens.map(Number).includes(userId);
+  return isSharedPlatformAdminUser(userId, configuration);
 }
 
 export class SupplierCreditController {
@@ -231,6 +227,15 @@ export class SupplierCreditController {
           limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined,
         }),
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getCatalogueProvenance(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      this.requirePlatformAdmin(req);
+      res.json(await this.getService(req).getCatalogueProvenance());
     } catch (error) {
       next(error);
     }

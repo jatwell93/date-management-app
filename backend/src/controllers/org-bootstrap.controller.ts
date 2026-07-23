@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { isPlatformAdminUser } from '../../../shared/domain/platform-catalogue';
 import { isBaseError } from '../errors';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
@@ -47,6 +48,7 @@ export class OrgBootstrapController {
         isNewOrg: result.isNewOrg,
         isNewUser: result.isNewUser,
         isFirstAdmin: result.isFirstAdmin,
+        isPlatformAdmin: isPlatformAdminUser(result.userId, process.env.PLATFORM_ADMIN_USER_IDS),
       });
     } catch (error) {
       this.handleError(error, res, 'Bootstrap failed');

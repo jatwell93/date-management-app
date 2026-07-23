@@ -26,10 +26,12 @@ questions from inside the app**:
 
 Close the seed → review → re-seed loop for the platform operator, in three parts:
 
-- **Persisted seed-run provenance.** Every `seedMasterCatalogue` run records a `CatalogueSeedRun`
+- **Persisted seed-run provenance.** Every successful live `seedMasterCatalogue` run records a `CatalogueSeedRun`
   row: a monotonic `version`, `seededAt`, `sourceFileName`, and the full diff
-  (`inserted / updated / unchanged / retired / errorCount`). The `MasterCatalogueSeedResult` the
-  service already computes is persisted rather than discarded.
+  (`inserted / updated / unchanged / retired / reinstated / errorCount`). The
+  `MasterCatalogueSeedResult` also separates benign `skippedBlankRows` from unchanged catalogue
+  entries and carries structured validation errors. Under the v1 fail-closed policy, invalid live
+  attempts abort before writing, so persisted `errorCount` is always zero.
 - **Retirement instead of orphaning (decision (b)).** A barcode present in the database but **absent
   from the newly seeded workbook** is soft-retired: a nullable `retiredAt` is stamped on
   `MasterCatalogueEntry`. Retired entries are **excluded from all import matching** in both backends
@@ -52,8 +54,8 @@ Close the seed → review → re-seed loop for the platform operator, in three p
     catalogue is global read-only reference data and seeding is a platform operation, so no
     `organizationId` (a deliberate, documented exception to golden rule 1, consistent with
     `MasterCatalogueEntry` already being global).
-  - Prisma base + production, Neon SQL `0008` (+ rollback), runtime SQLite migration
-    `018-add-catalogue-provenance`, pglite harness.
+  - Prisma base + production, Neon SQL `0009_add_catalogue_provenance` (+ rollback), runtime SQLite
+    migration `019-add-catalogue-provenance`, pglite harness.
 - **Seed safety guardrail (dry-run + retirement threshold):** `seedMasterCatalogue` accepts a
   **dry-run** mode that parses the workbook, computes the full diff (including the exact set that
   would be retired), and returns it **without mutating the catalogue or recording a run** — so the
@@ -62,19 +64,26 @@ Close the seed → review → re-seed loop for the platform operator, in three p
   without any mutation** unless explicitly confirmed, guarding against the foot-gun of accidentally
   seeding a partial/wrong workbook and mass-retiring real entries. The guard only engages when a
   prior catalogue exists (the first seed retires nothing). Exposed as service options
-  (`{ dryRun, confirmRetirements }`) that the seeding invocation passes through; no new CLI is built
-  here.
+  (`{ dryRun, confirmRetirements }`) and a minimal npm-backed operator command supporting
+  `--dry-run` and `--confirm-retirements`.
+- **Workbook validation is fail-closed:** blank rows are counted separately, while malformed rows
+  and duplicate normalized barcodes are reported by dry-runs but abort live runs before any write
+  transaction or provenance insert.
 - **Seed service:** compute the retired set (DB-active barcodes minus workbook barcodes) and stamp
   `retiredAt`; clear `retiredAt` when a retired barcode reappears; persist one `CatalogueSeedRun`
   per run with the full diff and next `version`. `retired` and `reinstated` counts added to
   `MasterCatalogueSeedResult`.
 - **Matching excludes retired entries (dual-backend, golden rule 5):** `matchByBarcode` and
   `matchByWholesalerSku` in `shared/domain/*` skip `retiredAt != null`; Worker SQL adds
-  `AND retired_at IS NULL`; conformance test covers a retired barcode and a retired wholesaler-SKU
-  hit falling through to "needs brand".
+  `AND retired_at IS NULL`; Express's raw enrichment SQL parenthesizes its barcode-or-SKU predicate
+  and combines it with `retired_at IS NULL`; conformance tests cover a retired barcode and a
+  retired wholesaler-SKU hit falling through to "needs brand".
 - **Read endpoint (backend + worker parity):** platform-admin-gated catalogue provenance read —
   latest run plus recent history (version, seededAt, sourceFileName, diff counts). Reuses the
   `PLATFORM_ADMIN_USER_IDS` allowlist authorization already applied to `platformCatalogueCorrectionRouter`.
+- **Bootstrap capability:** both organization-bootstrap responses expose `isPlatformAdmin`, derived
+  from the bootstrapped numeric database user ID using one shared fail-closed allowlist helper. This
+  is a presentation capability only; every platform endpoint remains independently authorized.
 - **Frontend:** a platform-admin surface with the provenance/version-history panel and the
   correction triage queue (list `PENDING`, accept/reject, batch select), reusing the existing
   correction endpoints and the allowlist-gated route guard.
@@ -110,7 +119,8 @@ on top of the existing allowlist.
   triage UI and the new provenance read — one authorization primitive.
 - **Extend `matchByBarcode` / `matchByWholesalerSku`** in `shared/domain/*` with a retired filter;
   do not fork a second matcher. Worker SQL adds one predicate.
-- **Frontend:** a platform-admin route reusing the existing allowlist-gated guard; provenance and
+- **Frontend:** a platform-admin route guarded by the bootstrap `isPlatformAdmin` capability;
+  provenance and
   triage as sibling panels rather than a new app section.
 
 ## Guardrails
@@ -122,19 +132,23 @@ on top of the existing allowlist.
   its history intact.
 - The platform read/triage endpoints fail closed on missing/malformed `PLATFORM_ADMIN_USER_IDS`,
   identically to the existing correction-review route.
+- `MASTER_CATALOGUE_RETIREMENT_THRESHOLD` defaults to `0.10`; malformed, negative, or greater-than-1
+  values are configuration errors rather than silently falling back.
 - Retirement changes matching in **both** backends together, guarded by a dual-backend conformance
   test (golden rule 5); schema stays triplicated (golden rule 6).
 
 ## Implementation steps
 
-1. Shared domain: retired-aware `matchByBarcode` / `matchByWholesalerSku`; unit tests.
-2. Schema (triplicated): `MasterCatalogueEntry.retiredAt`, `CatalogueSeedRun`; Neon SQL `0008`
-   (+ rollback), SQLite `018`, pglite harness; dual-backend conformance for retired matching.
+1. Schema (triplicated): `MasterCatalogueEntry.retiredAt`, `CatalogueSeedRun`; Neon SQL `0009`
+   (+ rollback), SQLite `019`, pglite harness.
+2. Shared domain and production matching: retired-aware shared matchers, Express raw SQL, Worker
+   barcode and SKU CTEs; dual-backend conformance for retired matching.
 3. Seed service: retired-set computation + reinstatement + `CatalogueSeedRun` persistence with
    monotonic `version`; extend `MasterCatalogueSeedResult` with `retired` / `reinstated`; add the
    dry-run mode and the retirement-threshold guard (`{ dryRun, confirmRetirements }`).
-4. Backend: platform-admin-gated provenance read (latest + history); reuse the allowlist guard.
-5. Workers: parity provenance read + retired-filtered matching SQL.
+4. Operator command: npm-backed seed script with dry-run and confirmation flags.
+5. Backend and Workers: shared platform-admin helper, bootstrap capability, and parity provenance
+   read (latest + at most 20 prior history rows).
 6. Frontend: platform-admin surface — provenance/version-history panel + correction triage queue.
 7. Tests: shared units; dual-backend conformance (retired matching); seed-run provenance +
    retirement + reinstatement; provenance-read auth (allowlist fail-closed); frontend panels.

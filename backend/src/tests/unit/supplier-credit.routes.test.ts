@@ -60,9 +60,10 @@ describe('supplier credit route wiring', () => {
     );
   });
 
-  it('exposes only correction review operations on the platform router', () => {
+  it('exposes correction review and provenance operations on the platform router', () => {
     expect(routes(platformCatalogueCorrectionRouter)).toEqual([
       'GET /catalogue-corrections',
+      'GET /catalogue/provenance',
       'PATCH /catalogue-corrections/:id',
     ]);
   });

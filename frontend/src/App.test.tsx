@@ -42,7 +42,12 @@ let mockOrgBootstrapState = {
   isBootstrapped: true,
   isBootstrapping: false,
   bootstrapError: null as string | null,
-  bootstrapResult: null as { userId: number; role: RoleValue; organizationId?: string } | null,
+  bootstrapResult: null as {
+    userId: number;
+    role: RoleValue;
+    organizationId?: string;
+    isPlatformAdmin?: boolean;
+  } | null,
   retry: vi.fn(),
 };
 
@@ -236,6 +241,37 @@ describe('App navigation', () => {
 
     const nav = screen.getByRole('navigation');
     expect(within(nav).queryByText('CSV Upload')).not.toBeInTheDocument();
+  });
+
+  it('shows platform catalogue navigation only for the bootstrap capability', () => {
+    mockSignedInContext();
+    mockOrgBootstrapState = {
+      isBootstrapped: true,
+      isBootstrapping: false,
+      bootstrapError: null,
+      bootstrapResult: {
+        userId: 1,
+        role: 'admin',
+        organizationId: 'org-platform',
+        isPlatformAdmin: true,
+      },
+      retry: vi.fn(),
+    };
+
+    render(<App />);
+
+    expect(
+      within(screen.getByRole('navigation')).getAllByText('Platform Catalogue'),
+    ).not.toHaveLength(0);
+  });
+
+  it('blocks direct non-platform catalogue access', () => {
+    window.history.pushState({}, '', '/platform/catalogue');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(screen.queryByText('Catalogue provenance and triage')).not.toBeInTheDocument();
   });
 
   it('uses the current bootstrap role when Clerk token does not include a numeric user id', () => {

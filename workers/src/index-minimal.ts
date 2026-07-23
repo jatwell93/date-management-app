@@ -73,6 +73,7 @@ import {
   type MarkdownMatrixSet,
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
+import { isPlatformAdminUser as isSharedPlatformAdminUser } from '../../shared/domain/platform-catalogue';
 import {
   isCreditType,
   isPolicyWrite,
@@ -256,6 +257,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/supplier-credits/recovery-report', handleGetRecoveryReport],
   ['GET', '/api/supplier-credits/claims', handleListCreditClaims],
   ['GET', '/api/platform/catalogue-corrections', handleListCatalogueCorrections],
+  ['GET', '/api/platform/catalogue/provenance', handleGetCatalogueProvenance],
   ['PATCH', RE_PLATFORM_CATALOGUE_CORRECTION, handleReviewCatalogueCorrection, 'path'],
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
@@ -1928,10 +1930,7 @@ export function isPlatformAdminUser(
   userId: number | undefined,
   configuration: string | undefined,
 ): boolean {
-  if (userId == null || !configuration) return false;
-  const tokens = configuration.split(',').map((token) => token.trim());
-  if (tokens.length === 0 || tokens.some((token) => !/^[1-9]\d*$/.test(token))) return false;
-  return tokens.map(Number).includes(userId);
+  return isSharedPlatformAdminUser(userId, configuration);
 }
 
 async function handleListBrands(request: Request, db: Database, env: Env): Promise<Response> {
@@ -2119,6 +2118,19 @@ async function handleListCatalogueCorrections(
     200,
     env,
   );
+}
+
+async function handleGetCatalogueProvenance(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (!isPlatformAdminUser(auth.userId, env.PLATFORM_ADMIN_USER_IDS)) {
+    return errorResponse('Platform catalogue review access required', 403, env);
+  }
+  return jsonResponse(await db.getCatalogueProvenance(), 200, env);
 }
 
 async function handleReviewCatalogueCorrection(
