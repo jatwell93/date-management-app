@@ -29,9 +29,13 @@ export class ProductRepository {
     limit?: number,
     offset?: number,
     tx?: DbClient,
-  ): Promise<Product[]> {
+  ): Promise<ProductWithCreditRelations[]> {
+    // Include supplier/brand so mapPrismaToModel can resolve an accurate creditScope
+    // on the GET /products list, matching findById/findByBarcode/findBySku. Without
+    // this the list would emit a hardcoded NO_CREDIT for every product.
     return this.getClient(tx).product.findMany({
       where: { organizationId },
+      include: creditContextInclude,
       ...(limit !== undefined && { take: limit }),
       ...(offset !== undefined && { skip: offset }),
     });
@@ -78,6 +82,10 @@ export class ProductRepository {
     });
   }
 
+  // Deliberately does NOT include supplier/brand relations: callers use this only to
+  // resolve product identity (id/sku/barcode) during CSV/XLSX import, and the derived
+  // creditScope is discarded. Adding credit-context joins to this per-row import
+  // lookup would cost query time for a value nothing reads.
   async findBySkuOrBarcode(
     sku: string,
     barcode: string,

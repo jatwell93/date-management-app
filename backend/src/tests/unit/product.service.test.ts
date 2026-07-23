@@ -23,6 +23,13 @@ import {
   extractCostValueEnhanced,
 } from '../../services/product.service';
 
+// Mirrors ProductRepository.creditContextInclude — the relations findAll now loads so
+// mapPrismaToModel can resolve an accurate creditScope on the GET /products list.
+const creditContextInclude = {
+  supplier: true,
+  brand: { include: { supplier: true } },
+};
+
 describe('ProductService with organizationId', () => {
   let productService: ProductService;
   let mockPrisma: any;
@@ -86,6 +93,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId,
         },
+        include: creditContextInclude,
       });
     });
 
@@ -98,6 +106,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId,
         },
+        include: creditContextInclude,
         take: 10,
         skip: 20,
       });
@@ -486,6 +495,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId: customOrgId,
         },
+        include: creditContextInclude,
       });
     });
 
@@ -500,6 +510,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId: 'default-org', // From getOrganizationId default
         },
+        include: creditContextInclude,
       });
     });
   });
