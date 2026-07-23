@@ -137,13 +137,17 @@ npm run mem:rebuild                                   # rebuild local index afte
 
 ### Search & Refactor: When to Use What
 
+Pick the tool by the *question*, not by habit. For everyday "where is this string/symbol" lookups, `ripgrep` is the default and the fastest — reach for `mgrep` or `ast-grep` only when the question is genuinely semantic or structural.
+
 | Scenario | Tool | Why |
 | --- | --- | --- |
-| "How is pattern matching implemented?" | `mgrep` | **Semantic search:** Finds code by intent and context rather than exact text strings. |
-| "Where is the quick reject filter?" | `mgrep` | **Conceptual search:** Locates architectural components using natural language queries. |
-| "Find all uses of `Regex::new`" | `ripgrep` | **Targeted literal search:** Best for finding exact string matches or exact code symbols. |
-| "Find files with `println!`" | `ripgrep` | **Simple pattern matching:** Fast, literal line-by-line regex matching. |
-| "Replace all `unwrap()` with `expect()`" | `ast-grep` | **Structural refactor:** Understands the Abstract Syntax Tree (AST) to safely modify code structure. |
+| "Find all uses of `verifyToken`" / "which files import `@clerk/backend`" | `ripgrep` (the built-in Grep tool) | **Default choice — literal / symbol search.** Sub-second; honours `.gitignore` so vendored deps are skipped automatically. Prefer this for confirming whether/where something is used. |
+| "Find files with a `console.log`" | `ripgrep` | **Simple pattern matching:** fast, literal, line-by-line regex. |
+| "How is markdown-matrix pricing implemented?" | `mgrep` | **Semantic search:** finds code by intent when you don't know the exact identifier. Index-backed and returns *ranked* relevance (top matches), not every literal hit — trades a few seconds of query time for not having to know the search term. |
+| "Where does auth/session handling live?" | `mgrep` | **Conceptual search:** locate architectural components with a natural-language query. |
+| "Rename `unwrap()` → `expect()` everywhere" / "change every `useState(x)` call shape" | `ast-grep` | **Structural refactor:** understands the AST for safe, syntax-aware edits. **Always scope it to source paths** (e.g. `backend/src frontend/src workers/src shared`) — an unscoped run parses every file in the tree, including vendored deps, and will crawl. |
+
+**Rule of thumb:** default to `ripgrep`; use `mgrep` when you don't know the exact term; use `ast-grep` only for structural rewrites, and always give it explicit source paths.
 
 ## Serena Tool Usage  
   
