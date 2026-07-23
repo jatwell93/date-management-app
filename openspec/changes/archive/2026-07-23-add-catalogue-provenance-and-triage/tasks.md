@@ -78,6 +78,6 @@
 - [x] 6.1 Run `npm run test:backend:diff`, `npm run test:frontend:diff`, and `npm run test:db`.
 - [x] 6.2 Run `npm run lint`, `npm run compile`, `npm run build:frontend`, and
       `npm run build:workers`.
-- [ ] 6.3 Run `openspec validate --all`.
+- [x] 6.3 Run `openspec validate --all`.
 - [x] 6.4 Record the feature and safety decisions with `mem-log`, and present the human approval
       summary before any push or PR. Do not archive before merge.

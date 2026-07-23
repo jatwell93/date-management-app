@@ -4,10 +4,10 @@ import { getOrganizationId } from '../utils/auth-bypass';
 import { ConflictError, NotFoundError, PolicyValidationError, ValidationError } from '../errors';
 import {
   SupplierCreditRepository,
-  type BrandReviewOptions,
   type CorrectionReviewOptions,
   type SupplierWriteData,
 } from '../repositories/supplier-credit.repository';
+import type { BrandReviewOptions } from '../../../shared/domain/catalogue-review';
 import { rollupClaimablePool, type ClaimablePoolGroup } from '../../../shared/domain/credit-claim';
 import { isCatalogueReviewState } from '../../../shared/domain/brand-supplier';
 import {

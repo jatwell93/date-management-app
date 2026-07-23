@@ -12,8 +12,8 @@ import {
   matchCatalogueEntry,
   normalizeCatalogueSku,
   type CatalogueMatchEntry,
-  type CatalogueReviewState,
 } from '../../../shared/domain/brand-supplier';
+import type { BrandReviewOptions } from '../../../shared/domain/catalogue-review';
 
 type SupplierRecord = Prisma.SupplierGetPayload<Record<string, never>>;
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -43,18 +43,6 @@ export interface PolicyReviewOptions {
 export interface BulkLinkTarget {
   brandId?: number;
   brandName?: string;
-}
-
-export interface BrandReviewOptions {
-  state?: CatalogueReviewState;
-  group?: string;
-  cursor?: number;
-  limit?: number;
-  page?: number;
-  pageSize?: number;
-  title?: string;
-  titleMatch?: 'contains' | 'startsWith';
-  sort?: 'titleAsc' | 'titleDesc';
 }
 
 export interface AddBrandData {

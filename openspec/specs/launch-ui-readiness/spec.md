@@ -1,5 +1,8 @@
-## MODIFIED Requirements
+# launch-ui-readiness Specification
 
+## Purpose
+TBD - created by archiving change UI-fixes. Update Purpose after archive.
+## Requirements
 ### Requirement: Scan expiry pricing remains recoverable and accurate
 The scan workflow SHALL consume the current product API contract and SHALL present expiry markdown pricing without crashing when product cost data is absent or invalid.
 
@@ -25,3 +28,4 @@ The scan workflow SHALL consume the current product API contract and SHALL prese
 #### Scenario: Product outside markdown window
 - **WHEN** a product expires more than 90 days from the current date
 - **THEN** the scan page SHALL not display a markdown price
+

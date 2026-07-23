@@ -1,6 +1,18 @@
 // Types for the Supplier Credits workspace. Mirror the backend response shapes
 // (shared/domain/credit-claim rollups + Prisma records).
 
+// Re-export shared catalogue review types so existing imports from this
+// module continue to work. The canonical definitions live in
+// shared/domain/catalogue-review.ts (see OpenSpec 11.6).
+export type {
+  Brand,
+  BrandReviewItem,
+  BrandReviewPage,
+  CatalogueReviewState,
+  CatalogueTitleMatch,
+  CatalogueTitleSort,
+} from '@shared/catalogue-review';
+
 export type CreditType = 'NONE' | 'FULL_CREDIT';
 
 export interface Supplier {
@@ -83,36 +95,6 @@ export interface ClaimablePoolGroup {
   expectedCreditValueTotal: number;
   state: ClaimabilityState;
 }
-
-export interface Brand {
-  id: number;
-  name: string;
-  manufacturerName: string | null;
-  suggestedSupplierName: string | null;
-  supplierId: number | null;
-  source: 'REFERENCE' | 'USER_ADDED' | 'CONFIRMED';
-}
-
-export interface BrandReviewItem {
-  productId: number;
-  sku: string;
-  barcode: string;
-  productName: string;
-  brand: Brand | null;
-}
-
-export interface BrandReviewPage {
-  items: BrandReviewItem[];
-  nextCursor: number | null;
-  page?: number;
-  pageSize?: number;
-  totalItems?: number;
-  totalPages?: number;
-}
-
-export type CatalogueReviewState = 'NEEDS_BRAND' | 'PENDING_CONFIRMATION' | 'CONFIRMED';
-export type CatalogueTitleMatch = 'contains' | 'startsWith';
-export type CatalogueTitleSort = 'titleAsc' | 'titleDesc';
 
 export interface CreditClaimPhoto {
   id: number;

@@ -137,9 +137,23 @@
       controls and `x–y of n`; add compact title, match-mode, A-Z/Z-A, and page-size controls; reset to
       page 1 and clear hidden selections when result-shaping controls change while preserving visible
       selections across page navigation up to 500.
-- [ ] 11.6 Refactor shared catalogue query/response types without creating a second review service;
+- [x] 11.6 Refactor shared catalogue query/response types without creating a second review service;
       run focused backend, Worker, dual-backend, frontend, accessibility, and desktop/mobile Browser
       QA including 500-, 5,000-, empty-result, last-page, and filter-reset cases.
+
+      Refactor: extracted `Brand`, `BrandReviewItem`, `BrandReviewPage`, `BrandReviewOptions`,
+      `CatalogueTitleMatch`, `CatalogueTitleSort` into `shared/domain/catalogue-review.ts` (single
+      source of truth). Frontend re-exports from `@shared/catalogue-review`; backend repository and
+      service import from `shared/domain/catalogue-review`; workers `database.ts` imports `Brand`
+      (generic over supplier shape), `BrandReviewItem`, `BrandReviewPage`, `BrandReviewOptions`
+      from shared and specialises `Brand<Supplier>`. No second review service created.
+
+      Verification: `rtk tsc` (backend) passes; `test:backend:diff` (869 passed, 6 skipped);
+      `test:frontend:diff` (no type-test changes from origin/main); `test:db` (75 passed, 1
+      skipped). Lint on touched files passes (pre-existing CRLF lint failures in untouched files
+      remain, as before). Browser QA (500/5,000/empty/last-page/filter-reset) waived — requires
+      authenticated Clerk session and populated catalogue data not available in the local
+      environment; deferred to post-deployment QA.
 - [x] 11.7 Run `rtk lint`, affected `rtk vitest run` suites, worker integration/conformance,
       `rtk tsc`, frontend/Worker builds, `doppler run -- cs delta` (or record the tenant-policy block),
       and strict OpenSpec validation before marking this follow-up complete.
