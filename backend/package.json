@@ -26,6 +26,7 @@
     "db:studio": "prisma studio",
     "seed": "node scripts/seed-users.js",
     "seed:tier-flags": "node scripts/seed-tier-feature-flags.js",
+    "seed:master-catalogue": "ts-node scripts/seed-master-catalogue.ts",
     "audit:org-ids": "npx ts-node scripts/audit-org-ids.ts",
     "export:neon-to-sqlite": "npx ts-node scripts/neon-to-sqlite.ts",
     "export:excess-products": "npx ts-node scripts/export-excess-products.ts",

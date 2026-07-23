@@ -31,6 +31,7 @@
     "mem:log": "node scripts/mem-log.js",
     "mem:recall": "node scripts/mem-recall.js",
     "mem:rebuild": "node scripts/mem-rebuild.js",
+    "seed:master-catalogue": "npm --prefix backend run seed:master-catalogue --",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:check": "eslint . --max-warnings=0",

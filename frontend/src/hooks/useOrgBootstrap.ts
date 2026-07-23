@@ -10,6 +10,7 @@ interface BootstrapResult {
   isNewOrg: boolean;
   isNewUser: boolean;
   isFirstAdmin: boolean;
+  isPlatformAdmin: boolean;
 }
 
 interface UseOrgBootstrapReturn {

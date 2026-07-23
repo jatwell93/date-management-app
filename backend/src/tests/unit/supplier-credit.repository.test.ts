@@ -33,6 +33,21 @@ function makeRepository(options: {
 }
 
 describe('SupplierCreditRepository catalogue enrichment', () => {
+  it('filters retired entries across the parenthesized barcode-or-SKU predicate', async () => {
+    const { repository, tx } = makeRepository({ candidates: [] });
+
+    await repository.enrichImportedProduct('org-a', {
+      productId: 10,
+      barcode: 'STORE-BARCODE',
+      sku: 'API-100',
+    });
+
+    const query = tx.$queryRaw.mock.calls[0][0] as { strings: readonly string[] };
+    const sql = query.strings.join('?').replace(/\s+/g, ' ');
+    expect(sql).toContain('WHERE retired_at IS NULL AND (');
+    expect(sql).toContain('UPPER(TRIM(ch2_sku)) = ?)');
+  });
+
   it('falls back to a normalized wholesaler SKU when the barcode has no catalogue match', async () => {
     const { repository, tx } = makeRepository({
       candidates: [
@@ -130,6 +145,39 @@ describe('SupplierCreditRepository catalogue enrichment', () => {
       where: { id: 10, organizationId: 'org-a' },
       data: { brandId: 77 },
     });
+  });
+});
+
+describe('SupplierCreditRepository catalogue provenance', () => {
+  it('returns one latest run plus at most twenty prior global runs', async () => {
+    const rows = Array.from({ length: 21 }, (_, index) => ({
+      id: index + 1,
+      version: 21 - index,
+      seededAt: new Date(`2026-07-${String(21 - index).padStart(2, '0')}T00:00:00.000Z`),
+      sourceFileName: `v${21 - index}.xlsx`,
+      inserted: index,
+      updated: 0,
+      unchanged: 100,
+      retired: 0,
+      reinstated: 0,
+      errorCount: 0,
+    }));
+    const prisma = {
+      catalogueSeedRun: { findMany: vi.fn(async () => rows) },
+    } as unknown as PrismaClient;
+
+    const result = await new SupplierCreditRepository(prisma).getCatalogueProvenance();
+
+    expect(prisma.catalogueSeedRun.findMany).toHaveBeenCalledWith({
+      orderBy: { version: 'desc' },
+      take: 21,
+    });
+    expect(result.latest).toMatchObject({
+      version: 21,
+      seededAt: '2026-07-21T00:00:00.000Z',
+    });
+    expect(result.history).toHaveLength(20);
+    expect(result.history[19].version).toBe(1);
   });
 });
 

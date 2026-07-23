@@ -272,6 +272,7 @@ const SCHEMA_SQL = `
     sub_category TEXT,
     rrp DOUBLE PRECISION,
     metro_price DOUBLE PRECISION,
+    retired_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
@@ -279,6 +280,19 @@ const SCHEMA_SQL = `
   CREATE INDEX idx_master_catalogue_entries_api_sku ON master_catalogue_entries (api_sku);
   CREATE INDEX idx_master_catalogue_entries_sigma_sku ON master_catalogue_entries (sigma_sku);
   CREATE INDEX idx_master_catalogue_entries_ch2_sku ON master_catalogue_entries (ch2_sku);
+
+  CREATE TABLE catalogue_seed_runs (
+    id SERIAL PRIMARY KEY,
+    version INTEGER NOT NULL UNIQUE,
+    seeded_at TIMESTAMPTZ NOT NULL,
+    source_file_name TEXT NOT NULL,
+    inserted INTEGER NOT NULL,
+    updated INTEGER NOT NULL,
+    unchanged INTEGER NOT NULL,
+    retired INTEGER NOT NULL,
+    reinstated INTEGER NOT NULL,
+    error_count INTEGER NOT NULL
+  );
 
   CREATE TABLE catalogue_corrections (
     id SERIAL PRIMARY KEY,

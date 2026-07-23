@@ -468,25 +468,41 @@ model Brand {
 }
 
 model MasterCatalogueEntry {
-  id               Int      @id @default(autoincrement())
-  barcode          String   @unique
+  id               Int       @id @default(autoincrement())
+  barcode          String    @unique
   description      String
-  apiSku           String?  @map("api_sku")
-  sigmaSku         String?  @map("sigma_sku")
-  ch2Sku           String?  @map("ch2_sku")
-  brandName        String   @map("brand_name")
-  manufacturerName String?  @map("manufacturer_name")
+  apiSku           String?   @map("api_sku")
+  sigmaSku         String?   @map("sigma_sku")
+  ch2Sku           String?   @map("ch2_sku")
+  brandName        String    @map("brand_name")
+  manufacturerName String?   @map("manufacturer_name")
   category         String?
-  subCategory      String?  @map("sub_category")
+  subCategory      String?   @map("sub_category")
   rrp              Float?
-  metroPrice       Float?   @map("metro_price")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  metroPrice       Float?    @map("metro_price")
+  retiredAt        DateTime? @map("retired_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([apiSku])
   @@index([sigmaSku])
   @@index([ch2Sku])
   @@map("master_catalogue_entries")
+}
+
+model CatalogueSeedRun {
+  id             Int      @id @default(autoincrement())
+  version        Int      @unique
+  seededAt       DateTime @map("seeded_at")
+  sourceFileName String   @map("source_file_name")
+  inserted       Int
+  updated        Int
+  unchanged      Int
+  retired        Int
+  reinstated     Int
+  errorCount     Int      @map("error_count")
+
+  @@map("catalogue_seed_runs")
 }
 
 model CatalogueCorrection {

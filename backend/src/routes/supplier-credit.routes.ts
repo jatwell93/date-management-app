@@ -178,6 +178,13 @@ platformCatalogueCorrectionRouter.get(
   },
 );
 
+platformCatalogueCorrectionRouter.get(
+  '/catalogue/provenance',
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().getCatalogueProvenance(req, res, next);
+  },
+);
+
 platformCatalogueCorrectionRouter.patch(
   '/catalogue-corrections/:id',
   standardLimiter,

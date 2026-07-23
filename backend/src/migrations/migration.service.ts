@@ -955,6 +955,36 @@ export class MigrationService {
           );
         },
       },
+      {
+        id: 19,
+        name: '019-add-catalogue-provenance',
+        up: (db: DB) => {
+          addColumnIfMissing(db, 'master_catalogue_entries', 'retired_at', 'TEXT');
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS catalogue_seed_runs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              version INTEGER NOT NULL UNIQUE,
+              seeded_at TEXT NOT NULL,
+              source_file_name TEXT NOT NULL,
+              inserted INTEGER NOT NULL,
+              updated INTEGER NOT NULL,
+              unchanged INTEGER NOT NULL,
+              retired INTEGER NOT NULL,
+              reinstated INTEGER NOT NULL,
+              error_count INTEGER NOT NULL
+            );
+          `);
+        },
+        down: (db: DB) => {
+          db.exec('DROP TABLE IF EXISTS catalogue_seed_runs;');
+          const columns = db
+            .prepare('PRAGMA table_info(master_catalogue_entries)')
+            .all() as PragmaTableInfoRow[];
+          if (columns.some((column) => column.name === 'retired_at')) {
+            db.exec('ALTER TABLE master_catalogue_entries DROP COLUMN retired_at;');
+          }
+        },
+      },
     ];
   }
 

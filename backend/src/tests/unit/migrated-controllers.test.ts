@@ -1208,6 +1208,7 @@ describe('migrated controllers', () => {
         isNewOrg: true,
         isNewUser: true,
         isFirstAdmin: true,
+        isPlatformAdmin: false,
       });
     });
 
