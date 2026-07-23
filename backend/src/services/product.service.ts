@@ -110,7 +110,9 @@ export class ProductService {
   }
   async getAllProducts(limit?: number, offset?: number): Promise<Product[]> {
     const products = await this.productRepo.findAll(this.organizationId, limit, offset);
-    return products.map(this.mapPrismaToModel);
+    // Bind via arrow: mapPrismaToModel reads this.organizationId, so it must not be
+    // passed as an unbound reference to Array.map (this would be undefined there).
+    return products.map((product) => this.mapPrismaToModel(product));
   }
 
   async getProductById(id: number): Promise<Product | null> {
