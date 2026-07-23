@@ -897,6 +897,16 @@ export class MigrationService {
             .all() as PragmaTableInfoRow[];
           if (columns.some((column) => column.name === 'credit_scope')) return;
 
+          // Rebuilding organization_markdown_config to swap its UNIQUE key from
+          // (organization_id) to (organization_id, credit_scope). The legacy table
+          // carried a FOREIGN KEY to `organizations`, but that table does not exist
+          // in SQLite (organizations are Clerk-managed) — the FK was always a no-op.
+          // We deliberately omit it from the rebuilt table: since SQLite 3.25 the
+          // default legacy_alter_table=OFF makes ALTER TABLE ... RENAME re-parse and
+          // validate the renamed table's schema, and a FK to a missing table aborts
+          // the rename with "no such table: organizations". (PRAGMA legacy_alter_table
+          // is a no-op inside the migration transaction, so dropping the dead FK is the
+          // reliable fix.)
           db.exec(`
             DROP INDEX IF EXISTS idx_organization_markdown_config_org_id;
             ALTER TABLE organization_markdown_config
@@ -914,7 +924,6 @@ export class MigrationService {
               band3_basis TEXT NOT NULL DEFAULT 'cost',
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
               CHECK (credit_scope IN ('NO_CREDIT', 'FULL_CREDIT')),
               CHECK (band1_basis IN ('cost', 'retail')),
               CHECK (band2_basis IN ('cost', 'retail')),

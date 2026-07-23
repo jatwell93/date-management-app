@@ -2,7 +2,24 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { calculateMarkdownPrice } from '../../shared/domain/markdown';
+import {
+  calculateMarkdownPrice,
+  type MarkdownBasis,
+  type MarkdownableItem,
+} from '../../shared/domain/markdown';
+
+// Price a sample item using a band3 (0-30 day) config. 15 days lands squarely in
+// band3, so calculateMarkdownPrice resolves the band3 percentage/basis; the other
+// bands are irrelevant here and mirror band3 only to satisfy the matrix shape.
+const SAMPLE_ITEM: MarkdownableItem = { costPrice: 20, retailPrice: 30 };
+function band3Price(percentage: number, basis: MarkdownBasis): number | null {
+  const band = { percentage, basis };
+  return calculateMarkdownPrice(SAMPLE_ITEM, 15, {
+    band1: band,
+    band2: band,
+    band3: band,
+  });
+}
 
 const forwardPath = fileURLToPath(
   new URL(
@@ -57,10 +74,7 @@ describe('Neon credit-scoped markdown migration', () => {
       'SELECT band3_percentage, band3_basis FROM organization_markdown_config WHERE organization_id = $1',
       ['org-1'],
     );
-    const priceBefore = calculateMarkdownPrice(
-      { costPrice: 20, retailPrice: 30 },
-      { percentage: before.rows[0].band3_percentage, basis: before.rows[0].band3_basis },
-    );
+    const priceBefore = band3Price(before.rows[0].band3_percentage, before.rows[0].band3_basis);
 
     await pg.exec(await readFile(forwardPath, 'utf8'));
 
@@ -87,15 +101,9 @@ describe('Neon credit-scoped markdown migration', () => {
         band3_basis: 'cost',
       },
     ]);
-    expect(
-      calculateMarkdownPrice(
-        { costPrice: 20, retailPrice: 30 },
-        {
-          percentage: migrated.rows[0].band3_percentage,
-          basis: migrated.rows[0].band3_basis,
-        },
-      ),
-    ).toBe(priceBefore);
+    expect(band3Price(migrated.rows[0].band3_percentage, migrated.rows[0].band3_basis)).toBe(
+      priceBefore,
+    );
 
     await pg.exec(`
       INSERT INTO organization_markdown_config (
