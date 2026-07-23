@@ -144,7 +144,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
               <div
                 className={
                   latest.retired > 0
-                    ? 'rounded-md border border-amber-500 bg-amber-50 p-3 text-amber-950'
+                    ? 'rounded-md border border-semantic-warning-muted bg-semantic-warning-hover p-3 text-semantic-warning-foreground'
                     : ''
                 }
               >
