@@ -1,11 +1,11 @@
 # Proposal: Retire Express, Prisma, and SQLite and unify on the Worker + Postgres
 
-> **Status: DECISION GATE MOSTLY CLEARED / source work paused on final two items.** This began as a
-> decision-capture proposal. The **retirement path is decided — direct, not a staged engine-swap** (see
-> "What changes" and Decision Gate criterion 6); the **measurable trigger is met** (#390, #394) and the
-> **sole-Worker dev API is approved** (2026-07-24). Remaining before source work: confirm the local/CI
-> database story (task 0.3) and record the go/no-go (task 0.4). The replacement migration foundation
-> (Phase 1) must still be proven before anything is deleted.
+> **Status: DECISION GATE CLEARED — GO (2026-07-24). Phase 1 (migration foundation) may begin.** This
+> began as a decision-capture proposal. The **retirement path is decided — direct, not a staged
+> engine-swap**; the **measurable trigger is met** (#390, #394), the **sole-Worker dev API is approved**,
+> the **local/CI database story is confirmed**, and **go/no-go is GO** (all 2026-07-24). Deletion
+> (Phase 4) stays gated on the replacement migration foundation (Phase 1) and the parity audit (Phase 2);
+> each production cutover keeps its own verification/rollback gate.
 
 ## Why
 
@@ -162,9 +162,8 @@ Before any source change under this proposal, confirm all of:
 
 ### Decision Gate outcome
 
-- **Status:** 🟡 **Mostly cleared (2026-07-24).** The two human-decision blockers are resolved; only the
-  local/CI database-story confirmation (task 0.3) and the final go/no-go record (task 0.4) remain before
-  source work may begin.
+- **Status:** ✅ **Cleared — GO (2026-07-24).** All Phase 0 prerequisites are recorded; Phase 1 (the
+  migration foundation) is unparked and may begin. Phase 4 deletion stays gated on Phases 1–2.
 - **Criterion 1 (measurable trigger) — MET.** The unmeasurable ">30 minutes" clause was revised to the
   git-observable identical-dual-Prisma-edit proxy (see criterion 1). Evidence on file: #390 and #394
   each touched **7/7** triplication artifacts with **byte-identical** edits to the base and production
@@ -174,9 +173,13 @@ Before any source change under this proposal, confirm all of:
   product-decision prerequisite and gate task 0.2.
 - **Sequencing decision — RESOLVED (direct path).** The staged Knob A→B engine-swap is rejected in
   favour of direct retirement, for the reasons in "What changes" and criterion 6.
-- **Remaining before source work:** confirm the local/CI database story (task 0.3 — a recommendation is
-  drafted there) and record the go/no-go (task 0.4). Implementation stays paused until those two are
-  recorded.
+- **Local/CI database story — CONFIRMED (2026-07-24)** (task 0.3): Express dev/test stays on SQLite
+  untouched; Worker + conformance tests on pglite; Worker local dev via `wrangler dev` against a Neon
+  branch; migration-runner CI on an ephemeral Postgres / per-run Neon branch with no production secrets;
+  no Docker.
+- **Go/no-go — GO (2026-07-24)** (task 0.4): Phase 1 (migration foundation) is unparked. Deletion
+  (Phase 4) remains gated on Phases 1–2, and each production cutover keeps its own verification/rollback
+  gate.
 
 ### Known Express-only surface (pre-audit, to be confirmed in Phase 2)
 

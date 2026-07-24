@@ -1,7 +1,8 @@
 # Tasks: Retire Express, Prisma, and SQLite — unify on the Worker + Postgres
 
-> All source-changing tasks are **blocked on the Decision Gate** (Phase 0). Until that clears, only the
-> spec/doc artifacts in this change directory exist.
+> **Phase 0 Decision Gate: CLEARED — GO (2026-07-24).** Phase 1 (migration foundation) may begin;
+> Phases 3–4 (Worker parity, deletion) stay gated on Phases 1–2, and each production cutover keeps its
+> own verification/rollback gate.
 >
 > **Direct path:** there is no intermediate "Express on Postgres" state. Express + Prisma + SQLite stay
 > untouched as the rollback backend until Worker parity and the migration runner are proven, then all
@@ -20,16 +21,17 @@
   `git show` diff comparison). The proposal Decision Gate criterion 1 carries the revised wording.
 - [x] 0.2 Sole-Worker dev API — **APPROVED (2026-07-24)** by the product owner (jatwell93): run the
   Worker (`wrangler dev`) as the sole local dev API and retire Express as a dev backend.
-- [ ] 0.3 Confirm the local/CI DB story for the direct path. **Recommendation:** Express dev/test stays
-  on **SQLite, untouched** until deletion; Worker + conformance tests use **pglite**; Worker local dev
-  uses `wrangler dev` against a developer-owned **Neon branch** (pglite offline fallback); the migration
-  runner's required pull-request CI uses an ephemeral PostgreSQL service or an auto-created per-run Neon
-  branch without production secrets; a separate scheduled Neon compatibility job exercises the provider.
-  Record the final choice and ownership.
-- [ ] 0.4 Record the go/no-go decision after 0.1–0.3 and this engineering review are complete. The
-  sequencing question (staged vs direct) is **already resolved to the direct path** — see the proposal
-  Decision Gate outcome; do not re-litigate it here. Source work remains paused until 0.1–0.3 are
-  recorded.
+- [x] 0.3 Local/CI DB story — **CONFIRMED (2026-07-24)** by the product owner (jatwell93):
+  - Express dev/test → stays on **SQLite, untouched** until deletion (the rollback backend; no new local DB).
+  - Worker + conformance tests → **pglite** (already a dependency).
+  - Worker local dev → `wrangler dev` against a developer-owned **Neon branch** (pglite offline fallback).
+  - Migration-runner PR CI → ephemeral PostgreSQL service or auto-created per-run Neon branch, **no
+    production secrets**; a separate scheduled job exercises the real Neon provider.
+  - No Docker and no heavyweight local Postgres server.
+- [x] 0.4 Go/no-go — **GO (2026-07-24)**. All Phase 0 prerequisites are recorded (0.1 trigger met, 0.2
+  sole-Worker approved, 0.3 DB story confirmed, sequencing resolved to the direct path). **Phase 1
+  (migration foundation) is unparked and may begin.** Phases 3–4 (Worker parity, deletion) remain gated
+  on Phases 1–2 completing, and every production cutover keeps its own verification/rollback gate.
 
 ## Phase 1 — Establish the authoritative PostgreSQL migration foundation (before anything is deleted)
 
@@ -210,10 +212,10 @@ equivalent, a relocated home, or an explicit retirement decision.
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | Not applicable | Infrastructure/backend consolidation |
 | DX Review | `/plan-devex-review` | Developer experience | 0 | Covered here | Local DB, CI, commands, rollback, and docs included |
 
-- **RESOLVED:** staged-versus-direct retirement sequence — **direct path chosen** (no transitional
-  Express-on-Postgres state; SQLite retained as rollback until deletion); measurable friction trigger
-  (0.1, met by #390/#394); sole-Worker product approval (0.2, approved 2026-07-24).
-- **UNRESOLVED:** local/CI database choice confirmation (0.3 — recommendation drafted) and the final
-  go/no-go record (0.4).
-- **VERDICT:** two of the four Phase 0 blockers cleared; implementation stays paused until 0.3 is
-  confirmed and 0.4 records go/no-go. Strict OpenSpec validation is required after every further edit.
+- **RESOLVED:** staged-versus-direct retirement sequence (direct path); measurable friction trigger
+  (0.1, met by #390/#394); sole-Worker product approval (0.2, 2026-07-24); local/CI database story
+  (0.3, 2026-07-24); go/no-go (0.4, **GO** 2026-07-24).
+- **UNRESOLVED:** none in Phase 0.
+- **VERDICT:** **Phase 0 Decision Gate cleared — GO.** Phase 1 (migration foundation) is unparked;
+  Phases 3–4 remain gated on Phases 1–2. Strict OpenSpec validation is required after every further
+  edit, and each production cutover retains its own verification/rollback gate.
