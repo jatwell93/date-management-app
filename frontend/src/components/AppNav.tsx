@@ -14,6 +14,7 @@ interface AppNavProps {
   setIsMobileMenuOpen: (open: boolean) => void;
   handleLogout: () => void;
   pathname: string;
+  isPlatformAdmin: boolean;
 }
 
 export function AppNav({
@@ -22,6 +23,7 @@ export function AppNav({
   setIsMobileMenuOpen,
   handleLogout,
   pathname,
+  isPlatformAdmin,
 }: AppNavProps) {
   const hasAdminAccess =
     !!effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS);
@@ -123,6 +125,11 @@ export function AppNav({
                       </DropdownMenuItem>
                     </>
                   )}
+                  {isPlatformAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/platform/catalogue">Platform Catalogue</Link>
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </li>
@@ -215,6 +222,15 @@ export function AppNav({
                     </Link>
                   ))}
                 </>
+              )}
+              {isPlatformAdmin && (
+                <Link
+                  to="/platform/catalogue"
+                  className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Platform Catalogue
+                </Link>
               )}
               <div className="mt-2 border-t border-semantic-primary-foreground/20 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-semantic-primary-foreground/75">
                 Account

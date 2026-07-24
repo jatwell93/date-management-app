@@ -4,7 +4,7 @@
 // than being re-derived per backend (golden rule 5). The SQL that *fetches* the
 // rows differs per dialect; this module owns the pure logic on top of them.
 
-import { resolveSupplier } from './brand-supplier';
+import { resolveSupplierContext } from './brand-supplier';
 
 // ── Status vocabulary (String columns + const-union, per shared/domain/disposition.ts) ──
 
@@ -223,82 +223,58 @@ interface ResolvedClaimSupplier {
 }
 
 function resolveClaimSupplier(row: ClaimableWriteOffRow): ResolvedClaimSupplier {
-  const supplierId = resolveSupplier(
-    { supplierId: row.supplierId },
-    { supplierId: row.brandSupplierId },
-  );
+  const candidate = (
+    id: number | null,
+    name: string | null,
+    writeOffQty: number | null | undefined,
+    creditQty: number | null | undefined,
+    policyNote: string | null | undefined,
+  ) =>
+    id == null
+      ? null
+      : {
+          id,
+          name,
+          writeOffQty: writeOffQty ?? null,
+          creditQty: creditQty ?? null,
+          policyNote: policyNote ?? null,
+          hasPolicy: writeOffQty != null || creditQty != null || Boolean(policyNote?.trim()),
+        };
 
-  if (supplierId != null && row.supplierId != null) {
-    const hasPolicy =
-      row.policyWriteOffQty != null ||
-      row.policyCreditQty != null ||
-      Boolean(row.creditPolicyNote?.trim());
-    return {
-      id: row.supplierId,
-      name: row.supplierName,
-      writeOffQty: row.policyWriteOffQty,
-      creditQty: row.policyCreditQty,
-      policyNote: row.creditPolicyNote ?? null,
-      state: hasPolicy ? 'CLAIMABLE' : 'NO_POLICY',
-      key: `s:${row.supplierId}`,
-    };
-  }
-
-  if (supplierId != null && row.brandSupplierId != null) {
-    const hasPolicy =
-      row.brandPolicyWriteOffQty != null ||
-      row.brandPolicyCreditQty != null ||
-      Boolean(row.brandCreditPolicyNote?.trim());
-    return {
-      id: row.brandSupplierId,
-      name: row.brandSupplierName ?? null,
-      writeOffQty: row.brandPolicyWriteOffQty ?? null,
-      creditQty: row.brandPolicyCreditQty ?? null,
-      policyNote: row.brandCreditPolicyNote ?? null,
-      state:
-        row.brandSource === 'REFERENCE'
-          ? 'PENDING_CONFIRMATION'
-          : hasPolicy
-            ? 'CLAIMABLE'
-            : 'NO_POLICY',
-      key: `s:${row.brandSupplierId}`,
-    };
-  }
-
-  const suggestion = row.suggestedSupplierName?.trim() || null;
-  if (row.brandId != null && row.brandSource === 'REFERENCE' && suggestion) {
-    return {
-      id: null,
-      name: suggestion,
-      writeOffQty: null,
-      creditQty: null,
-      policyNote: null,
-      state: 'PENDING_CONFIRMATION',
-      key: `suggested:${suggestion.toUpperCase()}`,
-    };
-  }
-
-  const brandName = row.brandName?.trim() || null;
-  if (row.brandId != null && brandName) {
-    return {
-      id: null,
-      name: brandName,
-      writeOffQty: null,
-      creditQty: null,
-      policyNote: null,
-      state: 'PENDING_CONFIRMATION',
-      key: `brand:${row.brandId}`,
-    };
-  }
+  const resolved = resolveSupplierContext({
+    productSupplier: candidate(
+      row.supplierId,
+      row.supplierName,
+      row.policyWriteOffQty,
+      row.policyCreditQty,
+      row.creditPolicyNote,
+    ),
+    brand:
+      row.brandId == null
+        ? null
+        : {
+            id: row.brandId,
+            name: row.brandName ?? null,
+            source: row.brandSource ?? null,
+            suggestedSupplierName: row.suggestedSupplierName,
+            supplier: candidate(
+              row.brandSupplierId ?? null,
+              row.brandSupplierName ?? null,
+              row.brandPolicyWriteOffQty,
+              row.brandPolicyCreditQty,
+              row.brandCreditPolicyNote,
+            ),
+          },
+  });
 
   return {
-    id: null,
-    name: null,
-    writeOffQty: null,
-    creditQty: null,
-    policyNote: null,
-    state: 'NEEDS_BRAND',
-    key: 'needs-brand',
+    id: resolved.supplier?.id ?? null,
+    name: resolved.supplierName,
+    writeOffQty: resolved.supplier?.writeOffQty ?? null,
+    creditQty: resolved.supplier?.creditQty ?? null,
+    policyNote: resolved.supplier?.policyNote ?? null,
+    state: resolved.state,
+    key: resolved.identityKey,
   };
 }
 

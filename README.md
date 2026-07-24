@@ -66,9 +66,7 @@ npm run build
 ├── workers/
 │   └── src/                  # Cloudflare Workers API handlers and middleware
 ├── docs/                     # Project documentation and runbooks
-├── openspec/                 # Active and archived project change specs
-├── graphify-out/             # Generated project knowledge graph artifacts
-└── .agentlens/               # Generated codebase navigation docs
+└── openspec/                 # Active and archived project change specs
 ```
 
 ## Core Capabilities

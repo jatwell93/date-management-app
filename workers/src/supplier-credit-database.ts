@@ -29,6 +29,7 @@ function toSupplier(row: Record<string, unknown>): Supplier {
   return {
     id: Number(row.id),
     name: String(row.name),
+    creditType: row.creditType === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE',
     contactEmail: (row.contactEmail as string | null) ?? null,
     contactPhone: (row.contactPhone as string | null) ?? null,
     creditPolicyNote: String(row.creditPolicyNote ?? ''),
@@ -92,7 +93,7 @@ export function createSupplierCreditDatabase(
   return {
     async listSuppliers(organizationId) {
       const rows = (await sql`
-        SELECT id, name,
+        SELECT id, name, credit_type AS "creditType",
                contact_email AS "contactEmail", contact_phone AS "contactPhone",
                credit_policy_note AS "creditPolicyNote",
                policy_write_off_qty AS "policyWriteOffQty",
@@ -109,7 +110,7 @@ export function createSupplierCreditDatabase(
 
     async findSupplier(organizationId, id) {
       const rows = (await sql`
-        SELECT id, name,
+        SELECT id, name, credit_type AS "creditType",
                contact_email AS "contactEmail", contact_phone AS "contactPhone",
                credit_policy_note AS "creditPolicyNote",
                policy_write_off_qty AS "policyWriteOffQty",
@@ -127,17 +128,17 @@ export function createSupplierCreditDatabase(
     async createSupplier(organizationId, data) {
       const rows = (await sql`
         INSERT INTO suppliers (
-          organization_id, name, contact_email, contact_phone, credit_policy_note,
+          organization_id, name, credit_type, contact_email, contact_phone, credit_policy_note,
           policy_write_off_qty, policy_credit_qty, follow_up_days,
           representative_name, representative_email, policy_updated_at,
           created_at, updated_at
         ) VALUES (
-          ${organizationId}, ${data.name}, ${data.contactEmail}, ${data.contactPhone},
+          ${organizationId}, ${data.name}, ${data.creditType}, ${data.contactEmail}, ${data.contactPhone},
           ${data.creditPolicyNote}, ${data.policyWriteOffQty}, ${data.policyCreditQty},
           ${data.followUpDays}, ${data.representativeName}, ${data.representativeEmail},
           ${data.policyUpdatedAt}, NOW(), NOW()
         )
-        RETURNING id, name,
+        RETURNING id, name, credit_type AS "creditType",
           contact_email AS "contactEmail", contact_phone AS "contactPhone",
           credit_policy_note AS "creditPolicyNote",
           policy_write_off_qty AS "policyWriteOffQty",
@@ -152,7 +153,7 @@ export function createSupplierCreditDatabase(
     async updateSupplier(organizationId, id, data) {
       const rows = (await sql`
         UPDATE suppliers SET
-          name = ${data.name}, contact_email = ${data.contactEmail},
+          name = ${data.name}, credit_type = ${data.creditType}, contact_email = ${data.contactEmail},
           contact_phone = ${data.contactPhone}, credit_policy_note = ${data.creditPolicyNote},
           policy_write_off_qty = ${data.policyWriteOffQty},
           policy_credit_qty = ${data.policyCreditQty}, follow_up_days = ${data.followUpDays},
@@ -160,7 +161,7 @@ export function createSupplierCreditDatabase(
           representative_email = ${data.representativeEmail},
           policy_updated_at = ${data.policyUpdatedAt}, updated_at = NOW()
         WHERE organization_id = ${organizationId} AND id = ${id}
-        RETURNING id, name,
+        RETURNING id, name, credit_type AS "creditType",
           contact_email AS "contactEmail", contact_phone AS "contactPhone",
           credit_policy_note AS "creditPolicyNote",
           policy_write_off_qty AS "policyWriteOffQty",
@@ -175,11 +176,11 @@ export function createSupplierCreditDatabase(
     async clearSupplierPolicy(organizationId, id) {
       const rows = (await sql`
         UPDATE suppliers SET
-          credit_policy_note = '', policy_write_off_qty = NULL, policy_credit_qty = NULL,
+          credit_type = 'NONE', credit_policy_note = '', policy_write_off_qty = NULL, policy_credit_qty = NULL,
           follow_up_days = 7, representative_name = NULL, representative_email = NULL,
           policy_updated_at = NOW(), updated_at = NOW()
         WHERE organization_id = ${organizationId} AND id = ${id}
-        RETURNING id, name,
+        RETURNING id, name, credit_type AS "creditType",
           contact_email AS "contactEmail", contact_phone AS "contactPhone",
           credit_policy_note AS "creditPolicyNote",
           policy_write_off_qty AS "policyWriteOffQty",
@@ -197,7 +198,7 @@ export function createSupplierCreditDatabase(
       const statusFilter = options.status ?? null;
       const rows = (await sql`
         SELECT b.id AS "brandId", b.name AS "brandName",
-               s.id AS "supplierId", s.name AS "supplierName",
+               s.id AS "supplierId", s.name AS "supplierName", s.credit_type AS "creditType",
                s.contact_email AS "contactEmail", s.contact_phone AS "contactPhone",
                s.credit_policy_note AS "creditPolicyNote",
                s.policy_write_off_qty AS "policyWriteOffQty",

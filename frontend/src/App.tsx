@@ -76,6 +76,7 @@ const ExpiryEntriesPage = React.lazy(() =>
 );
 const ExpiredItemsPage = React.lazy(() => import('./pages/ExpiredItemsPage'));
 const SupplierCreditsPage = React.lazy(() => import('./pages/SupplierCreditsPage'));
+const PlatformCataloguePage = React.lazy(() => import('./pages/PlatformCataloguePage'));
 const SubscriptionSettingsPage = React.lazy(() =>
   import('./pages/SubscriptionSettingsPage').then((module) => ({
     default: module.SubscriptionSettingsPage,
@@ -319,6 +320,7 @@ interface AppRoutesProps {
   isLoggedIn: boolean;
   effectiveUserRole: RoleValue | null;
   token: string | null;
+  isPlatformAdmin: boolean;
 }
 
 function renderSignedInElement(isLoggedIn: boolean, element: React.ReactNode) {
@@ -341,7 +343,7 @@ function renderAdminElement(
   return element;
 }
 
-function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
+function AppRoutes({ isLoggedIn, effectiveUserRole, token, isPlatformAdmin }: AppRoutesProps) {
   const hasAdminPermissions =
     !!effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS);
 
@@ -407,6 +409,16 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
             isLoggedIn,
             <SupplierCreditsPage token={token} effectiveUserRole={effectiveUserRole} />,
           )}
+        />
+        <Route
+          path="/platform/catalogue"
+          element={
+            isLoggedIn && isPlatformAdmin ? (
+              <PlatformCataloguePage token={token} />
+            ) : (
+              <Navigate to={isLoggedIn ? '/scan' : '/login'} replace />
+            )
+          }
         />
         <Route
           path="/usage-report"
@@ -519,7 +531,6 @@ function AppContent({
     const handleUnauthorized = (event: Event) => {
       // Log the unauthorized event for debugging
       if (event instanceof CustomEvent) {
-        // eslint-disable-next-line no-console
         console.warn('[Auth] Unauthorized API response detected:', event.detail);
       }
       // Call logout to clear auth state and redirect to login
@@ -585,6 +596,7 @@ function AppContent({
           setIsMobileMenuOpen={setIsMobileMenuOpen}
           handleLogout={handleLogout}
           pathname={pathname}
+          isPlatformAdmin={bootstrapResult?.isPlatformAdmin === true}
         />
       )}
 
@@ -604,6 +616,7 @@ function AppContent({
                 isLoggedIn={isLoggedIn}
                 effectiveUserRole={effectiveUserRole}
                 token={token}
+                isPlatformAdmin={bootstrapResult?.isPlatformAdmin === true}
               />
             </ErrorBoundary>
           </div>
@@ -615,6 +628,7 @@ function AppContent({
               isLoggedIn={isLoggedIn}
               effectiveUserRole={effectiveUserRole}
               token={token}
+              isPlatformAdmin={bootstrapResult?.isPlatformAdmin === true}
             />
           </ErrorBoundary>
         </main>

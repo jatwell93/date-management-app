@@ -32,6 +32,7 @@ export function useSyncStatus(isLoggedIn: boolean): {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off initial queue-count fetch, then polls on an interval
     void refreshPendingQueueCount();
     const intervalId = window.setInterval(() => {
       void refreshPendingQueueCount();

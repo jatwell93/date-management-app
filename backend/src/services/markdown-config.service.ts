@@ -7,14 +7,17 @@ import {
   type MarkdownConfigWriteData,
 } from '../repositories/markdown-config.repository';
 import {
-  DEFAULT_MARKDOWN_MATRIX,
+  DEFAULT_MARKDOWN_MATRIX_SET,
+  type CreditScope,
   type MarkdownBasis,
   type MarkdownMatrixConfig,
+  type MarkdownMatrixSet,
 } from '../../../shared/domain/markdown';
 import type { MarkdownConfig, MarkdownConfigResponse } from '../models/markdown-config.model';
 
 type MarkdownConfigRecord = {
   organizationId: string;
+  creditScope: string;
   band1Percentage: number;
   band2Percentage: number;
   band3Percentage: number;
@@ -66,17 +69,30 @@ export class MarkdownConfigService {
    * default 50/60/75%-off-cost ladder when the org has not customized it.
    */
   async getMatrix(): Promise<MarkdownMatrixConfig> {
-    const record = await this.repo.findByOrganizationId(this.organizationId);
-    return record ? recordToMatrix(record) : DEFAULT_MARKDOWN_MATRIX;
+    return (await this.getMatrices()).NO_CREDIT;
+  }
+
+  async getMatrices(): Promise<MarkdownMatrixSet> {
+    const records = await this.repo.findAllByOrganizationId(this.organizationId);
+    const matrices: MarkdownMatrixSet = {
+      NO_CREDIT: DEFAULT_MARKDOWN_MATRIX_SET.NO_CREDIT,
+      FULL_CREDIT: DEFAULT_MARKDOWN_MATRIX_SET.FULL_CREDIT,
+    };
+    for (const record of records) {
+      if (record.creditScope === 'NO_CREDIT' || record.creditScope === 'FULL_CREDIT') {
+        matrices[record.creditScope] = recordToMatrix(record);
+      }
+    }
+    return matrices;
   }
 
   /** The API/UI-facing config: the matrix plus whether retail basis is available. */
   async getConfig(): Promise<MarkdownConfigResponse> {
-    const [matrix, hasRetailData] = await Promise.all([
-      this.getMatrix(),
+    const [matrices, hasRetailData] = await Promise.all([
+      this.getMatrices(),
       this.repo.hasRetailData(this.organizationId),
     ]);
-    return { matrix, hasRetailData };
+    return { matrices, matrix: matrices.NO_CREDIT, hasRetailData };
   }
 
   /**
@@ -84,13 +100,24 @@ export class MarkdownConfigService {
    * enum, and enforced non-decreasing discounts; here we enforce the one rule that
    * needs the database: a retail-basis band requires the org to have retail data.
    */
-  async updateConfig(matrix: MarkdownMatrixConfig): Promise<MarkdownConfigResponse> {
-    const wantsRetail =
-      matrix.band1.basis === 'retail' ||
-      matrix.band2.basis === 'retail' ||
-      matrix.band3.basis === 'retail';
+  async updateConfig(
+    input: MarkdownMatrixConfig | { matrices: MarkdownMatrixSet },
+  ): Promise<MarkdownConfigResponse> {
+    const isScopedUpdate = 'matrices' in input;
+    const matricesToWrite: Array<[CreditScope, MarkdownMatrixConfig]> = isScopedUpdate
+      ? [
+          ['NO_CREDIT', input.matrices.NO_CREDIT],
+          ['FULL_CREDIT', input.matrices.FULL_CREDIT],
+        ]
+      : [['NO_CREDIT', input]];
+    const wantsRetail = matricesToWrite.some(([, matrix]) =>
+      [matrix.band1, matrix.band2, matrix.band3].some((band) => band.basis === 'retail'),
+    );
 
-    const hasRetailData = await this.repo.hasRetailData(this.organizationId);
+    const [hasRetailData, existingMatrices] = await Promise.all([
+      this.repo.hasRetailData(this.organizationId),
+      isScopedUpdate ? Promise.resolve(null) : this.getMatrices(),
+    ]);
 
     if (wantsRetail && !hasRetailData) {
       throw new ValidationError(
@@ -98,8 +125,27 @@ export class MarkdownConfigService {
       );
     }
 
-    const record = await this.repo.upsert(this.organizationId, matrixToWriteData(matrix));
-    return { matrix: recordToMatrix(record), hasRetailData };
+    if (isScopedUpdate) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const [scope, matrix] of matricesToWrite) {
+          await this.repo.upsert(this.organizationId, scope, matrixToWriteData(matrix), tx);
+        }
+      });
+      return {
+        matrices: input.matrices,
+        matrix: input.matrices.NO_CREDIT,
+        hasRetailData,
+      };
+    }
+
+    const record = await this.repo.upsert(
+      this.organizationId,
+      'NO_CREDIT',
+      matrixToWriteData(input),
+    );
+    const matrices = existingMatrices as MarkdownMatrixSet;
+    matrices.NO_CREDIT = recordToMatrix(record);
+    return { matrices, matrix: matrices.NO_CREDIT, hasRetailData };
   }
 }
 

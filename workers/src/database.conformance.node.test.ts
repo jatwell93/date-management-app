@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
@@ -32,6 +32,7 @@ interface SeededItem {
   sku: string;
   status?: string;
   org?: string;
+  creditContext?: 'DIRECT_FULL' | 'REFERENCE_FULL';
 }
 
 function createSqliteDb(): import('better-sqlite3').Database {
@@ -44,7 +45,24 @@ function createSqliteDb(): import('better-sqlite3').Database {
       sku TEXT NOT NULL,
       name TEXT NOT NULL,
       cost_price REAL NOT NULL DEFAULT 0,
-      retail_price REAL
+      retail_price REAL,
+      supplier_id INTEGER,
+      brand_id INTEGER
+    );
+    CREATE TABLE suppliers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      credit_policy_note TEXT,
+      credit_type TEXT NOT NULL DEFAULT 'NONE'
+    );
+    CREATE TABLE brands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'REFERENCE',
+      suggested_supplier_name TEXT,
+      supplier_id INTEGER
     );
     CREATE TABLE store_areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,6 +170,10 @@ function normalizeDetailedRows(
     sku: row.sku,
     retailPrice: row.retailPrice === null ? null : Number(row.retailPrice),
     subDepartment: row.subDepartment ?? '',
+    creditScope: row.creditScope,
+    creditScopeReason: row.creditScopeReason,
+    creditSupplierId: row.creditSupplierId,
+    creditSupplierName: row.creditSupplierName,
   }));
 }
 
@@ -212,6 +234,7 @@ async function seedWorkersStoreWalkFloorProgress(sql: NeonQueryFunction<false, f
   await sql`
     INSERT INTO organizations (id, name, slug)
     VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'})
+    ON CONFLICT (id) DO NOTHING
   `;
   await sql`
     INSERT INTO users (id, organization_id, email, username, role)
@@ -427,9 +450,16 @@ describe('dual-backend report conformance', () => {
   });
 
   beforeEach(async () => {
+    await sql`
+      INSERT INTO organizations (id, name, slug)
+      VALUES (${ORG}, ${'Organization A'}, ${'organization-a'}),
+             (${OTHER_ORG}, ${'Organization B'}, ${'organization-b'})
+      ON CONFLICT (id) DO NOTHING`;
     await sql`DELETE FROM expired_item_transactions`;
     await sql`DELETE FROM inventory_items`;
     await sql`DELETE FROM products`;
+    await sql`DELETE FROM brands`;
+    await sql`DELETE FROM suppliers`;
     await sql`DELETE FROM store_areas`;
     const areaRows = await sql`
       INSERT INTO store_areas (organization_id, name, sub_department)
@@ -449,9 +479,48 @@ describe('dual-backend report conformance', () => {
     const org = seed.org ?? ORG;
     const status = seed.status ?? 'Active';
     const expiryDate = expiryDateForOffset(seed.offsetDays);
+    const supplierName = `Supplier ${seed.sku}`;
+    let workersSupplierId: number | null = null;
+    let workersBrandId: number | null = null;
+    let sqliteSupplierId: number | null = null;
+    let sqliteBrandId: number | null = null;
+
+    if (seed.creditContext) {
+      const supplierRows = await sql`
+        INSERT INTO suppliers (organization_id, name, credit_policy_note, credit_type)
+        VALUES (${org}, ${supplierName}, ${'Return monthly'}, ${'FULL_CREDIT'})
+        RETURNING id`;
+      workersSupplierId = Number(supplierRows[0].id);
+      const sqliteSupplier = sqlite
+        .prepare(
+          'INSERT INTO suppliers (organization_id, name, credit_policy_note, credit_type) VALUES (?, ?, ?, ?)',
+        )
+        .run(org, supplierName, 'Return monthly', 'FULL_CREDIT');
+      sqliteSupplierId = Number(sqliteSupplier.lastInsertRowid);
+    }
+
+    if (seed.creditContext === 'REFERENCE_FULL') {
+      const brandRows = await sql`
+        INSERT INTO brands (organization_id, name, supplier_id, source)
+        VALUES (${org}, ${'Brand ' + seed.sku}, ${workersSupplierId}, ${'REFERENCE'})
+        RETURNING id`;
+      workersBrandId = Number(brandRows[0].id);
+      const sqliteBrand = sqlite
+        .prepare(
+          'INSERT INTO brands (organization_id, name, supplier_id, source) VALUES (?, ?, ?, ?)',
+        )
+        .run(org, `Brand ${seed.sku}`, sqliteSupplierId, 'REFERENCE');
+      sqliteBrandId = Number(sqliteBrand.lastInsertRowid);
+    }
+
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price, retail_price)
-      VALUES (${org}, ${seed.sku}, ${seed.sku}, ${'Item ' + seed.sku}, 10, 18.5)
+      INSERT INTO products (
+        organization_id, barcode, sku, name, cost_price, retail_price, supplier_id, brand_id
+      )
+      VALUES (
+        ${org}, ${seed.sku}, ${seed.sku}, ${'Item ' + seed.sku}, 10, 18.5,
+        ${seed.creditContext === 'DIRECT_FULL' ? workersSupplierId : null}, ${workersBrandId}
+      )
       RETURNING id`;
     await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
@@ -465,9 +534,20 @@ describe('dual-backend report conformance', () => {
 
     const product = sqlite
       .prepare(
-        'INSERT INTO products (organization_id, barcode, sku, name, cost_price, retail_price) VALUES (?, ?, ?, ?, ?, ?)',
+        `INSERT INTO products (
+          organization_id, barcode, sku, name, cost_price, retail_price, supplier_id, brand_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(org, seed.sku, seed.sku, `Item ${seed.sku}`, 10, 18.5);
+      .run(
+        org,
+        seed.sku,
+        seed.sku,
+        `Item ${seed.sku}`,
+        10,
+        18.5,
+        seed.creditContext === 'DIRECT_FULL' ? sqliteSupplierId : null,
+        sqliteBrandId,
+      );
     sqliteProductId = Number(product.lastInsertRowid);
     sqlite
       .prepare(
@@ -510,7 +590,8 @@ describe('dual-backend report conformance', () => {
       { offsetDays: 15, sku: 'TIE-B' },
       { offsetDays: 15, sku: 'TIE-A' },
       { offsetDays: 45, sku: 'M2' },
-      { offsetDays: 75, sku: 'M1' },
+      { offsetDays: 75, sku: 'M1', creditContext: 'DIRECT_FULL' },
+      { offsetDays: 76, sku: 'REFERENCE', creditContext: 'REFERENCE_FULL' },
       { offsetDays: 100, sku: 'NEXT' },
       { offsetDays: 140, sku: 'FUTURE' },
       { offsetDays: 25, sku: 'SQLITE-SOLD', status: 'Processed' },

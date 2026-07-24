@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { buildCatalogueProvenanceResponse } from '../../../shared/domain/platform-catalogue';
 import { injectable, inject } from 'tsyringe';
 import type { ClaimableWriteOffRow } from '../../../shared/domain/credit-claim';
 import {
@@ -11,8 +12,8 @@ import {
   matchCatalogueEntry,
   normalizeCatalogueSku,
   type CatalogueMatchEntry,
-  type CatalogueReviewState,
 } from '../../../shared/domain/brand-supplier';
+import type { BrandReviewOptions } from '../../../shared/domain/catalogue-review';
 
 type SupplierRecord = Prisma.SupplierGetPayload<Record<string, never>>;
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -23,6 +24,7 @@ export interface SupplierWriteData {
   name: string;
   contactEmail: string | null;
   creditPolicyNote: string;
+  creditType: 'NONE' | 'FULL_CREDIT';
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
   followUpDays: number;
@@ -41,18 +43,6 @@ export interface PolicyReviewOptions {
 export interface BulkLinkTarget {
   brandId?: number;
   brandName?: string;
-}
-
-export interface BrandReviewOptions {
-  state?: CatalogueReviewState;
-  group?: string;
-  cursor?: number;
-  limit?: number;
-  page?: number;
-  pageSize?: number;
-  title?: string;
-  titleMatch?: 'contains' | 'startsWith';
-  sort?: 'titleAsc' | 'titleDesc';
 }
 
 export interface AddBrandData {
@@ -118,10 +108,13 @@ export class SupplierCreditRepository {
                api_sku AS "apiSku", sigma_sku AS "sigmaSku", ch2_sku AS "ch2Sku",
                brand_name AS "brandName", manufacturer_name AS "manufacturerName"
         FROM master_catalogue_entries
-        WHERE TRIM(barcode) = ${barcode}
-           OR (${normalizedSku} IS NOT NULL AND UPPER(TRIM(api_sku)) = ${normalizedSku})
-           OR (${normalizedSku} IS NOT NULL AND UPPER(TRIM(sigma_sku)) = ${normalizedSku})
-           OR (${normalizedSku} IS NOT NULL AND UPPER(TRIM(ch2_sku)) = ${normalizedSku})
+        WHERE retired_at IS NULL
+          AND (
+            TRIM(barcode) = ${barcode}
+            OR (${normalizedSku} IS NOT NULL AND UPPER(TRIM(api_sku)) = ${normalizedSku})
+            OR (${normalizedSku} IS NOT NULL AND UPPER(TRIM(sigma_sku)) = ${normalizedSku})
+            OR (${normalizedSku} IS NOT NULL AND UPPER(TRIM(ch2_sku)) = ${normalizedSku})
+          )
       `);
       const entry = matchCatalogueEntry(candidates, input);
 
@@ -310,6 +303,7 @@ export class SupplierCreditRepository {
       where: { id, organizationId },
       data: {
         creditPolicyNote: '',
+        creditType: 'NONE',
         policyWriteOffQty: null,
         policyCreditQty: null,
         followUpDays: 7,
@@ -564,13 +558,24 @@ export class SupplierCreditRepository {
         status: options.status,
         id: options.cursor == null ? undefined : { gt: options.cursor },
       },
-      include: { organization: { select: { id: true, name: true } } },
+      include: {
+        organization: { select: { id: true, name: true } },
+        chosenSupplier: { select: { id: true, name: true } },
+      },
       orderBy: { id: 'asc' },
       take: options.limit + 1,
     });
     const hasMore = rows.length > options.limit;
     const items = hasMore ? rows.slice(0, options.limit) : rows;
     return { items, nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null };
+  }
+
+  async getCatalogueProvenance() {
+    const rows = await this.prisma.catalogueSeedRun.findMany({
+      orderBy: { version: 'desc' },
+      take: 21,
+    });
+    return buildCatalogueProvenanceResponse(rows);
   }
 
   async updateCatalogueCorrectionStatus(

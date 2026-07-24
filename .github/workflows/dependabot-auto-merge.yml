@@ -9,14 +9,20 @@ name: Dependabot auto-merge
 # so we drive merges from CI instead.
 #
 # Scope, per docs/security.md ("review by boundary, don't mix runtime and
-# tooling"): only minor/patch updates auto-merge. Major bumps return
-# update-type `semver-major` and are intentionally skipped so each gets
-# individual review. The grouped minor/patch PRs (production-minor-patch /
-# development-minor-patch) report the highest semver change in the group, so a
-# group containing only minor/patch updates is what this matches.
+# tooling", and the remediation log's "registry-sourced dev/type/tooling, no
+# runtime code paths" precedent), auto-merge requires BOTH:
 #
-# To tighten further to dev/tooling deps only, add to the merge step's `if`:
-#   && steps.metadata.outputs.dependency-type == 'direct:development'
+#   1. update-type is minor or patch. Major bumps return `semver-major` and are
+#      skipped so each gets individual review. The grouped minor/patch PRs
+#      (production-minor-patch / development-minor-patch) report the highest
+#      semver change in the group, so a group of only minor/patch matches.
+#   2. dependency-type is `direct:development`. Production runtime dependencies
+#      never auto-merge, even for a patch bump.
+#
+# Condition 2 was added after runtime bumps (axios #377, body-parser #380)
+# auto-merged, which contradicted the documented dev/tooling-only precedent.
+# Note this gate only waits on the repo's REQUIRED status checks; test jobs
+# that are not required cannot block an auto-merge.
 on: pull_request
 
 # Grant the GITHUB_TOKEN write scopes for this workflow only. This applies even
@@ -35,12 +41,12 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for minor and patch updates
-        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch' }}
+      - name: Enable auto-merge for minor and patch development updates
+        if: ${{ (steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch') && steps.metadata.outputs.dependency-type == 'direct:development' }}
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

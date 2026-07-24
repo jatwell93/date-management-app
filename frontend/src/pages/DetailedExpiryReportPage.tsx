@@ -5,13 +5,16 @@ import { apiService } from '../lib/api.service';
 import { calculateMarkdownPrice } from '@shared/markdown';
 import Toast from '../components/ui/toast';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
-import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
+import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
+import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
+import { MarkdownCreditScopeBadge } from '../components/MarkdownCreditScopeBadge';
+import { MarkdownMatricesNotice } from '../components/MarkdownMatricesNotice';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
 }
 
-interface DetailedExpiryReportItem {
+interface DetailedExpiryReportItem extends MarkdownCreditContext {
   inventoryId: number;
   expiryDate: string; // Format: YYYY-MM-DD
   status: string;
@@ -84,7 +87,7 @@ function worklistGroupForDays(daysToExpiry: number | null): WorklistGroupKey | n
 
 export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
-  const markdownMatrix = useMarkdownMatrix(token);
+  const markdownConfig = useMarkdownMatrices(token);
   const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -131,6 +134,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sets loading before kicking off an abortable fetch
     setLoading(true);
     fetchReportData(controller.signal);
     return () => {
@@ -297,6 +301,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           active entry, open the full expiry entries table.
         </p>
       </header>
+      <MarkdownMatricesNotice {...markdownConfig} />
 
       <section
         className="grid gap-4 rounded-lg border bg-semantic-surface-1 p-4 md:grid-cols-[1.15fr_1fr]"
@@ -381,12 +386,14 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                     <ul className="mt-3 space-y-2">
                       {items.map((item) => {
                         const daysToExpiry = getDaysToExpiry(item.expiryDate);
-                        const markdownPrice =
-                          calculateMarkdownPrice(
-                            { costPrice: item.costPrice, retailPrice: item.retailPrice },
-                            daysToExpiry,
-                            markdownMatrix,
-                          ) ?? item.costPrice;
+                        const matrix = markdownConfig.matrices?.[item.creditScope ?? 'NO_CREDIT'];
+                        const markdownPrice = matrix
+                          ? (calculateMarkdownPrice(
+                              { costPrice: item.costPrice, retailPrice: item.retailPrice },
+                              daysToExpiry,
+                              matrix,
+                            ) ?? item.costPrice)
+                          : null;
                         const isSubmitting = soldThroughId === item.inventoryId;
                         return (
                           <li
@@ -399,10 +406,20 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                                 {item.sku} · {item.locationName} ·{' '}
                                 {daysToExpiry === null ? '—' : `${daysToExpiry} days left`}
                               </p>
+                              <div className="mt-2">
+                                <MarkdownCreditScopeBadge
+                                  creditScope={item.creditScope ?? 'NO_CREDIT'}
+                                  creditScopeReason={item.creditScopeReason ?? 'NO_CREDIT'}
+                                  creditSupplierId={item.creditSupplierId ?? null}
+                                  creditSupplierName={item.creditSupplierName ?? null}
+                                />
+                              </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="tabular-nums text-sm font-medium">
-                                {formatCurrencyValue(markdownPrice)}
+                                {markdownPrice == null
+                                  ? 'Unavailable'
+                                  : formatCurrencyValue(markdownPrice)}
                               </span>
                               <Button
                                 onClick={() => handleSoldThrough(item.inventoryId)}

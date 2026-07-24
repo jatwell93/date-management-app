@@ -200,7 +200,7 @@ export function startStripeSyncJob(): void {
 
   const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
   const stripeClient = new Stripe(envConfig.STRIPE_SECRET_KEY, {
-    apiVersion: '2023-08-16',
+    apiVersion: '2026-06-24.dahlia',
   });
 
   // Schedule: Every hour at minute 0

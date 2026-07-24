@@ -75,6 +75,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
       return;
     }

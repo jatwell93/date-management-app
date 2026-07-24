@@ -24,6 +24,10 @@ import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 import { getTierLimits, TierLimits } from './webhook-subscription.helpers';
+import {
+  getSubscriptionCurrentPeriodEnd,
+  getSubscriptionCurrentPeriodEndDate,
+} from './subscription-billing.helpers';
 import { dispatchStripeWebhookEvent } from './webhook-event-dispatcher';
 import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
@@ -90,7 +94,7 @@ export class WebhookService {
 
     if (envConfig.STRIPE_SECRET_KEY) {
       this.stripe = new Stripe(envConfig.STRIPE_SECRET_KEY, {
-        apiVersion: '2023-08-16',
+        apiVersion: '2026-06-24.dahlia',
       });
     } else {
       this.stripe = null;
@@ -284,9 +288,7 @@ export class WebhookService {
                 : 'monthly',
             trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            currentPeriodEnd: subscription.current_period_end
-              ? new Date(subscription.current_period_end * 1000)
-              : null,
+            currentPeriodEnd: getSubscriptionCurrentPeriodEndDate(subscription),
           },
           tx,
         );
@@ -365,7 +367,7 @@ export class WebhookService {
       log.info('Subscription updated', {
         subscriptionId: subscription.id,
         status: subscription.status,
-        currentPeriodEnd: subscription.current_period_end,
+        currentPeriodEnd: getSubscriptionCurrentPeriodEnd(subscription),
       });
 
       const organizationId = await this.validateWebhookMetadata(subscription.customer as string);
@@ -925,9 +927,7 @@ export class WebhookService {
       billingCycle:
         subscription.items.data[0]?.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      currentPeriodEnd: subscription.current_period_end
-        ? new Date(subscription.current_period_end * 1000)
-        : null,
+      currentPeriodEnd: getSubscriptionCurrentPeriodEndDate(subscription),
     };
 
     if (existingTier) {
@@ -1119,9 +1119,7 @@ export class WebhookService {
             ? 'annual'
             : 'monthly',
         cancelAtPeriodEnd: checkoutData.stripeSubscription.cancel_at_period_end,
-        currentPeriodEnd: checkoutData.stripeSubscription.current_period_end
-          ? new Date(checkoutData.stripeSubscription.current_period_end * 1000)
-          : null,
+        currentPeriodEnd: getSubscriptionCurrentPeriodEndDate(checkoutData.stripeSubscription),
       },
       tx,
     );

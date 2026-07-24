@@ -37,6 +37,30 @@ const STRIPE_PRICE_CATALOG = {
 
 type StripePriceTier = keyof typeof STRIPE_PRICE_CATALOG;
 
+/**
+ * Stripe's 2025 "basil" API (carried into 2026-06-24.dahlia, the version this
+ * SDK targets) moved the billing-period fields off the Subscription and onto
+ * each subscription item. For our single-item tier subscriptions the first
+ * item's period end is the subscription's effective renewal/expiry boundary.
+ * Returns the Unix epoch seconds, or null when no item is present.
+ */
+export function getSubscriptionCurrentPeriodEnd(
+  subscription: Pick<Stripe.Subscription, 'items'>,
+): number | null {
+  return subscription.items.data[0]?.current_period_end ?? null;
+}
+
+/**
+ * Convenience wrapper around {@link getSubscriptionCurrentPeriodEnd} that
+ * returns the period end as a `Date` (milliseconds) for persistence, or null.
+ */
+export function getSubscriptionCurrentPeriodEndDate(
+  subscription: Pick<Stripe.Subscription, 'items'>,
+): Date | null {
+  const seconds = getSubscriptionCurrentPeriodEnd(subscription);
+  return seconds ? new Date(seconds * 1000) : null;
+}
+
 export function mapStripeSubscriptionStatusToLocal(
   stripeStatus: Stripe.Subscription.Status | string,
 ): SubscriptionStatus {

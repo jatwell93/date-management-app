@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ProductService } from '../../services/product.service';
 import { findColumnByAlternatives } from '../../services/product-import.helpers';
 import { PrismaClient } from '@prisma/client';

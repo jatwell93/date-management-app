@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { MarkdownConfigService } from '../services/markdown-config.service';
-import type { MarkdownMatrixConfig } from '../../../shared/domain/markdown';
+import type { MarkdownMatrixConfig, MarkdownMatrixSet } from '../../../shared/domain/markdown';
 
 export class MarkdownConfigController {
   constructor(private serviceFactory: (orgId?: string) => MarkdownConfigService) {}
@@ -21,8 +21,8 @@ export class MarkdownConfigController {
 
   async updateConfig(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const matrix = req.body as MarkdownMatrixConfig;
-      const config = await this.getService(req).updateConfig(matrix);
+      const input = req.body as MarkdownMatrixConfig | { matrices: MarkdownMatrixSet };
+      const config = await this.getService(req).updateConfig(input);
       res.json(config);
     } catch (error) {
       next(error);

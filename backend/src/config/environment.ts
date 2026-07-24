@@ -14,11 +14,8 @@ const loadDotenv = () => {
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const dotenv = require('dotenv') as typeof import('dotenv');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require('fs') as typeof import('fs');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const path = require('path') as typeof import('path');
 
   const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase();

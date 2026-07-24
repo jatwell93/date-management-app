@@ -5,7 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 const sharedMarkdownPath = path.resolve(__dirname, '../shared/domain/markdown.ts');
+const sharedMarkdownCreditContextPath = path.resolve(
+  __dirname,
+  '../shared/domain/markdown-credit-context.ts',
+);
 const sharedSupplierPolicyPath = path.resolve(__dirname, '../shared/domain/supplier-policy.ts');
+const sharedCatalogueReviewPath = path.resolve(__dirname, '../shared/domain/catalogue-review.ts');
 
 // Every REACT_APP_* var referenced in source must appear in `define`, otherwise
 // the literal `process.env.X` survives into the browser bundle and throws a
@@ -62,7 +67,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@shared/markdown': sharedMarkdownPath,
+        '@shared/markdown-credit-context': sharedMarkdownCreditContextPath,
         '@shared/supplier-policy': sharedSupplierPolicyPath,
+        '@shared/catalogue-review': sharedCatalogueReviewPath,
         '@': path.resolve(__dirname, 'src'),
       },
     },

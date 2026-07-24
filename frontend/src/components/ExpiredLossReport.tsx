@@ -28,6 +28,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setError('Authentication token not found');
       return;
     }

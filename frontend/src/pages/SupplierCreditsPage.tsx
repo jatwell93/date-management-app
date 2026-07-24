@@ -41,6 +41,26 @@ const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: '
 
 type Tab = 'to-claim' | 'catalogue-review' | 'policy-review' | 'open' | 'settled';
 
+const SUPPLIER_CREDIT_TABS: Tab[] = [
+  'to-claim',
+  'catalogue-review',
+  'policy-review',
+  'open',
+  'settled',
+];
+
+function initialSupplierCreditView(): { tab: Tab; supplierId: number | null } {
+  const params = new URLSearchParams(window.location.search);
+  const requestedTab = params.get('view');
+  const rawSupplierId = params.get('supplierId');
+  const supplierId =
+    rawSupplierId != null && /^\d+$/.test(rawSupplierId) ? Number(rawSupplierId) : null;
+  return {
+    tab: SUPPLIER_CREDIT_TABS.includes(requestedTab as Tab) ? (requestedTab as Tab) : 'to-claim',
+    supplierId,
+  };
+}
+
 const STATUS_TONE: Record<string, string> = {
   DRAFT: 'bg-semantic-surface-3 text-semantic-text-secondary',
   SENDING: 'bg-semantic-primary/10 text-semantic-primary',
@@ -66,11 +86,8 @@ function isFollowUpDue(claim: CreditClaim): boolean {
 
 const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   const getFreshApiToken = useFreshApiToken(token);
-  const [tab, setTab] = useState<Tab>(() =>
-    new URLSearchParams(window.location.search).get('view') === 'catalogue-review'
-      ? 'catalogue-review'
-      : 'to-claim',
-  );
+  const [initialView] = useState(initialSupplierCreditView);
+  const [tab, setTab] = useState<Tab>(initialView.tab);
   const [pool, setPool] = useState<ClaimablePoolGroup[]>([]);
   const [claims, setClaims] = useState<CreditClaim[]>([]);
   const [report, setReport] = useState<RecoveryReport | null>(null);
@@ -124,6 +141,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off the claims data fetch on deps change
     void load();
   }, [load]);
 
@@ -209,6 +227,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
       {tab === 'policy-review' && (
         <PolicyReviewPanel
           suppliers={suppliers}
+          initialSupplierId={initialView.supplierId}
           isAdmin={effectiveUserRole === ROLES.ADMIN}
           getToken={getCatalogueReviewToken}
           onChanged={() => void load(false)}

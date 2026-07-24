@@ -36,6 +36,29 @@ describe('supplier policy request schemas', () => {
     expect(supplierPatchSchema.safeParse({ body: { policyWriteOffQty: 4 } }).success).toBe(true);
   });
 
+  it.each(['NONE', 'FULL_CREDIT'])(
+    'accepts credit type %s on every supplier write',
+    (creditType) => {
+      expect(
+        supplierCreateSchema.safeParse({ body: { name: 'Supplier', creditType } }).success,
+      ).toBe(true);
+      expect(
+        supplierUpdateSchema.safeParse({ body: { name: 'Supplier', creditType } }).success,
+      ).toBe(true);
+      expect(supplierPatchSchema.safeParse({ body: { creditType } }).success).toBe(true);
+    },
+  );
+
+  it('rejects unknown credit types on every supplier write', () => {
+    expect(
+      supplierCreateSchema.safeParse({ body: { name: 'Supplier', creditType: 'PARTIAL' } }).success,
+    ).toBe(false);
+    expect(
+      supplierUpdateSchema.safeParse({ body: { name: 'Supplier', creditType: 'PARTIAL' } }).success,
+    ).toBe(false);
+    expect(supplierPatchSchema.safeParse({ body: { creditType: 'PARTIAL' } }).success).toBe(false);
+  });
+
   it.each([supplierCreateSchema, supplierUpdateSchema])(
     'defers full-write ratio validation to the policy service',
     (schema) => {

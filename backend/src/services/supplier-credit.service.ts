@@ -4,15 +4,17 @@ import { getOrganizationId } from '../utils/auth-bypass';
 import { ConflictError, NotFoundError, PolicyValidationError, ValidationError } from '../errors';
 import {
   SupplierCreditRepository,
-  type BrandReviewOptions,
   type CorrectionReviewOptions,
   type SupplierWriteData,
 } from '../repositories/supplier-credit.repository';
+import type { BrandReviewOptions } from '../../../shared/domain/catalogue-review';
 import { rollupClaimablePool, type ClaimablePoolGroup } from '../../../shared/domain/credit-claim';
 import { isCatalogueReviewState } from '../../../shared/domain/brand-supplier';
 import {
   isPolicyWrite,
+  isCreditType,
   validatePolicyWrite,
+  type CreditType,
   type PolicyStatus,
   type SupplierPolicyRecord,
 } from '../../../shared/domain/supplier-policy';
@@ -24,6 +26,7 @@ export interface SupplierInput {
   contactEmail?: string | null;
   contactPhone?: string | null;
   creditPolicyNote?: string;
+  creditType?: CreditType;
   policyWriteOffQty?: number | null;
   policyCreditQty?: number | null;
   followUpDays?: number;
@@ -83,6 +86,7 @@ function toCreateData(input: SupplierInput, policyChanged: boolean): SupplierWri
     contactEmail: normalizeText(input.contactEmail),
     contactPhone: normalizeText(input.contactPhone),
     creditPolicyNote: input.creditPolicyNote?.trim() ?? '',
+    creditType: input.creditType ?? 'NONE',
     policyWriteOffQty: writeOffQty,
     policyCreditQty: creditQty,
     followUpDays: input.followUpDays ?? 7,
@@ -94,7 +98,7 @@ function toCreateData(input: SupplierInput, policyChanged: boolean): SupplierWri
 
 function toMergedData(
   input: SupplierInput,
-  existing: SupplierWriteData & { name: string },
+  existing: Omit<SupplierWriteData, 'creditType'> & { creditType: string },
   policyChanged: boolean,
 ): SupplierWriteData {
   const writeOffQty =
@@ -112,6 +116,8 @@ function toMergedData(
       input.creditPolicyNote === undefined
         ? existing.creditPolicyNote
         : (normalizeText(input.creditPolicyNote) ?? ''),
+    creditType:
+      input.creditType ?? (isCreditType(existing.creditType) ? existing.creditType : 'NONE'),
     policyWriteOffQty: writeOffQty,
     policyCreditQty: creditQty,
     followUpDays: input.followUpDays ?? existing.followUpDays,
@@ -138,6 +144,12 @@ function authorizeAndValidatePolicy(
   const errors = validatePolicyWrite(input, existing);
   if (errors.length) throw new PolicyValidationError('Supplier policy is invalid', errors);
   return true;
+}
+
+function assertCreditType(input: SupplierInput): void {
+  if (input.creditType !== undefined && !isCreditType(input.creditType)) {
+    throw new ValidationError('Credit type must be NONE or FULL_CREDIT');
+  }
 }
 
 function normalizeBulkIds(ids: number[], field: string): number[] {
@@ -169,6 +181,7 @@ export class SupplierCreditService {
   }
 
   async createSupplier(input: SupplierInput, actorRole?: string) {
+    assertCreditType(input);
     return this.repo.withTransaction(async (tx) => {
       const policyChanged = authorizeAndValidatePolicy(input, null, actorRole);
       const data = toCreateData(input, policyChanged);
@@ -178,6 +191,7 @@ export class SupplierCreditService {
   }
 
   async updateSupplier(id: number, input: SupplierInput, actorRole?: string) {
+    assertCreditType(input);
     return this.repo.withTransaction(async (tx) => {
       const existing = await this.repo.findSupplier(this.organizationId, id, tx);
       if (!existing) throw new NotFoundError(`Supplier ${id} not found`);
@@ -196,6 +210,7 @@ export class SupplierCreditService {
   }
 
   async replaceSupplier(id: number, input: SupplierInput, actorRole?: string) {
+    assertCreditType(input);
     return this.repo.withTransaction(async (tx) => {
       const existing = await this.repo.findSupplier(this.organizationId, id, tx);
       if (!existing) throw new NotFoundError(`Supplier ${id} not found`);
@@ -406,6 +421,10 @@ export class SupplierCreditService {
       ...options,
       limit: Math.min(100, Math.max(1, options.limit ?? 50)),
     });
+  }
+
+  getCatalogueProvenance() {
+    return this.repo.getCatalogueProvenance();
   }
 
   async reviewCatalogueCorrection(id: number, status: 'ACCEPTED' | 'REJECTED') {

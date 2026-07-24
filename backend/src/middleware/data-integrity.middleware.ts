@@ -92,7 +92,10 @@ export const validateDataConsistency = (req: Request, res: Response, next: NextF
           });
         }
       } catch (_error) {
-        res.status(500).json({ error: 'Data consistency check failed' });
+        // Must return: `next()` below is outside this try, so without it the
+        // request would continue into the route handler after the 500 was sent
+        // (ERR_HTTP_HEADERS_SENT on the handler's own response).
+        return res.status(500).json({ error: 'Data consistency check failed' });
       } finally {
         releaseDb(db);
       }

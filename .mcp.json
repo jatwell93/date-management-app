@@ -1,12 +1,3 @@
 {
-  "mcpServers": {
-    "quint-code": {
-      "command": "C:\\Users\\josha\\.local\\bin\\quint-code.exe",
-      "args": ["serve"],
-      "cwd": "c:\\Users\\josha\\date-management-app",
-      "env": {
-        "QUINT_PROJECT_ROOT": "c:\\Users\\josha\\date-management-app"
-      }
-    }
-  }
+  "mcpServers": {}
 }

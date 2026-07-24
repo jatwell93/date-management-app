@@ -881,6 +881,110 @@ export class MigrationService {
           );
         },
       },
+      {
+        id: 18,
+        name: '018-add-credit-scoped-markdown-matrix',
+        up: (db: DB) => {
+          addColumnIfMissing(
+            db,
+            'suppliers',
+            'credit_type',
+            "TEXT NOT NULL DEFAULT 'NONE' CHECK (credit_type IN ('NONE', 'FULL_CREDIT'))",
+          );
+
+          const columns = db
+            .prepare('PRAGMA table_info(organization_markdown_config)')
+            .all() as PragmaTableInfoRow[];
+          if (columns.some((column) => column.name === 'credit_scope')) return;
+
+          // Rebuilding organization_markdown_config to swap its UNIQUE key from
+          // (organization_id) to (organization_id, credit_scope). The legacy table
+          // carried a FOREIGN KEY to `organizations`, but that table does not exist
+          // in SQLite (organizations are Clerk-managed) — the FK was always a no-op.
+          // We deliberately omit it from the rebuilt table: since SQLite 3.25 the
+          // default legacy_alter_table=OFF makes ALTER TABLE ... RENAME re-parse and
+          // validate the renamed table's schema, and a FK to a missing table aborts
+          // the rename with "no such table: organizations". (PRAGMA legacy_alter_table
+          // is a no-op inside the migration transaction, so dropping the dead FK is the
+          // reliable fix.)
+          db.exec(`
+            DROP INDEX IF EXISTS idx_organization_markdown_config_org_id;
+            ALTER TABLE organization_markdown_config
+              RENAME TO organization_markdown_config_legacy_018;
+
+            CREATE TABLE organization_markdown_config (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              credit_scope TEXT NOT NULL DEFAULT 'NO_CREDIT',
+              band1_percentage REAL NOT NULL DEFAULT 50,
+              band2_percentage REAL NOT NULL DEFAULT 60,
+              band3_percentage REAL NOT NULL DEFAULT 75,
+              band1_basis TEXT NOT NULL DEFAULT 'cost',
+              band2_basis TEXT NOT NULL DEFAULT 'cost',
+              band3_basis TEXT NOT NULL DEFAULT 'cost',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              CHECK (credit_scope IN ('NO_CREDIT', 'FULL_CREDIT')),
+              CHECK (band1_basis IN ('cost', 'retail')),
+              CHECK (band2_basis IN ('cost', 'retail')),
+              CHECK (band3_basis IN ('cost', 'retail')),
+              CHECK (band1_percentage BETWEEN 0 AND 100),
+              CHECK (band2_percentage BETWEEN 0 AND 100),
+              CHECK (band3_percentage BETWEEN 0 AND 100),
+              UNIQUE (organization_id, credit_scope)
+            );
+
+            INSERT INTO organization_markdown_config (
+              id, organization_id, credit_scope,
+              band1_percentage, band2_percentage, band3_percentage,
+              band1_basis, band2_basis, band3_basis, created_at, updated_at
+            )
+            SELECT id, organization_id, 'NO_CREDIT',
+              band1_percentage, band2_percentage, band3_percentage,
+              band1_basis, band2_basis, band3_basis, created_at, updated_at
+            FROM organization_markdown_config_legacy_018;
+
+            DROP TABLE organization_markdown_config_legacy_018;
+            CREATE UNIQUE INDEX idx_organization_markdown_config_org_scope
+              ON organization_markdown_config (organization_id, credit_scope);
+          `);
+        },
+        down: () => {
+          Logger.warn(
+            'SQLite rollback leaves credit-scoped markdown columns in place to preserve customized matrices',
+          );
+        },
+      },
+      {
+        id: 19,
+        name: '019-add-catalogue-provenance',
+        up: (db: DB) => {
+          addColumnIfMissing(db, 'master_catalogue_entries', 'retired_at', 'TEXT');
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS catalogue_seed_runs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              version INTEGER NOT NULL UNIQUE,
+              seeded_at TEXT NOT NULL,
+              source_file_name TEXT NOT NULL,
+              inserted INTEGER NOT NULL,
+              updated INTEGER NOT NULL,
+              unchanged INTEGER NOT NULL,
+              retired INTEGER NOT NULL,
+              reinstated INTEGER NOT NULL,
+              error_count INTEGER NOT NULL
+            );
+          `);
+        },
+        down: (db: DB) => {
+          db.exec('DROP TABLE IF EXISTS catalogue_seed_runs;');
+          const columns = db
+            .prepare('PRAGMA table_info(master_catalogue_entries)')
+            .all() as PragmaTableInfoRow[];
+          if (columns.some((column) => column.name === 'retired_at')) {
+            db.exec('ALTER TABLE master_catalogue_entries DROP COLUMN retired_at;');
+          }
+        },
+      },
     ];
   }
 

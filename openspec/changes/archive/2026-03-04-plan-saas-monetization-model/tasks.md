@@ -1465,6 +1465,16 @@ The failures are **test environment issues**, not production bugs. Your test sui
   - ✅ Verified during ngrok testing: Zero cross-tenant access attempts logged
   - Monitoring hooks confirmed active: `tenant-isolation.middleware.ts` + Sentry capture
   - Production verification: Query Sentry with `tag:type:security AND cross_tenant_access_attempt` after 7 days live traffic
+  - ⚠️ **Correction (2026-07-22):** the two lines above were **not accurate**.
+    `tenant-isolation.middleware.ts` was written but never imported or mounted by any route
+    or by `index.ts`, so it never executed. "Zero cross-tenant access attempts logged" was
+    therefore vacuous — the hook could only ever report zero — and the Sentry query above
+    would never return results. The file has now been deleted as dead code.
+    **Isolation itself was, and remains, enforced and tested** at the service layer
+    (`multi-tenant-cross-tenant-isolation.test.ts`, plus `auth.middleware.ts` organizationId
+    extraction per `docs/cross-tenant-isolation-assurance.md`); the deleted middleware only
+    ever logged and called `next()` unconditionally, so it enforced nothing.
+    If cross-tenant *alerting* is wanted, it needs to be built and mounted deliberately.
 - [x] 17.7 Verify webhook delivery success rate >99%
   - ✅ Verified during ngrok testing: 100% webhook success rate (6/6 operational webhooks succeeded; 1 test card decline was expected behavior)
   - Webhook metrics tracked via `ApplicationMonitoringService` and exposed at `/api/admin/metrics/alerts`

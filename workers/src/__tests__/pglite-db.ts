@@ -46,7 +46,9 @@ const SCHEMA_SQL = `
 
   CREATE TABLE organization_markdown_config (
     id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL UNIQUE,
+    organization_id TEXT NOT NULL,
+    credit_scope TEXT NOT NULL DEFAULT 'NO_CREDIT'
+      CHECK (credit_scope IN ('NO_CREDIT', 'FULL_CREDIT')),
     band1_percentage DOUBLE PRECISION NOT NULL DEFAULT 50,
     band2_percentage DOUBLE PRECISION NOT NULL DEFAULT 60,
     band3_percentage DOUBLE PRECISION NOT NULL DEFAULT 75,
@@ -54,7 +56,8 @@ const SCHEMA_SQL = `
     band2_basis TEXT NOT NULL DEFAULT 'cost',
     band3_basis TEXT NOT NULL DEFAULT 'cost',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, credit_scope)
   );
 
   CREATE TABLE uploads (
@@ -225,6 +228,8 @@ const SCHEMA_SQL = `
     contact_email TEXT,
     contact_phone TEXT,
     credit_policy_note TEXT NOT NULL DEFAULT '',
+    credit_type TEXT NOT NULL DEFAULT 'NONE'
+      CHECK (credit_type IN ('NONE', 'FULL_CREDIT')),
     policy_write_off_qty INTEGER,
     policy_credit_qty INTEGER,
     follow_up_days INTEGER NOT NULL DEFAULT 7,
@@ -267,6 +272,7 @@ const SCHEMA_SQL = `
     sub_category TEXT,
     rrp DOUBLE PRECISION,
     metro_price DOUBLE PRECISION,
+    retired_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
@@ -274,6 +280,19 @@ const SCHEMA_SQL = `
   CREATE INDEX idx_master_catalogue_entries_api_sku ON master_catalogue_entries (api_sku);
   CREATE INDEX idx_master_catalogue_entries_sigma_sku ON master_catalogue_entries (sigma_sku);
   CREATE INDEX idx_master_catalogue_entries_ch2_sku ON master_catalogue_entries (ch2_sku);
+
+  CREATE TABLE catalogue_seed_runs (
+    id SERIAL PRIMARY KEY,
+    version INTEGER NOT NULL UNIQUE,
+    seeded_at TIMESTAMPTZ NOT NULL,
+    source_file_name TEXT NOT NULL,
+    inserted INTEGER NOT NULL,
+    updated INTEGER NOT NULL,
+    unchanged INTEGER NOT NULL,
+    retired INTEGER NOT NULL,
+    reinstated INTEGER NOT NULL,
+    error_count INTEGER NOT NULL
+  );
 
   CREATE TABLE catalogue_corrections (
     id SERIAL PRIMARY KEY,

@@ -232,7 +232,6 @@ describe('CSV header name recognition', () => {
   it('should handle leading/trailing spaces in headers', () => {
     // This is harder to test directly, but we can verify the implementation logic
     // by checking if the findColumnByAlternatives method works as expected
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row: any = {};
     row[' SKU '] = 'SKU123';
     row[' Name '] = 'Product';

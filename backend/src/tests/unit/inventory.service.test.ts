@@ -1,6 +1,19 @@
 import { InventoryService } from '../../services/inventory.service';
 import { PrismaClient } from '@prisma/client';
 
+function matrixRecord(creditScope: string, percentage: number) {
+  return {
+    organizationId: 'org-123',
+    creditScope,
+    band1Percentage: percentage,
+    band2Percentage: percentage,
+    band3Percentage: percentage,
+    band1Basis: 'cost',
+    band2Basis: 'cost',
+    band3Basis: 'cost',
+  };
+}
+
 function createMockPrisma() {
   const mockPrisma = {
     inventoryItem: {
@@ -41,6 +54,9 @@ function createMockPrisma() {
     subscriptionTier: {
       findFirst: vi.fn(),
       update: vi.fn(),
+    },
+    organizationMarkdownConfig: {
+      findMany: vi.fn(),
     },
     $transaction: vi.fn((callback) => callback(mockPrisma)),
   };
@@ -183,6 +199,35 @@ describe('InventoryService', () => {
   beforeEach(() => {
     mockPrisma = createMockPrisma();
     inventoryService = createInventoryService(organizationId, mockPrisma);
+  });
+
+  it('selects the FULL_CREDIT matrix for inventory linked to a full-credit supplier', async () => {
+    const expiryDate = new Date();
+    expiryDate.setUTCDate(expiryDate.getUTCDate() + 20);
+    mockPrisma.inventoryItem.findUnique.mockResolvedValue({
+      id: 1,
+      organizationId,
+      expiryDate,
+      product: {
+        costPrice: 100,
+        retailPrice: null,
+        organizationId,
+        supplier: {
+          id: 4,
+          organizationId,
+          name: 'Credit Supplier',
+          creditType: 'FULL_CREDIT',
+          creditPolicyNote: 'Return monthly',
+        },
+        brand: null,
+      },
+    });
+    mockPrisma.organizationMarkdownConfig.findMany.mockResolvedValue([
+      matrixRecord('NO_CREDIT', 75),
+      matrixRecord('FULL_CREDIT', 20),
+    ]);
+
+    await expect(inventoryService.calculateMarkdownPrice(1)).resolves.toBe(80);
   });
 
   afterEach(() => {
