@@ -473,6 +473,18 @@ test('adoption rejects an invalid deployment SHA', async () => {
   }
 });
 
+test('adoption rejects an empty migration history', async () => {
+  const { pg, client } = await createPglite();
+  try {
+    await assert.rejects(
+      performAdoption(client, [], dryRunOptions()),
+      /Migration history is empty/,
+    );
+  } finally {
+    await pg.close();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Tests: exact column exceptions
 // ---------------------------------------------------------------------------

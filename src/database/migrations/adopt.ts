@@ -295,6 +295,9 @@ export async function performAdoption(
   if (!/^[0-9a-f]{7,64}$/i.test(options.deploymentSha)) {
     throw new Error('A valid Git commit SHA is required');
   }
+  if (history.length === 0) {
+    throw new Error('Migration history is empty — cannot adopt without a baseline migration');
+  }
   const deploymentSha = options.deploymentSha.toLowerCase();
   const latestId = history[history.length - 1].id;
 
