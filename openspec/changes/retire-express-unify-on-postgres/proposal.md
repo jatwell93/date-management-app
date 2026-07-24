@@ -66,8 +66,9 @@ So Express keeps running **on SQLite, untouched**, as the reference/rollback bac
 it is deleted. The sequence de-risks the dangerous parts first instead:
 
 1. **Migration foundation first.** Stand up a Prisma-independent, executable Neon migration runner
-   (forward + rollback, baseline + adoption) and prove it on a real schema change against a Neon dev
-   branch. This is the single most load-bearing responsibility Prisma owns today (`npm run migrate:prod`
+   (forward migration plus class-appropriate recovery, baseline + adoption) and prove a reversible
+   schema change and its down path against a Neon dev branch. This is the single most load-bearing
+   responsibility Prisma owns today (`npm run migrate:prod`
    / `scripts/migrate-production-doppler.js`), it survives regardless of what else happens, and it
    directly de-risks production. See `design.md` "Replacement production migration path".
 2. **Responsibility & parity audit.** Inventory **everything `backend/` owns** — not just HTTP routes,
@@ -90,9 +91,9 @@ The concern that motivated caution — added local runtime weight on an already-
 | Concern | Answer |
 |---|---|
 | Express dev/test during the transition | **Unchanged — stays on SQLite** until deletion. No new local DB required to keep the fallback working. |
-| Worker local dev | `wrangler dev` (workerd/Miniflare) — comparable in weight to today's `ts-node` Express — pointed at a **Neon dev branch** (or pglite offline). |
+| Worker local dev | `wrangler dev` (workerd/Miniflare) — comparable in weight to today's `ts-node` Express — pointed at a developer-owned **Neon dev branch**. PGlite remains the offline test/conformance engine, not a `wrangler dev` adapter. |
 | Worker + conformance tests | **pglite** (already a dependency), initialized from the authoritative migrations. |
-| Migration-runner CI | Ephemeral per-run Postgres service or an auto-created Neon branch — no production secrets. |
+| Migration-runner CI | Required PR checks use an ephemeral PostgreSQL service with no production secrets; a separate scheduled job uses an isolated, auto-created Neon branch for provider compatibility. |
 
 `wrangler dev` is comparable in weight to the current `ts-node` Express process, and no heavyweight
 local Postgres server (Docker especially) is required, so this does not add meaningful weight to the
@@ -148,8 +149,9 @@ Before any source change under this proposal, confirm all of:
    enforcement, authorization precedence, webhook security) has a **Worker-shaped** equivalent on
    pglite/Neon that is green **before** Express is deleted. Note this is the coverage being reproduced
    once, not the Express test suite being ported to Postgres.
-4. **Migration path replaced first:** a Prisma-independent, executable Neon migration runner (forward +
-   rollback, with baseline + adoption) is proven **before** Prisma/`backend/` is removed —
+4. **Migration path replaced first:** a Prisma-independent, executable Neon migration runner (forward
+   migration plus recovery appropriate to each reversibility/data-loss class, with baseline + adoption)
+   is proven **before** Prisma/`backend/` is removed —
    `npm run migrate:prod` must not be deleted without a working successor.
 5. **Non-route responsibilities rehomed:** the scheduled jobs and the operational scripts in
    `backend/` each have a Worker/relocated home or a recorded retirement decision before deletion.
@@ -208,7 +210,8 @@ a new Worker capability by accident.
   (captured as MODIFIED requirements in the `dual-backend-parity` spec delta).
 - **Production migration mechanism** — `npm run migrate:prod`
   (`scripts/migrate-production-doppler.js`, Prisma `db push`) is replaced by a Prisma-independent Neon
-  migration runner (forward + rollback) that lives outside `backend/`; the Neon SQL migrations become
+  migration runner (forward migration plus recovery appropriate to each change's declared
+  reversibility/data-loss class) that lives outside `backend/`; the Neon SQL migrations become
   the authoritative path rather than a mirror of Prisma. Built and proven in Phase 1, **before**
   anything is deleted.
 - **Scheduled jobs** — the `backend/src/jobs/` jobs move to Cloudflare Cron Triggers/Queues (or are
@@ -235,9 +238,10 @@ a new Worker capability by accident.
 
 1. **Decision Gate** review — go/no-go with the trigger and prerequisites above (sequencing already
    resolved to the direct path).
-2. **Migration foundation:** stand up a Prisma-independent, executable Neon migration runner (forward +
-   rollback) outside `backend/`, with baseline + adoption, and prove it on a real schema change against
-   a Neon dev branch. Nothing is deleted until this succeeds.
+2. **Migration foundation:** inventory the current production migration contract, then stand up a
+   Prisma-independent, executable Neon migration runner (forward migration plus class-appropriate
+   recovery) outside `backend/`, with baseline + adoption, and prove a reversible schema change and its
+   down path against a Neon dev branch. Nothing is deleted until this succeeds.
 3. **Responsibility & parity audit:** inventory everything `backend/` owns — Express-only endpoints,
    tests, scheduled jobs, operational scripts, migration scripts, middleware/runtime concerns, docs,
    and config — and map each to a Worker/replacement target or an explicit retirement. This checklist
@@ -260,7 +264,7 @@ The change is complete when **all** of the following hold:
   shared domain types when the domain contract changes.
 - `backend/` (Express, Prisma, `better-sqlite3`, both Prisma schemas, the runtime SQLite migration
   runner) is deleted; `wrangler dev` is the sole dev API and the frontend works against it locally.
-- The Phase 3 rehoming checklist is fully satisfied — every endpoint, test, job, script, and the
+- The Phase 2 rehoming checklist is fully satisfied — every endpoint, test, job, script, and the
   migration path has a replacement or a recorded retirement.
 - The Prisma-independent Neon migration runner has performed a real schema change **with a rollback**,
   and golden rules 5 & 6 are rewritten naming it as authoritative.

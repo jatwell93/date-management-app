@@ -81,9 +81,11 @@ staged draft's:
   deps, no internet, fast. This is where the migrated coverage is written **once** (Worker-shaped) in
   Phase 3.
 - **Worker local dev → `wrangler dev` against a Neon dev branch.** Exercises the exact production engine
-  and driver; pglite is the offline fallback for behaviours that do not need the real driver.
-- **Migration-runner CI → ephemeral Postgres / per-run Neon branch.** The Phase 1 runner is proven
-  against isolated targets with no production secrets.
+  and driver. PGlite remains the offline test/conformance engine for behaviours that do not need the
+  real driver; this plan does not invent a PGlite adapter for `wrangler dev`.
+- **Migration-runner CI → ephemeral PostgreSQL for required PR checks.** The Phase 1 runner is proven
+  against an isolated service with no production secrets. A separate scheduled job creates and cleans
+  up an isolated Neon branch to exercise provider-specific behaviour.
 
 The Worker-shaped test coverage written in Phase 3.2 must, from the start, satisfy the isolation and
 fail-closed properties the staged draft was going to retrofit onto the Neon harness:
@@ -94,8 +96,9 @@ fail-closed properties the staged draft was going to retrofit onto the Neon harn
 - never point destructive test setup at a shared development or production database (explicit per-run
   target identity + allow token);
 - preserve coverage thresholds; and
-- keep pull-request CI runnable without exposing production credentials (ephemeral CI PostgreSQL service
-  or a per-run Neon branch with equivalent isolation).
+- keep pull-request CI runnable without exposing production credentials by using an ephemeral CI
+  PostgreSQL service. Hosted CI may implement this as a service container; developers do not need
+  local Docker. A scheduled Neon compatibility job uses equivalent per-run isolation and cleanup.
 
 Note this makes the Prisma-vs-pglite adapter question moot: the backend is never pointed at pglite
 (Prisma's PGlite support is only a community adapter, not worth the supply-chain risk), because the
@@ -164,8 +167,10 @@ Prisma removes that path, so before deletion we stand up a Prisma-independent ru
   into a permanent path outside `backend/`; that relocated history becomes the single authoritative,
   executable migration set and survives deletion of the backend workspace.
 - **Run it with a lightweight runner** (`node-pg-migrate`, `dbmate`, or a small first-party script) that
-  supports forward migration and rollback, invoked under Doppler from outside `backend/` (workers
-  workspace or repo root).
+  supports forward migration plus an explicit recovery mechanism appropriate to each migration's
+  declared reversibility/data-loss class, invoked under Doppler from outside `backend/` (workers
+  workspace or repo root). Reversible migrations may provide lossless downs; destructive changes use
+  Worker rollback with expanded schema, forward correction, or point-in-time restore instead.
 - Track applied migration identity/checksums so changed or out-of-order files fail before execution,
   and define transaction behaviour for migrations that PostgreSQL cannot run transactionally.
 - **Prove it on a real schema change against a Neon dev branch, including rollback**, before Prisma is

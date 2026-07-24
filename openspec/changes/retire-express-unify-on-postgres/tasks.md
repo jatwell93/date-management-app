@@ -24,10 +24,12 @@
 - [x] 0.3 Local/CI DB story — **CONFIRMED (2026-07-24)** by the product owner (jatwell93):
   - Express dev/test → stays on **SQLite, untouched** until deletion (the rollback backend; no new local DB).
   - Worker + conformance tests → **pglite** (already a dependency).
-  - Worker local dev → `wrangler dev` against a developer-owned **Neon branch** (pglite offline fallback).
-  - Migration-runner PR CI → ephemeral PostgreSQL service or auto-created per-run Neon branch, **no
-    production secrets**; a separate scheduled job exercises the real Neon provider.
-  - No Docker and no heavyweight local Postgres server.
+  - Worker local dev → `wrangler dev` against a developer-owned **Neon branch**. PGlite remains the
+    offline test/conformance engine; it is not claimed as a `wrangler dev` database adapter.
+  - Migration-runner PR CI → an ephemeral PostgreSQL service with **no production secrets**. A separate
+    scheduled job uses an isolated, auto-created Neon branch to exercise provider-specific behaviour.
+  - No local Docker or heavyweight local Postgres server is required; hosted CI may use a service
+    container internally.
 - [x] 0.4 Go/no-go — **GO (2026-07-24)**. All Phase 0 prerequisites are recorded (0.1 trigger met, 0.2
   sole-Worker approved, 0.3 DB story confirmed, sequencing resolved to the direct path). **Phase 1
   (migration foundation) is unparked and may begin.** Phases 3–4 (Worker parity, deletion) remain gated
@@ -36,48 +38,58 @@
 ## Phase 1 — Establish the authoritative PostgreSQL migration foundation (before anything is deleted)
 
 > Highest-priority, highest-value work: it replaces the single most load-bearing thing Prisma owns
-> (`npm run migrate:prod`), survives regardless of the rest, and directly de-risks production. Runs in
-> parallel with the Phase 2 audit.
+> (`npm run migrate:prod`), survives regardless of the rest, and directly de-risks production. After
+> task 1.1 captures the current migration contract, the remaining work may run in parallel with the
+> Phase 2 audit.
 
-- [ ] 1.1 Choose an executable Postgres migration runner for Neon that does **not** depend on Prisma.
+- [ ] 1.1 Inventory **all backend-owned migration scripts** before choosing their replacement:
+  `migrate-production-doppler.js` (the authoritative `npm run migrate:prod`),
+  `migrate-production-simple.js`, `migrate-production.ts`, `migrate.js`, `verify-migration.js`,
+  `list-migrations.ts`, plus the runtime SQLite migration runner
+  (`backend/src/migrations/{migrate.ts,migration.service.ts,migration.model.ts}` and the numbered
+  `*-*.migration.ts` files). Record the current production command's full contract—schema push,
+  required tier/reference seed, and post-migration verification—and mark every script **replace, do
+  not delete** until the successor reproduces or explicitly retires its responsibility.
+- [ ] 1.2 Choose an executable Postgres migration runner for Neon that does **not** depend on Prisma.
   Relocate `backend/prisma/neon-sql/*.sql` to a permanent path outside `backend/` and promote the
-  relocated files—not the runner alone—to the authoritative migration history. Require forward and
-  rollback support, an applied-migration ledger with identity/checksum validation, ordering checks,
-  and explicit transaction rules. Use a dedicated `schema_migrations` ledger; reconcile/retain the
-  legacy `migrations` table. Acquire a PostgreSQL advisory lock, make transactional DDL plus ledger
-  write atomic, bound lock/statement timeouts, and define resume/repair for explicit non-transactional
-  migrations.
-- [ ] 1.2 Build a canonical PostgreSQL baseline because the current Neon SQL series assumes an older
+  relocated files—not the runner alone—to the authoritative migration history. Require forward
+  migration plus an explicit recovery mechanism appropriate to each migration's declared
+  reversibility/data-loss class, an applied-migration ledger with identity/checksum validation,
+  ordering checks, and explicit transaction rules. Use a dedicated `schema_migrations` ledger;
+  reconcile/retain the legacy `migrations` table. Acquire a PostgreSQL advisory lock, make
+  transactional DDL plus ledger write atomic, bound lock/statement timeouts, and define resume/repair
+  for explicit non-transactional migrations.
+- [ ] 1.3 Build a canonical PostgreSQL baseline because the current Neon SQL series assumes an older
   schema already exists. Prove empty database → baseline → all migrations → latest schema fingerprint,
   covering tables, columns, constraints, indexes, defaults, functions, checks, and partial indexes.
-- [ ] 1.3 Build an explicit one-time adoption command for the existing production-shaped database.
+- [ ] 1.4 Build an explicit one-time adoption command for the existing production-shaped database.
   `adopt --dry-run` performs read-only catalog-definition checks, refuses mismatches, emits a reviewable
   report, and only a separate approved adoption stamps baseline/checksum metadata. Adoption never treats
   "object already exists" as proof the object is correct.
-- [ ] 1.4 Provide separate ordered commands outside `backend/` for migration status/preflight/apply,
+- [ ] 1.5 Provide separate ordered commands outside `backend/` for migration status/preflight/apply,
   required idempotent reference-data seed, and schema/data verification. Require a dedicated DDL
   migration role, allowlisted target identity, redacted output, explicit production confirmation,
   and rejection of development/restore/pooled application targets.
-- [ ] 1.5 Prove the runner end-to-end against isolated PostgreSQL/Neon targets: fresh install,
+- [ ] 1.6 Prove the runner end-to-end against isolated PostgreSQL/Neon targets: fresh install,
   existing-schema adoption, concurrent invocation refusal, interruption/recovery, checksum/catalog
   drift, safe down migration, forward fix, Worker rollback with expanded schema, and restore recovery.
   **Perform at least one real schema change with a working rollback on a Neon dev branch** — this is the
   gate that lets Prisma be removed in Phase 4.
-- [ ] 1.6 Integrate migrations into deployment: validate history; store dry-run/status output as an
+- [ ] 1.7 Integrate migrations into deployment: validate history; store dry-run/status output as an
   artifact; verify Neon PITR/backup readiness; apply expand-compatible schema; verify postconditions;
   seed/verify prerequisites; deploy Worker; run real database readiness plus schema-dependent smoke
   tests; observe a canary window with explicit stop/rollback thresholds. Migration-only changes must
   trigger this workflow, and manual deploy commands must not bypass compatibility checks.
-- [ ] 1.7 Require expand/migrate/contract metadata for every schema change, including compatibility,
+- [ ] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,
   reversibility/data-loss class, backfill/resume plan, and the later contract deployment. Do not use
   destructive down migrations as the default rollback.
-- [ ] 1.8 Verify production recovery before first migration: active Neon retention/PITR, named
+- [ ] 1.9 Verify production recovery before first migration: active Neon retention/PITR, named
   pre-migration recovery point, restore-to-new-branch drill, application verification, RPO/RTO, and
   responsible operator.
-- [ ] 1.9 Add structured migration logs/status and alerts for failure, advisory-lock timeout, checksum
+- [ ] 1.10 Add structured migration logs/status and alerts for failure, advisory-lock timeout, checksum
   mismatch, drift, duration, target identity, migration ID, and deployment SHA. Make Worker health
   execute a real database readiness query and verify Cloudflare observability/Sentry are enabled.
-- [ ] 1.10 Document the new authoritative path and its rollback (the golden-rule rewrite itself lands in
+- [ ] 1.11 Document the new authoritative path and its recovery policies (the golden-rule rewrite itself lands in
   Phase 5).
 
 ## Phase 2 — Responsibility & parity audit (parallel with Phase 1; before removing anything)
@@ -112,14 +124,7 @@ equivalent, a relocated home, or an explicit retirement decision.
   decide the backup capability's home:** `backup.sh` + `backend/src/routes/database.backup.routes.ts`
   together implement operator-triggered backup — pick a Worker route, Neon-native backups, or a
   scheduled R2 export via a Cron Trigger, and put the backup route on the rehoming checklist.
-- [ ] 2.5 Inventory **all backend-owned migration scripts** and mark each **replace, do not delete**
-  until the Phase 1 runner supersedes it: `migrate-production-doppler.js` (the authoritative
-  `npm run migrate:prod`), `migrate-production-simple.js`, `migrate-production.ts`, `migrate.js`,
-  `verify-migration.js`, `list-migrations.ts`, plus the runtime SQLite migration runner
-  (`backend/src/migrations/{migrate.ts,migration.service.ts,migration.model.ts}` and the numbered
-  `*-*.migration.ts` files). Record the current production command's full contract: schema push,
-  required tier/reference seed, and post-migration verification, so Phase 1 reproduces it.
-- [ ] 2.6 Produce a single **rehoming checklist** mapping every endpoint, test, job, script, and the
+- [ ] 2.5 Produce a single **rehoming checklist** mapping every endpoint, test, job, script, and the
   migration path to a target or a recorded retirement decision. Include middleware/runtime concerns
   (CORS, auth, tenant/role gates, rate limiting, error shape, Sentry, health/readiness, environment
   validation, shutdown), frontend network call sites, docs/runbooks, configuration, env templates,
@@ -159,20 +164,28 @@ equivalent, a relocated home, or an explicit retirement decision.
   route it through the shared URL builder unless intentionally same-origin; browser-test frontend
   port 3002 → Worker port 8787 for storage quota, subscription checkout/cancel/portal, uploads, errors,
   and CORS.
-- [ ] 3.8 Cut Stripe webhooks over as a production change: add typed secret/config, raw-byte signature
-  verification, supported-event contract, durable event idempotency/replay handling, Stripe endpoint
-  registration, shadow/dev verification, monitored cutover, and rollback. Keep the old Express receiver
-  available until Stripe delivery to the Worker is confirmed.
+- [ ] 3.8 Before implementation, record the currently registered production Stripe endpoint, the
+  deployment that receives it, and the exact rollback target; do not assume the undeployed Express
+  reference backend is reachable. Then cut Stripe webhooks over as a production change: add typed
+  secret/config, raw-byte signature verification, supported-event contract, durable event
+  idempotency/replay handling, Stripe endpoint registration, shadow/dev verification, monitored
+  cutover, and rollback. Keep a deployable rollback receiver—normally the previous Worker
+  deployment/route, or a deliberately temporary receiver—until Stripe delivery to the new Worker
+  handler is confirmed.
 - [ ] 3.9 Add one required database-conformance workflow triggered by `workers/**`, `shared/**`,
   authoritative migrations/schemas, and relevant root package/lock files. Run the Worker PGlite
-  conformance job and the migration-runner job (ephemeral Postgres / per-run Neon branch, no production
-  secrets); combine them in an always-reporting required gate. Fail rather than skip when the database
-  is unavailable.
+  conformance job and the migration-runner job against an ephemeral PostgreSQL service with no
+  production secrets; combine them in an always-reporting required gate. Fail rather than skip when
+  the database is unavailable. Add a separate scheduled compatibility job against an isolated,
+  auto-created Neon branch with guaranteed cleanup.
 
 ## Phase 4 — Delete Express + Prisma + SQLite together (gated on Phases 1–3)
 
-- [ ] 4.1 **Only once the rehoming checklist (2.6) is fully satisfied and the Phase 1 runner has proven a
-  real schema change with rollback (1.5)**, remove `backend/` in one controlled retirement: the Express
+- [ ] 4.0 Tag the last Express+SQLite-capable revision immediately before the retirement commit so the
+  fallback is recoverable by `git revert`/checkout if a post-deletion regression appears. Document and
+  test the exact recovery commands while the tagged revision is still present.
+- [ ] 4.1 **Only once the rehoming checklist (2.5) is fully satisfied and the Phase 1 runner has proven a
+  real reversible schema change and its down path (1.6)**, remove `backend/` in one controlled retirement: the Express
   server, Prisma client, `better-sqlite3`, the Prisma **base** (SQLite) schema, the runtime
   `src/migrations/` SQLite migration runner (`migrate.ts`, `migration.service.ts`, `migration.model.ts`,
   numbered `*-*.migration.ts`), and the Prisma **production** schema. Delete only the obsolete copies of
@@ -182,12 +195,9 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 4.2 Prune dependencies and scripts from the workspace: remove `express`, `@prisma/*`,
   `better-sqlite3`, and the backend Vitest project from `package.json` files (root, `backend/`, and any
   workspace-level). Remove the now-dead npm scripts (`migrate:prod`, `dev:backend`, `seed:*`, the
-  superseded migration scripts from 2.5, etc.). Retire `.github/workflows/backend-test.yml` — its
+  superseded migration scripts from 1.1, etc.). Retire `.github/workflows/backend-test.yml` — its
   multi-tenant coverage (cross-tenant isolation, penetration, concurrency, feature-gate enforcement) is
   already rehomed onto the Worker suite in Phase 3.2, so removing it loses nothing.
-- [ ] 4.3 Tag the last Express+SQLite-capable revision before deletion so the fallback is recoverable by
-  `git revert`/checkout if a post-deletion regression appears. Document the exact recovery commands.
-
 ## Phase 5 — Conventions & closeout
 
 - [ ] 5.1 Rewrite `openspec/project.md` golden rules 5 & 6 for a single backend / single migration path,
@@ -208,7 +218,7 @@ equivalent, a relocated home, or an explicit retirement decision.
 |---|---|---|---:|---|---|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | Optional; no product expansion proposed |
 | Codex Review | review feedback | Independent review | 2 | Addressed | (1) Migration ownership + full backend audit added; (2) staged engine-swap identified as throwaway — plan re-sequenced to direct retirement |
-| Eng Review | `/plan-eng-review` | Architecture & tests | 1 | Issues open | Consolidated gaps documented; Phase 0 trigger + approvals unresolved |
+| Eng Review | `/plan-eng-review` | Architecture & tests | 1 | Addressed | Phase 0 decisions cleared; migration dependency, CI target, Stripe rollback topology, recovery semantics, and deletion checkpoint made explicit |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | Not applicable | Infrastructure/backend consolidation |
 | DX Review | `/plan-devex-review` | Developer experience | 0 | Covered here | Local DB, CI, commands, rollback, and docs included |
 
