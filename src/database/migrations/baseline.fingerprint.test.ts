@@ -29,15 +29,16 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
-  columnStructuralKey,
-  constraintStructuralKey,
-  functionStructuralKey,
-  indexStructuralKey,
+  computeStructuralKeys,
+  isKnownColumnDifference,
+  MIGRATION_ONLY_PARTIAL_INDEXES,
+  PRISMA_ONLY_KNOWN_INDEXES,
+} from './catalog-comparison';
+import {
   introspectCatalog,
   normalizeCatalog,
   type NormalizedCatalog,
   setDifference,
-  triggerStructuralKey,
 } from './catalog-introspection';
 import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
 
@@ -138,43 +139,7 @@ async function applyRawSql(pg: PgliteInstance, sql: string): Promise<void> {
   await pg.exec(sql);
 }
 
-/**
- * Compute structural keys for a normalized catalog, excluding:
- * - NOT NULL constraints (contype 'n'): redundant with column nullability.
- * - CHECK constraints (contype 'c'): Prisma cannot express them; they are
- *   migration-only by design. Verified separately by counting.
- * - UNIQUE constraints (contype 'u'): Prisma generates `CREATE UNIQUE INDEX`
- *   instead of `ALTER TABLE ADD CONSTRAINT UNIQUE`. The index comparison
- *   already covers these functionally.
- * - The runner-owned `schema_migrations` table.
- */
-function computeStructuralKeys(catalog: NormalizedCatalog) {
-  const tables = catalog.tables.filter((t) => t !== 'schema_migrations');
-  const columns = catalog.columns.filter((c) => c.table !== 'schema_migrations');
-  const indexes = catalog.indexes.filter((i) => i.table !== 'schema_migrations');
-  const constraints = catalog.constraints.filter(
-    (c) => c.table !== 'schema_migrations' && c.type !== 'n' && c.type !== 'c' && c.type !== 'u',
-  );
-  const triggers = catalog.triggers.filter((t) => t.table !== 'schema_migrations');
-
-  return {
-    tables: [...tables].sort(),
-    columns: columns.map(columnStructuralKey).sort(),
-    indexes: indexes.map(indexStructuralKey).sort(),
-    constraints: constraints.map(constraintStructuralKey).sort(),
-    functions: catalog.functions.map(functionStructuralKey).sort(),
-    triggers: triggers.map(triggerStructuralKey).sort(),
-    // CHECK and UNIQUE constraints are kept for separate verification.
-    checkConstraints: catalog.constraints
-      .filter((c) => c.table !== 'schema_migrations' && c.type === 'c')
-      .map(constraintStructuralKey)
-      .sort(),
-    uniqueConstraints: catalog.constraints
-      .filter((c) => c.table !== 'schema_migrations' && c.type === 'u')
-      .map(constraintStructuralKey)
-      .sort(),
-  };
-}
+// `computeStructuralKeys` is imported from './catalog-comparison'.
 
 // ===========================================================================
 // Layer 1: Checked-in fingerprint deep comparison
@@ -311,66 +276,8 @@ test('baseline-only schema (0000) matches the pre-0001 Prisma production schema'
 // Layer 3: Full-series cross-comparison against current Prisma schema
 // ===========================================================================
 
-/**
- * Known, accepted differences between the migration-derived schema and the
- * current Prisma production schema. Each entry is documented with its cause.
- *
- * 1. **`updated_at` default**: migration-added tables set
- *    `DEFAULT CURRENT_TIMESTAMP` on `updated_at` columns; Prisma's `@updatedAt`
- *    directive does not generate a database-level default (the application
- *    layer sets the value). The migration approach is safer (the database
- *    always has a value) and is accepted.
- *
- * 2. **Timestamp type**: migration-added columns use `timestamp with time zone`
- *    (TIMESTAMPTZ) while the Prisma schema declares them as `DateTime` which
- *    Prisma maps to `timestamp(3) without time zone`. These are semantically
- *    different but accepted because the migrations deliberately chose TIMESTAMPTZ
- *    for timezone-aware storage.
- */
-function isKnownDifference(migKey: string, prismaKey: string): boolean {
-  const m = migKey.split('|');
-  const p = prismaKey.split('|');
-  const column = m[1];
-
-  // `updated_at` default: migration has CURRENT_TIMESTAMP, Prisma has no default.
-  if (
-    column === 'updated_at' &&
-    m[2] === p[2] && // same type
-    m[3] === p[3] && // same nullability
-    m[4] === 'CURRENT_TIMESTAMP' &&
-    p[4] === 'null'
-  ) {
-    return true;
-  }
-
-  // Timestamp type: migration uses timestamptz, Prisma uses timestamp(3).
-  if (
-    m[2] === 'timestamp with time zone' &&
-    p[2] === 'timestamp(3) without time zone' &&
-    m[3] === p[3] && // same nullability
-    m[4] === p[4] // same default
-  ) {
-    return true;
-  }
-
-  // `expired_item_transactions.markdown_level`: migration 0002 uses `smallint`,
-  // Prisma schema declares `Int` (maps to `integer`). The migration was already
-  // applied to production with `smallint`; the Prisma schema does not reflect
-  // this. This is a pre-existing drift, not introduced by the baseline. Flagged
-  // for reconciliation in a future task.
-  if (
-    m[0] === 'expired_item_transactions' &&
-    m[1] === 'markdown_level' &&
-    m[2] === 'smallint' &&
-    p[2] === 'integer' &&
-    m[3] === p[3] &&
-    m[4] === p[4]
-  ) {
-    return true;
-  }
-
-  return false;
-}
+// `isKnownColumnDifference` is imported from './catalog-comparison' as
+// `isKnownColumnDifference` (renamed from the test-local `isKnownDifference`).
 
 test('full-series schema (0000-0009) matches the current Prisma production schema', async () => {
   const { pg: migrationPg, client: migrationClient } = await createPglite();
@@ -443,7 +350,7 @@ test('full-series schema (0000-0009) matches the current Prisma production schem
         return `${pParts[0]}|${pParts[1]}` === tableCol;
       });
       if (matchingPrisma) {
-        if (isKnownDifference(migKey, matchingPrisma)) {
+        if (isKnownColumnDifference(migKey, matchingPrisma)) {
           knownDifferences.push(
             `${tableCol}: migration=${parts.slice(2).join(',')} vs prisma=${matchingPrisma.split('|').slice(2).join(',')}`,
           );
@@ -480,18 +387,8 @@ test('full-series schema (0000-0009) matches the current Prisma production schem
     // Indexes: compare structurally (ignoring names).
     // Migrations create partial indexes with WHERE clauses that Prisma cannot
     // express in the schema definition. These are migration-only by design.
-    const MIGRATION_ONLY_PARTIAL_INDEXES = new Set([
-      // 0004: one active cycle per org
-      "check_cycles|ON public.check_cycles USING btree (organization_id) WHERE (status = 'active'::text)|true|false|(status = 'active'::text)",
-      // 0001: one active catalogue import per org
-      "uploads|ON public.uploads USING btree (organization_id) WHERE ((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))|true|false|((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))",
-    ]);
-    // Prisma declares @@index([status]) on CheckCycle but migration 0004 does not
-    // create it. This is a known gap — the Prisma schema has an index that the
-    // migration series doesn't create. Flagged for a future migration to add it.
-    const PRISMA_ONLY_KNOWN_INDEXES = new Set([
-      'check_cycles|ON public.check_cycles USING btree (status)|false|false|null',
-    ]);
+    // MIGRATION_ONLY_PARTIAL_INDEXES and PRISMA_ONLY_KNOWN_INDEXES are imported
+    // from './catalog-comparison'.
     const idxOnlyInMigrations = setDifference(migrationKeys.indexes, prismaKeys.indexes);
     const idxOnlyInPrisma = setDifference(prismaKeys.indexes, migrationKeys.indexes);
     // Filter out indexes on the `migrations` table and known migration-only partial indexes.

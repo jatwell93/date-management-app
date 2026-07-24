@@ -47,14 +47,14 @@ export interface MigrationTargetOptions {
   productionConfirmation?: string;
 }
 
-interface LedgerRow {
+export interface LedgerRow {
   id: string;
   checksum: string;
   state: 'applying' | 'applied';
 }
 
-const MIGRATION_LOCK_NAMESPACE = 1_146_041_169;
-const MIGRATION_LOCK_KEY = 1;
+export const MIGRATION_LOCK_NAMESPACE = 1_146_041_169;
+export const MIGRATION_LOCK_KEY = 1;
 const MIGRATION_ID_PATTERN = /^\d{4}$/;
 
 export class MigrationExecutionError extends Error {
@@ -260,13 +260,13 @@ export async function loadMigrationHistory(directory: string): Promise<LoadedMig
   return loaded;
 }
 
-async function configureSession(client: MigrationClient): Promise<void> {
+export async function configureSession(client: MigrationClient): Promise<void> {
   await client.query(`SET lock_timeout = '10s'`);
   await client.query(`SET statement_timeout = '5min'`);
   await client.query(`SET idle_in_transaction_session_timeout = '1min'`);
 }
 
-async function ensureLedger(client: MigrationClient): Promise<void> {
+export async function ensureLedger(client: MigrationClient): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id text PRIMARY KEY,
@@ -321,7 +321,7 @@ function validateLedger(history: LoadedMigration[], rows: LedgerRow[]): Set<stri
   return applied;
 }
 
-async function recordMigration(
+export async function recordMigration(
   client: MigrationClient,
   migration: LoadedMigration,
   state: LedgerRow['state'],
