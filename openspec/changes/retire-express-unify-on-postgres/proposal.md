@@ -1,9 +1,11 @@
 # Proposal: Retire Express, Prisma, and SQLite and unify on the Worker + Postgres
 
-> **Status: ENGINEERING REVIEW IN PROGRESS / source work paused.** This began as a
-> decision-capture proposal. The **retirement path is now decided — direct, not a staged engine-swap**
-> (see "What changes" and Decision Gate criterion 6). The measurable Decision Gate must still be
-> re-certified and the replacement migration foundation must be proven before source work resumes.
+> **Status: DECISION GATE MOSTLY CLEARED / source work paused on final two items.** This began as a
+> decision-capture proposal. The **retirement path is decided — direct, not a staged engine-swap** (see
+> "What changes" and Decision Gate criterion 6); the **measurable trigger is met** (#390, #394) and the
+> **sole-Worker dev API is approved** (2026-07-24). Remaining before source work: confirm the local/CI
+> database story (task 0.3) and record the go/no-go (task 0.4). The replacement migration foundation
+> (Phase 1) must still be proven before anything is deleted.
 
 ## Why
 
@@ -127,12 +129,16 @@ dev machine.
 
 Before any source change under this proposal, confirm all of:
 
-1. **Trigger (measurable):** at least one of the two most recent schema changes touched **5+ of the
-   5–7 triplication artifacts** AND required **>30 minutes of mechanical sync** across them (not
-   business logic). The signal is the artifact count + sync time on real merged work, not a feeling
-   of untidiness. If neither recent change clears that bar, this stays parked — the shared-domain
-   discipline already contains the dangerous part of the duplication, so completing it is cleanup,
-   not risk reduction.
+1. **Trigger (measurable) — MET.** At least one of the two most recent schema changes touched **≥5 of
+   the 5–7 triplication artifacts** AND the base (`schema.prisma`) and production
+   (`production/schema.prisma`) Prisma schemas received a **byte-identical edit** — proving the change
+   was mechanically mirrored across dialects rather than being business logic. This git-observable proxy
+   replaces an earlier, unmeasurable ">30 minutes of mechanical sync" clause (wall-clock time is not
+   recoverable from history); the identical-diff signal is recorded permanently and is stronger
+   evidence. **Evidence:** #390 (credit-scoped markdown) and #394 (catalogue provenance) *each* touched
+   **7/7** artifacts with byte-identical dual-Prisma edits. If future changes stop clearing this bar,
+   the shared-domain discipline still contains the dangerous half of the duplication, so completing this
+   is cleanup, not risk reduction.
 2. **Worker parity coverage:** every Express-only endpoint has (or will get) an equivalent Worker
    handler and test before Express is deleted. The **known Express-only endpoints today** (pre-audit,
    see "Known Express-only surface" below) must each be on the Phase 2 rehoming checklist with a
@@ -156,18 +162,21 @@ Before any source change under this proposal, confirm all of:
 
 ### Decision Gate outcome
 
-- **Status:** ⏸️ **Reopened during engineering review on 2026-07-24.**
+- **Status:** 🟡 **Mostly cleared (2026-07-24).** The two human-decision blockers are resolved; only the
+  local/CI database-story confirmation (task 0.3) and the final go/no-go record (task 0.4) remain before
+  source work may begin.
+- **Criterion 1 (measurable trigger) — MET.** The unmeasurable ">30 minutes" clause was revised to the
+  git-observable identical-dual-Prisma-edit proxy (see criterion 1). Evidence on file: #390 and #394
+  each touched **7/7** triplication artifacts with **byte-identical** edits to the base and production
+  Prisma schemas — mechanical mirroring, not business logic.
+- **Sole-Worker dev API — APPROVED (2026-07-24)** by the product owner (jatwell93): `wrangler dev`
+  becomes the sole local dev API and Express is retired as a dev backend. Satisfies criterion 2's
+  product-decision prerequisite and gate task 0.2.
 - **Sequencing decision — RESOLVED (direct path).** The staged Knob A→B engine-swap is rejected in
-  favour of direct retirement, for the reasons in "What changes" and criterion 6. This resolves the
-  previously-open "staged versus direct" question; the remaining gate items are the measurable trigger
-  and the product-owner approvals below.
-- The `enhance-supplier-policy-capture` change proves the **artifact-count** half of criterion 1,
-  but the repository does not contain evidence that more than 30 minutes was spent on mechanical
-  schema synchronization rather than business logic. Record that evidence or revise the threshold
-  before checking the gate again.
-- Reconfirm the product-owner decisions to make `wrangler dev` the sole local API and to proceed with
-  the retirement. Until those decisions and the measurable trigger are recorded, implementation is
-  paused.
+  favour of direct retirement, for the reasons in "What changes" and criterion 6.
+- **Remaining before source work:** confirm the local/CI database story (task 0.3 — a recommendation is
+  drafted there) and record the go/no-go (task 0.4). Implementation stays paused until those two are
+  recorded.
 
 ### Known Express-only surface (pre-audit, to be confirmed in Phase 2)
 

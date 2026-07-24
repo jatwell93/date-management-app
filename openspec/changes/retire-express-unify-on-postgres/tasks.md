@@ -12,12 +12,14 @@
 
 ## Phase 0 — Decision Gate (required before any code)
 
-- [ ] 0.1 Confirm the trigger: schema-change friction (5–7 artifacts per column) is costing real time
-  on active work, not just felt as untidy. The `enhance-supplier-policy-capture` change proves the
-  artifact count; add evidence for the required **>30 minutes of mechanical synchronization excluding
-  business logic**, or revise the measurable threshold.
-- [ ] 0.2 Reconfirm with the product owner the intent to run the Worker as the sole dev API
-  (`wrangler dev`) and record the approval source/date.
+- [x] 0.1 Confirm the trigger — **MET (2026-07-24)**. The unmeasurable ">30 minutes of mechanical sync"
+  clause was revised to a git-observable proxy: a schema change touches **≥5 of the 5–7 triplication
+  artifacts** AND the base + production Prisma schemas receive a **byte-identical edit** (mechanical
+  mirroring, not business logic). Evidence: **#390** (credit-scoped markdown) and **#394** (catalogue
+  provenance) each touched **7/7** artifacts with byte-identical dual-Prisma edits (verified via
+  `git show` diff comparison). The proposal Decision Gate criterion 1 carries the revised wording.
+- [x] 0.2 Sole-Worker dev API — **APPROVED (2026-07-24)** by the product owner (jatwell93): run the
+  Worker (`wrangler dev`) as the sole local dev API and retire Express as a dev backend.
 - [ ] 0.3 Confirm the local/CI DB story for the direct path. **Recommendation:** Express dev/test stays
   on **SQLite, untouched** until deletion; Worker + conformance tests use **pglite**; Worker local dev
   uses `wrangler dev` against a developer-owned **Neon branch** (pglite offline fallback); the migration
@@ -209,8 +211,9 @@ equivalent, a relocated home, or an explicit retirement decision.
 | DX Review | `/plan-devex-review` | Developer experience | 0 | Covered here | Local DB, CI, commands, rollback, and docs included |
 
 - **RESOLVED:** staged-versus-direct retirement sequence — **direct path chosen** (no transitional
-  Express-on-Postgres state; SQLite retained as rollback until deletion).
-- **UNRESOLVED:** measurable friction evidence (0.1), sole-Worker product approval (0.2), and the
-  local/CI database choice confirmation (0.3).
-- **VERDICT:** implementation remains paused until Phase 0 is re-certified; the engineering review
-  corrections are incorporated and strict OpenSpec validation is required after every further edit.
+  Express-on-Postgres state; SQLite retained as rollback until deletion); measurable friction trigger
+  (0.1, met by #390/#394); sole-Worker product approval (0.2, approved 2026-07-24).
+- **UNRESOLVED:** local/CI database choice confirmation (0.3 — recommendation drafted) and the final
+  go/no-go record (0.4).
+- **VERDICT:** two of the four Phase 0 blockers cleared; implementation stays paused until 0.3 is
+  confirmed and 0.4 records go/no-go. Strict OpenSpec validation is required after every further edit.
