@@ -158,6 +158,11 @@
 - [ ] 1.11 Document the new authoritative path and its recovery policies (the golden-rule rewrite itself lands in
       Phase 5).
 
+> **Integration checkpoint — end PR 360 here.** PR 360 contains only the approved proposal and Phase 1
+> migration foundation. Once Phase 1 is complete and its focused verification passes, update the PR
+> summary, obtain review, and merge it to `main`. Do not add Phase 2–5 implementation to PR 360.
+> Publish Phase 2 from a new short-lived branch based on the latest `main`.
+
 ## Phase 2 — Responsibility & parity audit (parallel with Phase 1; before removing anything)
 
 Inventory **everything `backend/` owns**, not just HTTP routes. For each item, record a target: a Worker
@@ -196,6 +201,10 @@ equivalent, a relocated home, or an explicit retirement decision.
       validation, shutdown), frontend network call sites, docs/runbooks, configuration, env templates,
       assets/generated files, package commands, workflows, and root tooling. This checklist gates all
       deletion in Phase 4.
+
+> **Integration checkpoint — audit PR.** Keep the Phase 2 inventory and rehoming decisions in their own
+> reviewable PR. Merge that PR to `main` before starting dependent Phase 3 implementation so every later
+> branch uses the reviewed checklist as its deletion authority.
 
 ## Phase 3 — Worker parity + move dev/tests onto the Worker (gated on Phases 1–2)
 
@@ -245,6 +254,11 @@ equivalent, a relocated home, or an explicit retirement decision.
       the database is unavailable. Add a separate scheduled compatibility job against an isolated,
       auto-created Neon branch with guaranteed cleanup.
 
+> **Integration checkpoint — parity PRs.** Implement Phase 3 as one or more independently safe,
+> reviewable PRs based on the latest `main`; split by coherent responsibility when that reduces review
+> risk. Every merged slice must leave the existing Express backend usable. Merge all Phase 3 PRs and
+> satisfy the Phase 1–3 gates before opening the Phase 4 deletion PR.
+
 ## Phase 4 — Delete Express + Prisma + SQLite together (gated on Phases 1–3)
 
 - [ ] 4.0 Tag the last Express+SQLite-capable revision immediately before the retirement commit so the
@@ -264,6 +278,11 @@ equivalent, a relocated home, or an explicit retirement decision.
       superseded migration scripts from 1.1, etc.). Retire `.github/workflows/backend-test.yml` — its
       multi-tenant coverage (cross-tenant isolation, penetration, concurrency, feature-gate enforcement) is
       already rehomed onto the Worker suite in Phase 3.2, so removing it loses nothing.
+
+> **Integration checkpoint — dedicated retirement PR.** Phase 4 is a separate, controlled deletion PR
+> based on the latest `main`. Retain the full backend suite as its final regression gate, in addition to
+> the replacement Worker and migration gates. Do not mix unrelated cleanup into the retirement commit;
+> land optional closeout work in Phase 5.
 
 ## Phase 5 — Conventions & closeout
 
