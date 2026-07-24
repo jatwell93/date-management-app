@@ -46,8 +46,23 @@ process, so the deciding factor is the database:
 - **Docker Postgres — rejected.** Docker Desktop on Windows is a constant RAM/CPU tax and the worst
   option on a slow machine. Explicitly not recommended.
 
-Likely landing spot: **pglite for tests + a Neon dev branch for local dev**, with native Postgres as a
-fallback for offline work. This keeps local weight low without Docker.
+Likely landing spot, **split by backend because the two use different DB access styles**:
+
+- **Workers tests → pglite.** The Worker uses hand-written SQL via `@neondatabase/serverless`, and the
+  existing pglite conformance harness (`workers/src/__tests__/pglite-db.ts`) already runs that SQL
+  against in-process WASM Postgres. No new deps, no internet, fast. This is the clean fit.
+- **Backend tests → Neon dev branch** (Prisma is the constraint). The backend uses Prisma, and Prisma
+  only supports pglite through a **community-maintained** driver adapter (per Prisma's docs: community
+  adapters exist for PGlite) — not an official adapter. Adopting it would add a supply-chain risk and a
+  new dep for no parity benefit, so the backend test path uses the **existing** Neon/Postgres Vitest
+  config (`vitest.config.neon.ts` + `test-setup-neon.js`) promoted to default, run against a Neon dev
+  branch via Prisma's official `pg` adapter. This requires `NEON_CONNECTION_STRING` (Doppler) to run
+  backend tests and needs internet, but it is the lowest-risk path and exercises the real production
+  engine. Native Postgres remains an offline fallback.
+
+So "pglite for tests" in the proposal applies to the workers; the backend's test DB is Neon. This split
+is a consequence of the backend being Prisma-bound and the Worker being raw-SQL — it collapses only
+when the backend is removed in Knob B.
 
 ## What survives
 

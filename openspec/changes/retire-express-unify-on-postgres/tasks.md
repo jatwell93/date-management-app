@@ -20,14 +20,18 @@
 
 ## Phase 1 — Knob A: unify dev/test on Postgres (drop SQLite)
 
-- [ ] 1.1 Stand up a Postgres-backed dev/test path (pglite and/or Neon dev branch); document how to run
-  it without Docker. Add the `wrangler dev` local config (`.dev.vars` / `wrangler.toml` dev section)
+- [ ] 1.1 Stand up a Postgres-backed dev/test path, **split by backend** (see `design.md` "Local
+  database options"): **workers tests → pglite** (existing harness, already works); **backend tests →
+  Neon dev branch** via the existing `vitest.config.neon.ts` path promoted to default (Prisma is
+  bound to a real Postgres; pglite needs a community adapter we are not adopting). Document how to run
+  each without Docker. Add the `wrangler dev` local config (`.dev.vars` / `wrangler.toml` dev section)
   that points the Worker at the Neon dev branch (vs production Hyperdrive), and document which
   behaviours need the Neon dev branch because pglite cannot model them.
-- [ ] 1.2 Point the existing backend Vitest suite at the Postgres-backed path (pglite for fast tests,
-  Neon dev branch where pglite cannot model the behaviour) instead of `better-sqlite3`; get it green.
-  The tests stay **Express-shaped** (`supertest`, Express `req`/`res`) in this phase — they only swap
-  the database engine. The rewrite against the Worker `Request`/`Response` model is a Knob B task (4.2).
+- [ ] 1.2 Promote the existing Neon/Postgres backend Vitest config to the default and point the suite
+  at the Neon dev branch instead of `better-sqlite3`; get it green. The tests stay **Express-shaped**
+  (`supertest`, Express `req`/`res`) in this phase — they only swap the database engine. The rewrite
+  against the Worker `Request`/`Response` model is a Knob B task (4.2). Requires
+  `NEON_CONNECTION_STRING` (Doppler) to run backend tests.
 - [ ] 1.3 Point local dev data access at Postgres (dev branch / pglite) instead of SQLite.
 - [ ] 1.3a Provide a Postgres dev-data seed/setup script so devs switching off SQLite can populate a
   fresh Neon dev branch / pglite instance without manual SQL. (Replaces the local SQLite DB devs have
