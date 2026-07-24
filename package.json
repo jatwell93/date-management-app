@@ -33,6 +33,7 @@
     "mem:recall": "node scripts/mem-recall.js",
     "mem:rebuild": "node scripts/mem-rebuild.js",
     "migrate:apply": "npm run compile && node build/src/database/migrations/cli.js",
+    "migrate:adopt": "npm run compile && node build/src/database/migrations/adopt-cli.js",
     "seed:master-catalogue": "npm --prefix backend run seed:master-catalogue --",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
