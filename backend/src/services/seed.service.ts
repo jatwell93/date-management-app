@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
@@ -37,8 +37,52 @@ export interface MasterCatalogueParseResult {
 export interface MasterCatalogueSeedResult {
   inserted: number;
   updated: number;
-  skipped: number;
+  unchanged: number;
+  retired: number;
+  reinstated: number;
+  skippedBlankRows: number;
+  errorCount: number;
   errors: Array<{ row: number; message: string }>;
+  retiredBarcodes: string[];
+  dryRun: boolean;
+}
+
+export interface MasterCatalogueSeedOptions {
+  dryRun?: boolean;
+  confirmRetirements?: boolean;
+}
+
+export class CatalogueSeedValidationError extends Error {
+  constructor(public readonly result: MasterCatalogueSeedResult) {
+    super(`Master catalogue workbook contains ${result.errorCount} validation error(s)`);
+    this.name = 'CatalogueSeedValidationError';
+  }
+}
+
+export class RetirementThresholdExceeded extends Error {
+  constructor(
+    public readonly retired: number,
+    public readonly activeBefore: number,
+    public readonly proportion: number,
+    public readonly threshold: number,
+  ) {
+    super(
+      `Retiring ${retired} of ${activeBefore} active catalogue entries (${proportion}) exceeds threshold ${threshold}`,
+    );
+    this.name = 'RetirementThresholdExceeded';
+  }
+}
+
+function retirementThreshold(): number {
+  const configured = process.env.MASTER_CATALOGUE_RETIREMENT_THRESHOLD;
+  if (configured == null || configured.trim() === '') return 0.1;
+  const threshold = Number(configured);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new Error(
+      'MASTER_CATALOGUE_RETIREMENT_THRESHOLD must be a number between 0 and 1 inclusive',
+    );
+  }
+  return threshold;
 }
 
 function masterCatalogueEntryMatches(
@@ -89,6 +133,7 @@ export function normalizeMasterCatalogueRows(rows: unknown[][]): MasterCatalogue
 
   const entries: MasterCatalogueSeedEntry[] = [];
   const errors: Array<{ row: number; message: string }> = [];
+  const barcodeRows = new Map<string, number>();
   let skipped = 0;
 
   dataRows.forEach((row, index) => {
@@ -105,6 +150,16 @@ export function normalizeMasterCatalogueRows(rows: unknown[][]): MasterCatalogue
       errors.push({ row: rowNumber, message: 'Description, barcode, and brand are required' });
       return;
     }
+
+    const firstRow = barcodeRows.get(barcode);
+    if (firstRow != null) {
+      errors.push({
+        row: rowNumber,
+        message: `Duplicate barcode ${barcode}; first seen on row ${firstRow}`,
+      });
+      return;
+    }
+    barcodeRows.set(barcode, rowNumber);
 
     entries.push({
       barcode,
@@ -151,50 +206,121 @@ export class SeedService {
     this.inventoryRepo = new InventoryRepository(this.prisma);
   }
 
-  async seedMasterCatalogue(workbookPath: string): Promise<MasterCatalogueSeedResult> {
+  async seedMasterCatalogue(
+    workbookPath: string,
+    options: MasterCatalogueSeedOptions = {},
+  ): Promise<MasterCatalogueSeedResult> {
     if (!workbookPath.trim()) {
       throw new Error('A master catalogue workbook path is required');
     }
     if (
       process.env.NODE_ENV === 'production' &&
+      options.dryRun !== true &&
       path.basename(workbookPath).toLowerCase() === 'sample_100_ipa_price_brands.xlsx'
     ) {
       throw new Error('The 100-row sample workbook cannot be used as the production catalogue');
     }
 
+    const threshold = retirementThreshold();
     const parsed = parseMasterCatalogueWorkbook(workbookPath);
-    const result: MasterCatalogueSeedResult = {
-      inserted: 0,
-      updated: 0,
-      skipped: parsed.skipped,
-      errors: [...parsed.errors],
-    };
+    const seededAt = new Date();
+    const workbookBarcodes = new Set(parsed.entries.map((entry) => entry.barcode));
 
-    for (const [index, entry] of parsed.entries.entries()) {
-      try {
-        const existing = await this.prisma.masterCatalogueEntry.findUnique({
-          where: { barcode: entry.barcode },
-        });
-        if (existing && masterCatalogueEntryMatches(existing, entry)) {
-          result.skipped += 1;
-          continue;
-        }
-        await this.prisma.masterCatalogueEntry.upsert({
-          where: { barcode: entry.barcode },
-          create: entry,
-          update: entry,
-        });
-        if (existing) result.updated += 1;
-        else result.inserted += 1;
-      } catch (error) {
-        result.errors.push({
-          row: index + 2,
-          message: error instanceof Error ? error.message : String(error),
+    const calculate = async (
+      client: PrismaClient | Prisma.TransactionClient,
+      applyWrites: boolean,
+    ): Promise<MasterCatalogueSeedResult> => {
+      const existingEntries = await client.masterCatalogueEntry.findMany();
+      const existingByBarcode = new Map(existingEntries.map((entry) => [entry.barcode, entry]));
+      const retiredBarcodes = existingEntries
+        .filter((entry) => entry.retiredAt == null && !workbookBarcodes.has(entry.barcode))
+        .map((entry) => entry.barcode)
+        .sort();
+
+      const result: MasterCatalogueSeedResult = {
+        inserted: 0,
+        updated: 0,
+        unchanged: 0,
+        retired: retiredBarcodes.length,
+        reinstated: 0,
+        skippedBlankRows: parsed.skipped,
+        errorCount: parsed.errors.length,
+        errors: [...parsed.errors],
+        retiredBarcodes,
+        dryRun: !applyWrites,
+      };
+
+      for (const entry of parsed.entries) {
+        const existing = existingByBarcode.get(entry.barcode);
+        if (!existing) result.inserted += 1;
+        else if (existing.retiredAt != null) result.reinstated += 1;
+        else if (masterCatalogueEntryMatches(existing, entry)) result.unchanged += 1;
+        else result.updated += 1;
+      }
+
+      if (!applyWrites) return result;
+
+      const activeBefore = existingEntries.filter((entry) => entry.retiredAt == null).length;
+      const proportion = activeBefore === 0 ? 0 : result.retired / activeBefore;
+      if (activeBefore > 0 && proportion > threshold && options.confirmRetirements !== true) {
+        throw new RetirementThresholdExceeded(result.retired, activeBefore, proportion, threshold);
+      }
+
+      const newEntries = parsed.entries.filter((entry) => !existingByBarcode.has(entry.barcode));
+      if (newEntries.length > 0) {
+        await client.masterCatalogueEntry.createMany({
+          data: newEntries.map((entry) => ({ ...entry, retiredAt: null })),
         });
       }
-    }
 
-    return result;
+      for (const entry of parsed.entries) {
+        const existing = existingByBarcode.get(entry.barcode);
+        if (!existing) continue;
+        if (existing.retiredAt == null && masterCatalogueEntryMatches(existing, entry)) {
+          continue;
+        }
+        await client.masterCatalogueEntry.update({
+          where: { barcode: entry.barcode },
+          data: { ...entry, retiredAt: null },
+        });
+      }
+
+      if (retiredBarcodes.length > 0) {
+        await client.masterCatalogueEntry.updateMany({
+          where: { barcode: { in: retiredBarcodes }, retiredAt: null },
+          data: { retiredAt: seededAt },
+        });
+      }
+
+      const latestVersion = await client.catalogueSeedRun.aggregate({ _max: { version: true } });
+      await client.catalogueSeedRun.create({
+        data: {
+          version: (latestVersion._max.version ?? 0) + 1,
+          seededAt,
+          sourceFileName: path.basename(workbookPath),
+          inserted: result.inserted,
+          updated: result.updated,
+          unchanged: result.unchanged,
+          retired: result.retired,
+          reinstated: result.reinstated,
+          errorCount: 0,
+        },
+      });
+
+      result.dryRun = false;
+      return result;
+    };
+
+    if (parsed.errors.length > 0) {
+      const result = await calculate(this.prisma, false);
+      if (options.dryRun) return result;
+      throw new CatalogueSeedValidationError(result);
+    }
+    if (options.dryRun) return calculate(this.prisma, false);
+    return this.prisma.$transaction((transaction) => calculate(transaction, true), {
+      maxWait: 10_000,
+      timeout: 600_000,
+    });
   }
 
   async seedDemoData(organizationId: string): Promise<SeedResult> {

@@ -1,4 +1,9 @@
-import type { MarkdownBasis, MarkdownMatrixConfig } from '../../../shared/domain/markdown';
+import type {
+  CreditScope,
+  MarkdownBasis,
+  MarkdownMatrixConfig,
+  MarkdownMatrixSet,
+} from '../../../shared/domain/markdown';
 
 /**
  * Persisted per-organization markdown matrix. The three bands map to the shared
@@ -6,6 +11,7 @@ import type { MarkdownBasis, MarkdownMatrixConfig } from '../../../shared/domain
  */
 export interface MarkdownConfig {
   organizationId: string;
+  creditScope: CreditScope;
   band1Percentage: number;
   band2Percentage: number;
   band3Percentage: number;
@@ -16,6 +22,8 @@ export interface MarkdownConfig {
 
 /** The API/UI-facing shape: the resolver-ready matrix plus whether retail is available. */
 export interface MarkdownConfigResponse {
+  matrices: MarkdownMatrixSet;
+  /** @deprecated Use matrices.NO_CREDIT. */
   matrix: MarkdownMatrixConfig;
   hasRetailData: boolean;
 }

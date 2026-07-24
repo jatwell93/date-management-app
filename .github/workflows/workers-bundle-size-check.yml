@@ -25,11 +25,15 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: workers/package-lock.json
+
+      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
 
       - name: Install dependencies
         run: npm ci

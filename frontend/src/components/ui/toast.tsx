@@ -14,6 +14,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
 
   useEffect(() => {
     if (isVisible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: imperative show + auto-hide timer driven by the isVisible prop
       setShow(true);
       const timer = setTimeout(() => {
         setShow(false);

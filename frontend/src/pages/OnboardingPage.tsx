@@ -306,6 +306,7 @@ export function OnboardingPage() {
       const step = parseInt(stepParam, 10);
       if (isValidStep(step)) {
         const normalized = normalizeStep(step, !!organization);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: syncs step state with the URL query param
         setCurrentStep(normalized);
         if (normalized !== step) {
           setSearchParams({ step: String(normalized) });

@@ -33,6 +33,7 @@ const MAX_BULK_SELECTION = 500;
 
 interface Props {
   suppliers: Supplier[];
+  initialSupplierId?: number | null;
   isAdmin: boolean;
   getToken: () => Promise<string | null>;
   onChanged: () => void;
@@ -50,7 +51,13 @@ function actionErrorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : 'Supplier policy action failed';
 }
 
-export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToken, onChanged }) => {
+export const PolicyReviewPanel: React.FC<Props> = ({
+  suppliers,
+  initialSupplierId = null,
+  isAdmin,
+  getToken,
+  onChanged,
+}) => {
   const [items, setItems] = useState<PolicyReviewItem[]>([]);
   const [brandFilter, setBrandFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
@@ -61,7 +68,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
     status?: PolicyStatus;
   }>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [supplierId, setSupplierId] = useState<number | null>(initialSupplierId);
   const [createdSupplier, setCreatedSupplier] = useState<Supplier | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
@@ -104,6 +111,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
   }, [appliedFilters, getToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off the policy data fetch on deps change
     void load();
   }, [load]);
 

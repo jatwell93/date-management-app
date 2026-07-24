@@ -3,9 +3,10 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { PolicyMarkdown } from './PolicyMarkdown';
-import type { Supplier, SupplierInput } from '../../types/supplierCredit';
+import type { CreditType, Supplier, SupplierInput } from '../../types/supplierCredit';
 
 export interface SupplierPolicyDraft {
+  creditType: CreditType;
   contactEmail: string;
   contactPhone: string;
   creditPolicyNote: string;
@@ -17,6 +18,7 @@ export interface SupplierPolicyDraft {
 }
 
 export const EMPTY_POLICY_DRAFT: SupplierPolicyDraft = {
+  creditType: 'NONE',
   contactEmail: '',
   contactPhone: '',
   creditPolicyNote: '',
@@ -30,6 +32,7 @@ export const EMPTY_POLICY_DRAFT: SupplierPolicyDraft = {
 export function supplierPolicyDraft(supplier?: Supplier): SupplierPolicyDraft {
   if (!supplier) return { ...EMPTY_POLICY_DRAFT };
   return {
+    creditType: supplier.creditType ?? 'NONE',
     contactEmail: supplier.contactEmail ?? '',
     contactPhone: supplier.contactPhone ?? '',
     creditPolicyNote: supplier.creditPolicyNote,
@@ -58,6 +61,7 @@ export function supplierPolicyInput(
     followUpDays: draft.followUpDays ? Number(draft.followUpDays) : 7,
     representativeName: draft.representativeName.trim() || null,
     representativeEmail: draft.representativeEmail.trim() || null,
+    creditType: draft.creditType,
   };
 }
 
@@ -152,13 +156,15 @@ const PolicySection: React.FC<PolicySectionProps> = ({
 }) => {
   const fieldId = (field: keyof SupplierPolicyDraft) => `${idPrefix}-${field}`;
   if (!editablePolicy) {
-    return value.creditPolicyNote.trim() ? (
+    return (
       <div>
-        <p className="mb-2 text-sm font-medium">Store instructions</p>
-        <div className="rounded-md border bg-semantic-surface-2 p-3">
-          <PolicyMarkdown value={value.creditPolicyNote} />
-        </div>
-        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <dl className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-semantic-text-tertiary">Credit treatment</dt>
+            <dd>
+              {value.creditType === 'FULL_CREDIT' ? 'Full supplier credit' : 'No supplier credit'}
+            </dd>
+          </div>
           <div>
             <dt className="text-semantic-text-tertiary">Representative</dt>
             <dd>{value.representativeName || 'Not provided'}</dd>
@@ -168,15 +174,35 @@ const PolicySection: React.FC<PolicySectionProps> = ({
             <dd>{value.representativeEmail || 'Not provided'}</dd>
           </div>
         </dl>
+        {value.creditPolicyNote.trim() ? (
+          <>
+            <p className="mb-2 text-sm font-medium">Store instructions</p>
+            <div className="rounded-md border bg-semantic-surface-2 p-3">
+              <PolicyMarkdown value={value.creditPolicyNote} />
+            </div>
+          </>
+        ) : (
+          <p className="rounded-md bg-semantic-surface-2 p-3 text-sm text-semantic-text-secondary">
+            No supplier policy has been captured. An admin can add store instructions.
+          </p>
+        )}
       </div>
-    ) : (
-      <p className="rounded-md bg-semantic-surface-2 p-3 text-sm text-semantic-text-secondary">
-        No supplier policy has been captured. An admin can add store instructions.
-      </p>
     );
   }
   return (
     <>
+      <div>
+        <Label htmlFor={fieldId('creditType')}>Credit treatment</Label>
+        <select
+          id={fieldId('creditType')}
+          className="mt-1 h-9 w-full rounded-md border bg-semantic-surface-1 px-3 text-sm"
+          value={value.creditType}
+          onChange={(event) => onChange('creditType', event.target.value)}
+        >
+          <option value="NONE">No supplier credit</option>
+          <option value="FULL_CREDIT">Full supplier credit</option>
+        </select>
+      </div>
       <div>
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor={fieldId('creditPolicyNote')}>Store instructions</Label>

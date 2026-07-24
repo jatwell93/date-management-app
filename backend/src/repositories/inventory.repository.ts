@@ -136,18 +136,21 @@ export class InventoryRepository {
     organizationId: string,
     tx?: DbClient,
   ): Promise<
-    (InventoryItem & { product: { costPrice: number | null; retailPrice: number | null } }) | null
+    | (InventoryItem & {
+        product: Prisma.ProductGetPayload<{
+          include: { supplier: true; brand: { include: { supplier: true } } };
+        }>;
+      })
+    | null
   > {
     return this.getClient(tx).inventoryItem.findUnique({
       where: { id, organizationId },
       include: {
         product: {
-          select: { costPrice: true, retailPrice: true },
+          include: { supplier: true, brand: { include: { supplier: true } } },
         },
       },
-    }) as Promise<
-      (InventoryItem & { product: { costPrice: number | null; retailPrice: number | null } }) | null
-    >;
+    }) as ReturnType<InventoryRepository['findUniqueWithProduct']>;
   }
 
   async updateManyByIds(

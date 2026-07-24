@@ -63,6 +63,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
   }, [currentPage, filter, getToken, pageSize, sort, title, titleMatch]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off the page data fetch on deps change
     void loadPage();
   }, [loadPage]);
 
@@ -322,6 +323,7 @@ const SkuMatchingView: React.FC<{
   const [summary, setSummary] = useState<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clears selection when the parent-provided reset key changes
     setSelected(new Set());
   }, [selectionResetKey]);
 

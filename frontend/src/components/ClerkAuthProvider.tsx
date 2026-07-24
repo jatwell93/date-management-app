@@ -145,6 +145,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
         });
     } else if (isLoaded && !isSignedIn) {
       // User signed out
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: syncs local auth state to Clerk's external sign-in state
       setToken(null);
       setIsLoggedIn(false);
       setIsFullySignedIn(false);

@@ -68,13 +68,11 @@ const detectHandheldDevice = (): HandheldDetectionResult => {
 };
 
 export const useHandheldDetection = (): UseHandheldDetectionResult => {
-  const [detectionResult, setDetectionResult] = useState<HandheldDetectionResult | null>(null);
-
-  // Initialize detection on mount
-  useEffect(() => {
-    const result = detectHandheldDevice();
-    setDetectionResult(result);
-  }, []);
+  // Initialize detection lazily during first render (client-only app) instead
+  // of mirroring it into state via a mount effect.
+  const [detectionResult, setDetectionResult] = useState<HandheldDetectionResult | null>(() =>
+    detectHandheldDevice(),
+  );
 
   // Refresh detection function
   const refresh = useCallback(() => {

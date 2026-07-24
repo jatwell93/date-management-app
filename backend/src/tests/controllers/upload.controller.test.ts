@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import request from 'supertest';
 import express from 'express';
 import { UploadController } from '../../controllers/upload.controller';

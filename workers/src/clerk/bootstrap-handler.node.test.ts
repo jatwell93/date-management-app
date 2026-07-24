@@ -51,6 +51,7 @@ interface BootstrapPayload {
   isNewOrg: boolean;
   isNewUser: boolean;
   isFirstAdmin: boolean;
+  isPlatformAdmin: boolean;
 }
 
 const ENV = {
@@ -136,6 +137,7 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
       isNewOrg: false,
       isNewUser: false,
       isFirstAdmin: false,
+      isPlatformAdmin: false,
     });
 
     const userCount = await sql`SELECT COUNT(*)::int AS n FROM users`;

@@ -207,6 +207,7 @@ export async function enrichImportedProductsSafely(
         SELECT pi."rowNumber", pi.product_id, m.id AS entry_id
         FROM product_input pi
         JOIN master_catalogue_entries m ON BTRIM(m.barcode) = BTRIM(pi.barcode)
+          AND m.retired_at IS NULL
       ), sku_candidates AS (
         SELECT pi."rowNumber", pi.product_id,
                COUNT(DISTINCT m.id)::int AS match_count,
@@ -216,6 +217,7 @@ export async function enrichImportedProductsSafely(
           ON UPPER(BTRIM(pi.sku)) IN (
             UPPER(BTRIM(m.api_sku)), UPPER(BTRIM(m.sigma_sku)), UPPER(BTRIM(m.ch2_sku))
           )
+          AND m.retired_at IS NULL
         WHERE BTRIM(pi.sku) <> ''
         GROUP BY pi."rowNumber", pi.product_id
       ), resolved AS (

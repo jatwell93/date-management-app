@@ -7,7 +7,6 @@
 // namespace onto Vitest's equivalents. Type annotations are erased at compile
 // time, so this is purely a typing convenience — the runtime calls use `vi.*`.
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace jest {
     type Mock<TReturn = any, TArgs extends any[] = any[]> = import('vitest').Mock<
       (...args: TArgs) => TReturn

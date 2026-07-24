@@ -41,10 +41,28 @@ describe('ReportRepository', () => {
       );
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL DEFAULT 'test-org',
         name TEXT NOT NULL DEFAULT 'Test product',
         sku TEXT,
         cost_price REAL,
-        retail_price REAL
+        retail_price REAL,
+        supplier_id INTEGER,
+        brand_id INTEGER
+      );
+      CREATE TABLE suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        credit_policy_note TEXT NOT NULL DEFAULT '',
+        credit_type TEXT NOT NULL DEFAULT 'NONE'
+      );
+      CREATE TABLE brands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        source TEXT NOT NULL,
+        suggested_supplier_name TEXT,
+        supplier_id INTEGER
       );
       CREATE TABLE store_areas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +72,47 @@ describe('ReportRepository', () => {
       INSERT INTO products (id, name, sku, cost_price, retail_price) VALUES (1, 'Test product', 'SKU1', 10, 25);
       INSERT INTO store_areas (id, name, sub_department) VALUES (1, 'Aisle 1', 'Dairy');
     `);
+  });
+
+  it('projects credit context for direct and reference-brand suppliers without changing row order', () => {
+    db.exec(`
+      INSERT INTO suppliers (id, organization_id, name, credit_policy_note, credit_type)
+        VALUES (10, 'test-org', 'Direct Full', 'Return monthly', 'FULL_CREDIT'),
+               (20, 'test-org', 'Suggested Full', 'Return monthly', 'FULL_CREDIT'),
+               (30, 'other-org', 'Cross Tenant', 'Return monthly', 'FULL_CREDIT');
+      INSERT INTO brands (id, organization_id, name, source, supplier_id)
+        VALUES (1, 'test-org', 'Reference Brand', 'REFERENCE', 20);
+      UPDATE products SET supplier_id = 10 WHERE id = 1;
+      INSERT INTO products
+        (id, organization_id, name, sku, cost_price, retail_price, supplier_id, brand_id)
+        VALUES (2, 'test-org', 'Reference Product', 'SKU2', 10, 20, NULL, 1),
+               (3, 'test-org', 'Malformed Product', 'SKU3', 10, 20, 30, NULL);
+      INSERT INTO inventory_items
+        (product_id, expiry_date, location_id, status, organization_id)
+        VALUES (1, date('now', '+10 days'), 1, 'Normal', 'test-org'),
+               (2, date('now', '+11 days'), 1, 'Normal', 'test-org'),
+               (3, date('now', '+12 days'), 1, 'Normal', 'test-org');
+    `);
+
+    const rows = new ReportRepository(db, 'test-org').getDetailedExpiryReport();
+
+    expect(rows.map((row) => row.productId)).toEqual([1, 2, 3]);
+    expect(rows[0]).toMatchObject({
+      creditScope: 'FULL_CREDIT',
+      creditScopeReason: 'FULL_CREDIT',
+      creditSupplierId: 10,
+      creditSupplierName: 'Direct Full',
+    });
+    expect(rows[1]).toMatchObject({
+      creditScope: 'NO_CREDIT',
+      creditScopeReason: 'PENDING_CONFIRMATION',
+      creditSupplierId: 20,
+    });
+    expect(rows[2]).toMatchObject({
+      creditScope: 'NO_CREDIT',
+      creditScopeReason: 'NEEDS_BRAND',
+      creditSupplierId: null,
+    });
   });
 
   afterEach(() => {

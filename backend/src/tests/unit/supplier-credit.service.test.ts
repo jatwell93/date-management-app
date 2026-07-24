@@ -35,6 +35,7 @@ function makeService(
           contactEmail: 'claims@example.com',
           contactPhone: null,
           creditPolicyNote: 'Keep chilled',
+          creditType: 'NONE',
           policyWriteOffQty: 3,
           policyCreditQty: 1,
           followUpDays: 7,
@@ -134,6 +135,14 @@ describe('SupplierCreditService', () => {
     );
   });
   describe('createSupplier', () => {
+    it('rejects an unknown credit type at the service boundary', async () => {
+      const { service, repo } = makeService();
+      await expect(
+        service.createSupplier({ name: 'Invalid', creditType: 'PARTIAL' as never }, 'admin'),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(repo.createSupplier).not.toHaveBeenCalled();
+    });
+
     it('persists a supplier with a complete credit ratio', async () => {
       const { service, repo } = makeService();
       await service.createSupplier(
@@ -143,6 +152,7 @@ describe('SupplierCreditService', () => {
           policyWriteOffQty: 3,
           policyCreditQty: 1,
           creditPolicyNote: 'Return with invoice',
+          creditType: 'NONE',
         },
         'admin',
       );
@@ -153,6 +163,7 @@ describe('SupplierCreditService', () => {
           contactEmail: 'credits@blackmores.com.au',
           contactPhone: null,
           creditPolicyNote: 'Return with invoice',
+          creditType: 'NONE',
           policyWriteOffQty: 3,
           policyCreditQty: 1,
           followUpDays: 7,
@@ -209,6 +220,24 @@ describe('SupplierCreditService', () => {
   });
 
   describe('updateSupplier', () => {
+    it('requires admin authorization for a credit-type-only classification change', async () => {
+      const { service, repo } = makeService();
+      await expect(
+        service.updateSupplier(1, { creditType: 'FULL_CREDIT' }, 'team_member'),
+      ).rejects.toBeInstanceOf(AuthorizationError);
+      expect(repo.updateSupplier).not.toHaveBeenCalled();
+    });
+
+    it('persists and timestamps an admin credit-type-only classification change', async () => {
+      const { service, repo } = makeService();
+      await service.updateSupplier(1, { creditType: 'FULL_CREDIT' }, 'admin');
+      expect(repo.updateSupplier).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ creditType: 'FULL_CREDIT', policyUpdatedAt: expect.any(Date) }),
+        undefined,
+      );
+    });
     it('404s when the supplier is not in the org', async () => {
       const { service } = makeService({ updateCount: 0 });
       await expect(service.updateSupplier(99, { name: 'X' }, 'admin')).rejects.toBeInstanceOf(

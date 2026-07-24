@@ -17,6 +17,10 @@ import {
   INVENTORY_MARKDOWN_THRESHOLDS,
 } from './inventory-markdown.helpers';
 import { MarkdownConfigService } from './markdown-config.service';
+import { hasPolicy } from '../../../shared/domain/supplier-policy';
+import { resolveSupplierContext } from '../../../shared/domain/brand-supplier';
+import { resolveMarkdownCreditContext } from '../../../shared/domain/markdown-credit-context';
+import { selectMatrix } from '../../../shared/domain/markdown';
 
 export interface CreateInventoryItemInput {
   productId: number;
@@ -384,8 +388,34 @@ export class InventoryService {
       return null;
     }
 
-    // Honor the org's configured matrix and retail basis (issue #338).
-    const matrix = await new MarkdownConfigService(this.organizationId, this.prisma).getMatrix();
+    const toSupplier = (supplier: typeof item.product.supplier) =>
+      supplier && supplier.organizationId === this.organizationId
+        ? {
+            id: supplier.id,
+            name: supplier.name,
+            creditType: supplier.creditType,
+            hasPolicy: hasPolicy(supplier),
+          }
+        : null;
+    const productBrand = item.product.brand;
+    const brand =
+      productBrand && productBrand.organizationId === this.organizationId
+        ? {
+            id: productBrand.id,
+            name: productBrand.name,
+            source: productBrand.source,
+            suggestedSupplierName: productBrand.suggestedSupplierName,
+            supplier: toSupplier(productBrand.supplier),
+          }
+        : null;
+    const context = resolveMarkdownCreditContext(
+      resolveSupplierContext({ productSupplier: toSupplier(item.product.supplier), brand }),
+    );
+    const matrices = await new MarkdownConfigService(
+      this.organizationId,
+      this.prisma,
+    ).getMatrices();
+    const matrix = selectMatrix(matrices, context.creditScope);
 
     return calculateInventoryMarkdownPrice(item.product.costPrice, item.expiryDate, new Date(), {
       retailPrice: item.product.retailPrice ?? null,

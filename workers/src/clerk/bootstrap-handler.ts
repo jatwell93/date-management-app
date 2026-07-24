@@ -10,6 +10,7 @@ import {
   sanitizeSlug,
   upsertClerkUser,
 } from './clerk-persistence';
+import { isPlatformAdminUser } from '../../../shared/domain/platform-catalogue';
 
 interface ClerkSessionClaims {
   sub?: string;
@@ -265,14 +266,16 @@ export async function handleOrganizationBootstrap(
   `;
 
   if (existingUser[0]) {
+    const userId = Number(existingUser[0].id);
     return jsonResponse(
       {
-        userId: Number(existingUser[0].id),
+        userId,
         organizationId: String(existingUser[0].organizationId),
         role: normalizeBootstrapRole(String(existingUser[0].role)),
         isNewOrg: false,
         isNewUser: false,
         isFirstAdmin: false,
+        isPlatformAdmin: isPlatformAdminUser(userId, env.PLATFORM_ADMIN_USER_IDS),
       },
       200,
       env,
@@ -340,6 +343,10 @@ export async function handleOrganizationBootstrap(
       isNewOrg,
       isNewUser: true,
       isFirstAdmin,
+      isPlatformAdmin: isPlatformAdminUser(
+        Number(bootstrappedUser[0].id),
+        env.PLATFORM_ADMIN_USER_IDS,
+      ),
     },
     201,
     env,

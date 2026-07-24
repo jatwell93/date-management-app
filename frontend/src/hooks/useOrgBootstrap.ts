@@ -10,6 +10,7 @@ interface BootstrapResult {
   isNewOrg: boolean;
   isNewUser: boolean;
   isFirstAdmin: boolean;
+  isPlatformAdmin: boolean;
 }
 
 interface UseOrgBootstrapReturn {
@@ -75,7 +76,6 @@ export function useOrgBootstrap(): UseOrgBootstrapReturn {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Bootstrap failed';
       setBootstrapError(message);
-      // eslint-disable-next-line no-console
       console.error('[useOrgBootstrap] Bootstrap error:', message, { error });
     } finally {
       setIsBootstrapping(false);

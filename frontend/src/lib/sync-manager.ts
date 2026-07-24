@@ -69,11 +69,9 @@ export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
       if (result.status === 'rejected') {
         const err = result.reason;
         if (err instanceof Error) {
-          // eslint-disable-next-line no-console
           console.error(`Error synchronizing item ${pendingInventoryItemKeys[i]}:`, err);
           // Could add user notification here if needed
         } else {
-          // eslint-disable-next-line no-console
           console.error(
             `An unknown error occurred while synchronizing item ${pendingInventoryItemKeys[i]}`,
             err,

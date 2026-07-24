@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
     "target": "ES2020",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
@@ -19,7 +19,9 @@
     "baseUrl": ".",
     "paths": {
       "@shared/markdown": ["../shared/domain/markdown.ts"],
+      "@shared/markdown-credit-context": ["../shared/domain/markdown-credit-context.ts"],
       "@shared/supplier-policy": ["../shared/domain/supplier-policy.ts"],
+      "@shared/catalogue-review": ["../shared/domain/catalogue-review.ts"],
       "@/*": ["./src/*"]
     }
   },
@@ -27,6 +29,8 @@
     "src",
     "src/global.d.ts",
     "../shared/domain/markdown.ts",
-    "../shared/domain/supplier-policy.ts"
+    "../shared/domain/markdown-credit-context.ts",
+    "../shared/domain/supplier-policy.ts",
+    "../shared/domain/catalogue-review.ts"
   ]
 }

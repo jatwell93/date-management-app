@@ -1,20 +1,90 @@
 name: Frontend Test & Coverage
 
+# No `paths:` filter on purpose — see the explanation in backend-test.yml.
+# Always trigger, detect changes in the `changes` job, gate the real jobs on it,
+# so these checks always report and are safe to mark as required.
 on:
   pull_request:
-    paths:
-      - 'frontend/**'
   push:
     branches:
+      # Kept in sync with backend-test.yml. `master` is listed defensively: the
+      # ruleset targets ~DEFAULT_BRANCH, so if the default branch were ever
+      # renamed, pushes to it must still run this workflow — otherwise the
+      # required "Frontend CI Gate" check would never report for those pushes.
       - main
-    paths:
-      - 'frontend/**'
+      - master
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  changes:
+    name: Detect frontend changes
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          # Deliberately NOT `set -e` -- see the explanation in backend-test.yml.
+          # Every failure path must fall back to RUNNING the tests, and the
+          # `gate` job is the backstop if this job fails outright.
+          set -u
+
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "::error::GITHUB_OUTPUT is unset; cannot publish detection result."
+            exit 1
+          fi
+
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_AFTER"
+          fi
+
+          run_tests() {
+            echo "$1"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            run_tests "Base commit unavailable (force push or first commit); running frontend tests."
+          fi
+
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            run_tests "Base commit ${base} not found; running frontend tests."
+          fi
+
+          # Capture explicitly: piping straight into grep would mask a git failure
+          # as "no matches" (no pipefail), silently skipping the tests.
+          if ! changed=$(git diff --name-only "$base" "$head" 2>&1); then
+            run_tests "git diff failed (${changed}); running frontend tests."
+          fi
+
+          if printf '%s\n' "$changed" | grep -q '^frontend/'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Correctness signal. No coverage thresholds — safe to require.
+  test:
+    name: Frontend Tests
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./frontend
@@ -25,11 +95,15 @@ jobs:
           fetch-depth: 0 # Needed for changedSince
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
+
+      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
 
       - name: Install dependencies
         run: npm ci
@@ -39,10 +113,42 @@ jobs:
 
       - name: Run Tests (Changed Files Only)
         if: github.event_name == 'pull_request'
-        run: npm run test:diff || npm run test:coverage
+        run: npm run test:diff || npm test
 
       - name: Run Full Tests
         if: github.event_name != 'pull_request'
+        run: npm test
+
+  # Coverage thresholds run separately and are NOT required, mirroring the
+  # backend split so correctness is never blocked on a coverage ratchet.
+  coverage:
+    name: Frontend Coverage
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Coverage
         run: npm run test:coverage
 
       - name: Generate Coverage Summary
@@ -60,3 +166,35 @@ jobs:
         with:
           name: frontend-coverage-report
           path: frontend/coverage/
+
+  # THE required status check -- see the explanation in backend-test.yml.
+  # Require "Frontend CI Gate", not the individual jobs. `coverage` excluded.
+  gate:
+    name: Frontend CI Gate
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate frontend job results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          set -u
+          echo "changes=${CHANGES_RESULT} frontend_changed=${FRONTEND_CHANGED:-<unset>} test=${TEST_RESULT}"
+
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate rather than letting a skipped test job pass as success."
+            exit 1
+          fi
+
+          if [ "${FRONTEND_CHANGED:-}" != "true" ]; then
+            echo "No frontend changes detected - gate passes with test job skipped."
+            exit 0
+          fi
+
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::Frontend Tests did not succeed (result: ${TEST_RESULT})."
+            exit 1
+          fi
