@@ -111,10 +111,16 @@ weight to the dev machine.
 
 Before any source change under this proposal, confirm all of:
 
-1. **Trigger:** schema-change friction (touching 5–7 artifacts) is actually costing meaningful time on
-   real work, not just felt as untidy.
+1. **Trigger (measurable):** at least one of the two most recent schema changes touched **5+ of the
+   5–7 triplication artifacts** AND required **>30 minutes of mechanical sync** across them (not
+   business logic). The signal is the artifact count + sync time on real merged work, not a feeling
+   of untidiness. If neither recent change clears that bar, this stays parked — the shared-domain
+   discipline already contains the dangerous part of the duplication, so completing it is cleanup,
+   not risk reduction.
 2. **Worker parity coverage:** every Express-only endpoint has (or will get) an equivalent Worker
-   handler and test before Express is deleted.
+   handler and test before Express is deleted. The **known Express-only endpoints today** (pre-audit,
+   see "Known Express-only surface" below) must each be on the Phase 2 rehoming checklist with a
+   target before deletion.
 3. **Test story on Postgres:** the backend/service test suite that runs on SQLite today has a
    Postgres-backed equivalent (pglite or Neon branch) that is green.
 4. **Sequencing:** Knob A ships and stabilises before Knob B, so a rollback point exists between "one
@@ -125,8 +131,27 @@ Before any source change under this proposal, confirm all of:
 6. **Non-route responsibilities rehomed:** the six scheduled jobs and the operational scripts in
    `backend/` each have a Worker/relocated home or a recorded retirement decision before deletion.
 
-If the trigger is not met, this stays parked — the shared-domain discipline already contains the
-dangerous part of the duplication, so completing this is cleanup, not risk reduction.
+### Decision Gate outcome
+
+- **Status:** ✅ **Cleared — go.** Recorded on 2026-07-24. The trigger (criterion 1) is met by the
+  `enhance-supplier-policy-capture` change, which touched 5–7 artifacts per column add. Knob A
+  source work may proceed; Knob B remains gated on Phases 2–3 per the sequencing rule.
+
+### Known Express-only surface (pre-audit, to be confirmed in Phase 2)
+
+Routes in `backend/src/routes/*` with **no equivalent** in `workers/src/index-minimal.ts` today:
+
+| Route file | Routes | Worker status |
+|---|---|---|
+| `webhook.routes.ts` | `POST /api/webhooks/stripe` | ❌ Missing — Worker handles Clerk webhooks only. **Stripe webhook inbound handler is a Knob B blocker.** |
+| `organization-invite.routes.ts` | 6 (create/accept/list/delete/revoke/bulk-delete) | ❌ Missing |
+| `storage-quota.routes.ts` | `GET /:userId`, `GET /:userId/can-upload` | ❌ Missing |
+| `admin.metrics.routes.ts` | admin metrics | ❌ Missing |
+| `database.backup.routes.ts` | backup trigger | ❌ Missing |
+| `subscription.routes.ts` | cancel, portal, checkout, webhook-handler (4 of 6) | 🟡 Partial — Worker has `current` + `trial-status` only |
+
+This list is a starting point for Phase 2 task 2.1, not its conclusion — the audit re-derives it from
+source at deletion time.
 
 ## Impact
 
@@ -142,9 +167,15 @@ dangerous part of the duplication, so completing this is cleanup, not risk reduc
   diagnostics, and backup are relocated, reimplemented, or explicitly retired per the audit.
 - **`backend/`** — removed at the end of Knob B, only after the rehoming checklist is fully satisfied.
 - **`workers/`** — becomes the sole API for all environments; gains any Express-only endpoints and the
-  rehomed jobs/scripts.
-- **CI** — the backend Vitest project and SQLite migration steps retire; the Worker suite and pglite
-  conformance become the whole backend test story.
+  rehomed jobs/scripts. The abandoned `workers/src/index.ts` + `workers/src/express-adapter.ts` (the
+  "reuse 100% of the backend" approach that did not pan out) are deleted in Knob B.
+- **CI** — `.github/workflows/backend-test.yml` (backend Vitest + the dedicated multi-tenant test job:
+  cross-tenant isolation, penetration, concurrency, feature-gate enforcement) is updated in Knob A to
+  run on Postgres, then retired in Knob B with its multi-tenant coverage rehomed onto the Worker suite.
+- **Frontend dev config** — `frontend/src/lib/api.service.ts` defaults to `http://localhost:3001`
+  (Express); `.env.example` and `vite.config.ts` carry `REACT_APP_API_URL`. Knob B repoints the dev
+  default to the `wrangler dev` origin (port 8787) and updates `.env.example`. This is a Knob B
+  dependency, not a Knob A one.
 - **Developer onboarding** — one backend to run (`wrangler dev`) and one dialect (Postgres) to learn.
 
 ## Implementation Steps (high level; detail in `tasks.md`)
@@ -161,3 +192,18 @@ dangerous part of the duplication, so completing this is cleanup, not risk reduc
    dev API; delete `backend/` and Prisma only once the checklist is satisfied.
 6. **Conventions:** rewrite golden rules 5 & 6 (naming the new migration runner); update the PR
    checklist; `npx openspec validate retire-express-unify-on-postgres --strict`.
+
+## Definition of Done (measurable)
+
+The change is complete when **all** of the following hold:
+
+- **Knob A DoD:** a real schema change made after Knob A touches **≤3 artifacts** (Neon SQL migration +
+  Worker raw SQL + shared domain types), requires **no** SQLite Prisma schema and **no** runtime SQLite
+  migration, and CI is green on the single-engine (Postgres-only) setup.
+- **Knob B DoD (in addition):** `backend/` is deleted; `wrangler dev` is the sole dev API and the
+  frontend works against it locally; the Phase 2 rehoming checklist is fully satisfied (every endpoint,
+  test, job, script, and the migration path has a replacement or recorded retirement); the
+  Prisma-independent Neon migration runner has performed a real schema change **with a rollback**; and
+  golden rules 5 & 6 are rewritten naming the new runner as authoritative.
+- **Invariant throughout:** production behaviour, endpoints, auth, R2, Neon, and Hyperdrive are
+  unchanged — production already runs solely on the Worker.

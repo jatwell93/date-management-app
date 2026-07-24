@@ -61,12 +61,25 @@ fallback for offline work. This keeps local weight low without Docker.
 ## What retires
 
 - `backend/` Express server, its Prisma client, and `better-sqlite3` (end of Knob B).
-- Prisma base (SQLite) schema and the runtime `src/migrations/` SQLite path (Knob A).
+- Prisma base (SQLite) schema and the runtime `src/migrations/` SQLite path (Knob A). The runtime
+  path is **code, not just SQL**: `backend/src/migrations/{migrate.ts,migration.service.ts,
+  migration.model.ts}` plus the numbered `*-*.migration.ts` files constitute a hand-rolled SQLite
+  migration runner that is removed alongside the schema.
+- `workers/src/index.ts` and `workers/src/express-adapter.ts` — the abandoned "reuse 100% of the
+  backend via the express-adapter" approach (described in `workers/README.md`) that did not pan out
+  because `better-sqlite3` and the Prisma engine cannot run in the Workers runtime. `index-minimal.ts`
+  is the real entry point; the adapter pair is deleted in Knob B.
 - The SQLite side of the conformance tests; conformance becomes "raw SQL vs shared TS on Postgres"
-  rather than "Postgres vs SQLite".
+  rather than "Postgres vs SQLite". The conformance tests already live in `workers/src/__tests__/`
+  (`database.conformance.node.test.ts`, `database.credit-claim.conformance.node.test.ts`,
+  `database.supplier-policy.conformance.node.test.ts`, etc.), so dropping the SQLite arm is a
+  workers-side edit — there is no backend-owned conformance suite to migrate.
 - The Prisma-based production migration mechanism (`npm run migrate:prod` /
   `scripts/migrate-production-doppler.js`), **replaced first** by a Prisma-independent Neon migration
-  runner (see below) — never deleted without a successor.
+  runner (see below) — never deleted without a successor. Note there are **several** backend-owned
+  migration scripts, not one: `migrate-production-doppler.js`, `migrate-production-simple.js`,
+  `migrate-production.ts`, `migrate.js`, `verify-migration.js`, and `list-migrations.ts`. Each is
+  inventoried in Phase 2 task 2.5 and either replaced by the new runner or explicitly retired.
 - Golden rules 5 and 6 in their current dual-backend form.
 
 ## What must be rehomed, not silently dropped
@@ -79,6 +92,11 @@ the Phase 2 rehoming checklist **before** the directory is deleted:
 - **Operational scripts** (`backend/scripts/`): seeds (`seed-users`, `seed-tier-feature-flags`),
   audits/backfills (`audit-org-ids`, `backfill-*`), data export (`neon-to-sqlite`,
   `export-excess-products`), diagnostics (`diagnose-webhook`, `verify-neon*`), and `backup.sh`.
+- **Backup capability** — `backend/scripts/backup.sh` and `backend/src/routes/database.backup.routes.ts`
+  together implement an operator-triggered backup. In a Worker-only world the backup trigger becomes a
+  Worker route (or is dropped in favour of Neon-native backups / a scheduled R2 export via a Cron
+  Trigger). Phase 2 task 2.4 records the chosen home; the backup route is on the rehoming checklist
+  before `backend/` is deleted.
 - **Production migration runner** (see below) — the single most load-bearing non-route responsibility.
 
 ## Replacement production migration path
@@ -107,12 +125,24 @@ Prisma removes that path, so before deletion we stand up a Prisma-independent ru
 - **No production migration path after Prisma.** `migrate:prod` is Prisma-based and backend-owned.
   Mitigation: Phase 3 stands up and proves a Prisma-independent Neon runner (forward + rollback) before
   Phase 4 deletes anything.
-- **Test coverage regression.** The backend Vitest suite runs on SQLite today. Mitigation: port it to a
-  Postgres-backed path (pglite/Neon branch) and require green before deleting Express.
+- **Test coverage regression.** The backend Vitest suite runs on SQLite today. Mitigation: in Knob A,
+  point the existing Express-shaped tests at a Postgres-backed path (pglite/Neon branch) and require
+  green — the tests stay Express-shaped (`supertest`, Express `req`/`res`) but hit Postgres instead of
+  SQLite. In Knob B, those tests are **rewritten** against the Worker's `Request`/`Response` model
+  (not "ported" — the Express constructs do not exist on the Worker), so the effort is larger than a
+  dialect swap. Phase 1.2 and 4.2 reflect this distinction.
 - **pglite/prod driver divergence for dev.** pglite is not the `@neondatabase/serverless` driver.
   Mitigation: use a Neon dev branch for behaviours pglite cannot model; keep pglite for fast tests.
 - **Loss of the SQLite rollback path.** Mitigation: sequence A before B; keep the change reversible by
   landing Knob A independently and stabilising before Knob B.
+- **Knob A itself needs a rollback.** If the Postgres-backed dev/test path (pglite + Neon dev branch)
+  proves unworkable after Knob A lands — e.g. pglite cannot model a runtime behaviour the suite depends
+  on, or the Neon dev branch is too slow/flaky for local dev — the SQLite path must be recoverable.
+  Mitigation: land Knob A on its own branch and keep the SQLite Prisma base schema + runtime migration
+  runner on `main` (or a tagged rollback branch) until Phase 1.7 (full CI green on single-engine) is
+  satisfied. Do not delete the SQLite artifacts from git history; the rollback is `git revert` of the
+  Knob A commit plus restoring the SQLite dev config. Only after 1.7 stabilises is the SQLite path
+  considered gone.
 
 ## Alternatives considered
 
