@@ -90,10 +90,48 @@
       `@electric-sql/pglite` is now a root devDependency; `test:migrations` runs all migration tests with
       `--test-concurrency=1` (pglite is WASM, memory-intensive). The runner test's expected history now
       includes 0000.**
-- [ ] 1.4 Build an explicit one-time adoption command for the existing production-shaped database.
+- [x] 1.4 Build an explicit one-time adoption command for the existing production-shaped database.
       `adopt --dry-run` performs read-only catalog-definition checks, refuses mismatches, emits a reviewable
       report, and only a separate approved adoption stamps baseline/checksum metadata. Adoption never treats
-      "object already exists" as proof the object is correct.
+      "object already exists" as proof the object is correct. **Implemented (2026-07-24, hardened after
+      adversarial review): the adoption command lives at `src/database/migrations/adopt.ts` with a CLI
+      entry point at `adopt-cli.ts` (`npm run migrate:adopt -- --dry-run` or `-- --apply`). It uses the
+      same `validateMigrationTarget` guard and advisory lock as `migrate:apply`. Key hardening:
+
+      (1) **Read-only dry-run.** Dry-run queries `information_schema.tables` for ledger existence (does
+      NOT call `ensureLedger`), wraps introspection in a ROLLBACK-only transaction, and creates no schema
+      objects — verified by a dedicated test asserting the table does not exist before and after.
+
+      (2) **Strict adoption comparison profile.** `ADOPTION_COMPARISON` requires all migration-owned
+      indexes (including partial indexes like `uploads_one_active_catalogue_per_org`) and all CHECK/UNIQUE
+      constraints (like `suppliers_credit_type_check`). The broad Prisma-vs-migration exception rules
+      (any `updated_at` default, any timestamptz/timestamp(3) difference) apply ONLY to the fingerprint
+      test's `TEST_COMPARISON` profile. Adoption column exceptions must be exact
+      `AdoptionColumnException` tuples (table, column, expected/actual type, not-null, default). By
+      default the exception list is empty.
+
+      (3) **Explicit flags and confirmation.** Unknown CLI args are rejected (`--dryrun` is NOT silently
+      treated as authorization). Exactly one of `--dry-run`/`--apply` is required. `--apply` mode requires
+      `MIGRATION_ADOPT_CONFIRMATION="ADOPT <host>/<database> AT <migration-id>"` — a separate,
+      adoption-specific confirmation distinct from `MIGRATION_CONFIRM_PRODUCTION`.
+
+      (4) **Single-transaction introspection and stamping.** The approved adoption performs catalog
+      introspection and ledger stamping inside one `BEGIN ISOLATION LEVEL REPEATABLE READ` transaction —
+      the snapshot used for verification is the same one the stamp writes to. A schema-change deployment
+      freeze must be in effect (documented in design.md) because the advisory lock only serializes the
+      migration runner.
+
+      (5) **Lock release in finally.** The advisory lock is released in a `finally` block — no early
+      return bypasses it. Both primary and unlock failures are preserved as `MigrationExecutionError`.
+
+      The structural comparison logic (`computeStructuralKeys`, `compareCatalogs`, `formatCatalogDiff`,
+      `ComparisonConfig`, `TEST_COMPARISON`, `ADOPTION_COMPARISON`, `AdoptionColumnException`) lives in
+      `src/database/migrations/catalog-comparison.ts`. 15 pglite-backed tests cover: matching dry-run,
+      read-only dry-run (no table creation), partial-database refusal, approved stamping, checksum
+      verification, explicit confirmation required, wrong confirmation rejected, no-stamp-on-mismatch,
+      one-time guard, wrong-definition refusal, missing-table refusal, missing-CHECK-constraint refusal
+      (strict), missing-partial-index refusal (strict), invalid SHA rejection, and exact-column-exception
+      acceptance.**
 - [ ] 1.5 Provide separate ordered commands outside `backend/` for migration status/preflight/apply,
       required idempotent reference-data seed, and schema/data verification. Require a dedicated DDL
       migration role, allowlisted target identity, redacted output, explicit production confirmation,

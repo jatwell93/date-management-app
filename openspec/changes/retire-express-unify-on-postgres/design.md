@@ -499,6 +499,106 @@ Postgres engine — not mocked.
 adoption, interruption/recovery, drift, safe down, forward fix) is task 1.6. The catalog-verified
 adoption path for existing production databases is task 1.4.
 
+### Phase 1.4 adoption command
+
+The existing production database was shaped by `prisma db push` plus the hand-written neon-sql
+deltas. Adoption transitions it from Prisma-managed to migration-runner-managed by verifying the
+catalog matches the expected migration-derived schema and stamping the `schema_migrations` ledger.
+Adoption is a one-time operation: if the ledger already has rows, it refuses.
+
+**Two modes with explicit flags.** `npm run migrate:adopt -- --dry-run` performs read-only catalog
+checks and emits a reviewable report — no writes, no ledger creation. `npm run migrate:adopt --
+--apply` re-runs the same catalog check inside a single transaction and, only if the catalog
+matches, stamps the ledger. Unknown arguments are rejected — a typo such as `--dryrun` is NOT
+silently treated as authorization to stamp. Exactly one of `--dry-run` or `--apply` must be
+specified; omitting both or specifying both is an error.
+
+**Adoption confirmation.** The `--apply` mode requires an explicit, adoption-specific confirmation
+via `MIGRATION_ADOPT_CONFIRMATION="ADOPT <host>/<database> AT <migration-id>"`. This is separate
+from the production target confirmation (`MIGRATION_CONFIRM_PRODUCTION`) and prevents accidental
+stamping. The migration ID in the confirmation must match the latest migration in the history.
+
+**Read-only dry-run.** Dry-run mode does NOT create the `schema_migrations` table. It queries
+`information_schema.tables` to check whether the ledger already exists, treats absence as an empty
+ledger, and wraps the catalog introspection in a `ROLLBACK`-only transaction for snapshot
+consistency. No schema object or ledger state is changed — verified by a dedicated test that
+asserts the table does not exist before and after dry-run.
+
+**Strict adoption comparison profile.** Adoption uses a separate `ADOPTION_COMPARISON` profile that
+is stricter than the fingerprint test's `TEST_COMPARISON` profile:
+- **CHECK and UNIQUE constraints are required.** They are included in the mismatch check — a
+  missing `suppliers_credit_type_check` or missing unique constraint causes a refusal. (The test
+  profile excludes them because Prisma cannot express CHECK constraints and uses
+  `CREATE UNIQUE INDEX` instead of `ADD CONSTRAINT UNIQUE`.)
+- **Migration-owned partial indexes are required.** They are NOT filtered out — a missing
+  `uploads_one_active_catalogue_per_org` partial index causes a refusal. (The test profile filters
+  them because Prisma cannot express partial indexes.)
+- **No broad column exception rules.** The test profile's broad rules (any `updated_at` default
+  difference, any timestamptz/timestamp(3) difference) do NOT apply to adoption. Column exceptions
+  must be exact `AdoptionColumnException` tuples specifying the table, column, expected
+  type/default, and actual type/default. An exception that does not match the exact tuple is a
+  mismatch. By default, the exception list is empty — every column difference is a mismatch unless
+  explicitly listed.
+
+**Single-transaction introspection and stamping.** The approved adoption performs catalog
+introspection and ledger stamping inside a single `BEGIN ISOLATION LEVEL REPEATABLE READ`
+transaction. The catalog snapshot used for verification is the same one the stamp writes to —
+there is no window between verification and stamping where the schema could change. The advisory
+lock coordinates with the migration runner; a **schema-change deployment freeze must be in effect
+during adoption** because the advisory lock only serializes programs using that same lock —
+Prisma, manual SQL, and legacy deployment tooling can still modify the schema unless externally
+frozen.
+
+**Advisory lock release.** The advisory lock is released in a `finally` block — no early return
+or thrown error bypasses it. Both primary and unlock failures are preserved as a
+`MigrationExecutionError` with nested errors.
+
+**Shared comparison module.** The structural comparison logic (`computeStructuralKeys`,
+`compareCatalogs`, `formatCatalogDiff`, `ComparisonConfig`, `TEST_COMPARISON`,
+`ADOPTION_COMPARISON`, `AdoptionColumnException`) lives in
+`src/database/migrations/catalog-comparison.ts`, shared between the fingerprint test and the
+adoption command. The two profiles ensure the test comparison can use broad Prisma-vs-migration
+exception rules while adoption uses strict, exact-tuple verification.
+
+**Ledger stamping.** The approved adoption creates the ledger (if it does not exist) and stamps
+all migrations (0000→latest) inside the same transaction: `BEGIN` → `ensureLedger` →
+`recordMigration` for each → `COMMIT`. Each row records the immutable migration name, checksum,
+state (`applied`), transaction rule, data-loss class, recovery strategy, deployment SHA, and
+timestamps. After stamping, `migrate:apply` sees the database as fully migrated and applies only
+future migrations.
+
+**Environment and target validation.** The adoption CLI uses the same `validateMigrationTarget`
+guard as `migrate:apply`: requires `DATABASE_URL_UNPOOLED`, rejects Neon pooler hostnames, requires
+exact `MIGRATION_ALLOWED_HOST`/`MIGRATION_ALLOWED_DATABASE` matches, and requires
+`MIGRATION_CONFIRM_PRODUCTION="APPLY <host>/<database>"` for production targets. It also requires
+`MIGRATION_DEPLOYMENT_SHA` for the audit ledger and `MIGRATION_ADOPT_CONFIRMATION` for `--apply`.
+
+**Report format.** The adoption report includes:
+- Mode (dry-run or apply)
+- STATUS: READY / REFUSED
+- Adoption point (latest migration ID)
+- Migrations to stamp (dry-run) or stamped (approved)
+- Catalog diff: tables/columns/indexes/constraints/CHECK constraints/UNIQUE constraints/functions/
+  triggers only in expected or only in actual, plus known/accepted differences
+- Actionable guidance for refused adoptions
+
+**Test coverage** (`src/database/migrations/adopt.test.ts`, 15 tests against pglite):
+- Dry-run on a matching database → `canAdopt: true`
+- Dry-run does NOT create the `schema_migrations` table (read-only verified)
+- Dry-run on a partial database (only baseline applied) → refused with missing-table diffs
+- Approved adoption on a matching database → ledger stamped with all migrations as `applied`
+- Checksums in the stamped ledger match the runner's loaded checksums
+- Approved adoption requires explicit confirmation (missing → rejected)
+- Wrong adoption confirmation (wrong host/db or wrong migration ID) → rejected
+- Approved adoption does not stamp if the catalog does not match
+- One-time guard: ledger already populated → refused with `ledgerAlreadyPopulated`
+- Object exists but has wrong definition (extra column) → refused with column diff
+- Table missing from the existing database → refused with table diff
+- Missing CHECK constraint → refused (strict adoption profile)
+- Missing migration-owned partial index → refused (strict adoption profile)
+- Invalid deployment SHA → rejected before any catalog check
+- Exact column exception tuple is accepted (and without it, the same difference is refused)
+
 ## What already exists
 
 - Worker raw-SQL execution and PGlite conformance tests; reuse them, but initialize PGlite from the
