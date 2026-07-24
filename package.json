@@ -20,6 +20,7 @@
     "test:backend:coverage": "npm run test:coverage --prefix backend",
     "test:backend:diff": "npm run test:diff --prefix backend",
     "test:db": "npm run test:db --prefix workers",
+    "test:migrations": "npm run compile && node --test build/src/database/migrations/runner.test.js",
     "test:frontend:coverage": "npm run test:coverage --prefix frontend",
     "test:frontend:diff": "npm run test:diff --prefix frontend",
     "test:load": "TEST_PASSWORD=LoadTest123! artillery run artillery.yml",
@@ -31,6 +32,7 @@
     "mem:log": "node scripts/mem-log.js",
     "mem:recall": "node scripts/mem-recall.js",
     "mem:rebuild": "node scripts/mem-rebuild.js",
+    "migrate:apply": "npm run compile && node build/src/database/migrations/cli.js",
     "seed:master-catalogue": "npm --prefix backend run seed:master-catalogue --",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -46,6 +48,7 @@
     "@eslint/js": "^9.39.0",
     "@playwright/test": "1.61.1",
     "@types/node": "26.1.1",
+    "@types/pg": "8.20.0",
     "@typescript-eslint/eslint-plugin": "8.62.0",
     "@typescript-eslint/parser": "8.62.0",
     "browserstack-local": "1.5.13",
@@ -64,6 +67,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "pg": "8.22.0",
     "prisma": "^6.19.3"
   }
 }

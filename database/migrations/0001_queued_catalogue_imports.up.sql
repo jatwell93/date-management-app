@@ -19,4 +19,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS uploads_one_active_catalogue_per_org
   ON uploads (organization_id)
   WHERE import_type = 'product-catalog'
     AND status IN ('pending', 'queued', 'validating', 'processing');
-

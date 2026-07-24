@@ -8,6 +8,7 @@ import {
 import { MigrationService, type Migration } from '../../migrations/migration.service';
 
 const backendRoot = path.resolve(__dirname, '../../..');
+const migrationRoot = path.resolve(backendRoot, '../database/migrations');
 
 async function scopedMarkdownMigration(): Promise<Migration> {
   const service = new MigrationService() as unknown as {
@@ -34,11 +35,11 @@ describe('credit-scoped markdown schema parity', () => {
 
   it('ships constrained forward migration and duplicate-safe rollback', () => {
     const forward = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0008_add_credit_scoped_markdown_matrix.sql'),
+      path.join(migrationRoot, '0008_add_credit_scoped_markdown_matrix.up.sql'),
       'utf8',
     );
     const rollback = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0008_add_credit_scoped_markdown_matrix_rollback.sql'),
+      path.join(migrationRoot, '0008_add_credit_scoped_markdown_matrix.down.sql'),
       'utf8',
     );
     expect(forward).toMatch(/credit_type[\s\S]+CHECK[\s\S]+NONE[\s\S]+FULL_CREDIT/i);

@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import { MigrationService, type Migration } from '../../migrations/migration.service';
 
 const backendRoot = path.resolve(__dirname, '../../..');
+const migrationRoot = path.resolve(backendRoot, '../database/migrations');
 
 async function brandMigration(): Promise<Migration> {
   const service = new MigrationService() as unknown as {
@@ -39,11 +40,11 @@ describe('brand-supplier schema parity', () => {
 
   it('ships a forward and rollback Neon migration', () => {
     const forward = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0006_add_brand_supplier_mapping.sql'),
+      path.join(migrationRoot, '0006_add_brand_supplier_mapping.up.sql'),
       'utf8',
     );
     const rollback = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0006_add_brand_supplier_mapping_rollback.sql'),
+      path.join(migrationRoot, '0006_add_brand_supplier_mapping.down.sql'),
       'utf8',
     );
     expect(forward).toContain('CREATE TABLE IF NOT EXISTS brands');
@@ -68,11 +69,11 @@ describe('brand-supplier schema parity', () => {
 
   it('ships catalogue provenance Neon migration 0009 and rollback', () => {
     const forward = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0009_add_catalogue_provenance.sql'),
+      path.join(migrationRoot, '0009_add_catalogue_provenance.up.sql'),
       'utf8',
     );
     const rollback = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0009_add_catalogue_provenance_rollback.sql'),
+      path.join(migrationRoot, '0009_add_catalogue_provenance.down.sql'),
       'utf8',
     );
     expect(forward).toContain('ADD COLUMN IF NOT EXISTS retired_at');
