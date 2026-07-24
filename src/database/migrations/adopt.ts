@@ -180,7 +180,11 @@ async function introspectActualCatalog(client: MigrationClient): Promise<Catalog
 
 function emptyDiff(): CatalogDiff {
   return {
-    matches: false,
+    // No comparison was performed, so there are zero differences. The
+    // ledgerAlreadyPopulated flag (not diff.matches) signals why adoption
+    // was refused in the one-time-guard path. Setting matches: true avoids
+    // misleading an API consumer into thinking a catalog mismatch occurred.
+    matches: true,
     tablesOnlyInExpected: [],
     tablesOnlyInActual: [],
     columnsOnlyInExpected: [],

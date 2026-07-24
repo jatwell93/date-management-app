@@ -352,6 +352,9 @@ test('adoption refuses if the ledger is already populated (one-time guard)', asy
     assert.equal(report.canAdopt, false);
     assert.equal(report.ledgerAlreadyPopulated, true);
     assert.equal(report.wouldStamp.length, 0);
+    // diff.matches is true because no catalog comparison was performed — the
+    // refusal reason is the populated ledger, not a catalog mismatch.
+    assert.equal(report.diff.matches, true);
     assert.match(report.report, /REFUSED/);
     assert.match(report.report, /ledger already populated/);
   } finally {
