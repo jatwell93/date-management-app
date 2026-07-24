@@ -2,6 +2,20 @@
   "version": 1,
   "migrations": [
     {
+      "id": "0000",
+      "forward": "0000_baseline.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0000_baseline.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
       "id": "0001",
       "forward": "0001_queued_catalogue_imports.up.sql",
       "transaction": "required",
