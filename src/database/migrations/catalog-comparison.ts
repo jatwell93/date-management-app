@@ -361,10 +361,12 @@ export function compareCatalogs(
   const colsOnlyInExpectedRaw = [...expectedColKeys].filter((k) => !actualColKeys.has(k));
   const colsOnlyInActualRaw = [...actualColKeys].filter((k) => !expectedColKeys.has(k));
 
-  const colsOnlyInExpectedFiltered = colsOnlyInExpectedRaw.filter(
-    (k) => !k.startsWith('migrations|'),
-  );
-  const colsOnlyInActualFiltered = colsOnlyInActualRaw.filter((k) => !k.startsWith('migrations|'));
+  const colsOnlyInExpectedFiltered = config.filterMigrationOnlyTables
+    ? colsOnlyInExpectedRaw.filter((k) => !k.startsWith('migrations|'))
+    : colsOnlyInExpectedRaw;
+  const colsOnlyInActualFiltered = config.filterMigrationOnlyTables
+    ? colsOnlyInActualRaw.filter((k) => !k.startsWith('migrations|'))
+    : colsOnlyInActualRaw;
 
   const columnsOnlyInExpected: string[] = [];
   const columnsOnlyInActual: string[] = [];
@@ -413,14 +415,14 @@ export function compareCatalogs(
 
   const idxOnlyInExpected = idxOnlyInExpectedRaw
     .filter((k) => {
-      if (k.startsWith('migrations|')) return false;
+      if (config.filterMigrationOnlyTables && k.startsWith('migrations|')) return false;
       if (config.filterMigrationOnlyIndexes && MIGRATION_ONLY_PARTIAL_INDEXES.has(k)) return false;
       return true;
     })
     .sort();
   const idxOnlyInActual = idxOnlyInActualRaw
     .filter((k) => {
-      if (k.startsWith('migrations|')) return false;
+      if (config.filterMigrationOnlyTables && k.startsWith('migrations|')) return false;
       if (config.filterPrismaOnlyIndexes && PRISMA_ONLY_KNOWN_INDEXES.has(k)) return false;
       return true;
     })
@@ -428,33 +430,33 @@ export function compareCatalogs(
 
   // Constraints (FK + PK)
   const conOnlyInExpected = setDifference(expected.constraints, actual.constraints)
-    .filter((k) => !k.startsWith('migrations|'))
+    .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
     .sort();
   const conOnlyInActual = setDifference(actual.constraints, expected.constraints)
-    .filter((k) => !k.startsWith('migrations|'))
+    .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
     .sort();
 
   // CHECK constraints
   const checkOnlyInExpected = config.includeCheckConstraints
     ? setDifference(expected.checkConstraints, actual.checkConstraints)
-        .filter((k) => !k.startsWith('migrations|'))
+        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
         .sort()
     : [];
   const checkOnlyInActual = config.includeCheckConstraints
     ? setDifference(actual.checkConstraints, expected.checkConstraints)
-        .filter((k) => !k.startsWith('migrations|'))
+        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
         .sort()
     : [];
 
   // UNIQUE constraints
   const uniqueOnlyInExpected = config.includeUniqueConstraints
     ? setDifference(expected.uniqueConstraints, actual.uniqueConstraints)
-        .filter((k) => !k.startsWith('migrations|'))
+        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
         .sort()
     : [];
   const uniqueOnlyInActual = config.includeUniqueConstraints
     ? setDifference(actual.uniqueConstraints, expected.uniqueConstraints)
-        .filter((k) => !k.startsWith('migrations|'))
+        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
         .sort()
     : [];
 
