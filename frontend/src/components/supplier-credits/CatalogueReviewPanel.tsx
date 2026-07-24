@@ -129,9 +129,13 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
       setError('Create a supplier before confirming this brand.');
       return;
     }
-    await svc.confirmBrandSupplier(item.brand.id, supplierId, await getToken());
-    await loadPage();
-    onChanged();
+    try {
+      await svc.confirmBrandSupplier(item.brand.id, supplierId, await getToken());
+      await loadPage();
+      onChanged();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to confirm brand.');
+    }
   };
 
   const add = async (item: BrandReviewItem) => {
@@ -140,16 +144,20 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
       setError('Enter a brand name.');
       return;
     }
-    await svc.addBrand(
-      {
-        productId: item.productId,
-        name,
-        supplierId: supplierIds[item.productId] ?? null,
-      },
-      await getToken(),
-    );
-    await loadPage();
-    onChanged();
+    try {
+      await svc.addBrand(
+        {
+          productId: item.productId,
+          name,
+          supplierId: supplierIds[item.productId] ?? suppliers[0]?.id ?? null,
+        },
+        await getToken(),
+      );
+      await loadPage();
+      onChanged();
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to add brand.');
+    }
   };
 
   if (mode === 'SKU_MATCHING') {
