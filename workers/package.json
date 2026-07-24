@@ -39,17 +39,17 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
-    "@electric-sql/pglite": "^0.5.1",
+    "@electric-sql/pglite": "^0.5.4",
     "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.1.1",
-    "@vitest/coverage-istanbul": "^4.1.7",
-    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10",
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.7",
+    "vitest": "^4.1.10",
     "wrangler": "^4.114.0"
   }
 }
