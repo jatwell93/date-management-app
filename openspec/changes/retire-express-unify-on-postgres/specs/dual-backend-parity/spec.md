@@ -75,7 +75,10 @@ from the business rules unnoticed.
 The project conventions SHALL state that there is one backend (the Worker on Postgres) with one
 authoritative, executable migration path, that cross-cutting domain values come from the shared module,
 and that parity-critical SQL is covered by a shared-logic conformance test. The authoritative migration
-path SHALL support forward migration and rollback and SHALL NOT depend on the retired Prisma tooling.
+path SHALL support forward migration and an explicit recovery policy and SHALL NOT depend on the
+retired Prisma tooling. Recovery SHALL distinguish lossless down migrations, Worker rollback while an
+expanded schema remains, forward corrective migrations, and point-in-time restore; destructive down
+migrations SHALL NOT be required as a universal rollback mechanism.
 The contribution checklist SHALL reflect these single-backend rules so the pattern is applied to future
 work.
 
@@ -99,4 +102,88 @@ work.
 - **GIVEN** Prisma and the Express backend have been removed
 - **WHEN** a production schema change is deployed
 - **THEN** it is applied by the authoritative Neon migration runner that replaced `npm run migrate:prod`
-- **AND** the change can be rolled back through the same mechanism
+- **AND** the migration declares its compatibility, reversibility, and data-loss class
+- **AND** the documented recovery path is executable for that class
+
+### Requirement: Authoritative migration history is replayable and adoptable
+
+The authoritative PostgreSQL migration path SHALL create the latest schema from an empty database and
+SHALL safely adopt an existing production-shaped database that was historically managed by Prisma
+schema push. Adoption SHALL verify actual PostgreSQL object definitions before recording baseline
+metadata and SHALL refuse schema drift.
+
+#### Scenario: Fresh database reaches the latest schema
+
+- **GIVEN** an empty PostgreSQL database
+- **WHEN** the canonical baseline and ordered migrations run
+- **THEN** the resulting schema fingerprint matches the expected latest schema
+- **AND** no Prisma command or manually maintained PGlite schema is required
+
+#### Scenario: Existing production schema is adopted
+
+- **GIVEN** a production-shaped database with no authoritative migration ledger
+- **WHEN** the operator runs adoption in dry-run mode
+- **THEN** tables, columns, constraints, indexes, defaults, functions, and checks are verified
+- **AND** no ledger state or schema object is changed
+- **WHEN** the separately approved adoption command runs
+- **THEN** baseline identity and checksums are recorded
+- **AND** any incompatible existing definition causes the operation to fail
+
+### Requirement: Schema deployment preserves application compatibility
+
+Production schema changes SHALL follow expand/migrate/contract. Migration and Worker deployment SHALL
+be coordinated by a required workflow that validates migration identity, target identity, recovery
+readiness, schema postconditions, required reference data, database readiness, and schema-dependent
+smoke tests before declaring success.
+
+#### Scenario: Worker requires a new column
+
+- **GIVEN** a Worker release that reads or writes a new column
+- **WHEN** the release is deployed
+- **THEN** an expansion compatible with both old and new Worker versions is applied first
+- **AND** the Worker deploy is blocked if migration preflight or postconditions fail
+- **AND** destructive contraction occurs only in a later deployment after an observation window
+
+#### Scenario: Concurrent migration runners start
+
+- **GIVEN** one migration runner holds the PostgreSQL advisory lock
+- **WHEN** another runner starts
+- **THEN** the second runner exits safely without applying or stamping a migration
+- **AND** the event is visible in structured migration output
+
+### Requirement: Destructive test databases are isolated and fail closed
+
+PostgreSQL-backed tests SHALL use an isolated per-run database or schema, SHALL require explicit
+test-target identity before destructive setup, and SHALL fail rather than skip when setup, reset, seed,
+cleanup, or teardown cannot complete. Required pull-request checks SHALL remain runnable without
+production credentials.
+
+#### Scenario: Test target is shared or production-like
+
+- **GIVEN** a database URL without the expected per-run target identity and explicit allow token
+- **WHEN** destructive test setup starts
+- **THEN** setup exits non-zero before changing schema or data
+- **AND** logs expose no credentials
+
+#### Scenario: Cleanup fails
+
+- **GIVEN** an isolated PostgreSQL test target whose reset or cleanup fails
+- **WHEN** the test command runs
+- **THEN** tests do not continue against dirty state
+- **AND** the required CI check fails
+
+### Requirement: Backend retirement is manifest-gated
+
+The Express backend SHALL NOT be deleted until source-derived manifests account for every mounted and
+unmounted route, frontend/operator consumer, security contract, test behaviour, scheduled action,
+script, migration responsibility, middleware/runtime concern, configuration item, workflow, and
+operational document. Every manifest row SHALL have a verified Worker/rehome target or an explicit
+retirement decision.
+
+#### Scenario: A backend file has no manifest decision
+
+- **GIVEN** a route, job, test, script, document, configuration item, or runtime responsibility under
+  `backend/`
+- **WHEN** backend deletion readiness is evaluated
+- **THEN** an unresolved manifest row blocks deletion
+- **AND** broad category-level claims do not count as a verified replacement
