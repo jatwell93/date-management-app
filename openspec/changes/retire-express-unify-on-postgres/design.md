@@ -416,6 +416,89 @@ The current SQL series still has no baseline. `npm run migrate:apply` therefore 
 unless `0000_baseline.up.sql` exists. Task 1.3 creates that canonical baseline and adds it to the
 manifest; task 1.4 then provides the separate catalog-verified adoption path for existing databases.
 
+### Phase 1.3 canonical baseline
+
+The canonical baseline (`0000_baseline.up.sql`) is the DDL that existed in production immediately
+before the first neon-sql delta (0001) was introduced. Production was shaped by `prisma db push`
+against the Prisma production schema, so the baseline is generated from that schema at the commit
+immediately before the first delta — not hand-written and not derived from the current (post-delta)
+schema.
+
+**Source commit.** `ae26d623~1`, the parent of `ae26d623 feat(uploads): queued catalogue imports and
+launch pricing`, which introduced migration 0001. Using the parent guarantees the baseline reflects
+exactly the schema that 0001 was written against, with no post-0001 columns mixed in.
+
+**Generation command (reproducible from git history):**
+
+```
+git show ae26d623~1:backend/prisma/production/schema.prisma > baseline.prisma
+DATABASE_URL=postgresql://placeholder npx prisma@5.22.0 migrate diff \
+  --from-empty --to-schema-datamodel baseline.prisma --script
+```
+
+Prisma is pinned to `5.22.0` — the version in the lockfile at commit `ae26d623~1`. Prisma 6+
+additionally emits `CREATE SCHEMA IF NOT EXISTS "public";` as its first statement; that line is
+added manually to the baseline file for fresh-database safety since Prisma 5.22.0 does not emit it.
+The table DDL is byte-identical between the two versions (verified by regenerating with both and
+diffing the SQL statements). `prisma migrate diff` generates standard PostgreSQL DDL (`CREATE TABLE`,
+`CREATE INDEX`, `ALTER TABLE ... ADD CONSTRAINT`) without needing a live database connection. The
+output is 429 lines of Prisma-generated SQL plus the manual `CREATE SCHEMA` line and a
+documentation header, creating 20 tables, their indexes, and foreign keys. The header records the
+source commit, pinned Prisma version, and generation command so the baseline is reproducible by
+anyone with git history.
+
+**Manifest entry.** The baseline is declared in `manifest.json` as `id: "0000"`,
+`transaction: "required"`, `compatibility: "expand"`, `dataLoss: "none"`, with a
+`rollback-sql` recovery (`0000_baseline.down.sql`) classified `manual-only`, `destructive`, and
+`complete`. The down migration drops only the 20 tables that 0000 created — it does not drop
+objects introduced by later migrations (0001–0009) or the runner's `schema_migrations` ledger,
+because those are owned by their respective migrations and the runner. Including them would couple
+the immutable 0000 recovery SQL to every future migration and invalidate its checksum (recovery SQL
+is part of the runner's SHA-256 identity). CASCADE removes FK constraints from migration-added
+tables that reference baseline tables, but does not drop the migration-added tables themselves.
+
+**Fingerprint test.** `src/database/migrations/baseline.fingerprint.test.ts` replays migrations
+against a fresh in-process pglite (WASM Postgres) database and performs a deep catalog comparison
+covering every table, column (type, nullability, default), index (definition, uniqueness, partial
+predicate), constraint (type, definition), function (body), and trigger (timing, events). Three
+test groups provide layered proof:
+
+1. **Checked-in fingerprint** (`database/migrations/catalog-fingerprint.json`): the full
+   0000→0009 series is replayed against pglite, the resulting catalog is introspected via
+   `pg_catalog`/`information_schema`, normalized, and deep-compared against a checked-in JSON
+   fingerprint. Every table, column, index, constraint, function, and trigger must match exactly
+   (after type/default normalization). This catches drift in any migration after the fingerprint
+   was captured — a changed column type, a missing index, an altered constraint definition all
+   fail the test.
+
+2. **Baseline-only cross-comparison**: migration 0000 alone is applied to pglite A; the
+   Prisma-generated SQL from the `ae26d623~1` schema is applied to pglite B; the two catalogs are
+   compared structurally (normalizing index/constraint names, which Prisma generates differently
+   from hand-written SQL). This proves the baseline exactly reproduces the pre-0001 production
+   schema — not just that it produces a self-consistent schema.
+
+3. **Full-series cross-comparison**: migrations 0000→0009 are applied to pglite A; the
+   Prisma-generated SQL from the current production schema is applied to pglite B; the two
+   catalogs are compared structurally with an explicit allowlist for known, accepted differences
+   (e.g. `TIMESTAMP(3)` vs `TIMESTAMPTZ` on migration-added columns, index name divergence). This
+   catches gaps — columns or tables that exist in the Prisma schema but were never captured in a
+   migration — and any difference not in the allowlist fails the test.
+
+**pglite adapter.** pglite is ESM-only and the root project compiles to CommonJS, so the test
+loads it via dynamic `import()`. pglite's `query` method rejects multi-statement SQL ("cannot
+insert multiple commands into a prepared statement"), so the adapter routes non-SELECT statements
+without parameters through `pg.exec` (which handles multi-statement DDL) and SELECTs/parameterised
+queries through `pg.query`. The adapter implements the runner's `MigrationClient` interface, so
+the runner's locking, ledger, and transaction logic is exercised end-to-end against a real
+Postgres engine — not mocked.
+
+**Test concurrency.** pglite is WASM and memory-intensive; each test boots a fresh instance. The
+`test:migrations` script uses `--test-concurrency=1` to avoid exhausting memory on CI.
+
+**What this does not yet cover.** The real-Postgres and Neon end-to-end proof (fresh install,
+adoption, interruption/recovery, drift, safe down, forward fix) is task 1.6. The catalog-verified
+adoption path for existing production databases is task 1.4.
+
 ## What already exists
 
 - Worker raw-SQL execution and PGlite conformance tests; reuse them, but initialize PGlite from the

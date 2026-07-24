@@ -68,9 +68,28 @@
       locking, atomic rollback, and interrupted non-transactional state. Every inherited down is explicitly
       manual-only/destructive; 0004 is partial. The legacy `migrations` table is retained but not
       reinterpreted, and the apply CLI remains fail-closed until task 1.3 installs the canonical baseline.**
-- [ ] 1.3 Build a canonical PostgreSQL baseline because the current Neon SQL series assumes an older
+- [x] 1.3 Build a canonical PostgreSQL baseline because the current Neon SQL series assumes an older
       schema already exists. Prove empty database → baseline → all migrations → latest schema fingerprint,
       covering tables, columns, constraints, indexes, defaults, functions, checks, and partial indexes.
+      **Implemented (2026-07-24): the canonical baseline `0000_baseline.up.sql` is generated from the
+      Prisma production schema at commit `ae26d623~1` (the parent of the commit that introduced the first
+      neon-sql delta, 0001) via `prisma@5.22.0 migrate diff --from-empty --to-schema-datamodel` (Prisma
+      version pinned to the historical lockfile; `CREATE SCHEMA IF NOT EXISTS "public"` added manually
+      since Prisma 5 does not emit it). The baseline is declared in `manifest.json` with
+      `transaction: required`, `compatibility: expand`, `dataLoss: none`, and a
+      manual-only/destructive/complete `rollback-sql` recovery (`0000_baseline.down.sql`) that drops only
+      the 20 baseline tables — not objects from later migrations or the runner's ledger, to avoid coupling
+      the immutable 0000 checksum to future migrations. A pglite fingerprint test
+      (`src/database/migrations/baseline.fingerprint.test.ts`) provides three layers of proof: (1) a
+      checked-in catalog fingerprint (`database/migrations/catalog-fingerprint.json`) deep-compares every
+      table, column/type/nullability/default, index definition, constraint definition, function, and
+      trigger after replaying 0000→0009; (2) a baseline-only cross-comparison applies 0000 to pglite A and
+      the Prisma-generated SQL from `ae26d623~1` to pglite B, then compares catalogs structurally; (3) a
+      full-series cross-comparison applies 0000→0009 to pglite A and the current Prisma production schema
+      SQL to pglite B, comparing structurally with an explicit allowlist for known differences.
+      `@electric-sql/pglite` is now a root devDependency; `test:migrations` runs all migration tests with
+      `--test-concurrency=1` (pglite is WASM, memory-intensive). The runner test's expected history now
+      includes 0000.**
 - [ ] 1.4 Build an explicit one-time adoption command for the existing production-shaped database.
       `adopt --dry-run` performs read-only catalog-definition checks, refuses mismatches, emits a reviewable
       report, and only a separate approved adoption stamps baseline/checksum metadata. Adoption never treats
