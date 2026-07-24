@@ -70,7 +70,7 @@ test('loads the relocated authoritative repository history', async () => {
 
   assert.deepEqual(
     history.map(({ id }) => id),
-    ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009'],
+    ['0000', '0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009'],
   );
   assert.equal(
     history.every(({ recovery }) => recovery.execution === 'manual-only'),
