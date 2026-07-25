@@ -30,12 +30,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { performAdoption, type AdoptionColumnException } from './adopt';
+import { performAdoption, selectAdoptionTarget, type AdoptionColumnException } from './adopt';
 import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
 
 const TEST_DEPLOYMENT_SHA = 'a'.repeat(40);
 const HISTORY_DIR = path.resolve('database/migrations');
 const FINGERPRINT_PATH = path.resolve('database/migrations/catalog-fingerprint.json');
+const FINGERPRINT_0009_PATH = path.resolve('database/migrations/catalog-fingerprint.0009.json');
 
 // ---------------------------------------------------------------------------
 // pglite adapter (same pattern as baseline.fingerprint.test.ts)
@@ -133,7 +134,7 @@ function applyOptions() {
     deploymentSha: TEST_DEPLOYMENT_SHA,
     mode: 'apply' as const,
     fingerprintPath: FINGERPRINT_PATH,
-    adoptionConfirmation: 'ADOPT test-host/test-db AT 0009',
+    adoptionConfirmation: 'ADOPT test-host/test-db AT 0010',
     targetHost: 'test-host',
     targetDatabase: 'test-db',
   };
@@ -153,7 +154,7 @@ test('dry-run adoption on a matching database reports canAdopt', async () => {
 
     assert.equal(report.canAdopt, true);
     assert.equal(report.ledgerAlreadyPopulated, false);
-    assert.equal(report.adoptionPoint, '0009');
+    assert.equal(report.adoptionPoint, '0010');
     assert.deepEqual(
       report.wouldStamp,
       history.map(({ id }) => id),
@@ -201,6 +202,40 @@ test('dry-run on a partial database (only baseline) refuses with mismatches', as
   } finally {
     await pg.close();
   }
+});
+
+test('a pre-0010 database can adopt through 0009 before applying 0010', async () => {
+  const { pg, client } = await createPglite();
+  try {
+    const history = await loadMigrationHistory(HISTORY_DIR);
+    const historyThrough0009 = history.slice(0, -1);
+    await applyMigrationsDirectlyUpTo(pg, historyThrough0009.length);
+
+    const report = await performAdoption(client, historyThrough0009, {
+      ...dryRunOptions(),
+      fingerprintPath: FINGERPRINT_0009_PATH,
+    });
+
+    assert.equal(report.canAdopt, true);
+    assert.equal(report.adoptionPoint, '0009');
+    assert.deepEqual(
+      report.wouldStamp,
+      historyThrough0009.map((migration) => migration.id),
+    );
+  } finally {
+    await pg.close();
+  }
+});
+
+test('selectAdoptionTarget selects the requested history prefix and historical fingerprint', async () => {
+  const history = await loadMigrationHistory(HISTORY_DIR);
+  const target = selectAdoptionTarget(history, HISTORY_DIR, '0009');
+
+  assert.deepEqual(
+    target.history.map((migration) => migration.id),
+    history.slice(0, -1).map((migration) => migration.id),
+  );
+  assert.equal(target.fingerprintPath, FINGERPRINT_0009_PATH);
 });
 
 // ---------------------------------------------------------------------------
@@ -271,7 +306,7 @@ test('approved adoption requires explicit confirmation', async () => {
         deploymentSha: TEST_DEPLOYMENT_SHA,
         mode: 'apply',
         fingerprintPath: FINGERPRINT_PATH,
-        adoptionConfirmation: 'ADOPT test-host/test-db AT 0009',
+        adoptionConfirmation: 'ADOPT test-host/test-db AT 0010',
       }),
       /requires targetHost and targetDatabase/,
     );
@@ -291,7 +326,7 @@ test('wrong adoption confirmation is rejected', async () => {
         deploymentSha: TEST_DEPLOYMENT_SHA,
         mode: 'apply',
         fingerprintPath: FINGERPRINT_PATH,
-        adoptionConfirmation: 'ADOPT wrong-host/wrong-db AT 0009',
+        adoptionConfirmation: 'ADOPT wrong-host/wrong-db AT 0010',
         targetHost: 'test-host',
         targetDatabase: 'test-db',
       }),

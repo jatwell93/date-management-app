@@ -3,7 +3,7 @@
  *
  * Three layers of proof:
  *
- * 1. **Checked-in fingerprint**: replay 0000→0009 against pglite, introspect
+ * 1. **Checked-in fingerprint**: replay 0000→latest against pglite, introspect
  *    the full catalog, normalize, and deep-compare every table, column, index,
  *    constraint, function, and trigger against a checked-in JSON file. Catches
  *    drift in any migration after the fingerprint was captured.
@@ -13,7 +13,7 @@
  *    catalogs structurally. Proves the baseline exactly reproduces the
  *    pre-0001 production schema.
  *
- * 3. **Full-series cross-comparison**: apply 0000→0009 to pglite A; apply
+ * 3. **Full-series cross-comparison**: apply 0000→latest to pglite A; apply
  *    Prisma-generated SQL from the current production schema to pglite B;
  *    compare structurally with an explicit allowlist for known differences.
  *    Catches gaps — Prisma schema objects never captured in a migration.
@@ -279,11 +279,11 @@ test('baseline-only schema (0000) matches the pre-0001 Prisma production schema'
 // `isKnownColumnDifference` is imported from './catalog-comparison' as
 // `isKnownColumnDifference` (renamed from the test-local `isKnownDifference`).
 
-test('full-series schema (0000-0009) matches the current Prisma production schema', async () => {
+test('full-series schema (0000-latest) matches the current Prisma production schema', async () => {
   const { pg: migrationPg, client: migrationClient } = await createPglite();
   const { pg: prismaPg } = await createPglite();
   try {
-    // Side A: apply all migrations 0000-0009.
+    // Side A: apply all migrations 0000-latest.
     await applyAllMigrations(migrationClient);
 
     // Side B: generate SQL from the current Prisma production schema.

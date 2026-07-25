@@ -10,6 +10,7 @@ import {
   MigrationExecutionError,
   validateMigrationTarget,
 } from './runner';
+import { assertTargetKind, verifyMigrationRole } from './target';
 
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL_UNPOOLED;
@@ -23,6 +24,7 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: true });
   const deploymentSha = process.env.MIGRATION_DEPLOYMENT_SHA;
   if (!deploymentSha) throw new Error('MIGRATION_DEPLOYMENT_SHA is required');
 
@@ -43,9 +45,11 @@ async function main(): Promise<void> {
   });
 
   await client.connect();
+  let role: string | undefined;
   let result: Awaited<ReturnType<typeof applyPendingMigrations>> | undefined;
   let migrationError: unknown;
   try {
+    role = await verifyMigrationRole(client, process.env.MIGRATION_ROLE);
     result = await applyPendingMigrations(client, history, { deploymentSha });
   } catch (error) {
     migrationError = error;
@@ -70,6 +74,7 @@ async function main(): Promise<void> {
       target: {
         host: target.host,
         database: target.database,
+        role,
       },
       ...result,
     })}\n`,

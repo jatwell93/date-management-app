@@ -198,6 +198,22 @@ export function isKnownColumnDifference(migrationKey: string, productionKey: str
     return true;
   }
 
+  // `tier_feature_flags.limit_value`: migration 0010 widens the column to
+  // `bigint` so it can hold storage_bytes tier limits (up to 100 GB) that
+  // exceed the int4 range. The Prisma production schema still declares `Int`
+  // (int4), so the migration-derived schema is intentionally wider. This is an
+  // expand-compatible widening with no data loss.
+  if (
+    m[0] === 'tier_feature_flags' &&
+    m[1] === 'limit_value' &&
+    m[2] === 'bigint' &&
+    p[2] === 'integer' &&
+    m[3] === p[3] &&
+    m[4] === p[4]
+  ) {
+    return true;
+  }
+
   return false;
 }
 

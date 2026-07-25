@@ -140,6 +140,20 @@
         "dataLoss": "destructive",
         "completeness": "complete"
       }
+    },
+    {
+      "id": "0010",
+      "forward": "0010_alter_tier_feature_flags_limit_value_to_bigint.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "forward-fix",
+        "file": "0010_alter_tier_feature_flags_limit_value_to_bigint.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "partial"
+      }
     }
   ]
 }

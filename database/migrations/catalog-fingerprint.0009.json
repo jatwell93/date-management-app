@@ -1921,7 +1921,7 @@
     {
       "table": "tier_feature_flags",
       "name": "limit_value",
-      "type": "bigint",
+      "type": "integer",
       "not_null": false,
       "default": null
     },

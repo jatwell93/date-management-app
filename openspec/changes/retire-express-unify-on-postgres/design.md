@@ -526,6 +526,7 @@ asserts the table does not exist before and after dry-run.
 
 **Strict adoption comparison profile.** Adoption uses a separate `ADOPTION_COMPARISON` profile that
 is stricter than the fingerprint test's `TEST_COMPARISON` profile:
+
 - **CHECK and UNIQUE constraints are required.** They are included in the mismatch check — a
   missing `suppliers_credit_type_check` or missing unique constraint causes a refusal. (The test
   profile excludes them because Prisma cannot express CHECK constraints and uses
@@ -574,6 +575,7 @@ exact `MIGRATION_ALLOWED_HOST`/`MIGRATION_ALLOWED_DATABASE` matches, and require
 `MIGRATION_DEPLOYMENT_SHA` for the audit ledger and `MIGRATION_ADOPT_CONFIRMATION` for `--apply`.
 
 **Report format.** The adoption report includes:
+
 - Mode (dry-run or apply)
 - STATUS: READY / REFUSED
 - Adoption point (latest migration ID)
@@ -583,6 +585,7 @@ exact `MIGRATION_ALLOWED_HOST`/`MIGRATION_ALLOWED_DATABASE` matches, and require
 - Actionable guidance for refused adoptions
 
 **Test coverage** (`src/database/migrations/adopt.test.ts`, 15 tests against pglite):
+
 - Dry-run on a matching database → `canAdopt: true`
 - Dry-run does NOT create the `schema_migrations` table (read-only verified)
 - Dry-run on a partial database (only baseline applied) → refused with missing-table diffs
@@ -598,6 +601,94 @@ exact `MIGRATION_ALLOWED_HOST`/`MIGRATION_ALLOWED_DATABASE` matches, and require
 - Missing migration-owned partial index → refused (strict adoption profile)
 - Invalid deployment SHA → rejected before any catalog check
 - Exact column exception tuple is accepted (and without it, the same difference is refused)
+
+### Phase 1.5 ordered migration commands and target guards
+
+Task 1.5 delivers the ordered command set that replaces the backend-owned
+`migrate:prod` orchestration (status → preflight → apply → seed → verify) and
+the shared target/role guards that every mutating command must pass. All new
+code lives under `src/database/migrations/` (outside `backend/`), so the
+authoritative migration path no longer depends on Prisma or Express.
+
+**New commands (npm scripts → `-cli.ts` entrypoints → core modules):**
+
+| Command             | Entry point               | Core module    | Mutates DB | Purpose                                                                                                                                                 |
+| ------------------- | ------------------------- | -------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migrate:status`    | `status-cli.ts`           | `status.ts`    | no         | Read-only ledger state: applied/pending/orphaned IDs, checksum drift, interrupted (`applying`) rows, contiguous-prefix check, health verdict.           |
+| `migrate:preflight` | `preflight-cli.ts`        | `preflight.ts` | no         | Read-only readiness: connection, `current_user` role, schema/database `CREATE` privileges, write probe, ledger state, interrupted rows, ready verdict.  |
+| `migrate:apply`     | `cli.ts` (extended)       | `runner.ts`    | yes        | Apply pending migrations under the advisory lock with deployment-SHA audit. Now gated by role + target-kind.                                            |
+| `migrate:adopt`     | `adopt-cli.ts` (extended) | `adopt.ts`     | yes        | One-time ledger stamp for an existing schema. Now gated by role + target-kind.                                                                          |
+| `migrate:seed`      | `seed-cli.ts`             | `seed.ts`      | yes        | Idempotent upsert of the 48 `tier_feature_flags` reference rows + verify. Production requires `MIGRATION_SEED_CONFIRMATION=SEED <host>/<db>`.           |
+| `migrate:verify`    | `verify-cli.ts`           | `verify.ts`    | no         | Post-apply verification: expected tables present, `tier_feature_flags` row count + values match, catalog-vs-fingerprint drift check, PASS/FAIL verdict. |
+
+**Shared guards (`target.ts`):**
+
+- `assertTargetKind({ targetKind, mutating })` — `MIGRATION_TARGET_KIND` is
+  required and must be one of `primary | development | restore-drill`. For
+  mutating commands (`apply`, `adopt`, `seed`) only `primary` is accepted;
+  `development` and `restore-drill` are rejected. Read-only commands
+  (`status`, `preflight`, `verify`) accept all three kinds. This is the
+  "rejection of development/restore/pooled application targets" requirement.
+- `verifyMigrationRole(client, expectedRole)` — `MIGRATION_ROLE` is required
+  and must equal `SELECT current_user`. Enforces the dedicated DDL migration
+  role: an application/pooler role cannot run migrations even if it has the
+  privileges. The CLI entrypoints call this after `client.connect()` and
+  before any DDL, so a wrong role fails fast with no writes.
+- `validateMigrationTarget` (existing, in `runner.ts`) continues to enforce
+  the allowlisted host/database, environment, and explicit production
+  confirmation (`APPLY <host>/<db>`).
+
+**Output and redaction:** `migrate:apply` emits JSON with `target.host` and
+`target.database` only (no password, no full connection string). The other
+commands emit human-readable text with the same redacted target identity.
+Errors are formatted via `formatMigrationError`, which recursively redacts
+connection strings in nested causes.
+
+**Seed contract (`seed.ts`):** the 48 declared `(tier_level, feature_key,
+enabled, limit_value)` rows are upserted via `ON CONFLICT (tier_level,
+feature_key) DO UPDATE`. After upsert, the rows are re-read and compared
+field-by-field; any mismatch is reported and the command fails. This is
+idempotent and converges a pre-existing incorrect row to the declared value.
+
+**Verify contract (`verify.ts`):** three independent checks, all must pass:
+
+1. **Tables** — every table named in the fingerprint exists in `public`.
+2. **Reference data** — `tier_feature_flags` has exactly 48 rows and every
+   declared `(tier_level, feature_key, enabled, limit_value)` tuple matches.
+3. **Catalog** — introspect the live catalog, normalize, deep-compare against
+   `database/migrations/catalog-fingerprint.json` (the same artifact the
+   baseline fingerprint test uses). Any drift fails verification.
+
+**Pre-existing schema/data inconsistency surfaced and fixed.** While porting
+the seed to raw SQL, the int4 `tier_feature_flags.limit_value` column rejected
+the declared `storage_bytes` tier limits (10 GB = 10737418240, 100 GB = 107374182400) — both exceed the int4 maximum (~2.1B). The backend Prisma seed
+(`backend/scripts/seed-tier-flags.js`) and the shared single-source-of-truth
+(`shared/types/subscription.ts`) both declare these values, so the seed could
+not have ever successfully inserted the professional/premium/concierge
+`storage_bytes` rows against the int4 column. This is a latent production
+inconsistency that the Prisma `db push` path masked.
+
+Resolution chosen (per explicit decision): add migration
+`0010_alter_tier_feature_flags_limit_value_to_bigint` (expand-compatible,
+forward-fix recovery) and regenerate `catalog-fingerprint.json` so the
+widened type is now the authoritative contract. The full-series cross-
+comparison test still passes because the bigint-vs-integer divergence is
+allowlisted in `catalog-comparison.ts` (`isKnownColumnDifference`) until the
+Prisma production schema is updated to `BigInt` in Phase 4. This keeps
+Phase 1.5 unblocked without silently rewriting the Prisma schema, and it
+makes the new seed command actually runnable against a real database.
+
+**Sequencing note for 1.6:** a pre-0010 production database must first adopt
+the history prefix whose fingerprint matches its schema, then apply the
+remainder. Set `MIGRATION_ADOPTION_POINT=0009`, run `migrate:adopt` (dry-run,
+then approved apply with confirmation ending in `AT 0009`), and then run
+`migrate:apply` to execute 0010. The adoption CLI selects
+`catalog-fingerprint.0009.json` and stamps only 0000→0009, so the normal runner
+sees 0010 as pending. Task 1.6's end-to-end proof must cover this executable
+sequence. The bigint widening is the natural "real schema change with a
+working rollback" candidate for 1.6's Neon dev-branch gate, since its down
+migration narrows back to int4 (destructive, partial — the documented
+forward-fix recovery path).
 
 ## What already exists
 

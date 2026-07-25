@@ -31,6 +31,7 @@
  * Adoption is one-time: if the ledger already has rows, it refuses.
  */
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import {
   ADOPTION_COMPARISON,
@@ -83,6 +84,37 @@ export interface AdoptionReport {
   diff: CatalogDiff;
   /** Human-readable report string. */
   report: string;
+}
+
+export function selectAdoptionTarget(
+  history: LoadedMigration[],
+  historyDirectory: string,
+  requestedPoint?: string,
+): { history: LoadedMigration[]; fingerprintPath: string } {
+  if (history.length === 0) {
+    throw new Error('Migration history is empty — cannot select an adoption point');
+  }
+
+  const latestId = history[history.length - 1].id;
+  const adoptionPoint = requestedPoint ?? latestId;
+  const adoptionIndex = history.findIndex((migration) => migration.id === adoptionPoint);
+  if (adoptionIndex < 0) {
+    throw new Error(
+      `Unknown migration adoption point ${adoptionPoint}; expected one of: ${history
+        .map((migration) => migration.id)
+        .join(', ')}`,
+    );
+  }
+
+  return {
+    history: history.slice(0, adoptionIndex + 1),
+    fingerprintPath: path.join(
+      historyDirectory,
+      adoptionPoint === latestId
+        ? 'catalog-fingerprint.json'
+        : `catalog-fingerprint.${adoptionPoint}.json`,
+    ),
+  };
 }
 
 export interface AdoptionOptions {

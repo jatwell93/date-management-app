@@ -12,9 +12,17 @@
  *   MIGRATION_ENVIRONMENT            — development | test | staging | production
  *   MIGRATION_CONFIRM_PRODUCTION     — "APPLY <host>/<database>" (production only)
  *   MIGRATION_DEPLOYMENT_SHA         — git commit SHA for the audit ledger
+ *   MIGRATION_TARGET_KIND            — must be "primary" for a mutating command
+ *   MIGRATION_ROLE                   — dedicated DDL migration role (must match current_user)
+ *   MIGRATION_ADOPTION_POINT         — optional historical migration ID (for example "0009")
  *
  * For --apply mode, additionally required:
  *   MIGRATION_ADOPT_CONFIRMATION     — "ADOPT <host>/<database> AT <migration-id>"
+ *
+ * To adopt a database at a historical schema point, set
+ * `MIGRATION_ADOPTION_POINT` to an installed migration ID. The command selects
+ * that history prefix and its `catalog-fingerprint.<id>.json`; a subsequent
+ * `migrate:apply` then executes only the remaining migrations.
  *
  * The --dry-run flag performs read-only catalog checks and emits a reviewable
  * report. No writes to the database — no ledger creation, no stamping.
@@ -32,8 +40,9 @@ import path from 'node:path';
 
 import { Client } from 'pg';
 
-import { performAdoption, formatMigrationError } from './adopt';
+import { performAdoption, formatMigrationError, selectAdoptionTarget } from './adopt';
 import { loadMigrationHistory, MigrationExecutionError, validateMigrationTarget } from './runner';
+import { assertTargetKind, verifyMigrationRole } from './target';
 
 const VALID_ARGS = new Set(['--dry-run', '--apply']);
 
@@ -71,6 +80,7 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: true });
   const deploymentSha = process.env.MIGRATION_DEPLOYMENT_SHA;
   if (!deploymentSha) throw new Error('MIGRATION_DEPLOYMENT_SHA is required');
 
@@ -82,16 +92,21 @@ async function main(): Promise<void> {
       'Canonical baseline is not installed yet; complete Phase 1 task 1.3 before adopting',
     );
   }
-  const fingerprintPath = path.join(historyDirectory, 'catalog-fingerprint.json');
+  const fullHistory = await loadMigrationHistory(historyDirectory);
+  const adoptionTarget = selectAdoptionTarget(
+    fullHistory,
+    historyDirectory,
+    process.env.MIGRATION_ADOPTION_POINT,
+  );
   try {
-    await access(fingerprintPath);
+    await access(adoptionTarget.fingerprintPath);
   } catch {
     throw new Error(
-      'Catalog fingerprint is not generated yet; complete Phase 1 task 1.3 before adopting',
+      `Catalog fingerprint for adoption point ${
+        adoptionTarget.history[adoptionTarget.history.length - 1].id
+      } is not installed`,
     );
   }
-
-  const history = await loadMigrationHistory(historyDirectory);
   const client = new Client({
     connectionString,
     application_name: 'date-management-migration-adopt',
@@ -100,13 +115,15 @@ async function main(): Promise<void> {
   });
 
   await client.connect();
+  let role: string | undefined;
   let report: Awaited<ReturnType<typeof performAdoption>> | undefined;
   let adoptionError: unknown;
   try {
-    report = await performAdoption(client, history, {
+    role = await verifyMigrationRole(client, process.env.MIGRATION_ROLE);
+    report = await performAdoption(client, adoptionTarget.history, {
       deploymentSha,
       mode,
-      fingerprintPath,
+      fingerprintPath: adoptionTarget.fingerprintPath,
       adoptionConfirmation: process.env.MIGRATION_ADOPT_CONFIRMATION,
       targetHost: target.host,
       targetDatabase: target.database,
@@ -130,7 +147,9 @@ async function main(): Promise<void> {
   if (adoptionError !== undefined) throw adoptionError;
   if (report === undefined) throw new Error('Adoption command finished without a report');
 
-  process.stdout.write(`Target: ${target.host}/${target.database}\n\n${report.report}\n`);
+  process.stdout.write(
+    `Target: ${target.host}/${target.database} (role: ${role})\n\n${report.report}\n`,
+  );
 
   // Exit with non-zero if an approved adoption was refused.
   // Dry-run refusals are informational — the operator reviews the report.

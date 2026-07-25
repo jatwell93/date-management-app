@@ -132,10 +132,29 @@
       one-time guard, wrong-definition refusal, missing-table refusal, missing-CHECK-constraint refusal
       (strict), missing-partial-index refusal (strict), invalid SHA rejection, and exact-column-exception
       acceptance.**
-- [ ] 1.5 Provide separate ordered commands outside `backend/` for migration status/preflight/apply,
+- [x] 1.5 Provide separate ordered commands outside `backend/` for migration status/preflight/apply,
       required idempotent reference-data seed, and schema/data verification. Require a dedicated DDL
       migration role, allowlisted target identity, redacted output, explicit production confirmation,
       and rejection of development/restore/pooled application targets.
+      **Done (2026-07-25):** added `migrate:status`, `migrate:preflight`, `migrate:seed`,
+      `migrate:verify` npm scripts backed by `status.ts`, `preflight.ts`, `seed.ts`, `verify.ts`
+      (+ `-cli.ts` entrypoints) under `src/database/migrations/`. Shared guards live in `target.ts`:
+      `assertTargetKind` (rejects `development`/`restore-drill` for mutating commands; only `primary`
+      is allowed for apply/seed) and `verifyMigrationRole` (dedicated DDL role must equal
+      `current_user`). `migrate:apply` and `migrate:adopt` were extended with the same role +
+      target-kind guards. Output is JSON/text with redacted target identity (host + database only,
+      no password). Production confirmation is required for `migrate:seed` via
+      `MIGRATION_SEED_CONFIRMATION=SEED <host>/<db>`. Seed is idempotent (upsert + verify) and
+      converges pre-existing incorrect rows. Verify checks table presence, `tier_feature_flags` row
+      count + values, and catalog-vs-fingerprint drift. **Pre-existing schema/data inconsistency
+      surfaced and fixed:** `tier_feature_flags.limit_value` was `integer` (int4) but the declared
+      `storage_bytes` tier limits (10 GB / 100 GB) exceed int32, so the backend Prisma seed could
+      not have ever inserted them. Added migration `0010_alter_tier_feature_flags_limit_value_to_bigint`
+      (expand-compatible, forward-fix recovery) and regenerated `catalog-fingerprint.json`. The
+      bigint-vs-integer divergence is allowlisted in `catalog-comparison.ts` until the Prisma schema
+      is updated (Phase 4). Tests: `commands.test.ts` covers all guards + commands (25 new tests,
+      pglite-backed); existing `adopt.test.ts`/`runner.test.ts`/`baseline.fingerprint.test.ts`
+      updated for 0010. `npm run test:migrations` → 61/61 pass.
 - [ ] 1.6 Prove the runner end-to-end against isolated PostgreSQL/Neon targets: fresh install,
       existing-schema adoption, concurrent invocation refusal, interruption/recovery, checksum/catalog
       drift, safe down migration, forward fix, Worker rollback with expanded schema, and restore recovery.
