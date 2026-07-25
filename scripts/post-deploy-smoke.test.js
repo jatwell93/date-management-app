@@ -32,6 +32,45 @@ function makeFetch(responses) {
   return fn;
 }
 
+/**
+ * Shared harness for `main` tests: builds the fetch impl, wires stdout/stderr
+ * capture, invokes main, and parses the JSON evidence document. Returns the
+ * pieces each test still needs to assert on.
+ *
+ * @param {Record<string, { status: number; body: unknown; contentType?: string } | Error>} responses
+ * @param {Record<string, string | undefined>} env
+ * @returns {Promise<{ code: number; out: string; err: string; fetchImpl: ReturnType<typeof makeFetch>; evidence: unknown }>}
+ */
+async function runMain(responses, env) {
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch(responses);
+  const code = await main(env, {
+    fetch: fetchImpl,
+    stdout: { write: (s) => outChunks.push(s) },
+    stderr: { write: (s) => errChunks.push(s) },
+  });
+  const out = outChunks.join('');
+  const err = errChunks.join('');
+  let evidence;
+  if (out) {
+    try {
+      evidence = JSON.parse(out);
+    } catch {
+      evidence = undefined;
+    }
+  }
+  return { code, out, err, fetchImpl, evidence };
+}
+
+const BASE_URL = 'https://api.example.com';
+
+const HEALTHY_DEEP = {
+  status: 200,
+  body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+};
+const OK_SUBSCRIPTION = { status: 200, body: { tier: 'starter' } };
+
 test('probeEndpoint: returns ok for a 2xx JSON response', async () => {
   const fetchImpl = makeFetch({
     'https://api.example.com/health?deep=true': {
@@ -137,71 +176,43 @@ test('evaluateProbe: fails on non-2xx status', () => {
 });
 
 test('main: exits 0 when all endpoints pass', async () => {
-  const outChunks = [];
-  const errChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
-    },
-    'https://api.example.com/api/subscription/current': { status: 200, body: { tier: 'starter' } },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com' },
+  const { code, evidence } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: (s) => errChunks.push(s) },
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: OK_SUBSCRIPTION,
     },
+    { SMOKE_TARGET_URL: BASE_URL },
   );
   assert.equal(code, 0);
-  const evidence = JSON.parse(outChunks.join(''));
   assert.equal(evidence.summary.passed, 2);
   assert.equal(evidence.summary.failed, 0);
 });
 
 test('main: exits 1 when an endpoint returns 5xx', async () => {
-  const outChunks = [];
-  const errChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
-    },
-    'https://api.example.com/api/subscription/current': { status: 500, body: { error: 'db' } },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com' },
+  const { code, err } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: (s) => errChunks.push(s) },
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: { status: 500, body: { error: 'db' } },
     },
+    { SMOKE_TARGET_URL: BASE_URL },
   );
   assert.equal(code, 1);
-  assert.match(errChunks.join(''), /Smoke test failed for \/api\/subscription\/current/);
+  assert.match(err, /Smoke test failed for \/api\/subscription\/current/);
 });
 
 test('main: exits 1 when DB readiness check fails on /health?deep=true', async () => {
-  const outChunks = [];
-  const errChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'degraded', checks: { database: { status: 'fail', error: 'timeout' } } },
-    },
-    'https://api.example.com/api/subscription/current': { status: 200, body: {} },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com' },
+  const { code, err } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: (s) => errChunks.push(s) },
+      [`${BASE_URL}/health?deep=true`]: {
+        status: 200,
+        body: { status: 'degraded', checks: { database: { status: 'fail', error: 'timeout' } } },
+      },
+      [`${BASE_URL}/api/subscription/current`]: { status: 200, body: {} },
     },
+    { SMOKE_TARGET_URL: BASE_URL },
   );
   assert.equal(code, 1);
-  assert.match(errChunks.join(''), /database readiness/);
+  assert.match(err, /database readiness/);
 });
 
 test('main: throws when SMOKE_TARGET_URL is missing', async () => {
@@ -209,20 +220,11 @@ test('main: throws when SMOKE_TARGET_URL is missing', async () => {
 });
 
 test('main: respects custom SMOKE_ENDPOINTS', async () => {
-  const outChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health': { status: 200, body: { status: 'healthy' } },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com', SMOKE_ENDPOINTS: '/health' },
-    {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: () => {} },
-    },
+  const { code, evidence } = await runMain(
+    { [`${BASE_URL}/health`]: { status: 200, body: { status: 'healthy' } } },
+    { SMOKE_TARGET_URL: BASE_URL, SMOKE_ENDPOINTS: '/health' },
   );
   assert.equal(code, 0);
-  const evidence = JSON.parse(outChunks.join(''));
   assert.equal(evidence.summary.total, 1);
 });
 
@@ -268,93 +270,52 @@ test('probeEndpoint: does NOT attach Authorization header when authToken is abse
 });
 
 test('main: sends Authorization header on all probes when SMOKE_AUTH_TOKEN is set', async () => {
-  const outChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
-    },
-    'https://api.example.com/api/subscription/current': { status: 200, body: { tier: 'starter' } },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com', SMOKE_AUTH_TOKEN: 'prod-smoke-token' },
+  const { code, fetchImpl, evidence } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: () => {} },
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: OK_SUBSCRIPTION,
     },
+    { SMOKE_TARGET_URL: BASE_URL, SMOKE_AUTH_TOKEN: 'prod-smoke-token' },
   );
   assert.equal(code, 0);
   assert.equal(fetchImpl.calls.length, 2);
   for (const call of fetchImpl.calls) {
     assert.equal(call.opts.headers.Authorization, 'Bearer prod-smoke-token');
   }
-  const evidence = JSON.parse(outChunks.join(''));
   assert.equal(evidence.authenticated, true);
 });
 
 test('main: evidence.authenticated is false when SMOKE_AUTH_TOKEN is unset', async () => {
-  const outChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
-    },
-    'https://api.example.com/api/subscription/current': { status: 200, body: {} },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com' },
+  const { code, evidence } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: () => {} },
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: { status: 200, body: {} },
     },
+    { SMOKE_TARGET_URL: BASE_URL },
   );
   assert.equal(code, 0);
-  const evidence = JSON.parse(outChunks.join(''));
   assert.equal(evidence.authenticated, false);
 });
 
 test('main: authenticated probe against /api/subscription/current passes with 2xx', async () => {
-  const outChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
-    },
-    'https://api.example.com/api/subscription/current': { status: 200, body: { tier: 'starter' } },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com', SMOKE_AUTH_TOKEN: 'token' },
+  const { code } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: (s) => outChunks.push(s) },
-      stderr: { write: () => {} },
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: OK_SUBSCRIPTION,
     },
+    { SMOKE_TARGET_URL: BASE_URL, SMOKE_AUTH_TOKEN: 'token' },
   );
   assert.equal(code, 0);
 });
 
 test('main: unauthenticated probe against /api/subscription/current fails on 401 (not treated as success)', async () => {
-  const errChunks = [];
-  const fetchImpl = makeFetch({
-    'https://api.example.com/health?deep=true': {
-      status: 200,
-      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
-    },
-    'https://api.example.com/api/subscription/current': {
-      status: 401,
-      body: { error: 'unauthorized' },
-    },
-  });
-  const code = await main(
-    { SMOKE_TARGET_URL: 'https://api.example.com' },
+  const { code, err } = await runMain(
     {
-      fetch: fetchImpl,
-      stdout: { write: () => {} },
-      stderr: { write: (s) => errChunks.push(s) },
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: { status: 401, body: { error: 'unauthorized' } },
     },
+    { SMOKE_TARGET_URL: BASE_URL },
   );
   assert.equal(code, 1);
-  assert.match(errChunks.join(''), /non-2xx status: 401/);
+  assert.match(err, /non-2xx status: 401/);
 });
