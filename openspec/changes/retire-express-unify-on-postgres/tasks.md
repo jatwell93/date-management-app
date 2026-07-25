@@ -262,18 +262,40 @@
             credentials — documentation alone is not enforcement.
       - [x] **1.7.B-runbook** Operator runbook for the production deploy gate.
             `docs/migrations-deploy-runbook.md` documents: the pre-deploy PITR
-            drill (restore-to-new-branch, RPO/RTO recording); the CI workflow
+            drill (restore-to-new-branch at a **specific snapshot/timestamp**,
+            not `--parent main`, with RPO/RTO recording); the CI workflow
             sequence and artifact inventory; canary observation thresholds
             (smoke failure, Sentry fatal/critical issues, error rate,
             latency); three-layer rollback procedure (Worker rollback →
             forward fix → Neon PITR restore, with explicit warning that
             destructive down migrations are NOT the default); post-deploy
-            verification; the single-job migration-prep architecture; the
-            concurrency serialization model; the credential-level
-            enforcement model; new secrets/variables reference
-            (`NEON_API_KEY`, `SMOKE_AUTH_TOKEN`, `SENTRY_AUTH_TOKEN`,
-            `SENTRY_ORG`, `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`); and a
-            structured sign-off section for operator evidence.
+            verification (authenticated smoke via
+            `scripts/run-authenticated-smoke.js`, not bare curl); the
+            single-job migration-prep architecture; the concurrency
+            serialization model; the credential-level enforcement model;
+            smoke-test identity provisioning (manual, dedicated org, normal
+            bootstrap path, `team_member` role, recorded in sign-off);
+            secrets/variables reference (`NEON_API_KEY`,
+            `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`,
+            `CANARY_WAIT_MINUTES` in GitHub; `CLERK_SECRET_KEY`,
+            `SMOKE_USER_ID` in Doppler); and a structured sign-off section
+            for operator evidence including the smoke-test identity record.
+            **Canary authentication redesign (2026-07-25):** the original
+            `SMOKE_AUTH_TOKEN` design (static GitHub secret) was replaced
+            because `authenticateApiRequest` → `verifyToken` verifies Clerk
+            session JWTs (~60s lifetime) — a static token would expire
+            within a minute. The canary now mints a fresh session token
+            per round via `scripts/run-authenticated-smoke.js` (create
+            session → mint JWT → probe → revoke in `finally`), using
+            `CLERK_SECRET_KEY` + `SMOKE_USER_ID` from Doppler. The JWT
+            and secret are never printed or stored. Revocation failure
+            fails the canary (security signal) without masking an earlier
+            probe failure. Investigation confirmed Clerk does not offer a
+            suitably restricted Backend API credential for session minting
+            (M2M tokens and user API keys are wrong token types for the
+            existing `verifyToken` path), so the full production
+            `CLERK_SECRET_KEY` is used with blast-radius controlled by the
+            protected GitHub `production` environment.
       - [ ] **1.7.B-execute** Operator-driven production deploy execution.
             The runbook must be exercised end-to-end on a real production
             deploy and the sign-off section filled with evidence (CI run URL,
@@ -281,10 +303,19 @@
             verify). **Task 1.7 is not complete until this subtask is done.**
             Outstanding: the CI workflow and runbook are merged; the first
             real production deploy with this workflow has not yet been
-            executed. New GitHub environment secrets (`NEON_API_KEY`,
-            `SMOKE_AUTH_TOKEN`, `SENTRY_AUTH_TOKEN`) and variables
-            (`SENTRY_ORG`, `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`) must be
-            configured before the first run.
+            executed. Prerequisites before the first run: (1) complete
+            task 1.6.B-execute (Neon dev-branch exercise); (2) merge the
+            completed Phase 1 slice through 1.7.A into main; (3) configure
+            the protected GitHub `production` environment (branch policy +
+            15-min wait + `can_admins_bypass: false`) with secrets
+            `NEON_API_KEY`, `SENTRY_AUTH_TOKEN` and variables `SENTRY_ORG`,
+            `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`; (4) add `CLERK_SECRET_KEY`
+            and `SMOKE_USER_ID` to Doppler production config; (5) provision
+            the dedicated smoke-test identity (manual, normal bootstrap,
+            dedicated org, `team_member` role, real `subscription_tiers`
+            row, recorded in the runbook sign-off). Evidence is committed
+            in a small follow-up PR after the run — do not pre-edit the
+            runbook sign-off as though evidence existed before deployment.
 - [ ] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,
       reversibility/data-loss class, backfill/resume plan, and the later contract deployment. Do not use
       destructive down migrations as the default rollback.

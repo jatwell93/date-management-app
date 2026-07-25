@@ -248,12 +248,22 @@ jobs:
         run: doppler run -- npx wrangler deploy --env production
 
   # Phase 1 task 1.7 — post-deploy canary with delayed gate.
-  # Runs smoke tests immediately after deploy, waits CANARY_WAIT_MINUTES,
-  # then re-runs smoke tests and checks Sentry for new issues. A failure
-  # in either round blocks the canary gate (which downstream consumers can
-  # wire as a required check). The Sentry check fails open (warns but does
-  # not block) if SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are unset,
-  # so a missing Sentry configuration cannot block a deploy.
+  # Runs authenticated smoke tests immediately after deploy, waits
+  # CANARY_WAIT_MINUTES, then re-runs smoke tests and checks Sentry for new
+  # issues. A failure in either round blocks the canary gate.
+  #
+  # Authentication: the canary mints a short-lived Clerk session token for a
+  # dedicated smoke-test identity (configured in Doppler as SMOKE_USER_ID)
+  # immediately before each smoke round, then revokes the session in a
+  # finally block. The JWT is never stored in GitHub or carried across the
+  # canary window. CLERK_SECRET_KEY and SMOKE_USER_ID are injected by
+  # `doppler run` — the protected GitHub `production` environment holds only
+  # DOPPLER_TOKEN. The /api/subscription/current endpoint requires
+  # authentication (authenticateApiRequest → verifyToken), so an
+  # unauthenticated canary would get 401 and fail spuriously.
+  #
+  # The Sentry check fails open (warns but does not block) if
+  # SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are unset.
   canary:
     name: Post-deploy canary
     needs: [deploy-production]
@@ -261,14 +271,6 @@ jobs:
     environment: production
     env:
       SMOKE_TARGET_URL: https://api.expirymate.com.au
-      # SMOKE_AUTH_TOKEN is a dedicated production smoke-test identity token
-      # stored as a GitHub environment secret. The /api/subscription/current
-      # endpoint requires authentication (authenticateApiRequest), so the
-      # canary must send Authorization: Bearer <token> to exercise the
-      # schema-dependent read. Without this, every canary would see a 401
-      # and the gate would either fail spuriously or, if 401 were treated as
-      # success, stop exercising the schema-dependent query.
-      SMOKE_AUTH_TOKEN: ${{ secrets.SMOKE_AUTH_TOKEN }}
       CANARY_WAIT_MINUTES: ${{ vars.CANARY_WAIT_MINUTES || '15' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
@@ -281,11 +283,16 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Canary round 1 — immediate smoke test
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
+      - name: Canary round 1 — authenticated smoke test
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          node scripts/post-deploy-smoke.js > canary-round-1.json 2> canary-round-1.stderr
+          doppler run -- node scripts/run-authenticated-smoke.js > canary-round-1.json 2> canary-round-1.stderr
           cat canary-round-1.json
-          # post-deploy-smoke exits 1 on failure — propagate
+          # run-authenticated-smoke exits 1 on probe/mint/revoke failure — propagate
           exit $?
 
       - name: Canary wait window
@@ -293,9 +300,11 @@ jobs:
           echo "Waiting $CANARY_WAIT_MINUTES minutes before re-checking..."
           sleep "$((CANARY_WAIT_MINUTES * 60))"
 
-      - name: Canary round 2 — smoke test after wait
+      - name: Canary round 2 — authenticated smoke test after wait
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          node scripts/post-deploy-smoke.js > canary-round-2.json 2> canary-round-2.stderr
+          doppler run -- node scripts/run-authenticated-smoke.js > canary-round-2.json 2> canary-round-2.stderr
           cat canary-round-2.json
           exit $?
 

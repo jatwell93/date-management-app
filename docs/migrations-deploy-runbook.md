@@ -77,12 +77,6 @@ production GitHub environment is the enforcement boundary.
 - [ ] `DOPPLER_TOKEN` GitHub secret configured (repo-level, used by all deploy jobs)
 - [ ] `NEON_API_KEY` GitHub environment secret configured in `production`
       (read-only Neon API key for the PITR readiness check)
-- [ ] `SMOKE_AUTH_TOKEN` GitHub environment secret configured in `production`
-      (a dedicated production smoke-test identity token sent as
-      `Authorization: Bearer <token>` by the canary smoke test. The
-      `/api/subscription/current` endpoint requires authentication via
-      `authenticateApiRequest`; without this token every canary would
-      receive a 401 and the gate would fail spuriously.)
 - [ ] `SENTRY_AUTH_TOKEN` GitHub environment secret configured in `production`
       (read-only Sentry API token for the canary check) — optional, canary
       fails open if unset
@@ -93,12 +87,53 @@ production GitHub environment is the enforcement boundary.
 - [ ] Doppler production config contains: `DATABASE_URL_UNPOOLED`,
       `MIGRATION_ALLOWED_HOST`, `MIGRATION_ALLOWED_DATABASE`,
       `MIGRATION_CONFIRM_PRODUCTION`, `MIGRATION_ROLE`, `MIGRATION_SEED_CONFIRMATION`,
-      `NEON_CONNECTION_STRING`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+      `NEON_CONNECTION_STRING`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+      `CLERK_SECRET_KEY`, `SMOKE_USER_ID`
+- [ ] Dedicated smoke-test identity provisioned (see
+      [Smoke-test identity provisioning](#smoke-test-identity-provisioning) below)
 - [ ] Neon project ID known: `dawn-darkness-22587117` (region
       `aws-ap-southeast-2`, PostgreSQL 17)
 - [ ] `npm run compile` passes locally
 - [ ] The automated e2e suite passes in CI (green `Migrations E2E Gate` check)
 - [ ] Operator has access to the Neon console for the PITR drill
+
+### Smoke-test identity provisioning
+
+A dedicated smoke-test identity must be provisioned **once** in production
+before the first canary run. This is cross-system operational state (Clerk
+identity + application database rows), not deterministic reference data —
+do **not** add it to `migrate:seed`.
+
+Provision it through the normal application bootstrap path:
+
+1. Create a dedicated user in the **production** Clerk dashboard
+   (instance `ins_3C1uCdrvUbtBaw2zG5gPmeqSwCV`).
+2. Create a **dedicated smoke-test organization** (not a customer org —
+   a canary failure against a customer org could pollute their
+   `subscription_tiers` reads).
+3. Run the normal organization/bootstrap flow so the application creates
+   the `users` table row via production logic. Do **not** manually insert
+   database rows unless the normal bootstrap path cannot support this
+   identity.
+4. Assign `team_member` (or the lowest role that can read
+   `/api/subscription/current`).
+5. Ensure the organization has a real `subscription_tiers` row (so the
+   canary query returns data, not an empty 200).
+6. Ensure the identity has **no** production administration or billing
+   privileges.
+7. Store the Clerk user ID as `SMOKE_USER_ID` in Doppler production config.
+8. Record the identity details in the sign-off section below: Clerk user
+   ID, application user ID, organization ID, creator, date, and purpose.
+
+> **Blast radius note:** the canary job receives the full production
+> `CLERK_SECRET_KEY` (via `doppler run`) to mint session tokens. Clerk
+> does not offer a suitably restricted Backend API credential that can
+> mint session tokens for one user only — the secret key has full
+> Backend API access. Blast radius is controlled by the protected GitHub
+> `production` environment (branch policy + 15-min wait timer +
+> `can_admins_bypass: false`) and the reviewed `main` branch. The
+> `SMOKE_USER_ID` is not secret but is kept in Doppler alongside the
+> Clerk key so the canary configuration lives in one place.
 
 ---
 
@@ -130,24 +165,33 @@ neonctl snapshots create --project-id dawn-darkness-22587117 --branch main
 
 ### 1b. Restore-to-new-branch drill
 
+This step must restore a **specific snapshot or timestamp** into a new
+branch — creating an ordinary child branch from current main does **not**
+prove PITR. The drill verifies that a restore point can be materialized
+and the application works against the restored data.
+
 ```bash
 export NEON_PROJECT_ID=dawn-darkness-22587117
 export DRILL_BRANCH=pitr-drill-$(date +%Y%m%d%H%M)
 
-# Create a branch restored to the latest state
+# 1. Pick a restore point (use the newest snapshot from Step 1a)
+export RESTORE_TIMESTAMP="<newest-snapshot-ISO-timestamp>"
+
+# 2. Create a branch restored to that timestamp — NOT --parent main.
+#    The --restore-to flag materializes the branch at the snapshot point.
 neonctl branches create \
   --project-id "$NEON_PROJECT_ID" \
   --name "$DRILL_BRANCH" \
-  --parent main
+  --restore-to "$RESTORE_TIMESTAMP"
 
 export DRILL_URL=$(neonctl connection-string "$DRILL_BRANCH" \
   --project-id "$NEON_PROJECT_ID" --role-name postgres)
 
-# Verify the restored branch has the expected schema
+# 3. Verify the restored branch has the expected schema
 psql "$DRILL_URL" -c \
   "SELECT count(*) AS table_count FROM information_schema.tables WHERE table_schema = 'public';"
 
-# Run the migration verify command against the restored branch
+# 4. Run the migration verify command against the restored branch
 DATABASE_URL_UNPOOLED="$DRILL_URL" \
 MIGRATION_ALLOWED_HOST=<drill-host> \
 MIGRATION_ALLOWED_DATABASE=<drill-db> \
@@ -159,6 +203,12 @@ npm run migrate:verify
 
 **Expected:** `migrate:verify` reports PASS. If it fails, the production
 schema has drift that must be investigated before migrating.
+
+> **Why `--restore-to` and not `--parent`:** `--parent main` creates a
+> child branch from the current tip of main — that is a copy, not a
+> restore. PITR proves you can recover to a **past point in time**. The
+> `--restore-to <timestamp>` flag tells Neon to materialize the branch
+> at that historical state, which is what the drill must verify.
 
 ### 1c. Clean up the drill branch
 
@@ -239,13 +289,20 @@ with the deployment record:
 
 The canary job runs automatically after deploy. It:
 
-1. **Round 1**: immediate smoke test (`/health?deep=true` + `/api/subscription/current`).
-   The `/api/subscription/current` probe sends `Authorization: Bearer
-   <SMOKE_AUTH_TOKEN>` because the endpoint requires authentication via
-   `authenticateApiRequest` — an unauthenticated request would return 401
-   and the gate would fail spuriously. A 401 is **not** treated as success.
+1. **Round 1**: mint a fresh Clerk session token for the smoke-test
+   identity, run the authenticated smoke test
+   (`/health?deep=true` + `/api/subscription/current`), revoke the session
+   in a `finally` block. The `/api/subscription/current` probe sends
+   `Authorization: Bearer <minted-JWT>` because the endpoint requires
+   authentication via `authenticateApiRequest` → `verifyToken` — an
+   unauthenticated request would return 401 and the gate would fail
+   spuriously. A 401 is **not** treated as success. The JWT is short-lived
+   (~60s) and never stored; a fresh session is minted immediately before
+   each round.
 2. **Wait**: 15 minutes (configurable via `CANARY_WAIT_MINUTES`)
-3. **Round 2**: re-run smoke test + check Sentry for new fatal/critical issues
+3. **Round 2**: mint a **new** fresh session token (never carried across
+   the wait window), re-run the authenticated smoke test, check Sentry
+   for new fatal/critical issues, revoke the session
 
 ### Stop / rollback thresholds
 
@@ -376,11 +433,14 @@ data after the restore point is lost. This is a last resort.
 After the canary passes, perform a final manual verification:
 
 ```bash
-# Deep health check (verifies DB connectivity)
+# Deep health check (verifies DB connectivity) — no auth required
 curl -sS "https://api.expirymate.com.au/health?deep=true" | jq .
 
-# Subscription endpoint (verifies schema-dependent read)
-curl -sS "https://api.expirymate.com.au/api/subscription/current" | jq . | head -20
+# Subscription endpoint (verifies schema-dependent read) — REQUIRES auth.
+# The /api/subscription/current endpoint calls authenticateApiRequest →
+# verifyToken, so a bare curl returns 401. Use the authenticated canary
+# mechanism to exercise this endpoint manually:
+doppler run -- node scripts/run-authenticated-smoke.js
 
 # Run migrate:verify against production to confirm the deployed schema
 # matches the fingerprint
@@ -394,11 +454,13 @@ MIGRATION_ROLE=<ddl-role> \
 npm run migrate:verify
 ```
 
-**Expected:** all checks PASS.
+**Expected:** all checks PASS. The authenticated smoke test creates a
+fresh Clerk session, mints a JWT, probes both endpoints, and revokes the
+session — its evidence document is the manual verification record.
 
 **Record:**
 - Deep health: [ ] PASS [ ] FAIL
-- Subscription read: [ ] PASS [ ] FAIL
+- Authenticated smoke (subscription read): [ ] PASS [ ] FAIL
 - `migrate:verify`: [ ] PASS [ ] FAIL
 
 ---
@@ -429,6 +491,20 @@ Paste links to CI runs, artifacts, or commit output files to the PR:
 - [ ] Canary evidence artifact: `____________________________`
 - [ ] Post-deploy verify output: `____________________________`
 
+### Smoke-test identity record
+
+Recorded once when the identity is provisioned (see
+[Smoke-test identity provisioning](#smoke-test-identity-provisioning)):
+
+| Field | Value |
+|-------|-------|
+| Clerk user ID (`SMOKE_USER_ID`) | `____________________________` |
+| Application user ID | `____________________________` |
+| Smoke-test organization ID | `____________________________` |
+| Provisioned by | `____________________________` |
+| Date provisioned | `____________________________` |
+| Purpose | Production canary smoke test (read-only) |
+
 ### Outstanding evidence
 
 If any step could not be completed in this session, record what is missing
@@ -448,7 +524,6 @@ off task 1.7.B-execute and the parent 1.7 checkbox.
 | Secret | Purpose | Required |
 |--------|---------|----------|
 | `NEON_API_KEY` | Neon API read-only key for PITR readiness check | Yes |
-| `SMOKE_AUTH_TOKEN` | Production smoke-test identity token (sent as `Authorization: Bearer` by the canary smoke test for `/api/subscription/current`) | Yes |
 | `SENTRY_AUTH_TOKEN` | Sentry API read-only token for canary check | No (canary fails open) |
 
 ### GitHub environment variables (production)
@@ -461,7 +536,8 @@ off task 1.7.B-execute and the parent 1.7 checkbox.
 
 ### Doppler production config (existing + new)
 
-The migration CLIs read these from the environment (injected by `doppler run`):
+The migration CLIs and canary orchestrator read these from the environment
+(injected by `doppler run`):
 
 | Variable | Purpose |
 |----------|---------|
@@ -474,6 +550,8 @@ The migration CLIs read these from the environment (injected by `doppler run`):
 | `NEON_CONNECTION_STRING` | Worker's Neon connection (existing) |
 | `CLOUDFLARE_API_TOKEN` | Worker deploy (existing) |
 | `CLOUDFLARE_ACCOUNT_ID` | Worker deploy (existing) |
+| `CLERK_SECRET_KEY` | Production Clerk secret key — used by the canary orchestrator (`scripts/run-authenticated-smoke.js`) to mint short-lived session tokens for the smoke identity. Full Backend API access; blast radius controlled by the protected GitHub `production` environment. |
+| `SMOKE_USER_ID` | Clerk user ID of the dedicated smoke-test identity. Not secret, but kept in Doppler so the canary configuration lives in one place. |
 
 ---
 

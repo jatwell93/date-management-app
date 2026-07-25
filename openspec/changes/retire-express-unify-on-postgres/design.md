@@ -886,22 +886,32 @@ apply/seed/verify sequence — it queues behind the running deploy. PR
 
 **Canary job (CI smoke test + delayed gate).** After the Worker deploys:
 
-1. **Round 1** — immediate smoke test via `scripts/post-deploy-smoke.js`
-   against the production URL (`/health?deep=true` requiring DB readiness
-   pass, plus `/api/subscription/current`). Each probe sends
-   `Authorization: Bearer <SMOKE_AUTH_TOKEN>` because
+1. **Round 1** — the canary job mints a short-lived Clerk session token
+   for a dedicated smoke-test identity via `scripts/run-authenticated-smoke.js`
+   (create session → mint JWT → probe → revoke in `finally`), then runs
+   the authenticated smoke test against the production URL
+   (`/health?deep=true` requiring DB readiness pass, plus
+   `/api/subscription/current`). Each probe sends
+   `Authorization: Bearer <minted-JWT>` because
    `/api/subscription/current` requires authentication via
-   `authenticateApiRequest` — an unauthenticated request would return 401
-   and the gate would fail spuriously. A 401 is NOT treated as success.
+   `authenticateApiRequest` → `verifyToken` — an unauthenticated request
+   would return 401 and the gate would fail spuriously. A 401 is NOT
+   treated as success. The JWT is short-lived (~60s) and never stored; a
+   fresh session is minted immediately before each round. `CLERK_SECRET_KEY`
+   and `SMOKE_USER_ID` are injected by `doppler run` (the canary job
+   installs Doppler CLI and runs `doppler run -- node scripts/run-authenticated-smoke.js`).
+   The JWT and Clerk secret are never printed. Revocation failure fails
+   the canary (security signal) without masking an earlier probe failure.
 2. **Wait** — `CANARY_WAIT_MINUTES` (default 15, matching the production
    environment's wait timer).
-3. **Round 2** — re-run smoke test, then check Sentry for new fatal/critical
-   issues via the Sentry REST API (queries `level:[fatal,critical]` using
-   Sentry's multiple-value OR syntax; `fatal` is Sentry's standard highest
-   severity, `critical` is included defensively). The Sentry check **fails
-   open** (warns but does not block) if `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
-   or `SENTRY_PROJECT` are unset, so a missing Sentry configuration cannot
-   block a deploy.
+3. **Round 2** — mint a **new** fresh session token (never carried across
+   the wait window), re-run the authenticated smoke test, then check
+   Sentry for new fatal/critical issues via the Sentry REST API (queries
+   `level:[fatal,critical]` using Sentry's multiple-value OR syntax;
+   `fatal` is Sentry's standard highest severity, `critical` is included
+   defensively). The Sentry check **fails open** (warns but does not
+   block) if `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, or `SENTRY_PROJECT` are
+   unset, so a missing Sentry configuration cannot block a deploy.
 
 Canary evidence (both rounds + Sentry output) is uploaded as an artifact.
 
@@ -923,10 +933,17 @@ restore actually works and the application is functional against restored
 data.
 
 **Credential-level enforcement.** Production deployment credentials
-(`DOPPLER_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`, `SMOKE_AUTH_TOKEN`,
+(`DOPPLER_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`,
 `SENTRY_AUTH_TOKEN`) are scoped to the protected `production` GitHub
 environment, which has branch policy (only `main`), a 15-minute wait timer,
 and `can_admins_bypass: false` (verified via GitHub API 2026-07-25).
+`CLERK_SECRET_KEY` and `SMOKE_USER_ID` are stored in Doppler production
+config (not GitHub) and injected via `doppler run` in the canary job —
+the canary receives the full production Clerk secret key because Clerk
+does not offer a suitably restricted Backend API credential for session
+minting (investigation confirmed M2M tokens and user API keys are wrong
+token types for the existing `verifyToken` path). Blast radius is
+controlled by the protected GitHub `production` environment.
 `workflow_dispatch` from `main` is the supported manual deployment mechanism.
 Direct local `wrangler deploy --env production` requires separately
 controlled break-glass access to production credentials — **documentation
@@ -961,18 +978,32 @@ destructive down migrations.
 - `scripts/post-deploy-smoke.js` — probes a configurable list of endpoints
   against a deployed Worker URL with latency budgets. Requires
   `/health?deep=true` to report DB readiness pass. Sends
-  `Authorization: Bearer <SMOKE_AUTH_TOKEN>` when configured so the
+  `Authorization: Bearer <authToken>` when configured so the
   authenticated `/api/subscription/current` endpoint is exercised (a 401
   is NOT treated as success). Exits non-zero on failure. 21 unit tests
   (mocked fetch), including auth-header attachment and 401-failure tests.
+  Called in-process by `run-authenticated-smoke.js` — not invoked directly
+  by the canary job.
+- `scripts/run-authenticated-smoke.js` — orchestrates the authenticated
+  canary: creates a Clerk session for `SMOKE_USER_ID`, mints a short-lived
+  JWT, invokes `post-deploy-smoke.js`'s `main()` in-process with the JWT
+  as `SMOKE_AUTH_TOKEN`, and revokes the session in a `finally` block.
+  The JWT and `CLERK_SECRET_KEY` are never printed. Emits sanitized
+  evidence (session ID, user ID, timestamps, probe results, revocation
+  result). Fails closed if minting or revocation fails; revocation
+  failure fails the canary (security signal) without masking an earlier
+  probe failure. 16 unit tests (mocked Clerk fetch + fake smoke main),
+  covering successful flow, probe failure still revokes, mint failure
+  cleanup, revoke failure reported, no secret/JWT in output, fresh
+  session per round.
 
 **New secrets and variables.** `NEON_API_KEY` (environment secret,
-production) for the PITR check; `SMOKE_AUTH_TOKEN` (environment secret,
-production) for the canary smoke test's authenticated endpoint probe;
-`SENTRY_AUTH_TOKEN` (environment secret, production, optional) for the
-canary Sentry check; `SENTRY_ORG`, `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`
-(environment variables, production). These are documented in the runbook's
-secrets reference section.
+production) for the PITR check; `SENTRY_AUTH_TOKEN` (environment secret,
+production, optional) for the canary Sentry check; `SENTRY_ORG`,
+`SENTRY_PROJECT`, `CANARY_WAIT_MINUTES` (environment variables,
+production) in GitHub. `CLERK_SECRET_KEY` and `SMOKE_USER_ID` in Doppler
+production config for the canary orchestrator's session minting. These
+are documented in the runbook's secrets reference section.
 
 **Outstanding evidence from this session.** The CI workflow, scripts, and
 runbook are complete and verified locally (compile clean, 44 script tests
