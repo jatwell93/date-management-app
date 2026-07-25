@@ -160,6 +160,52 @@
       drift, safe down migration, forward fix, Worker rollback with expanded schema, and restore recovery.
       **Perform at least one real schema change with a working rollback on a Neon dev branch** — this is the
       gate that lets Prisma be removed in Phase 4.
+      **Split into automatable (A) and operator-driven (B) subtasks (2026-07-25):**
+      - [x] **1.6.A** Automated e2e suite against real PostgreSQL. `src/database/migrations/e2e.test.ts`
+            (run via `npm run test:migrations:e2e`) covers fresh install, existing-schema adoption at
+            `MIGRATION_ADOPTION_POINT=0009`, concurrent invocation refusal (advisory lock held externally),
+            interruption/recovery (a real partial non-transactional DDL — a temp `transaction: forbidden`
+            migration whose third statement fails after a visible CREATE TABLE + INSERT, proving the
+            partial schema is committed and the ledger is stuck at `applying`; resume refused; explicit
+            repair drops the partial table, deletes the ledger row, fixes the SQL, re-applies), checksum
+            drift (tampered migration file in temp dir → status + apply refuse), catalog drift (manual
+            `ALTER TABLE` after apply → verify fails), safe down migration (execute 0010 down SQL directly
+            → schema reverts to int4 → verify fails with only the `limit_value` diff), and forward fix
+            (delete 0010 ledger row → re-apply → schema returns to bigint → verify passes). The suite
+            **fails closed** (non-zero exit, no skip) when `MIGRATION_E2E_DATABASE_URL` is unset, and
+            enforces a **dedicated-target policy**: requires a second env var
+            `MIGRATION_E2E_CONFIRMATION` matching the exact token `DROP <dbname> AT <host>` derived from
+            the URL, refuses production-shaped host/db names, and verifies `current_database()` matches
+            the URL before any DROP. Temp dirs are cleaned in `finally`; the schema is dropped in an
+            `after` hook. CI workflow `.github/workflows/migrations-e2e.yml` runs the suite against an
+            ephemeral `postgres:17.10-trixie` service container **pinned by amd64 digest** (matching
+            production Neon PG 17, verified via Neon MCP + Docker Hub API 2026-07-25). The workflow has
+            **no trigger-level `paths:` filter** (matches `backend-test.yml` — a required check must
+            always report); path detection is done inside the `changes` job, and the `gate` job is the
+            required check that passes when migration files are unchanged. The `test:migrations` script
+            was changed from a glob to explicit file listing so the e2e suite's fail-closed throw does
+            not break the pglite test run.
+      - [x] **1.6.B-runbook** Operator runbook for the Neon dev-branch gate.
+            `docs/migrations-e2e-runbook.md` documents the guarded procedure: **two** branch creations
+            via `neonctl` — a FRESH branch (schema dropped, for the empty-DB fresh-install replay) and
+            an ADOPTION branch (production-shaped schema, for adoption + rollback + old-Worker checks);
+            fresh install proof; real schema change with working rollback (0010 down via guarded psql
+            with an **executable confirmation guard** that refuses to invoke `psql` unless
+            `MIGRATION_DOWN_CONFIRMATION` matches the exact token — no `migrate:down` CLI per decision);
+            forward-fix recovery; restore-to-new-branch drill via Neon PITR; old-Worker-against-expanded-
+            schema check (actually checks out `OLD_WORKER_SHA`, builds, deploys via `wrangler`, points
+            the Worker at the post-0010 branch via `NEON_CONNECTION_STRING` — the env var the Worker
+            reads — and smoke-tests real endpoints `/health` and `/api/subscription/current`); teardown;
+            and a sign-off section for operator evidence. Connection strings are not echoed in full
+            (passwords redacted). The stale `storage_bytes` oversized-row expectation was corrected:
+            the current 48-row seed's largest `limit_value` is 250000, so the down succeeds cleanly on
+            a fresh branch (the destructive classification is forward-looking).
+      - [ ] **1.6.B-execute** Operator-driven Neon gate execution. The runbook must be exercised
+            end-to-end on a real Neon dev branch and the sign-off section filled with evidence (CI run
+            URL, psql output, restore verification, old Worker smoke test). **Task 1.6 is not complete
+            until this subtask is done.** Outstanding evidence from this session: the e2e suite compiles
+            and fails-closed correctly but was not executed against a real Postgres locally (Docker daemon
+            not running on the Windows dev machine); CI will exercise it on PR open.
 - [ ] 1.7 Integrate migrations into deployment: validate history; store dry-run/status output as an
       artifact; verify Neon PITR/backup readiness; apply expand-compatible schema; verify postconditions;
       seed/verify prerequisites; deploy Worker; run real database readiness plus schema-dependent smoke

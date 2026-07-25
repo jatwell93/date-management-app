@@ -690,6 +690,152 @@ working rollback" candidate for 1.6's Neon dev-branch gate, since its down
 migration narrows back to int4 (destructive, partial — the documented
 forward-fix recovery path).
 
+### Phase 1.6 end-to-end runner proof
+
+Task 1.6 proves the migration runner end-to-end against real PostgreSQL,
+split into an **automatable e2e suite** (1.6.A) and an **operator-driven
+Neon gate** (1.6.B). The parent task stays open until the operator evidence
+is recorded; only the automation and runbook subtasks are complete.
+
+**Production PostgreSQL version — verified.** The Neon production project
+`date-management-prod` (ID `dawn-darkness-22587117`, region
+`aws-ap-southeast-2`) runs **PostgreSQL 17** (confirmed via Neon MCP
+`list_projects` on 2026-07-25). The CI service container is pinned **by
+amd64 digest** to `postgres:17.10-trixie@sha256:cb875afe6d2e8593c28c22d37d0fd7aaf035c43a42e2f7792cd4c09ceb6beac5`
+(verified via Docker Hub API on 2026-07-25 — the amd64 image digest matches
+the documented tag) to match production exactly and to make the image
+immutable so a registry-side republish cannot silently change the PG minor
+version. If production upgrades to PG 18+, both the tag and the digest must
+be updated. This is recorded evidence, not a reviewer suggestion.
+
+**1.6.A — Automated e2e suite (`src/database/migrations/e2e.test.ts`).**
+Runs via `npm run test:migrations:e2e` against a real PostgreSQL connection
+from `MIGRATION_E2E_DATABASE_URL`. The suite **fails closed** (throws at
+module top-level, non-zero exit, no skip) when the env var is absent — a
+skipped e2e suite provides zero proof; a failing one is visible. Each test
+resets the `public` schema (`DROP SCHEMA CASCADE` → `CREATE SCHEMA`) for
+isolation; tests run with `--test-concurrency=1` because they share the
+same database and cannot overlap.
+
+**Dedicated-target safety policy (P0).** Because the suite runs
+`DROP SCHEMA public CASCADE`, a mistaken production/shared URL would erase
+real data. Three layers prevent this:
+
+1. **Confirmation token.** A second env var `MIGRATION_E2E_CONFIRMATION`
+   must equal exactly `DROP <dbname> AT <host>`, where `<dbname>` and
+   `<host>` are parsed from `MIGRATION_E2E_DATABASE_URL`. This proves the
+   operator knows which database will be wiped.
+2. **Production-shaped name refusal.** If the URL's host or database name
+   matches `/(^|[._-])(prod|production|primary|main)($|[._-])/i`, the suite
+   refuses to run regardless of the confirmation token.
+3. **Live identity check.** Before the first DROP, the suite opens a
+   connection, queries `current_database()`, and asserts it matches the URL
+   path. This catches DNS, pgbouncer, or copy-paste mistakes that route the
+   TCP connection somewhere other than the URL's named database.
+
+The suite covers eight scenarios against a real `pg.Client`:
+
+1. **Fresh install** — empty DB → `applyPendingMigrations` 0000→0010 →
+   `seedTierFeatureFlags` → `verifyMigration` PASS.
+2. **Existing-schema adoption** — pre-shape 0000→0009 SQL directly (no
+   ledger) → `performAdoption` dry-run + apply at `MIGRATION_ADOPTION_POINT=0009`
+   using `catalog-fingerprint.0009.json` → `applyPendingMigrations` applies
+   0010 → `verifyMigration` PASS against the full fingerprint.
+3. **Concurrent invocation refusal** — client A holds the advisory lock
+   externally (`pg_advisory_lock`) → client B's `applyPendingMigrations`
+   is refused with the documented message → A releases.
+4. **Interruption/recovery (real partial non-transactional DDL)** — after a
+   normal apply of 0000→0010, build a temp history with an extra `0011`
+   migration marked `transaction: forbidden` whose SQL is three statements:
+   `CREATE TABLE` (succeeds), `INSERT` (succeeds), `SELECT FROM
+   nonexistent` (fails). Because the migration is non-transactional, the
+   first two statements COMMIT and remain visible after the third throws —
+   producing a real partial schema and a ledger row stuck at `applying`.
+   The test asserts the probe table exists with the inserted row (proving
+   real partial DDL, not a faked ledger state), that resume is refused
+   ("interrupted outside a transaction; repair it explicitly"), that
+   `getMigrationStatus` reports `interrupted: ['0011']`, then performs the
+   documented repair (drop the partial table, delete the interrupted ledger
+   row, fix the migration SQL, re-apply) and asserts the ledger reaches
+   `applied` and status is healthy.
+5. **Checksum drift** — copy history to a temp dir, tamper one migration
+   file (add a SQL comment) → `getMigrationStatus` reports `checksumDrift:
+   ['0010']` → `applyPendingMigrations` refuses ("checksum mismatch").
+6. **Catalog drift** — after apply + seed, `ALTER TABLE organizations ADD
+   COLUMN e2e_drift_test text` → `verifyMigration` FAIL with
+   `catalogOk: false`.
+7. **Safe down migration** — after apply, execute `0010_...down.sql`
+   directly via `client.query` → `limit_value` type is `integer` →
+   `verifyMigration` FAIL with the ONLY diff being `limit_value` (bigint
+   expected vs integer actual; no table/index/other-column drift).
+8. **Forward fix** — after the down, delete the 0010 ledger row →
+   `applyPendingMigrations` re-applies 0010 → `limit_value` is `bigint` →
+   `verifyMigration` PASS.
+
+**Suite cleanup.** Temp dirs created by the interruption and checksum-drift
+tests are removed in `finally` blocks. An `after` hook drops the `public`
+schema once all tests complete, so the dedicated e2e database is not left
+carrying the test schema.
+
+**No `migrate:down` CLI (per decision).** Down migrations are
+`manual-only / destructive` by design. The e2e suite executes the down SQL
+directly via `client.query`, and the operator runbook documents a guarded
+`psql` procedure with an **executable confirmation guard** (a shell `if`
+that refuses to invoke `psql` unless `MIGRATION_DOWN_CONFIRMATION` matches
+the exact token), plus manifest metadata review and an int4 overflow check
+before execution. A generic `migrate:down` CLI is deferred until the manual
+procedure has been successfully exercised.
+
+**CI workflow (`.github/workflows/migrations-e2e.yml`).** Has **no
+trigger-level `paths:` filter** — triggered on every pull request and push
+to main/master, matching `backend-test.yml`. A required status check must
+always report; a workflow filtered out by `paths:` never runs, so its check
+never appears and a required check waits forever. Path detection is done
+inside the `changes` job (plain git diff, no third-party action), and the
+`gate` job with `if: always()` is the required check that passes when
+migration files are unchanged and fails unless the e2e job genuinely
+succeeded when they are changed. Runs the e2e suite against the
+digest-pinned `postgres:17.10-trixie` service container with a dedicated
+`migration_e2e` database and the matching `MIGRATION_E2E_CONFIRMATION`
+token.
+
+**`test:migrations` script change.** The pglite test script was changed
+from a glob (`*.test.js`) to an explicit file list
+(`runner.test.js adopt.test.js baseline.fingerprint.test.js commands.test.js`)
+so the e2e suite's fail-closed top-level throw does not break the pglite
+test run when `MIGRATION_E2E_DATABASE_URL` is unset. New pglite test files
+must be added to the explicit list (or moved to the e2e suite if they
+require real Postgres).
+
+**1.6.B — Operator Neon gate runbook (`docs/migrations-e2e-runbook.md`).**
+Documents the procedure an operator follows on real Neon dev branches.
+**Two** branches are created: a FRESH branch (schema dropped, for the
+empty-DB fresh-install replay) and an ADOPTION branch (production-shaped
+schema from `main`, no ledger, for adoption + rollback + old-Worker
+checks). The runbook covers: fresh install proof (preflight → apply →
+seed → verify → status on the FRESH branch); real schema change with
+working rollback (adopt at 0009 → apply 0010 → 0010 down via guarded psql
+with the executable confirmation guard → verify fails → forward fix →
+verify passes, on the ADOPTION branch); restore-to-new-branch drill via
+Neon PITR (record RPO/RTO); old-Worker-against-expanded-schema check
+(checkout `OLD_WORKER_SHA`, build, deploy via `wrangler` to a preview URL,
+point the Worker at the post-0010 ADOPTION branch via
+`NEON_CONNECTION_STRING` — the env var the Worker reads
+(`workers/src/utils/db-connection.ts` resolves `NEON_CONNECTION_STRING ||
+DATABASE_URL`), smoke-test real endpoints `/health` and
+`/api/subscription/current`); teardown; and a structured sign-off section
+for operator evidence. Connection strings are not echoed in full
+(passwords redacted). **Task 1.6 is not complete until the sign-off
+section is filled.**
+
+**Outstanding evidence from this session.** The e2e suite compiles clean
+and fails-closed correctly (verified: exit code 1, clear error message
+when `MIGRATION_E2E_DATABASE_URL` is unset). The pglite suite still passes
+(65/65). The e2e suite was **not** executed against a real Postgres locally
+because the Docker daemon was not running on the Windows dev machine. CI
+will exercise it on PR open. The operator Neon gate (1.6.B-execute) is
+deferred to the operator.
+
 ## What already exists
 
 - Worker raw-SQL execution and PGlite conformance tests; reuse them, but initialize PGlite from the
