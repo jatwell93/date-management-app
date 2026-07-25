@@ -16,6 +16,13 @@
  *   SMOKE_LATENCY_MS       — optional per-endpoint latency budget in ms (default 5000)
  *   SMOKE_TIMEOUT_MS       — optional per-request timeout in ms (default 10000)
  *   SMOKE_EXPECT_DB_READY  — "true" requires /health?deep=true to report a healthy DB
+ *   SMOKE_AUTH_TOKEN       — optional Bearer token sent as Authorization header.
+ *                             Required for authenticated endpoints like
+ *                             /api/subscription/current, which calls
+ *                             authenticateApiRequest and returns 401 without a
+ *                             valid token. Without this, the canary would either
+ *                             fail spuriously on 401 or — if 401 were treated as
+ *                             success — stop exercising the schema-dependent query.
  *
  * Exit codes:
  *   0 — all endpoints passed
@@ -41,7 +48,7 @@ const ENDPOINT_EXPECTATIONS = {
  * Probe a single endpoint.
  * @param {string} baseUrl
  * @param {string} path
- * @param {{ timeoutMs: number; fetchImpl?: typeof fetch }} opts
+ * @param {{ timeoutMs: number; fetchImpl?: typeof fetch; authToken?: string }} opts
  * @returns {Promise<{ path: string; status: number | null; ok: boolean; latencyMs: number; error?: string; body?: unknown }>}
  */
 async function probeEndpoint(baseUrl, path, opts) {
@@ -51,9 +58,13 @@ async function probeEndpoint(baseUrl, path, opts) {
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
   const start = Date.now();
   try {
+    const headers = { Accept: 'application/json' };
+    if (opts.authToken) {
+      headers.Authorization = `Bearer ${opts.authToken}`;
+    }
     const response = await fetchFn(url, {
       signal: controller.signal,
-      headers: { Accept: 'application/json' },
+      headers,
     });
     const latencyMs = Date.now() - start;
     let body;
@@ -124,10 +135,15 @@ async function main(env, deps) {
   if (endpoints.length === 0) throw new Error('SMOKE_ENDPOINTS resolved to an empty list');
   const latencyBudgetMs = Number(env.SMOKE_LATENCY_MS || DEFAULT_LATENCY_MS);
   const timeoutMs = Number(env.SMOKE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
+  const authToken = env.SMOKE_AUTH_TOKEN || '';
 
   const results = [];
   for (const path of endpoints) {
-    const result = await probeEndpoint(baseUrl, path, { timeoutMs, fetchImpl });
+    const result = await probeEndpoint(baseUrl, path, {
+      timeoutMs,
+      fetchImpl,
+      authToken: authToken || undefined,
+    });
     const evaluation = evaluateProbe(result, latencyBudgetMs);
     results.push({
       path,
@@ -150,6 +166,7 @@ async function main(env, deps) {
     targetUrl: baseUrl,
     latencyBudgetMs,
     timeoutMs,
+    authenticated: authToken !== '',
     summary: { total: results.length, passed, failed },
     results,
   };

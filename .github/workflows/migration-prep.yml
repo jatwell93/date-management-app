@@ -9,11 +9,22 @@ name: Migration Prep (reusable)
 # load time (runner.ts:224), so "apply expand-compatible schema" is enforced
 # by the runner itself — no separate guard is needed here.
 #
-# Jobs run sequentially (each needs the previous): validate-history →
-# preflight → pitr-check → apply → seed → verify. A failure in any job
-# stops the sequence and blocks the downstream Worker deploy.
+# The sequence runs as ONE job with sequential steps so that:
+#   - the protected production environment gate (15-min wait timer + branch
+#     policy + required reviewers) is applied exactly once, not six times;
+#   - Doppler CLI is installed once;
+#   - checkout, dependency install, and TypeScript compile happen once on a
+#     single checked-out revision.
 #
-# Credential-level enforcement: every job declares
+# Steps run sequentially: status → preflight → pitr-check → apply → seed →
+# verify. A failure in any step stops the sequence and blocks the downstream
+# Worker deploy. Each step uploads its own artifact with `if: always()` so
+# partial evidence is preserved even on mid-sequence failure.
+#
+# In "validate" mode (PR previews), only status + preflight run (read-only,
+# no mutations on the shared dev database).
+#
+# Credential-level enforcement: the job declares
 # `environment: ${{ inputs.environment }}` so production secrets
 # (DOPPLER_TOKEN, NEON_API_KEY) are only available when called with
 # environment=production. The production GitHub environment has branch
@@ -55,10 +66,14 @@ permissions:
   contents: read
 
 jobs:
-  validate-history:
-    name: Validate migration history (status)
+  migration-prep:
+    name: Migration prep (${{ inputs.environment }}, ${{ inputs.mode }})
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    env:
+      MIGRATION_DEPLOYMENT_SHA: ${{ inputs.deployment_sha }}
+      MIGRATION_TARGET_KIND: primary
+      MIGRATION_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'development' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -70,6 +85,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
 
@@ -79,12 +97,10 @@ jobs:
       - name: Compile TypeScript
         run: npm run compile
 
+      # ── Step 1: status (read-only ledger check) ──────────────────────
       - name: Run migrate:status (read-only ledger check)
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          MIGRATION_DEPLOYMENT_SHA: ${{ inputs.deployment_sha }}
-          MIGRATION_TARGET_KIND: primary
-          MIGRATION_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'development' }}
         run: |
           doppler run -- npm run migrate:status > migration-status.txt 2>&1
           cat migration-status.txt
@@ -97,36 +113,10 @@ jobs:
           path: migration-status.txt
           retention-days: 30
 
-  preflight:
-    name: Preflight (readiness check)
-    needs: validate-history
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Pin npm to match lockfile generator
-        run: npm i -g npm@11
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compile TypeScript
-        run: npm run compile
-
+      # ── Step 2: preflight (read-only readiness) ──────────────────────
       - name: Run migrate:preflight (read-only readiness)
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          MIGRATION_TARGET_KIND: primary
-          MIGRATION_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'development' }}
         run: |
           doppler run -- npm run migrate:preflight > migration-preflight.txt 2>&1
           cat migration-preflight.txt
@@ -139,21 +129,12 @@ jobs:
           path: migration-preflight.txt
           retention-days: 30
 
-  pitr-check:
-    name: PITR readiness (Neon restore point)
-    needs: preflight
-    if: inputs.mode == 'full'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
+      # ── Steps 3–6: full mode only (production) ────────────────────────
+      # In validate mode (PR previews), the workflow ends here — no
+      # mutations touch the shared dev database.
 
       - name: Check Neon PITR readiness
+        if: inputs.mode == 'full'
         env:
           # NEON_API_KEY is an environment secret scoped to the production
           # (or preview) GitHub environment. It is NOT passed via workflow_call
@@ -164,7 +145,7 @@ jobs:
         run: node scripts/check-neon-pitr.js > pitr-evidence.json 2> pitr-check.stderr
 
       - name: Upload PITR evidence
-        if: always()
+        if: always() && inputs.mode == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: pitr-evidence-${{ inputs.deployment_sha }}
@@ -173,125 +154,42 @@ jobs:
             pitr-check.stderr
           retention-days: 30
 
-  apply:
-    name: Apply pending migrations
-    needs: pitr-check
-    if: inputs.mode == 'full'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Pin npm to match lockfile generator
-        run: npm i -g npm@11
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compile TypeScript
-        run: npm run compile
-
       - name: Run migrate:apply (expand-compatible schema)
+        if: inputs.mode == 'full'
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          MIGRATION_DEPLOYMENT_SHA: ${{ inputs.deployment_sha }}
-          MIGRATION_TARGET_KIND: primary
-          MIGRATION_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'development' }}
         run: |
           doppler run -- npm run migrate:apply > migration-apply.txt 2>&1
           cat migration-apply.txt
 
       - name: Upload apply artifact
-        if: always()
+        if: always() && inputs.mode == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: migration-apply-${{ inputs.deployment_sha }}
           path: migration-apply.txt
           retention-days: 30
 
-  seed:
-    name: Seed reference data
-    needs: apply
-    if: inputs.mode == 'full'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Pin npm to match lockfile generator
-        run: npm i -g npm@11
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compile TypeScript
-        run: npm run compile
-
       - name: Run migrate:seed (idempotent reference data)
+        if: inputs.mode == 'full'
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          MIGRATION_DEPLOYMENT_SHA: ${{ inputs.deployment_sha }}
-          MIGRATION_TARGET_KIND: primary
-          MIGRATION_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'development' }}
         run: |
           doppler run -- npm run migrate:seed > migration-seed.txt 2>&1
           cat migration-seed.txt
 
       - name: Upload seed artifact
-        if: always()
+        if: always() && inputs.mode == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: migration-seed-${{ inputs.deployment_sha }}
           path: migration-seed.txt
           retention-days: 30
 
-  verify:
-    name: Verify postconditions
-    needs: seed
-    if: inputs.mode == 'full'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Pin npm to match lockfile generator
-        run: npm i -g npm@11
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compile TypeScript
-        run: npm run compile
-
       - name: Run migrate:verify (schema + reference data check)
+        if: inputs.mode == 'full'
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          MIGRATION_TARGET_KIND: primary
-          MIGRATION_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'development' }}
         run: |
           doppler run -- npm run migrate:verify > migration-verify.txt 2>&1
           cat migration-verify.txt
@@ -299,7 +197,7 @@ jobs:
           grep -q "PASS" migration-verify.txt || { echo "::error::Migration verify did not PASS"; exit 1; }
 
       - name: Upload verify artifact
-        if: always()
+        if: always() && inputs.mode == 'full'
         uses: actions/upload-artifact@v4
         with:
           name: migration-verify-${{ inputs.deployment_sha }}

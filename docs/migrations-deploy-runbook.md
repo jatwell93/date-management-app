@@ -30,15 +30,35 @@ PR / push to main (touching workers/ or migrations/)
   │       └─ deploy-development (preview Worker)
   │
   └─ push to main / workflow_dispatch:
-          migration-prep (production, full: status → preflight → PITR → apply → seed → verify)
+          migration-prep (production, full: ONE job with sequential steps
+            → status → preflight → PITR → apply → seed → verify)
           └─ deploy-production (production Worker)
              └─ canary (smoke round 1 → wait 15m → smoke round 2 + Sentry check)
 ```
 
+**Single-job migration prep.** The `migration-prep.yml` reusable workflow
+runs the entire status → preflight → PITR → apply → seed → verify sequence
+as **one job with sequential steps** (not six separate jobs). This ensures:
+- the protected production environment gate (15-min wait timer + branch
+  policy + required reviewers) is applied **exactly once**, not six times;
+- the Doppler CLI is installed once;
+- checkout, dependency install, and TypeScript compile happen once on a
+  single checked-out revision.
+Each step uploads its own artifact with `if: always()` so partial evidence
+is preserved even on mid-sequence failure.
+
+**Concurrency serialization.** All production deploys (push to `main` or
+manual `workflow_dispatch` from `main`) share a single fixed concurrency
+group (`workers-deploy-production`) with `cancel-in-progress: false`. A
+subsequent push or dispatch **cannot** cancel or overlap an in-flight
+apply/seed/verify sequence — it queues behind the running deploy. PR
+(preview) deploys keep ref-specific concurrency groups with
+`cancel-in-progress: true` so superseded preview runs are cancelled.
+
 **Credential-level enforcement.** Production deployment credentials
-(`DOPPLER_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`, `SENTRY_AUTH_TOKEN`)
-are scoped to the protected `production` GitHub environment. That environment
-has:
+(`DOPPLER_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`, `SMOKE_AUTH_TOKEN`,
+`SENTRY_AUTH_TOKEN`) are scoped to the protected `production` GitHub
+environment. That environment has:
 
 - **Branch policy**: only `main` can deploy to production
 - **15-minute wait timer**: a human review window before any production job starts
@@ -57,6 +77,12 @@ production GitHub environment is the enforcement boundary.
 - [ ] `DOPPLER_TOKEN` GitHub secret configured (repo-level, used by all deploy jobs)
 - [ ] `NEON_API_KEY` GitHub environment secret configured in `production`
       (read-only Neon API key for the PITR readiness check)
+- [ ] `SMOKE_AUTH_TOKEN` GitHub environment secret configured in `production`
+      (a dedicated production smoke-test identity token sent as
+      `Authorization: Bearer <token>` by the canary smoke test. The
+      `/api/subscription/current` endpoint requires authentication via
+      `authenticateApiRequest`; without this token every canary would
+      receive a 401 and the gate would fail spuriously.)
 - [ ] `SENTRY_AUTH_TOKEN` GitHub environment secret configured in `production`
       (read-only Sentry API token for the canary check) — optional, canary
       fails open if unset
@@ -204,7 +230,7 @@ with the deployment record:
 - Workflow run URL: `____________________________`
 - Git SHA deployed: `____________________________`
 - Migrations applied: `____________________________`
-- All migration-prep jobs passed: [ ] yes
+- All migration-prep steps passed: [ ] yes
 - Worker deployed: [ ] yes
 
 ---
@@ -213,9 +239,13 @@ with the deployment record:
 
 The canary job runs automatically after deploy. It:
 
-1. **Round 1**: immediate smoke test (`/health?deep=true` + `/api/subscription/current`)
+1. **Round 1**: immediate smoke test (`/health?deep=true` + `/api/subscription/current`).
+   The `/api/subscription/current` probe sends `Authorization: Bearer
+   <SMOKE_AUTH_TOKEN>` because the endpoint requires authentication via
+   `authenticateApiRequest` — an unauthenticated request would return 401
+   and the gate would fail spuriously. A 401 is **not** treated as success.
 2. **Wait**: 15 minutes (configurable via `CANARY_WAIT_MINUTES`)
-3. **Round 2**: re-run smoke test + check Sentry for new critical issues
+3. **Round 2**: re-run smoke test + check Sentry for new fatal/critical issues
 
 ### Stop / rollback thresholds
 
@@ -224,11 +254,18 @@ The canary job runs automatically after deploy. It:
 | Signal | Threshold | Action |
 |--------|-----------|--------|
 | Smoke test failure (round 1 or 2) | Any endpoint non-2xx or DB readiness fail | Immediate rollback |
-| Sentry new critical/fatal issues | > 0 new unresolved critical issues | Immediate rollback |
+| Sentry new fatal/critical issues | > 0 new unresolved fatal or critical issues | Immediate rollback |
 | Sentry error rate | > 5% of requests | Investigate, likely rollback |
 | 5xx error rate | > 1% of requests | Investigate, likely rollback |
 | p95 latency | > 2000ms (2x baseline) | Investigate, consider rollback |
 | Neon compute suspended unexpectedly | Repeated cold starts | Investigate, not necessarily rollback |
+
+> **Sentry query scope:** the canary Sentry check queries
+> `level:[fatal,critical]` (Sentry's multiple-value OR syntax). `fatal` is
+> Sentry's standard highest severity level; `critical` is included
+> defensively in case of custom level configurations. The check fails open
+> (warns but does not block) if `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/
+> `SENTRY_PROJECT` are unset or the Sentry API returns a non-200 response.
 
 ### Manual canary observation
 
@@ -411,6 +448,7 @@ off task 1.7.B-execute and the parent 1.7 checkbox.
 | Secret | Purpose | Required |
 |--------|---------|----------|
 | `NEON_API_KEY` | Neon API read-only key for PITR readiness check | Yes |
+| `SMOKE_AUTH_TOKEN` | Production smoke-test identity token (sent as `Authorization: Bearer` by the canary smoke test for `/api/subscription/current`) | Yes |
 | `SENTRY_AUTH_TOKEN` | Sentry API read-only token for canary check | No (canary fails open) |
 
 ### GitHub environment variables (production)

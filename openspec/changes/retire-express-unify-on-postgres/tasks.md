@@ -214,46 +214,66 @@
       **Split into automatable (A) and operator-driven (B) subtasks (2026-07-25):**
       - [x] **1.7.A** Automated CI workflow + scripts. A reusable
             `migration-prep.yml` workflow (called by `workers-deploy.yml` via
-            `workflow_call`) runs the full sequence: `migrate:status` →
-            `migrate:preflight` → Neon PITR readiness check → `migrate:apply` →
-            `migrate:seed` → `migrate:verify`, each uploading its stdout as a
-            CI artifact (30-day retention). `workers-deploy.yml` now triggers
-            on `database/migrations/**` and `src/database/migrations/**` paths
-            (migration-only changes trigger the workflow); `deploy-production`
+            `workflow_call`) runs the full sequence as **one job with
+            sequential steps**: `migrate:status` → `migrate:preflight` →
+            Neon PITR readiness check → `migrate:apply` → `migrate:seed` →
+            `migrate:verify`, each uploading its stdout as a CI artifact
+            (30-day retention). Consolidating into one job ensures the
+            protected production environment gate (15-min wait timer +
+            branch policy) is applied exactly once, Doppler CLI is installed
+            once, and checkout/compile happen once on a single revision.
+            `workers-deploy.yml` now triggers on `database/migrations/**`
+            and `src/database/migrations/**` paths (migration-only changes
+            trigger the workflow); `deploy-production`
             `needs: [migration-prep-production]` and `deploy-development`
             `needs: [migration-prep-preview]` (validate-only mode: status +
-            preflight, no mutations on the shared dev database). A `canary` job
-            after `deploy-production` runs `scripts/post-deploy-smoke.js`
-            (round 1), waits `CANARY_WAIT_MINUTES` (default 15), re-runs smoke
-            (round 2), and checks Sentry for new critical issues (fails open
-            if `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` are unset).
-            `scripts/check-neon-pitr.js` verifies a Neon restore point exists
-            within `PITR_MAX_AGE_HOURS` (default 2) via the Neon REST API.
-            `scripts/post-deploy-smoke.js` probes `/health?deep=true` (requires
-            DB readiness pass) and `/api/subscription/current` with latency
-            budgets. Both scripts have unit tests (14 + 15 tests, mocked
-            fetch). Expand-only compatibility is enforced by the runner at
-            load time (`runner.ts:224` refuses non-expand migrations), so the
-            "apply expand-compatible schema" requirement is enforced by the
-            runner itself. **Credential-level enforcement:** production
-            secrets (`DOPPLER_TOKEN`, `NEON_API_KEY`, `SENTRY_AUTH_TOKEN`)
-            are scoped to the protected `production` GitHub environment (branch
-            policy + 15-min wait timer + `can_admins_bypass: false`).
-            `workflow_dispatch` from `main` is the supported manual deploy;
-            direct local `wrangler deploy --env production` requires
-            break-glass credentials — documentation alone is not enforcement.
+            preflight, no mutations on the shared dev database). A `canary`
+            job after `deploy-production` runs `scripts/post-deploy-smoke.js`
+            (round 1), waits `CANARY_WAIT_MINUTES` (default 15), re-runs
+            smoke (round 2), and checks Sentry for new fatal/critical
+            issues (queries `level:[fatal,critical]`; fails open if
+            `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` are unset).
+            `scripts/check-neon-pitr.js` verifies a Neon restore point
+            exists within `PITR_MAX_AGE_HOURS` (default 2) for the target
+            branch via the Neon REST API — it resolves the branch first
+            (fail closed if not found), filters snapshots by `branch_id`,
+            evaluates only the filtered collection, and rejects implausible
+            future timestamps. `scripts/post-deploy-smoke.js` probes
+            `/health?deep=true` (requires DB readiness pass) and
+            `/api/subscription/current` with latency budgets, sending
+            `Authorization: Bearer <SMOKE_AUTH_TOKEN>` on each request so
+            the authenticated endpoint is exercised (a 401 is NOT treated
+            as success). Both scripts have unit tests (23 + 21 tests,
+            mocked fetch). Expand-only compatibility is enforced by the
+            runner at load time (`runner.ts:224` refuses non-expand
+            migrations), so the "apply expand-compatible schema" requirement
+            is enforced by the runner itself. **Concurrency serialization:**
+            all production deploys share a fixed concurrency group
+            (`workers-deploy-production`) with `cancel-in-progress: false`
+            so a push or dispatch cannot cancel or overlap an in-flight
+            apply/seed/verify sequence; PR deploys keep ref-specific
+            cancellation. **Credential-level enforcement:** production
+            secrets (`DOPPLER_TOKEN`, `NEON_API_KEY`, `SMOKE_AUTH_TOKEN`,
+            `SENTRY_AUTH_TOKEN`) are scoped to the protected `production`
+            GitHub environment (branch policy + 15-min wait timer +
+            `can_admins_bypass: false`). `workflow_dispatch` from `main` is
+            the supported manual deploy; direct local
+            `wrangler deploy --env production` requires break-glass
+            credentials — documentation alone is not enforcement.
       - [x] **1.7.B-runbook** Operator runbook for the production deploy gate.
             `docs/migrations-deploy-runbook.md` documents: the pre-deploy PITR
             drill (restore-to-new-branch, RPO/RTO recording); the CI workflow
             sequence and artifact inventory; canary observation thresholds
-            (smoke failure, Sentry critical issues, error rate, latency);
-            three-layer rollback procedure (Worker rollback → forward fix →
-            Neon PITR restore, with explicit warning that destructive down
-            migrations are NOT the default); post-deploy verification; the
-            credential-level enforcement model; new secrets/variables reference
-            (`NEON_API_KEY`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
-            `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`); and a structured
-            sign-off section for operator evidence.
+            (smoke failure, Sentry fatal/critical issues, error rate,
+            latency); three-layer rollback procedure (Worker rollback →
+            forward fix → Neon PITR restore, with explicit warning that
+            destructive down migrations are NOT the default); post-deploy
+            verification; the single-job migration-prep architecture; the
+            concurrency serialization model; the credential-level
+            enforcement model; new secrets/variables reference
+            (`NEON_API_KEY`, `SMOKE_AUTH_TOKEN`, `SENTRY_AUTH_TOKEN`,
+            `SENTRY_ORG`, `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`); and a
+            structured sign-off section for operator evidence.
       - [ ] **1.7.B-execute** Operator-driven production deploy execution.
             The runbook must be exercised end-to-end on a real production
             deploy and the sign-off section filled with evidence (CI run URL,
@@ -262,8 +282,9 @@
             Outstanding: the CI workflow and runbook are merged; the first
             real production deploy with this workflow has not yet been
             executed. New GitHub environment secrets (`NEON_API_KEY`,
-            `SENTRY_AUTH_TOKEN`) and variables (`SENTRY_ORG`, `SENTRY_PROJECT`,
-            `CANARY_WAIT_MINUTES`) must be configured before the first run.
+            `SMOKE_AUTH_TOKEN`, `SENTRY_AUTH_TOKEN`) and variables
+            (`SENTRY_ORG`, `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`) must be
+            configured before the first run.
 - [ ] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,
       reversibility/data-loss class, backfill/resume plan, and the later contract deployment. Do not use
       destructive down migrations as the default rollback.

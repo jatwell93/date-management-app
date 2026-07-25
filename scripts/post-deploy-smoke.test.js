@@ -20,12 +20,16 @@ function makeResponse(status, body, contentType = 'application/json') {
 }
 
 function makeFetch(responses) {
-  return async (url) => {
+  const calls = [];
+  const fn = async (url, opts) => {
+    calls.push({ url, opts });
     const entry = responses[url];
     if (!entry) throw new Error(`unexpected fetch ${url}`);
     if (entry instanceof Error) throw entry;
     return makeResponse(entry.status, entry.body, entry.contentType);
   };
+  fn.calls = calls;
+  return fn;
 }
 
 test('probeEndpoint: returns ok for a 2xx JSON response', async () => {
@@ -229,4 +233,128 @@ test('DEFAULT_ENDPOINTS includes the deep health and subscription current paths'
 
 test('ENDPOINT_EXPECTATIONS requires DB readiness for /health?deep=true', () => {
   assert.equal(ENDPOINT_EXPECTATIONS['/health?deep=true'].requireDbReady, true);
+});
+
+test('probeEndpoint: attaches Authorization: Bearer header when authToken is provided', async () => {
+  const fetchImpl = makeFetch({
+    'https://api.example.com/api/subscription/current': { status: 200, body: { tier: 'starter' } },
+  });
+  await probeEndpoint('https://api.example.com', '/api/subscription/current', {
+    timeoutMs: 5000,
+    fetchImpl,
+    authToken: 'test-token-123',
+  });
+  assert.equal(fetchImpl.calls.length, 1);
+  assert.equal(fetchImpl.calls[0].opts.headers.Authorization, 'Bearer test-token-123');
+});
+
+test('probeEndpoint: does NOT attach Authorization header when authToken is absent', async () => {
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+  });
+  await probeEndpoint('https://api.example.com', '/health?deep=true', {
+    timeoutMs: 5000,
+    fetchImpl,
+  });
+  assert.equal(fetchImpl.calls.length, 1);
+  assert.equal(
+    fetchImpl.calls[0].opts.headers.Authorization,
+    undefined,
+    'Authorization must not be set when no authToken is provided',
+  );
+});
+
+test('main: sends Authorization header on all probes when SMOKE_AUTH_TOKEN is set', async () => {
+  const outChunks = [];
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+    'https://api.example.com/api/subscription/current': { status: 200, body: { tier: 'starter' } },
+  });
+  const code = await main(
+    { SMOKE_TARGET_URL: 'https://api.example.com', SMOKE_AUTH_TOKEN: 'prod-smoke-token' },
+    {
+      fetch: fetchImpl,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: () => {} },
+    },
+  );
+  assert.equal(code, 0);
+  assert.equal(fetchImpl.calls.length, 2);
+  for (const call of fetchImpl.calls) {
+    assert.equal(call.opts.headers.Authorization, 'Bearer prod-smoke-token');
+  }
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.authenticated, true);
+});
+
+test('main: evidence.authenticated is false when SMOKE_AUTH_TOKEN is unset', async () => {
+  const outChunks = [];
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+    'https://api.example.com/api/subscription/current': { status: 200, body: {} },
+  });
+  const code = await main(
+    { SMOKE_TARGET_URL: 'https://api.example.com' },
+    {
+      fetch: fetchImpl,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: () => {} },
+    },
+  );
+  assert.equal(code, 0);
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.authenticated, false);
+});
+
+test('main: authenticated probe against /api/subscription/current passes with 2xx', async () => {
+  const outChunks = [];
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+    'https://api.example.com/api/subscription/current': { status: 200, body: { tier: 'starter' } },
+  });
+  const code = await main(
+    { SMOKE_TARGET_URL: 'https://api.example.com', SMOKE_AUTH_TOKEN: 'token' },
+    {
+      fetch: fetchImpl,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: () => {} },
+    },
+  );
+  assert.equal(code, 0);
+});
+
+test('main: unauthenticated probe against /api/subscription/current fails on 401 (not treated as success)', async () => {
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+    'https://api.example.com/api/subscription/current': {
+      status: 401,
+      body: { error: 'unauthorized' },
+    },
+  });
+  const code = await main(
+    { SMOKE_TARGET_URL: 'https://api.example.com' },
+    {
+      fetch: fetchImpl,
+      stdout: { write: () => {} },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 1);
+  assert.match(errChunks.join(''), /non-2xx status: 401/);
 });

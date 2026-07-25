@@ -24,9 +24,13 @@ on:
 permissions:
   contents: read
 
+# Concurrency: serialize all production deploys under one fixed group so a
+# push or manual dispatch can never cancel or overlap an in-flight
+# apply/seed/verify sequence. PR (preview) deploys keep ref-specific groups
+# with cancel-in-progress so superseded preview runs are cancelled.
 concurrency:
-  group: workers-deploy-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'pull_request' && format('workers-deploy-pr-{0}', github.ref) || 'workers-deploy-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Phase 1 task 1.7 — migration preparation before Worker deploy.
@@ -257,6 +261,14 @@ jobs:
     environment: production
     env:
       SMOKE_TARGET_URL: https://api.expirymate.com.au
+      # SMOKE_AUTH_TOKEN is a dedicated production smoke-test identity token
+      # stored as a GitHub environment secret. The /api/subscription/current
+      # endpoint requires authentication (authenticateApiRequest), so the
+      # canary must send Authorization: Bearer <token> to exercise the
+      # schema-dependent read. Without this, every canary would see a 401
+      # and the gate would either fail spuriously or, if 401 were treated as
+      # success, stop exercising the schema-dependent query.
+      SMOKE_AUTH_TOKEN: ${{ secrets.SMOKE_AUTH_TOKEN }}
       CANARY_WAIT_MINUTES: ${{ vars.CANARY_WAIT_MINUTES || '15' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
@@ -291,26 +303,30 @@ jobs:
         if: ${{ env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != '' }}
         run: |
           # Check for new unresolved Sentry issues in the canary window.
-          # Fails the gate only if new CRITICAL/FATAL issues are found.
+          # Queries both fatal and critical severity levels using Sentry's
+          # multiple-value search syntax (level:[fatal,critical] = OR).
+          # `fatal` is Sentry's standard highest severity; `critical` is
+          # included defensively in case of custom level configurations.
+          # Fails the gate only if new fatal/critical issues are found.
           set -u
           SINCE="${CANARY_WAIT_MINUTES}m"
           RESPONSE=$(curl -sS -w "\n%{http_code}" \
             -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
-            "https://sentry.io/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved+level:critical+last_seen:-${SINCE}&statsSince=${SINCE}" || true)
+            "https://sentry.io/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved+level:%5Bfatal,critical%5D+last_seen:-${SINCE}&statsSince=${SINCE}" || true)
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | sed '$d')
           echo "Sentry issues HTTP $HTTP_CODE"
           echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "::warning::Sentry API returned $HTTP_CODE; skipping critical-issue gate (fail open)."
+            echo "::warning::Sentry API returned $HTTP_CODE; skipping fatal/critical-issue gate (fail open)."
             exit 0
           fi
           NEW_CRITICAL=$(echo "$BODY" | jq 'length' 2>/dev/null || echo "0")
           if [ "$NEW_CRITICAL" -gt 0 ]; then
-            echo "::error::$NEW_CRITICAL new critical Sentry issue(s) detected during canary window. ROLLBACK."
+            echo "::error::$NEW_CRITICAL new fatal/critical Sentry issue(s) detected during canary window. ROLLBACK."
             exit 1
           fi
-          echo "No new critical Sentry issues in the canary window."
+          echo "No new fatal/critical Sentry issues in the canary window."
 
       - name: Canary round 2 — Sentry check skipped (no token)
         if: ${{ env.SENTRY_AUTH_TOKEN == '' || env.SENTRY_ORG == '' || env.SENTRY_PROJECT == '' }}
