@@ -7,13 +7,19 @@ on:
       - main
     paths:
       - 'workers/**'
+      - 'database/migrations/**'
+      - 'src/database/migrations/**'
       - '.github/workflows/workers-deploy.yml'
+      - '.github/workflows/migration-prep.yml'
   push:
     branches:
       - main
     paths:
       - 'workers/**'
+      - 'database/migrations/**'
+      - 'src/database/migrations/**'
       - '.github/workflows/workers-deploy.yml'
+      - '.github/workflows/migration-prep.yml'
 
 permissions:
   contents: read
@@ -23,7 +29,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Phase 1 task 1.7 — migration preparation before Worker deploy.
+  # Preview (PR) deploys run in validate mode (read-only status + preflight)
+  # so migration files are checked without mutating the shared dev database.
+  # Production deploys run in full mode (status → preflight → PITR → apply →
+  # seed → verify) before the Worker is deployed.
+  migration-prep-preview:
+    name: Migration prep (preview, validate-only)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
+    needs: []
+    uses: ./.github/workflows/migration-prep.yml
+    with:
+      environment: preview
+      deployment_sha: ${{ github.event.pull_request.head.sha }}
+      mode: validate
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+  migration-prep-production:
+    name: Migration prep (production, full)
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: []
+    uses: ./.github/workflows/migration-prep.yml
+    with:
+      environment: production
+      deployment_sha: ${{ github.sha }}
+      mode: full
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
   deploy-development:
+    needs: [migration-prep-preview]
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment:
@@ -89,6 +125,7 @@ jobs:
     # workflow only for the development preview deploy; the production
     # environment's branch protection rejects non-main refs, so guard the job
     # explicitly instead of letting it start and fail. Mirrors pages-deploy.yml.
+    needs: [migration-prep-production]
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
@@ -205,3 +242,88 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- npx wrangler deploy --env production
+
+  # Phase 1 task 1.7 — post-deploy canary with delayed gate.
+  # Runs smoke tests immediately after deploy, waits CANARY_WAIT_MINUTES,
+  # then re-runs smoke tests and checks Sentry for new issues. A failure
+  # in either round blocks the canary gate (which downstream consumers can
+  # wire as a required check). The Sentry check fails open (warns but does
+  # not block) if SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are unset,
+  # so a missing Sentry configuration cannot block a deploy.
+  canary:
+    name: Post-deploy canary
+    needs: [deploy-production]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SMOKE_TARGET_URL: https://api.expirymate.com.au
+      CANARY_WAIT_MINUTES: ${{ vars.CANARY_WAIT_MINUTES || '15' }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Canary round 1 — immediate smoke test
+        run: |
+          node scripts/post-deploy-smoke.js > canary-round-1.json 2> canary-round-1.stderr
+          cat canary-round-1.json
+          # post-deploy-smoke exits 1 on failure — propagate
+          exit $?
+
+      - name: Canary wait window
+        run: |
+          echo "Waiting $CANARY_WAIT_MINUTES minutes before re-checking..."
+          sleep "$((CANARY_WAIT_MINUTES * 60))"
+
+      - name: Canary round 2 — smoke test after wait
+        run: |
+          node scripts/post-deploy-smoke.js > canary-round-2.json 2> canary-round-2.stderr
+          cat canary-round-2.json
+          exit $?
+
+      - name: Canary round 2 — Sentry new-issue check (fail open)
+        if: ${{ env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != '' }}
+        run: |
+          # Check for new unresolved Sentry issues in the canary window.
+          # Fails the gate only if new CRITICAL/FATAL issues are found.
+          set -u
+          SINCE="${CANARY_WAIT_MINUTES}m"
+          RESPONSE=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
+            "https://sentry.io/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved+level:critical+last_seen:-${SINCE}&statsSince=${SINCE}" || true)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "Sentry issues HTTP $HTTP_CODE"
+          echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Sentry API returned $HTTP_CODE; skipping critical-issue gate (fail open)."
+            exit 0
+          fi
+          NEW_CRITICAL=$(echo "$BODY" | jq 'length' 2>/dev/null || echo "0")
+          if [ "$NEW_CRITICAL" -gt 0 ]; then
+            echo "::error::$NEW_CRITICAL new critical Sentry issue(s) detected during canary window. ROLLBACK."
+            exit 1
+          fi
+          echo "No new critical Sentry issues in the canary window."
+
+      - name: Canary round 2 — Sentry check skipped (no token)
+        if: ${{ env.SENTRY_AUTH_TOKEN == '' || env.SENTRY_ORG == '' || env.SENTRY_PROJECT == '' }}
+        run: echo "::warning::SENTRY_AUTH_TOKEN/SENTRY_ORG/SENTRY_PROJECT not set; Sentry canary check skipped (fail open)."
+
+      - name: Upload canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-evidence-${{ github.sha }}
+          path: |
+            canary-round-1.json
+            canary-round-1.stderr
+            canary-round-2.json
+            canary-round-2.stderr
+          retention-days: 30

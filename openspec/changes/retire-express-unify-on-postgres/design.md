@@ -836,6 +836,117 @@ because the Docker daemon was not running on the Windows dev machine. CI
 will exercise it on PR open. The operator Neon gate (1.6.B-execute) is
 deferred to the operator.
 
+### Phase 1.7 deployment integration
+
+Task 1.7 integrates the Phase 1 migration runner into the production
+deployment workflow. The architecture is a **hybrid gate + dispatch** model:
+a reusable `migration-prep.yml` workflow called by `workers-deploy.yml` as a
+required prerequisite before the Worker deploy, followed by a delayed canary
+job. The parent task stays open until the operator-driven execution
+(1.7.B-execute) is signed off.
+
+**Reusable migration-prep workflow (`.github/workflows/migration-prep.yml`).**
+A `workflow_call` workflow with two modes:
+
+- **`full` mode (production):** runs six sequential jobs — `validate-history`
+  (`migrate:status`, read-only ledger check) → `preflight`
+  (`migrate:preflight`, read-only readiness) → `pitr-check`
+  (`scripts/check-neon-pitr.js`, Neon REST API restore-point verification) →
+  `apply` (`migrate:apply`, expand-compatible schema under advisory lock) →
+  `seed` (`migrate:seed`, idempotent 48-row reference data) → `verify`
+  (`migrate:verify`, schema + reference data + catalog fingerprint check).
+  Each job uploads its stdout as a CI artifact (30-day retention) for audit.
+  A failure in any job stops the sequence and blocks the downstream Worker
+  deploy.
+- **`validate` mode (preview/PR):** runs only `validate-history` + `preflight`
+  (read-only). PRs that touch migration files are validated without mutating
+  the shared dev database. The mutating jobs (`pitr-check`, `apply`, `seed`,
+  `verify`) are gated by `if: inputs.mode == 'full'`.
+
+Every job declares `environment: ${{ inputs.environment }}` so production
+secrets are only available when called with `environment: production`.
+
+**`workers-deploy.yml` changes.** The trigger `paths:` filter now includes
+`database/migrations/**` and `src/database/migrations/**` so migration-only
+changes trigger the workflow. Two reusable-workflow call jobs are added:
+`migration-prep-preview` (validate mode, needed by `deploy-development`) and
+`migration-prep-production` (full mode, needed by `deploy-production`). A
+`canary` job runs after `deploy-production`.
+
+**Canary job (CI smoke test + delayed gate).** After the Worker deploys:
+
+1. **Round 1** — immediate smoke test via `scripts/post-deploy-smoke.js`
+   against the production URL (`/health?deep=true` requiring DB readiness
+   pass, plus `/api/subscription/current`).
+2. **Wait** — `CANARY_WAIT_MINUTES` (default 15, matching the production
+   environment's wait timer).
+3. **Round 2** — re-run smoke test, then check Sentry for new critical/fatal
+   issues via the Sentry REST API. The Sentry check **fails open** (warns but
+   does not block) if `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, or `SENTRY_PROJECT`
+   are unset, so a missing Sentry configuration cannot block a deploy.
+
+Canary evidence (both rounds + Sentry output) is uploaded as an artifact.
+
+**PITR readiness — CI gate + operator runbook.** The CI `pitr-check` job
+verifies a Neon restore point exists within `PITR_MAX_AGE_HOURS` (default 2)
+via `GET /projects/{project_id}/snapshots`. The operator runbook
+(`docs/migrations-deploy-runbook.md`) documents the heavier
+restore-to-new-branch drill (restore, verify schema, run `migrate:verify`
+against the restored branch, record RPO/RTO) as a separate operator gate
+before the first production migration. Both layers are required: the CI gate
+catches a missing/stale backup automatically; the runbook drill proves the
+restore actually works and the application is functional against restored
+data.
+
+**Credential-level enforcement.** Production deployment credentials
+(`DOPPLER_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`, `SENTRY_AUTH_TOKEN`)
+are scoped to the protected `production` GitHub environment, which has branch
+policy (only `main`), a 15-minute wait timer, and `can_admins_bypass: false`
+(verified via GitHub API 2026-07-25). `workflow_dispatch` from `main` is the
+supported manual deployment mechanism. Direct local
+`wrangler deploy --env production` requires separately controlled break-glass
+access to production credentials — **documentation alone is not enforcement.**
+The production GitHub environment is the enforcement boundary.
+
+**Expand-only compatibility.** The runner enforces `compatibility: 'expand'`
+at load time (`runner.ts:224` — `Migration ${id} must declare expand
+compatibility`). The deploy workflow does not need a separate expand-guard:
+the runner itself refuses to load any non-expand migration, so
+`migrate:apply` can only apply expand-compatible schema. A contract
+migration (which would break old Workers) cannot reach production through
+this workflow; it requires the expand/migrate/contract workflow in task 1.8.
+
+**No `migrate:down` in CI.** Per the Phase 1 design, down migrations are
+`manual-only / destructive`. The deploy workflow does NOT include an
+automatic down. Rollback is three-layer: (1) Worker rollback
+(`git revert` + redeploy — safe because expand migrations are
+backward-compatible with old code), (2) forward fix (new migration that
+corrects the problem), (3) Neon PITR restore (catastrophic only). The
+runbook documents all three with explicit warnings against defaulting to
+destructive down migrations.
+
+**New scripts.**
+
+- `scripts/check-neon-pitr.js` — calls the Neon REST API to verify a restore
+  point exists within the threshold. Exits non-zero if not. Output is JSON
+  evidence. 14 unit tests (mocked fetch).
+- `scripts/post-deploy-smoke.js` — probes a configurable list of endpoints
+  against a deployed Worker URL with latency budgets. Requires
+  `/health?deep=true` to report DB readiness pass. Exits non-zero on failure.
+  15 unit tests (mocked fetch).
+
+**New secrets and variables.** `NEON_API_KEY` (environment secret,
+production) for the PITR check; `SENTRY_AUTH_TOKEN` (environment secret,
+production, optional) for the canary Sentry check; `SENTRY_ORG`,
+`SENTRY_PROJECT`, `CANARY_WAIT_MINUTES` (environment variables, production).
+These are documented in the runbook's secrets reference section.
+
+**Outstanding evidence from this session.** The CI workflow, scripts, and
+runbook are complete and verified locally (compile clean, 29 script tests
+pass, lint clean, OpenSpec valid). The first real production deploy with
+this workflow (1.7.B-execute) is deferred to the operator. New GitHub
+environment secrets and variables must be configured before the first run.
+
 ## What already exists
 
 - Worker raw-SQL execution and PGlite conformance tests; reuse them, but initialize PGlite from the
