@@ -68,9 +68,9 @@
     "eslint-plugin-react": "^7.37.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.7.0",
-    "prettier": "3.8.5",
+    "prettier": "3.9.6",
     "typescript": "^6.0.3",
-    "wrangler": "4.105.0"
+    "wrangler": "4.114.0"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
