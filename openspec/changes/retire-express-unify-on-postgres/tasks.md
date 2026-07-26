@@ -240,11 +240,21 @@
             evaluates only the filtered collection, and rejects implausible
             future timestamps. `scripts/post-deploy-smoke.js` probes
             `/health?deep=true` (requires DB readiness pass) and
-            `/api/subscription/current` with latency budgets, sending
-            `Authorization: Bearer <SMOKE_AUTH_TOKEN>` on each request so
-            the authenticated endpoint is exercised (a 401 is NOT treated
-            as success). Both scripts have unit tests (23 + 21 tests,
-            mocked fetch). Expand-only compatibility is enforced by the
+            `/api/subscription/current` with latency budgets. The
+            authenticated endpoint is exercised by
+            `scripts/run-authenticated-smoke.js`, which mints a fresh
+            Clerk session token (via `CLERK_SECRET_KEY` +
+            `SMOKE_USER_ID` from Doppler) and sends
+            `Authorization: Bearer <minted-JWT>` on each request (a 401
+            is NOT treated as success); the session is revoked in a
+            `finally` block after each round. All four scripts have
+            unit tests (23 + 21 + 16 + 29 tests, mocked fetch),
+            totalling 89. The fourth script,
+            `scripts/neon-poll-operations.js`, polls Neon restore
+            operation IDs to a terminal state with a bounded deadline
+            and per-request AbortSignal timeout (used by the runbook
+            PITR drill and catastrophic rollback).
+            Expand-only compatibility is enforced by the
             runner at load time (`runner.ts:224` refuses non-expand
             migrations), so the "apply expand-compatible schema" requirement
             is enforced by the runner itself. **Concurrency serialization:**
@@ -253,33 +263,97 @@
             so a push or dispatch cannot cancel or overlap an in-flight
             apply/seed/verify sequence; PR deploys keep ref-specific
             cancellation. **Credential-level enforcement:** production
-            secrets (`DOPPLER_TOKEN`, `NEON_API_KEY`, `SMOKE_AUTH_TOKEN`,
+            GitHub environment secrets (`DOPPLER_TOKEN`, `NEON_API_KEY`,
             `SENTRY_AUTH_TOKEN`) are scoped to the protected `production`
             GitHub environment (branch policy + 15-min wait timer +
-            `can_admins_bypass: false`). `workflow_dispatch` from `main` is
-            the supported manual deploy; direct local
+            `can_admins_bypass: false`). The canary's `CLERK_SECRET_KEY`
+            and `SMOKE_USER_ID` are **not** GitHub secrets — they live in
+            Doppler production config and are injected via `doppler run`
+            so the canary can mint short-lived Clerk session tokens.
+            **Production safety switch:** push-to-main production deploys
+            are gated by the repository variable
+            `PRODUCTION_AUTO_DEPLOY_ENABLED` (defaults to disabled; set
+            to `'true'` to enable auto-deploy). `workflow_dispatch` from
+            `main` is the supported manual deploy and is never gated by
+            the variable; direct local
             `wrangler deploy --env production` requires break-glass
             credentials — documentation alone is not enforcement.
       - [x] **1.7.B-runbook** Operator runbook for the production deploy gate.
             `docs/migrations-deploy-runbook.md` documents: the pre-deploy PITR
-            drill (restore-to-new-branch at a **specific snapshot/timestamp**,
-            not `--parent main`, with RPO/RTO recording); the CI workflow
-            sequence and artifact inventory; canary observation thresholds
-            (smoke failure, Sentry fatal/critical issues, error rate,
-            latency); three-layer rollback procedure (Worker rollback →
-            forward fix → Neon PITR restore, with explicit warning that
-            destructive down migrations are NOT the default); post-deploy
-            verification (authenticated smoke via
+            drill (snapshot-restore to a new preview branch via the Neon
+            REST API
+            `POST /api/v2/projects/{project_id}/snapshots/{snapshot_id}/restore`
+            with `finalize_restore: false` — `neonctl@2.27.0` has no
+            `snapshots` subcommand, so the drill uses the REST API
+            directly, with operation-ID polling delegated to
+            `scripts/neon-poll-operations.js` (a tested Node script that
+            reads the restore response on stdin, extracts the operation
+            IDs itself, and polls
+            `GET /api/v2/projects/{project_id}/operations/{op_id}` with a
+            bounded 15-minute deadline until terminal state before
+            connecting — replacing a Bash `while read` loop that ran in a
+            subshell and could continue past a failed operation; RPO/RTO
+            recording); the restored-branch connection string is resolved
+            via Neon's official
+            `GET /api/v2/projects/{project_id}/connection_uri` endpoint
+            (not a hand-constructed `postgres://postgres@...` URI, which
+            has no password and hardcodes the wrong role); the CI
+            workflow sequence and artifact inventory; canary observation
+            thresholds (smoke failure, Sentry fatal/critical issues,
+            error rate, latency); three-layer rollback procedure (Worker
+            rollback → forward fix → Neon snapshot restore with
+            `finalize_restore: true` + `target_branch_id` to preserve
+            the production connection string, with explicit warning
+            that destructive down migrations are NOT the default; the
+            orphaned `main (old)` branch is recorded as the exact
+            pre-restore `MAIN_BRANCH_ID` and **retained until recovery is
+            explicitly verified** — never auto-deleted by name match);
+            post-deploy verification (authenticated smoke via
             `scripts/run-authenticated-smoke.js`, not bare curl); the
             single-job migration-prep architecture; the concurrency
             serialization model; the credential-level enforcement model;
-            smoke-test identity provisioning (manual, dedicated org, normal
-            bootstrap path, `team_member` role, recorded in sign-off);
-            secrets/variables reference (`NEON_API_KEY`,
-            `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`,
-            `CANARY_WAIT_MINUTES` in GitHub; `CLERK_SECRET_KEY`,
-            `SMOKE_USER_ID` in Doppler); and a structured sign-off section
-            for operator evidence including the smoke-test identity record.
+            the `PRODUCTION_AUTO_DEPLOY_ENABLED` repository variable
+            safety switch (defaults to disabled; push-to-main gated,
+            manual dispatch always available); smoke-test identity
+            provisioning (two identities: a **custodian admin** that
+            bootstraps the dedicated smoke organization, then the
+            **smoke identity** added second as `team_member` — because
+            `bootstrap-handler.ts:302-314` makes the first active user
+            in a new org an admin, a single-user provisioning flow
+            would produce an admin smoke identity, violating least
+            privilege; a verification query confirms the smoke identity
+            maps to a non-deleted application user with
+            `role = 'team_member'` and a valid `subscription_tiers` row
+            before its Clerk ID is stored as `SMOKE_USER_ID`; both
+            identities recorded in sign-off); secrets/variables
+            reference (`NEON_API_KEY`, `SENTRY_AUTH_TOKEN`,
+            `SENTRY_ORG`, `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES` in
+            GitHub; `PRODUCTION_AUTO_DEPLOY_ENABLED` as a repository
+            variable; `CLERK_SECRET_KEY`, `SMOKE_USER_ID` in Doppler);
+            and a structured sign-off section for operator evidence
+            including the smoke-test identity record.
+            **Runbook hardening (2026-07-26):** every runbook `curl` now
+            uses `--fail-with-body --silent --show-error` so HTTP 4xx/5xx
+            responses exit non-zero instead of being piped into `jq` as
+            if they were success bodies; resolved IDs and URIs are
+            validated non-empty before continuing; the snapshot-create
+            call sends `name` as a query parameter (not a JSON body
+            field) per the Neon create-snapshot API; the
+            `connection_uri` request includes the required `role_name`
+            parameter (not just `database_name`); and the lengthy
+            operation-polling shell sequences were extracted into the
+            tested `scripts/neon-poll-operations.js` (29 unit tests,
+            mocked fetch, including per-request AbortSignal timeout
+            tests) so the duplicated, subshell-prone polling logic is no
+            longer embedded only in Markdown. The catastrophic rollback
+            (Step 4c) records the orphaned `main (old)` branch ID as the
+            PRE-restore `MAIN_BRANCH_ID` (not `.branch.id` from the
+            restore response, which is the newly restored active main),
+            and the deletion step (8) verifies the recorded ID differs
+            from the current main, the branch is still named
+            `main (old)…`, and the operator types the exact ID to
+            confirm — preventing accidental deletion of the active
+            production branch.
             **Canary authentication redesign (2026-07-25):** the original
             `SMOKE_AUTH_TOKEN` design (static GitHub secret) was replaced
             because `authenticateApiRequest` → `verifyToken` verifies Clerk
@@ -295,7 +369,8 @@
             (M2M tokens and user API keys are wrong token types for the
             existing `verifyToken` path), so the full production
             `CLERK_SECRET_KEY` is used with blast-radius controlled by the
-            protected GitHub `production` environment.
+            protected GitHub `production` environment and the
+            `team_member`-role provisioning of the smoke identity.
       - [ ] **1.7.B-execute** Operator-driven production deploy execution.
             The runbook must be exercised end-to-end on a real production
             deploy and the sign-off section filled with evidence (CI run URL,
@@ -311,9 +386,20 @@
             `NEON_API_KEY`, `SENTRY_AUTH_TOKEN` and variables `SENTRY_ORG`,
             `SENTRY_PROJECT`, `CANARY_WAIT_MINUTES`; (4) add `CLERK_SECRET_KEY`
             and `SMOKE_USER_ID` to Doppler production config; (5) provision
-            the dedicated smoke-test identity (manual, normal bootstrap,
-            dedicated org, `team_member` role, real `subscription_tiers`
-            row, recorded in the runbook sign-off). Evidence is committed
+            the dedicated smoke-test identity **pair** (custodian admin
+            that bootstraps the dedicated smoke org, then the smoke
+            identity added second as `team_member` — see the runbook's
+            Smoke-test identity provisioning section for why a
+            single-user flow would produce an admin); verify with the
+            runbook's SQL query that the smoke identity maps to a
+            non-deleted application user with `role = 'team_member'` and
+            a real `subscription_tiers` row; store only the smoke
+            identity's Clerk ID as `SMOKE_USER_ID`; record both
+            identities in the runbook sign-off); (6) set the repository
+            variable `PRODUCTION_AUTO_DEPLOY_ENABLED` to `'true'` only
+            when ready to allow push-to-main deploys (leave unset to
+            require manual `workflow_dispatch` for the first run).
+            Evidence is committed
             in a small follow-up PR after the run — do not pre-edit the
             runbook sign-off as though evidence existed before deployment.
 - [ ] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,

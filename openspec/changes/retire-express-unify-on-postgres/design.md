@@ -987,7 +987,10 @@ destructive down migrations.
 - `scripts/run-authenticated-smoke.js` — orchestrates the authenticated
   canary: creates a Clerk session for `SMOKE_USER_ID`, mints a short-lived
   JWT, invokes `post-deploy-smoke.js`'s `main()` in-process with the JWT
-  as `SMOKE_AUTH_TOKEN`, and revokes the session in a `finally` block.
+  passed as the `SMOKE_AUTH_TOKEN` env var (an in-process handoff only —
+  this is **not** the retired static GitHub secret of the same name; the
+  JWT is never stored or logged), and revokes the session in a `finally`
+  block.
   The JWT and `CLERK_SECRET_KEY` are never printed. Emits sanitized
   evidence (session ID, user ID, timestamps, probe results, revocation
   result). Fails closed if minting or revocation fails; revocation
@@ -996,6 +999,24 @@ destructive down migrations.
   covering successful flow, probe failure still revokes, mint failure
   cleanup, revoke failure reported, no secret/JWT in output, fresh
   session per round.
+- `scripts/neon-poll-operations.js` — polls Neon restore operation IDs to
+  a terminal state after a `POST .../snapshots/{id}/restore` call. Reads
+  the restore response JSON on stdin, extracts the operation IDs itself
+  (failing closed if there are none), and polls
+  `GET /api/v2/projects/{project_id}/operations/{op_id}` with a bounded
+  deadline (default 15 min, configurable via `NEON_POLL_DEADLINE_MINUTES`)
+  and a per-request `AbortSignal` timeout (default 30 s, configurable via
+  `NEON_POLL_PER_REQUEST_TIMEOUT_MS`) so an unknown status or a stalled
+  HTTP connection cannot hang forever. The per-request timeout is the
+  smaller of the remaining overall deadline and the configured per-request
+  cap. Replaces a Bash `while read` loop that ran in a subshell and could
+  continue past a failed operation (the `exit 1` exited only the
+  subshell). Used by the runbook PITR drill (Step 1b) and the
+  catastrophic rollback (Step 4c). 29 unit tests (mocked fetch),
+  including success/failed/deadline outcomes, empty-ID fail-closed,
+  non-2xx abort, fetch-throw retry, per-request AbortSignal timeout
+  (stalled fetch only rejects on signal abort), and a subshell-bug
+  regression guard.
 
 **New secrets and variables.** `NEON_API_KEY` (environment secret,
 production) for the PITR check; `SENTRY_AUTH_TOKEN` (environment secret,
@@ -1006,7 +1027,7 @@ production config for the canary orchestrator's session minting. These
 are documented in the runbook's secrets reference section.
 
 **Outstanding evidence from this session.** The CI workflow, scripts, and
-runbook are complete and verified locally (compile clean, 44 script tests
+runbook are complete and verified locally (compile clean, 89 script tests
 pass, lint clean, OpenSpec valid). The first real production deploy with
 this workflow (1.7.B-execute) is deferred to the operator. New GitHub
 environment secrets and variables must be configured before the first run.

@@ -52,7 +52,21 @@ jobs:
 
   migration-prep-production:
     name: Migration prep (production, full)
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    # Production deploys run on push to main ONLY when the repository
+    # variable PRODUCTION_AUTO_DEPLOY_ENABLED == 'true'. This is an
+    # opt-in switch: the variable defaults to unset (disabled), so a
+    # push to main does not trigger a production deploy until the
+    # operator explicitly enables it. Manual `workflow_dispatch` from
+    # main always works regardless of the variable — this is the
+    # supported break-glass / rollback path and is never gated by the
+    # variable. Set the variable in GitHub → Settings → Secrets and
+    # variables → Actions → Variables.
+    if: >
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/main' &&
+       vars.PRODUCTION_AUTO_DEPLOY_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
     needs: []
     uses: ./.github/workflows/migration-prep.yml
     with:
@@ -124,13 +138,22 @@ jobs:
         run: doppler run -- npx wrangler deploy --env development --keep-vars
 
   deploy-production:
-    # Deploy to production on push to main or on a manual workflow_dispatch
-    # from main (for rollbacks / emergency patches). Pull requests trigger this
-    # workflow only for the development preview deploy; the production
-    # environment's branch protection rejects non-main refs, so guard the job
-    # explicitly instead of letting it start and fail. Mirrors pages-deploy.yml.
+    # Deploy to production on push to main ONLY when the repository
+    # variable PRODUCTION_AUTO_DEPLOY_ENABLED == 'true' (opt-in; defaults
+    # to disabled), or on a manual workflow_dispatch from main (for
+    # rollbacks / emergency patches — always available, never gated by
+    # the variable). Pull requests trigger this workflow only for the
+    # development preview deploy; the production environment's branch
+    # protection rejects non-main refs, so guard the job explicitly
+    # instead of letting it start and fail. Mirrors pages-deploy.yml.
+    # See migration-prep-production above for the variable's rationale.
     needs: [migration-prep-production]
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: >
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/main' &&
+       vars.PRODUCTION_AUTO_DEPLOY_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: production
