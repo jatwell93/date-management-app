@@ -131,6 +131,32 @@ retry_delay = 30
 binding = "RATE_LIMITER"
 id = "bc5312ed84fa4ff1bf59d3dc067309be"
 
+# Isolated Worker used only for the Phase 1.7 runtime-role verification.
+# It intentionally has no routes, queues, Hyperdrive, R2, KV, or Analytics
+# bindings: the role-check must not consume background work or share mutable
+# application resources. Its branch-specific NEON_CONNECTION_STRING is bound
+# separately with `wrangler secret put --env role_check` and the Worker is
+# deleted immediately after the verification procedure.
+[env.role_check]
+name = "date-management-api-role-check"
+workers_dev = true
+
+[env.role_check.vars]
+NODE_ENV = "development"
+STORAGE_PROVIDER = "local"
+CATALOGUE_QUEUE_ENABLED = "false"
+MAX_FILE_SIZE = "26214400"
+CSV_BATCH_SIZE = "1000"
+ENTERPRISE_MAX_SKUS = "250000"
+ENTERPRISE_MAX_ACTIVE_EXPIRIES = "250000"
+ENTERPRISE_MAX_FILE_SIZE = "104857600"
+RATE_LIMIT_WINDOW = "60000"
+RATE_LIMIT_MAX_REQUESTS = "5"
+RATE_LIMIT_MAX_AUTHENTICATED = "30"
+MAX_CONCURRENT_CONNECTIONS = "10"
+QUERY_MAX_RESULTS = "100"
+QUERY_TIMEOUT_MS = "10000"
+
 # Build Configuration
 [build]
 command = "npm run build"

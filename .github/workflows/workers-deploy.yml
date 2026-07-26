@@ -116,6 +116,14 @@ jobs:
       - name: Build worker
         run: npm run build
 
+      # Static assertion that this workflow binds NEON_CONNECTION_STRING
+      # as a Worker secret (via wrangler secret put) BEFORE wrangler
+      # deploy runs in deploy-production. Runs in <100ms, no deps.
+      # See scripts/verify-workers-deploy-bindings.js for the rationale.
+      - name: Validate workflow binding order
+        working-directory: .
+        run: node --test scripts/verify-workers-deploy-bindings.test.js
+
       - name: Validate required Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -193,6 +201,16 @@ jobs:
       - name: Build worker
         run: npm run build
 
+      # Static assertion that this workflow binds NEON_CONNECTION_STRING
+      # as a Worker secret (via wrangler secret put) BEFORE wrangler
+      # deploy runs in deploy-production. Runs in <100ms, no deps.
+      # This is the regression guard for the production cutover: a PR
+      # that reorders or removes the binding step fails here before any
+      # deploy runs. See scripts/verify-workers-deploy-bindings.js.
+      - name: Validate workflow binding order
+        working-directory: .
+        run: node --test scripts/verify-workers-deploy-bindings.test.js
+
       - name: Validate required Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -264,6 +282,27 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- bash -lc 'printf "%s" "$FRONTEND_URL" | npx wrangler secret put FRONTEND_URL --env production'
+
+      # Bind NEON_CONNECTION_STRING to the worker as a secret BEFORE deploying.
+      # `wrangler deploy` does NOT upload surrounding-shell env vars as Worker
+      # secret bindings — it only registers what is in wrangler.toml
+      # [env.*.vars] plus secrets previously registered via `wrangler secret
+      # put`. NEON_CONNECTION_STRING is a secret (wrangler.toml:168,
+      # workers/src/types/env.d.ts:35), not a [env.production.vars] entry, so
+      # `doppler run -- npx wrangler deploy` alone would leave the Worker bound
+      # to whatever NEON_CONNECTION_STRING was last `secret put`'d — potentially
+      # the pre-cutover neondb_owner credential. This step re-binds the value
+      # from Doppler on every production deploy, so a Doppler update (e.g. the
+      # app_runtime cutover, or a rollback to the previous credential) takes
+      # effect on the next deploy without any manual `wrangler secret put`.
+      # printf (no trailing newline) keeps the connection string exact (no
+      # trailing newline added to the secret value). The regression test
+      # scripts/verify-workers-deploy-bindings.test.js asserts this step runs
+      # before `Deploy production worker`.
+      - name: Bind NEON_CONNECTION_STRING secret to worker
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: doppler run -- bash -lc 'printf "%s" "$NEON_CONNECTION_STRING" | npx wrangler secret put NEON_CONNECTION_STRING --env production'
 
       - name: Deploy production worker
         env:

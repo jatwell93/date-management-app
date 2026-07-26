@@ -211,6 +211,44 @@
       seed/verify prerequisites; deploy Worker; run real database readiness plus schema-dependent smoke
       tests; observe a canary window with explicit stop/rollback thresholds. Migration-only changes must
       trigger this workflow, and manual deploy commands must not bypass compatibility checks.
+      **Runtime role separation prerequisite (2026-07-26):** the Worker
+      must not run with the schema owner's credentials. The existing
+      schema owner (`neondb_owner`) remains the schema owner and becomes
+      the migration-only identity (`MIGRATION_ROLE=neondb_owner`,
+      `DATABASE_URL_UNPOOLED` = direct neondb_owner URL). The
+      application is moved to a restricted runtime identity
+      (`app_runtime`) that has DML privileges but no DDL.
+      `app_runtime` is created via SQL `CREATE ROLE` (not Neon's "Add
+      Role" button, which auto-inherits `neon_superuser`), with the
+      password set interactively via `\password`. Grants + an explicit
+      `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime`
+      (so the runtime role has zero access to the migration ledger) +
+      `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner` are a one-time
+      operator provisioning procedure (role administration, not schema
+      DDL — not in the migration history). Provisioning is proven on a
+      temporary `migration-role-check` Neon branch first via
+      `scripts/verify-runtime-role.js` (68 unit tests, mocked `pg`
+      Client) in **active-probe mode** (`RUNTIME_ROLE_ACTIVE_PROBE=1`)
+      and a Worker preview deploy smoke test, then applied on main and
+      verified in **read-only mode** (no write or ALTER attempt against
+      production). The verifier checks: not a `neon_superuser` member;
+      cannot create tables; does not own any public table and is not a
+      member of any table's owner role (catalog proof of
+      non-alterability); [active only] cannot alter (ALTER attempt must
+      fail with SQLSTATE 42501; success or any other SQLSTATE is a
+      failure — catches the old undefined-column false-success bug);
+      can DML on all `public` tables **except** `schema_migrations`; has
+      **no** privileges on `schema_migrations` (all seven denied); can
+      use sequences (USAGE/SELECT, catalog only — no `nextval`); can
+      execute functions; [active only] can write (transactional
+      INSERT/UPDATE/DELETE with `id = -1` so no serial sequence is
+      advanced, then ROLLBACK). The previous Worker connection secret is
+      retained until the canary passes. A prior malformed
+      `" migration_runner"` role (leading space, created via Neon
+      Console) is deleted from main after confirming it owns no objects
+      — it is unnecessary under this model. See design.md "Runtime role
+      separation" and the runbook's "Runtime role separation" section
+      for the full procedure.
       **Split into automatable (A) and operator-driven (B) subtasks (2026-07-25):**
       - [x] **1.7.A** Automated CI workflow + scripts. A reusable
             `migration-prep.yml` workflow (called by `workers-deploy.yml` via
@@ -254,6 +292,73 @@
             operation IDs to a terminal state with a bounded deadline
             and per-request AbortSignal timeout (used by the runbook
             PITR drill and catastrophic rollback).
+            **Runtime role separation script (2026-07-26):**
+            `scripts/verify-runtime-role.js` (68 unit tests, mocked
+            `pg` Client) verifies the restricted `app_runtime` role
+            has exactly the privileges it needs (DML on all `public`
+            tables **except** `schema_migrations`, sequence access,
+            function execution) and nothing more (not a
+            `neon_superuser` member, cannot CREATE tables, does not
+            own any public table and is not a member of any table's
+            owner role — catalog proof of non-alterability, has **no**
+            privileges on `schema_migrations`). Two modes: read-only
+            (default, for main — catalog checks only, no mutations) and
+            active-probe (`RUNTIME_ROLE_ACTIVE_PROBE=1`, for the
+            temporary branch — additionally runs a rolled-back write
+            probe with `id = -1` so no serial sequence is advanced, and
+            an ALTER-denial probe that must fail with SQLSTATE 42501;
+            success or any other SQLSTATE is a failure). The `nextval`
+            probe was removed (non-transactional, permanently advances
+            the sequence). Connects via `RUNTIME_ROLE_URL` and redacts
+            the password from all output, including nested probe error
+            messages. Regression tests cover ledger-access denial,
+            undefined-column false-success (42703 must fail), sequence
+            non-use, identifier quoting, and nested-error redaction.
+            Total script tests: 179 (95 existing + 68 runtime-role +
+            16 Worker-binding/isolation; the 95 existing tests include
+            89 across the four migration scripts + 6 across
+            `validate-stripe-deployment-config` and
+            `mem-memory-scripts`).
+            **Worker secret binding on deploy (2026-07-26):**
+            `NEON_CONNECTION_STRING` is a Worker secret
+            (`wrangler.toml:168`, `workers/src/types/env.d.ts:35`), not
+            a `[env.production.vars]` entry, so `wrangler deploy` does
+            NOT upload the surrounding-shell env var as a Worker secret
+            binding — `doppler run -- npx wrangler deploy` alone would
+            leave the Worker bound to whatever
+            `NEON_CONNECTION_STRING` was last `secret put`'d (potentially
+            a stale pre-cutover `neondb_owner`-as-runtime credential).
+            The production deploy job has an explicit
+            `Bind NEON_CONNECTION_STRING secret to worker` step
+            (analogous to the existing `FRONTEND_URL` binding step) that
+            re-binds the value from Doppler via `wrangler secret put`
+            BEFORE `wrangler deploy` runs, so a Doppler update (the
+            `app_runtime` cutover, or a rollback to the previous
+            credential) takes effect on the next deploy with no manual
+            `wrangler secret put`. The runbook's preview role-check
+            Worker (separately-named, own secret store) is bound the
+            same way, with an explicit cleanup step that deletes the
+            Worker (and its secrets) after the cutover. A static
+            regression test,
+            `scripts/verify-workers-deploy-bindings.test.js` (16 tests,
+            dependency-free line-based YAML scanner), parses
+            `workers-deploy.yml` and asserts the binding step exists
+            and precedes `wrangler deploy`. It also verifies that the
+            dedicated `role_check` Wrangler environment exists, uses
+            the isolated Worker name, exposes only a workers.dev URL,
+            declares no routes, queues, Hyperdrive, R2, KV, or Analytics
+            bindings, and is used consistently by the runbook (with no
+            nonexistent `--env preview` references). It runs as a
+            pre-deploy CI step in both `deploy-development` and
+            `deploy-production`, so a PR that reorders/removes the
+            binding or weakens role-check isolation fails before any
+            deploy runs. The runbook's interactive psql
+            provisioning step was also corrected: it previously used
+            `psql ... -c "SELECT current_user;"` which exits
+            immediately, leaving no session for the `CREATE ROLE` /
+            `\password` instructions that followed; it now starts a
+            plain `psql "$OWNER_URL"` session and runs the SQL +
+            meta-commands inside it.
             Expand-only compatibility is enforced by the
             runner at load time (`runner.ts:224` refuses non-expand
             migrations), so the "apply expand-compatible schema" requirement
@@ -332,6 +437,32 @@
             variable; `CLERK_SECRET_KEY`, `SMOKE_USER_ID` in Doppler);
             and a structured sign-off section for operator evidence
             including the smoke-test identity record.
+            **Runtime role separation section (2026-07-26):** the
+            runbook now documents the `app_runtime` provisioning
+            procedure as a Phase 1.7 prerequisite — create the role
+            via SQL `CREATE ROLE` (not Neon's "Add Role" button, which
+            auto-inherits `neon_superuser`), set the password
+            interactively via `\password`, grant DML/sequence/function
+            privileges, explicitly `REVOKE ALL PRIVILEGES ON TABLE
+            schema_migrations FROM app_runtime` (so the runtime role
+            has zero access to the migration ledger) + `ALTER DEFAULT
+            PRIVILEGES FOR ROLE neondb_owner`, verify via
+            `scripts/verify-runtime-role.js` in **active-probe mode**
+            (`RUNTIME_ROLE_ACTIVE_PROBE=1`) on a `migration-role-check`
+            branch first and in **read-only mode** on main, test the
+            Worker against the branch first, then provision on main and
+            cut over. The Doppler config table reflects the role
+            separation: `DATABASE_URL_UNPOOLED`/`MIGRATION_ROLE` use
+            `neondb_owner`; `NEON_CONNECTION_STRING` uses the pooled
+            `app_runtime` URL. A role-cutover rollback procedure is
+            documented (retain previous Worker connection secret until
+            canary passes; on missing-grant failure: restore previous
+            credential, redeploy known-good Worker, add grant via
+            forward fix, re-verify in read-only mode). Cleanup steps
+            delete the `migration-role-check` branch and the malformed
+            `" migration_runner"` role from main. The sign-off section
+            includes runtime role separation (with REVOKE on
+            schema_migrations) and cleanup fields.
             **Runbook hardening (2026-07-26):** every runbook `curl` now
             uses `--fail-with-body --silent --show-error` so HTTP 4xx/5xx
             responses exit non-zero instead of being piped into `jq` as
@@ -398,7 +529,24 @@
             identities in the runbook sign-off); (6) set the repository
             variable `PRODUCTION_AUTO_DEPLOY_ENABLED` to `'true'` only
             when ready to allow push-to-main deploys (leave unset to
-            require manual `workflow_dispatch` for the first run).
+            require manual `workflow_dispatch` for the first run);
+            (7) complete the runtime role separation — provision
+            `app_runtime` on a `migration-role-check` branch first
+            (create via SQL `CREATE ROLE`, set password via
+            `\password`, grant DML/sequence/function privileges,
+            explicitly `REVOKE ALL PRIVILEGES ON TABLE schema_migrations
+            FROM app_runtime`, run `ALTER DEFAULT PRIVILEGES FOR ROLE
+            neondb_owner`), verify with `scripts/verify-runtime-role.js`
+            in **active-probe mode** (`RUNTIME_ROLE_ACTIVE_PROBE=1`),
+            test the Worker against the branch, then provision on main
+            and verify in **read-only mode** (no
+            `RUNTIME_ROLE_ACTIVE_PROBE`), and update Doppler config
+            (`DATABASE_URL_UNPOOLED`/`MIGRATION_ROLE` = `neondb_owner`,
+            `NEON_CONNECTION_STRING` = pooled `app_runtime` URL); see
+            the runbook's "Runtime role separation" section; (8) after
+            the canary passes, delete the `migration-role-check`
+            branch and the malformed `" migration_runner"` role from
+            main (cleanup steps in the runbook).
             Evidence is committed
             in a small follow-up PR after the run — do not pre-edit the
             runbook sign-off as though evidence existed before deployment.

@@ -111,6 +111,17 @@ production GitHub environment is the enforcement boundary.
       `MIGRATION_CONFIRM_PRODUCTION`, `MIGRATION_ROLE`, `MIGRATION_SEED_CONFIRMATION`,
       `NEON_CONNECTION_STRING`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
       `CLERK_SECRET_KEY`, `SMOKE_USER_ID`
+- [ ] Runtime role separation complete: `app_runtime` provisioned on main
+      via SQL `CREATE ROLE` (not Neon's "Add Role" button), grants + default
+      privileges applied, `REVOKE ALL PRIVILEGES ON TABLE schema_migrations
+      FROM app_runtime` applied, `scripts/verify-runtime-role.js` passes
+      against main's `app_runtime` URL in **read-only mode** (active-probe
+      mode was used on the `migration-role-check` branch first), and Doppler
+      config updated so `DATABASE_URL_UNPOOLED`/`MIGRATION_ROLE` use
+      `neondb_owner` and `NEON_CONNECTION_STRING` uses the pooled
+      `app_runtime` URL (see
+      [Runtime role separation](#runtime-role-separation-appruntime-provisioning)
+      below)
 - [ ] Dedicated smoke-test identity provisioned (see
       [Smoke-test identity provisioning](#smoke-test-identity-provisioning) below)
 - [ ] Neon project ID known: `dawn-darkness-22587117` (region
@@ -218,6 +229,445 @@ Provision it through the normal application bootstrap path:
 > org or billing configuration. The `SMOKE_USER_ID` is not secret but
 > is kept in Doppler alongside the Clerk key so the canary
 > configuration lives in one place.
+
+### Runtime role separation (app_runtime provisioning)
+
+The Worker must not run with the schema owner's credentials. The
+security objective is met by **reducing the Worker's privileges**, not
+by creating a second highly privileged DDL login. The existing schema
+owner (`neondb_owner`) remains the schema owner and becomes the
+**migration-only** identity; the application is moved to a restricted
+**runtime** identity (`app_runtime`) that can read and write data but
+cannot run DDL.
+
+> **Why SQL `CREATE ROLE`, not Neon's "Add Role" button:** Neon's
+> "Add Role" button creates a login role that **automatically inherits
+> `neon_superuser`** — a Neon-managed superuser role that bypasses the
+> privilege separation this section establishes. Creating the role via
+> SQL (`CREATE ROLE app_runtime LOGIN`) does **not** grant
+> `neon_superuser`, so the role starts with no privileges and receives
+> only the explicit grants below. This is the only supported way to
+> create a restricted runtime role on Neon.
+
+> **Do not recreate the malformed ` migration_runner` role.** A prior
+> attempt created a role with a leading space in its name
+> (`" migration_runner"`) via Neon Console. That role is unnecessary
+> under this ownership model (`neondb_owner` is the migration identity)
+> and should be deleted from main through the Neon Console after
+> confirming it owns no objects and is unused (see
+> [Cleanup](#runtime-role-cleanup) below).
+
+**Provision `app_runtime` on a temporary branch first.** Create a
+Neon branch named `migration-role-check` from `main` and execute the
+provisioning SQL there. This lets you test the grants and the Worker
+against a realistic schema without touching production. Only after
+verification passes on the branch do you provision `app_runtime` on
+main and cut the Worker over.
+
+#### 1. Create the role (interactive psql as `neondb_owner`)
+
+Connect to the `migration-role-check` branch as `neondb_owner` (the
+schema owner) via psql. Do **not** put a password in committed SQL or
+shell history — use the interactive `\password` meta-command:
+
+```bash
+set -euo pipefail
+
+# Connect to the migration-role-check branch as neondb_owner.
+# The connection string is obtained from the Neon console or the
+# connection_uri API (see Step 1b for the API call shape).
+#
+# Do NOT use `psql ... -c "SELECT current_user;"` here: `-c` runs the
+# query and exits immediately, so the CREATE ROLE and \password
+# instructions below would have no interactive session to run in.
+# Start a plain interactive psql session instead — the SQL and
+# meta-commands in the next block run inside it.
+export OWNER_URL="postgresql://neondb_owner@<branch-host>/neondb"
+psql "$OWNER_URL"
+```
+
+At the `psql` prompt (`neondb=>`), run:
+
+```sql
+-- Sanity-check the connected identity first.
+SELECT current_user;
+
+-- Create the runtime role. NO INHERIT is not required, but creating
+-- via SQL (not Neon's Add Role button) ensures it does NOT inherit
+-- neon_superuser. LOGIN allows it to authenticate; the password is
+-- set interactively so it is never in committed SQL or shell history.
+CREATE ROLE app_runtime LOGIN;
+
+-- Set the password interactively (NOT in SQL text or shell history).
+-- psql will prompt without echoing:
+\password app_runtime
+```
+
+Then proceed to step 2's grants **in the same psql session** (do not
+exit — the grants must also run as `neondb_owner`). Using `export
+OWNER_URL=...` (a single shell variable) instead of inlining the
+connection string also avoids the Git Bash heredoc quoting problems
+that occur when a `postgresql://` URI with special characters is
+embedded directly in a multi-line shell command.
+
+#### 2. Grant runtime privileges (as `neondb_owner`)
+
+Still in the interactive psql session as `neondb_owner`, run the
+following grants. These give `app_runtime` exactly the privileges the
+Worker needs — CONNECT, USAGE on the public schema, DML on all tables,
+sequence access, and function execution — and nothing more (no CREATE,
+no ALTER, no DROP).
+
+```sql
+GRANT CONNECT ON DATABASE neondb TO app_runtime;
+GRANT USAGE ON SCHEMA public TO app_runtime;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ALL TABLES IN SCHEMA public
+  TO app_runtime;
+
+GRANT USAGE, SELECT, UPDATE
+  ON ALL SEQUENCES IN SCHEMA public
+  TO app_runtime;
+
+GRANT EXECUTE
+  ON ALL FUNCTIONS IN SCHEMA public
+  TO app_runtime;
+
+-- Revoke ALL privileges on the migration ledger. The runtime role must
+-- NOT be able to read or write schema_migrations — it is the migration
+-- identity's ledger, not the application's. The GRANT ... ON ALL TABLES
+-- above would otherwise grant DML on it (the ledger is a public table
+-- created by the runner as neondb_owner). REVOKE ALL covers every table
+-- privilege PostgreSQL supports (SELECT, INSERT, UPDATE, DELETE,
+-- TRUNCATE, REFERENCES, TRIGGER) so no residual access remains.
+REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime;
+```
+
+> **Why the explicit REVOKE is required.** `GRANT ... ON ALL TABLES IN
+> SCHEMA public` grants DML on every existing public table, including
+> `schema_migrations` (the migration ledger, created by the runner as
+> `neondb_owner`). The runtime role must not touch the ledger — only
+> the migration identity does. `ALTER DEFAULT PRIVILEGES` (below) does
+> not help here: it applies only to *future* objects, and PostgreSQL
+> offers no way to exclude a specific table from a default-privilege
+> grant. The explicit `REVOKE ALL PRIVILEGES ON TABLE schema_migrations`
+> is the only way to ensure the runtime role has zero ledger access.
+> `scripts/verify-runtime-role.js` enforces this: its
+> `checkCannotAccessLedger` check fails if the runtime role holds ANY
+> of the seven table privileges on the ledger.
+
+Future objects created by migrations also need privileges. The
+`ALTER DEFAULT PRIVILEGES` statements ensure any table, sequence, or
+function created by `neondb_owner` in the `public` schema in the future
+automatically grants the runtime privileges to `app_runtime` — so a
+new migration does not require a separate grant step:
+
+```sql
+ALTER DEFAULT PRIVILEGES
+  FOR ROLE neondb_owner
+  IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_runtime;
+
+ALTER DEFAULT PRIVILEGES
+  FOR ROLE neondb_owner
+  IN SCHEMA public
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO app_runtime;
+
+ALTER DEFAULT PRIVILEGES
+  FOR ROLE neondb_owner
+  IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO app_runtime;
+```
+
+#### 3. Verify the runtime role's privileges
+
+The verifier has two modes:
+
+- **Read-only mode (default):** runs only catalog-level privilege
+  queries (`has_table_privilege`, `has_sequence_privilege`,
+  `has_function_privilege`, `pg_has_role`, `pg_class`/`pg_roles`
+  ownership lookups). No INSERT/UPDATE/DELETE, no `nextval`, no ALTER
+  attempt. Safe to run against production at any time.
+- **Active-probe mode (`RUNTIME_ROLE_ACTIVE_PROBE=1`):** additionally
+  runs two rolled-back active probes — a transactional
+  INSERT/UPDATE/DELETE that proves the grants actually let the Worker
+  write (using a reserved negative ID `id = -1` so no serial sequence
+  is advanced), and an `ALTER TABLE ... SET (autovacuum_enabled = true)`
+  attempt that proves the role cannot alter (expecting SQLSTATE 42501;
+  success or any other SQLSTATE is a failure). Intended only for the
+  temporary `migration-role-check` branch.
+
+Both modes check that `app_runtime` is not a `neon_superuser` member,
+cannot create tables, does not own any public table and is not a member
+of any table's owner role (catalog proof of non-alterability), can
+SELECT/INSERT/UPDATE/DELETE on every `public` table **except**
+`schema_migrations` (the migration ledger), has **NO** privileges on
+`schema_migrations` (all seven table privileges denied), can use
+sequences (USAGE/SELECT — catalog only, no `nextval`), and can execute
+all `public` functions. The password is redacted from all output,
+including nested probe error messages.
+
+**On the `migration-role-check` branch, use active-probe mode** so the
+write and alter-denial probes are exercised against a realistic schema
+before touching main:
+
+```bash
+set -euo pipefail
+
+# Obtain the app_runtime connection string for the migration-role-check
+# branch via the Neon connection_uri API (same shape as Step 1b):
+#   curl --fail-with-body --silent --show-error \
+#     -H "Authorization: Bearer $NEON_API_KEY" \
+#     --get \
+#     --data-urlencode "branch_id=<branch-id>" \
+#     --data-urlencode "database_name=neondb" \
+#     --data-urlencode "role_name=app_runtime" \
+#     --data-urlencode "pooled=true" \
+#     "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/connection_uri" \
+#     | jq -r '.uri // empty'
+export RUNTIME_ROLE_URL="<app_runtime connection string for migration-role-check>"
+if [ -z "$RUNTIME_ROLE_URL" ]; then
+  echo "::error::RUNTIME_ROLE_URL is empty. Resolve it from the Neon connection_uri API."
+  exit 1
+fi
+
+# Active-probe mode: runs the write + alter-denial probes in addition
+# to the catalog checks. The write probe uses id = -1 (no nextval) and
+# rolls back, so it is non-mutating outside its transaction.
+RUNTIME_ROLE_ACTIVE_PROBE=1 \
+  node scripts/verify-runtime-role.js > runtime-role-evidence.json
+# Exit code propagates: a failed check exits non-zero and stops the
+# procedure. The evidence JSON contains only host + database (no
+# password).
+```
+
+**On main, use read-only mode** (no `RUNTIME_ROLE_ACTIVE_PROBE`) so
+no write or ALTER attempt is made against production:
+
+```bash
+set -euo pipefail
+export RUNTIME_ROLE_URL="<app_runtime connection string for main>"
+node scripts/verify-runtime-role.js > runtime-role-evidence-main.json
+```
+
+**Expected:** all checks PASS. If any check fails, **stop** — the
+grants are incomplete, the role was created via Neon's "Add Role"
+button (inheriting `neon_superuser`), or the `REVOKE ALL PRIVILEGES ON
+TABLE schema_migrations` was not applied. Re-provision via SQL `CREATE
+ROLE`, re-run the grants **and the REVOKE**, then re-verify.
+
+#### 4. Verify `neondb_owner` can still run migrations
+
+On the same `migration-role-check` branch, confirm the schema owner can
+still run the full migration sequence (preflight, seed, apply, verify).
+This proves the role separation did not break the migration identity:
+
+```bash
+set -euo pipefail
+
+DATABASE_URL_UNPOOLED="<neondb_owner direct URL for migration-role-check>" \
+MIGRATION_ALLOWED_HOST=<branch-host> \
+MIGRATION_ALLOWED_DATABASE=neondb \
+MIGRATION_ENVIRONMENT=production \
+MIGRATION_TARGET_KIND=primary \
+MIGRATION_ROLE=neondb_owner \
+MIGRATION_CONFIRM_PRODUCTION="APPLY <branch-host>/neondb" \
+npm run migrate:preflight
+
+# Then seed + verify (apply is a no-op if the branch was created from
+# main with the schema already at the latest migration):
+DATABASE_URL_UNPOOLED="<neondb_owner direct URL>" \
+MIGRATION_ROLE=neondb_owner \
+MIGRATION_SEED_CONFIRMATION="SEED <branch-host>/neondb" \
+MIGRATION_ALLOWED_HOST=<branch-host> \
+MIGRATION_ALLOWED_DATABASE=neondb \
+MIGRATION_ENVIRONMENT=production \
+MIGRATION_TARGET_KIND=primary \
+npm run migrate:seed
+
+DATABASE_URL_UNPOOLED="<neondb_owner direct URL>" \
+MIGRATION_ROLE=neondb_owner \
+MIGRATION_ALLOWED_HOST=<branch-host> \
+MIGRATION_ALLOWED_DATABASE=neondb \
+MIGRATION_ENVIRONMENT=production \
+MIGRATION_TARGET_KIND=primary \
+npm run migrate:verify
+```
+
+**Expected:** preflight, seed, and verify all PASS as `neondb_owner`.
+
+#### 5. Test the Worker against the temporary branch
+
+Static grants are not enough evidence that every production query
+works. Point the Worker at the `migration-role-check` branch using the
+`app_runtime` pooled connection string and run the Worker DB tests and
+smoke checks against it.
+
+```bash
+set -euo pipefail
+
+# Deploy the Worker to a separately-named preview URL pointed at the
+# migration-role-check branch. NEON_CONNECTION_STRING is a Worker
+# secret (wrangler.toml:168, workers/src/types/env.d.ts:35), NOT a
+# [env.*.vars] entry, so `wrangler deploy` does NOT pick it up from the
+# surrounding shell — it must be registered via `wrangler secret put`.
+# Setting it as a shell env var around `wrangler deploy` would silently
+# leave the preview Worker with NO NEON_CONNECTION_STRING binding, and
+# workers/src/utils/db-connection.ts would fall through to DATABASE_URL
+# / Hyperdrive (likely the dev branch, not migration-role-check).
+#
+# The dedicated `role_check` environment in workers/wrangler.toml creates
+# date-management-api-role-check as a separate Worker. It intentionally
+# declares no routes, queues, Hyperdrive, R2, KV, or Analytics bindings,
+# so it cannot consume background work or share mutable application
+# resources with production/development.
+npx wrangler deploy --env role_check
+
+# Bind the branch-specific pooled app_runtime URL as the preview
+# Worker's NEON_CONNECTION_STRING secret. printf (no trailing newline)
+# keeps the connection string exact. The role_check environment targets
+# the separately-named Worker's secret store, not the dev Worker.
+printf '%s' "<pooled app_runtime URL for migration-role-check>" \
+  | npx wrangler secret put NEON_CONNECTION_STRING \
+    --env role_check
+
+# Run the Worker DB tests (pglite real-SQL) — these do not hit Neon but
+# prove the Worker code compiles and the SQL is valid:
+npm run test:db
+
+# Smoke-test the preview Worker's real endpoints against the
+# migration-role-check branch via app_runtime:
+curl --fail-with-body --silent --show-error \
+  "https://date-management-api-role-check.<subdomain>.workers.dev/health?deep=true" | jq .
+```
+
+**Expected:** `/health?deep=true` reports DB readiness pass. If it
+fails with a connection or permission error, a grant is missing — do
+not cut over. Add the missing grant (re-run step 2's SQL for the
+specific privilege) and re-test. A 5xx with a connection-string error
+specifically suggests the `wrangler secret put` step was skipped or
+targeted the wrong `--name`.
+
+#### 5b. Clean up the role-check preview Worker
+
+The role-check Worker is a separately-named Cloudflare Worker with its
+own secret binding. It is not garbage-collected when the
+`migration-role-check` Neon branch is deleted — it must be removed
+explicitly. After step 5 passes (and no later than the role-cutover
+cleanup in [Runtime role cleanup](#runtime-role-cleanup)):
+
+```bash
+set -euo pipefail
+
+# Delete the role-check Worker. This also drops its secret bindings
+# (including the branch-specific NEON_CONNECTION_STRING). The dedicated
+# role_check environment resolves the exact Worker name from wrangler.toml.
+npx wrangler delete --env role_check
+```
+
+If `wrangler delete` is unavailable in your pinned Wrangler version,
+delete the Worker from the Cloudflare dashboard (Workers & Pages →
+date-management-api-role-check → Settings → Delete) and confirm the
+secret is gone. Do **not** leave the role-check Worker running after
+the cutover — it would be an unmonitored Worker holding a credential
+for a deleted Neon branch.
+
+#### 6. Provision on main and cut over
+
+Only after steps 3–5 pass on the `migration-role-check` branch:
+
+1. Repeat steps 1–2 on **main** (create `app_runtime` via SQL, set
+   password interactively, run the grants + default privileges **and
+   the `REVOKE ALL PRIVILEGES ON TABLE schema_migrations`**).
+2. Run `scripts/verify-runtime-role.js` against main's `app_runtime`
+   connection string in **read-only mode** (no `RUNTIME_ROLE_ACTIVE_PROBE`)
+   — see Step 3 for the read-only command. Read-only mode makes no
+   write or ALTER attempt against production; the catalog checks
+   (including ledger-access denial and non-ownership proof) are
+   sufficient evidence on main because the same grants were already
+   proven with active probes on the `migration-role-check` branch.
+3. Update Doppler production config (see
+   [Doppler production config](#doppler-production-config-existing--new)
+   below):
+   - `DATABASE_URL_UNPOOLED` → direct `neondb_owner` URL (migrations)
+   - `MIGRATION_ROLE` → `neondb_owner`
+   - `NEON_CONNECTION_STRING` → pooled `app_runtime` URL (Worker)
+   - confirmation tokens remain based on the same host/database
+4. **Retain the previous Worker connection secret** (the old
+   `NEON_CONNECTION_STRING` value) securely until the canary passes —
+   see [Role-cutover rollback](#role-cutover-rollback) below.
+5. Trigger a production deploy (`workflow_dispatch` from `main`) and
+   observe the canary.
+
+**No workflow output exposes either password.** The migration CLIs
+redact connection strings (host + database only). The
+`verify-runtime-role.js` script redacts the password from its JSON
+evidence. The canary's `CLERK_SECRET_KEY` and `SMOKE_USER_ID` are
+injected via `doppler run` and never printed.
+
+#### Role-cutover rollback
+
+If the Worker fails during the canary window because of a missing
+runtime grant:
+
+1. **Restore the previous Worker connection credential.** Set
+   `NEON_CONNECTION_STRING` in Doppler production config back to the
+   previous value (retained from step 6.4) and save. The previous
+   credential is the `neondb_owner`-as-runtime or
+   pre-role-separation connection string.
+2. **Redeploy the known-good Worker** via `workflow_dispatch` from the
+   last known-good SHA. The production deploy job's
+   `Bind NEON_CONNECTION_STRING secret to worker` step (see
+   `.github/workflows/workers-deploy.yml`) re-binds the restored
+   Doppler value to the Worker via `wrangler secret put` **before**
+   `wrangler deploy` runs — so restoring Doppler is sufficient; no
+   manual `wrangler secret put` is required for rollback. The Worker
+   reconnects with the restored credential on the next request.
+3. **Add the missing runtime grant** through a reviewed forward fix —
+   re-run the specific `GRANT` statement from step 2 on main as
+   `neondb_owner` via an interactive psql session. Do not bundle grant
+   changes into a migration file; role administration is not schema
+   DDL.
+4. **Repeat verification:** run `scripts/verify-runtime-role.js`
+   against main's `app_runtime` URL in **read-only mode**, then re-cut
+   over (step 6.3–6.5). If the missing grant was on `schema_migrations`
+   (i.e., the `REVOKE` was not applied), re-apply the
+   `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime`
+   before re-verifying.
+
+This is the same three-layer rollback discipline as Step 4: restore the
+known-good state first, then forward-fix the root cause, then
+re-verify. Do not default to a destructive down migration.
+
+<a id="runtime-role-cleanup"></a>
+
+#### Runtime role cleanup
+
+After the role separation is proven on main and the canary passes:
+
+1. **Delete the `migration-role-check` branch** via the Neon console or
+   API. It is no longer needed.
+2. **Delete the malformed `" migration_runner"` role** from main through
+   the Neon Console. Before deleting, confirm it owns no objects and is
+   unused:
+   ```sql
+   -- Run as neondb_owner on main. If either query returns rows, do NOT
+   -- delete the role — reassign or drop the dependent objects first.
+   SELECT n.nspname || '.' || c.relname AS owned_object
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relowner = '" migration_runner"'::regrole;
+
+   SELECT n.nspname || '.' || p.proname AS owned_function
+     FROM pg_proc p
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE p.proowner = '" migration_runner"'::regrole;
+   ```
+   If both queries return zero rows, delete the role via the Neon
+   Console (Settings → Roles). Do **not** recreate it — it is
+   unnecessary under this ownership model.
+3. **Record the cleanup** in the sign-off section below.
 
 ---
 
@@ -366,13 +816,13 @@ fi
 #    postgres. The connection_uri endpoint returns a complete, callable
 #    PostgreSQL URI (.uri) for the restored branch. It REQUIRES both
 #    database_name AND role_name (the request returns HTTP 400 without
-#    role_name). Use the same DDL role here that migrate:verify will use
-#    below — the URI embeds the role so psql and the migration runner
-#    authenticate as the same identity.
+#    role_name). Use the schema owner (neondb_owner) here — the same
+#    identity migrate:verify will use below — so the URI embeds the role
+#    and psql and the migration runner authenticate as the same identity.
 #    https://api-docs.neon.tech/reference/getconnectionuri
-export DRILL_ROLE="<ddl-role>"
+export DRILL_ROLE="neondb_owner"
 if [ -z "$DRILL_ROLE" ]; then
-  echo "::error::DRILL_ROLE is empty. Set it to the dedicated DDL role before continuing."
+  echo "::error::DRILL_ROLE is empty. Set it to neondb_owner (the schema owner / migration identity) before continuing."
   exit 1
 fi
 DRILL_BRANCH_ID=$(curl --fail-with-body --silent --show-error \
@@ -841,7 +1291,7 @@ MIGRATION_ALLOWED_DATABASE=<prod-db> \
 MIGRATION_ENVIRONMENT=production \
 MIGRATION_CONFIRM_PRODUCTION="APPLY <prod-host>/<prod-db>" \
 MIGRATION_TARGET_KIND=primary \
-MIGRATION_ROLE=<ddl-role> \
+MIGRATION_ROLE=neondb_owner \
 npm run migrate:verify
 ```
 
@@ -866,11 +1316,13 @@ session — its evidence document is the manual verification record.
 | Date completed | `____________________________` |
 | Git SHA deployed | `____________________________` |
 | Workflow run URL | `____________________________` |
+| Runtime role separation (app_runtime provisioned, REVOKE on schema_migrations applied, verify-runtime-role.js PASS — active on branch, read-only on main) | [ ] PASS |
 | Step 1 (PITR drill) | [ ] PASS |
 | Step 2 (CI deploy) | [ ] PASS |
 | Step 3 (canary) | [ ] PASS |
 | Step 4 (rollback) | [ ] N/A [ ] executed |
 | Step 5 (post-deploy verify) | [ ] PASS |
+| Runtime role cleanup (migration-role-check branch deleted, malformed " migration_runner" role deleted) | [ ] done |
 
 ### Evidence attachments
 
@@ -878,6 +1330,7 @@ Paste links to CI runs, artifacts, or commit output files to the PR:
 
 - [ ] CI workflow run URL: `____________________________`
 - [ ] PITR drill output: `____________________________`
+- [ ] Runtime role verification evidence (`runtime-role-evidence.json`): `____________________________`
 - [ ] Migration artifacts (status/preflight/apply/seed/verify): `____________________________`
 - [ ] Canary evidence artifact: `____________________________`
 - [ ] Post-deploy verify output: `____________________________`
@@ -942,21 +1395,34 @@ off task 1.7.B-execute and the parent 1.7 checkbox.
 ### Doppler production config (existing + new)
 
 The migration CLIs and canary orchestrator read these from the environment
-(injected by `doppler run`):
+(injected by `doppler run`). After runtime role separation (see
+[Runtime role separation](#runtime-role-separation-appruntime-provisioning)
+above), the migration identity and the Worker runtime identity are
+**distinct**:
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL_UNPOOLED` | Direct (non-pooled) Neon connection for migrations |
+| `DATABASE_URL_UNPOOLED` | Direct (non-pooled) Neon connection authenticated as **`neondb_owner`** (the schema owner / migration identity). Used by `migrate:*` commands. |
 | `MIGRATION_ALLOWED_HOST` | Allowlisted hostname |
 | `MIGRATION_ALLOWED_DATABASE` | Allowlisted database name |
 | `MIGRATION_CONFIRM_PRODUCTION` | `APPLY <host>/<database>` confirmation token |
-| `MIGRATION_ROLE` | Dedicated DDL migration role name |
+| `MIGRATION_ROLE` | `neondb_owner` — the schema owner is the migration identity. The runner's `verifyMigrationRole` guard asserts `current_user` equals this value. |
 | `MIGRATION_SEED_CONFIRMATION` | `SEED <host>/<database>` confirmation token |
-| `NEON_CONNECTION_STRING` | Worker's Neon connection (existing) |
+| `NEON_CONNECTION_STRING` | **Pooled** Neon connection authenticated as **`app_runtime`** (the restricted runtime identity). Read by the Worker (`workers/src/utils/db-connection.ts` resolves `NEON_CONNECTION_STRING \|\| DATABASE_URL`). `app_runtime` has DML privileges but no DDL. |
 | `CLOUDFLARE_API_TOKEN` | Worker deploy (existing) |
 | `CLOUDFLARE_ACCOUNT_ID` | Worker deploy (existing) |
 | `CLERK_SECRET_KEY` | Production Clerk secret key — used by the canary orchestrator (`scripts/run-authenticated-smoke.js`) to mint short-lived session tokens for the smoke identity. Full Backend API access; blast radius controlled by the protected GitHub `production` environment. |
 | `SMOKE_USER_ID` | Clerk user ID of the dedicated smoke-test identity. Not secret, but kept in Doppler so the canary configuration lives in one place. |
+
+> **No workflow output exposes either password.** The migration CLIs
+> redact connection strings (host + database only, no password).
+> `scripts/verify-runtime-role.js` redacts the `app_runtime` password
+> from its JSON evidence, including in nested probe error messages
+> (active-probe mode only). The canary's `CLERK_SECRET_KEY` and
+> `SMOKE_USER_ID` are injected via `doppler run` and never printed. The
+> previous Worker connection secret is retained securely (outside
+> Doppler, in operator-controlled storage) until the canary passes, so
+> the role cutover can be rolled back without re-provisioning.
 
 ---
 
