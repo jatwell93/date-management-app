@@ -408,6 +408,7 @@ test('verify passes on a migrated and seeded database', async () => {
     assert.equal(report.referenceDataOk, true);
     assert.equal(report.catalogOk, true);
     assert.equal(report.verified, true);
+    assert.match(report.report, /Reference data \(tier_feature_flags\): OK \(48 rows\)/);
     assert.match(report.report, /Verdict: PASS/);
   } finally {
     await pg.close();

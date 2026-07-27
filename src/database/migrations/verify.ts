@@ -42,7 +42,7 @@ export interface VerifyReport {
   tablesOk: boolean;
   /** Missing table names (empty when tablesOk is true). */
   missingTables: string[];
-  /** Reference-data set exactly matches the declared 20 rows. */
+  /** Reference-data set exactly matches the declared rows. */
   referenceDataOk: boolean;
   /** Reference-data mismatch descriptions (empty when referenceDataOk is true). */
   referenceDataMismatches: string[];
@@ -173,7 +173,9 @@ function formatVerifyReport(input: {
   lines.push(`Migration verification`);
   lines.push(`  Tables: ${input.tablesOk ? 'OK' : 'MISSING ' + input.missingTables.join(', ')}`);
   lines.push(
-    `  Reference data (tier_feature_flags): ${input.referenceDataOk ? 'OK (20 rows)' : 'MISMATCH'}`,
+    `  Reference data (tier_feature_flags): ${
+      input.referenceDataOk ? `OK (${TIER_FEATURE_FLAGS.length} rows)` : 'MISMATCH'
+    }`,
   );
   if (input.referenceDataMismatches.length > 0) {
     for (const mismatch of input.referenceDataMismatches) lines.push(`    - ${mismatch}`);

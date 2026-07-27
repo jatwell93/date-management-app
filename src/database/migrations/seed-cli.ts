@@ -4,7 +4,7 @@
  * Usage:
  *   npm run migrate:seed
  *
- * Idempotently upserts the 20-row tier_feature_flags reference set and verifies
+ * Idempotently upserts the declared tier_feature_flags reference set and verifies
  * the result. Mutating: requires a primary target, the dedicated DDL migration
  * role, and (for production) an explicit seed confirmation distinct from the
  * production target confirmation.

@@ -5,8 +5,8 @@
  *   npm run migrate:verify
  *
  * Read-only: verifies the schema (expected tables present + catalog matches
- * the checked-in fingerprint) and the reference data (tier_feature_flags is
- * exactly the declared 20 rows). No writes, no advisory lock.
+ * the checked-in fingerprint) and the reference data (tier_feature_flags
+ * exactly matches the declared set). No writes, no advisory lock.
  *
  * Environment variables:
  *   DATABASE_URL_UNPOOLED            — direct PostgreSQL connection string
