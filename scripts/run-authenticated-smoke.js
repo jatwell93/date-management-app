@@ -72,6 +72,13 @@ async function createSession(clerkFetch, opts) {
       );
     }
     return { sessionId: body.id, userId: body.user_id };
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw new Error(
+        `createSession timed out after ${timeoutMs}ms; Clerk may have created the session before the response was received`,
+      );
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }

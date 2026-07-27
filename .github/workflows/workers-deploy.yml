@@ -352,10 +352,13 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
+          set +e
           doppler run -- node scripts/run-authenticated-smoke.js > canary-round-1.json 2> canary-round-1.stderr
+          SMOKE_EXIT=$?
+          set -e
           cat canary-round-1.json
-          # run-authenticated-smoke exits 1 on probe/mint/revoke failure — propagate
-          exit $?
+          cat canary-round-1.stderr >&2
+          exit "$SMOKE_EXIT"
 
       - name: Canary wait window
         run: |
@@ -366,9 +369,13 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
+          set +e
           doppler run -- node scripts/run-authenticated-smoke.js > canary-round-2.json 2> canary-round-2.stderr
+          SMOKE_EXIT=$?
+          set -e
           cat canary-round-2.json
-          exit $?
+          cat canary-round-2.stderr >&2
+          exit "$SMOKE_EXIT"
 
       - name: Canary round 2 — Sentry new-issue check (fail open)
         if: ${{ env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != '' }}

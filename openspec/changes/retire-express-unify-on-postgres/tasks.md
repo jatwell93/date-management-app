@@ -286,8 +286,8 @@
             `Authorization: Bearer <minted-JWT>` on each request (a 401
             is NOT treated as success); the session is revoked in a
             `finally` block after each round. All four scripts have
-            unit tests (23 + 21 + 16 + 29 tests, mocked fetch),
-            totalling 89. The fourth script,
+            unit tests (23 + 21 + 17 + 29 tests, mocked fetch),
+            totalling 90. The fourth script,
             `scripts/neon-poll-operations.js`, polls Neon restore
             operation IDs to a terminal state with a bounded deadline
             and per-request AbortSignal timeout (used by the runbook
@@ -314,11 +314,11 @@
             messages. Regression tests cover ledger-access denial,
             undefined-column false-success (42703 must fail), sequence
             non-use, identifier quoting, and nested-error redaction.
-            Total script tests: 180 (96 existing + 68 runtime-role +
-            16 Worker-binding/isolation; the 96 existing tests include
-            89 across the four migration scripts + 6 across
+            Total script tests: 183 (97 existing + 68 runtime-role +
+            18 Worker-binding/isolation; the 97 existing tests include
+            90 across the four migration scripts + 6 across
             `validate-stripe-deployment-config` and
-            `mem-memory-scripts`).
+            `mem-memory-scripts`, plus 1 root lifecycle test).
             **Worker secret binding on deploy (2026-07-26):**
             `NEON_CONNECTION_STRING` is a Worker secret
             (`wrangler.toml:168`, `workers/src/types/env.d.ts:35`), not
@@ -340,7 +340,7 @@
             same way, with an explicit cleanup step that deletes the
             Worker (and its secrets) after the cutover. A static
             regression test,
-            `scripts/verify-workers-deploy-bindings.test.js` (17 tests,
+            `scripts/verify-workers-deploy-bindings.test.js` (18 tests,
             dependency-free line-based YAML scanner), parses
             `workers-deploy.yml` and asserts the binding step exists
             and precedes `wrangler deploy`. It also verifies that preview

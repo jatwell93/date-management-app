@@ -1036,7 +1036,7 @@ cutover, or a rollback to the previous credential) takes effect on the
 next deploy with no manual `wrangler secret put`. The preview
 role-check Worker (a separately-named Worker with its own secret store)
 is bound the same way in the runbook. A static regression test,
-`scripts/verify-workers-deploy-bindings.test.js` (17 tests), parses the
+`scripts/verify-workers-deploy-bindings.test.js` (18 tests), parses the
 workflow YAML and asserts the binding step exists and precedes
 `wrangler deploy`. It also verifies that the dedicated
 `workers/wrangler.toml` `role_check` environment exists, uses the
@@ -1092,7 +1092,7 @@ destructive down migrations.
   evidence (session ID, user ID, timestamps, probe results, revocation
   result). Fails closed if minting or revocation fails; revocation
   failure fails the canary (security signal) without masking an earlier
-  probe failure. 16 unit tests (mocked Clerk fetch + fake smoke main),
+  probe failure. 17 unit tests (mocked Clerk fetch + fake smoke main),
   covering successful flow, probe failure still revokes, mint failure
   cleanup, revoke failure reported, no secret/JWT in output, fresh
   session per round.
@@ -1163,8 +1163,8 @@ production config for the canary orchestrator's session minting. These
 are documented in the runbook's secrets reference section.
 
 **Outstanding evidence from this session.** The CI workflow, scripts, and
-runbook are complete and verified locally (compile clean, 181 script tests
-pass — 96 existing + 68 from `verify-runtime-role` + 17 from
+runbook are complete and verified locally (compile clean, 183 script tests
+pass — 97 existing + 68 from `verify-runtime-role` + 18 from
 `verify-workers-deploy-bindings`, lint clean, OpenSpec valid).
 The first real production deploy with this workflow (1.7.B-execute) is
 deferred to the operator. New GitHub environment secrets and variables

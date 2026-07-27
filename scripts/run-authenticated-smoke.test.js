@@ -122,6 +122,22 @@ test('createSession: throws on non-2xx response', async () => {
   );
 });
 
+test('createSession: reports timeout and possible server-side creation on abort', async () => {
+  const clerkFetch = (_url, options) =>
+    new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        const error = new Error('The operation was aborted');
+        error.name = 'AbortError';
+        reject(error);
+      });
+    });
+
+  await assert.rejects(
+    createSession(clerkFetch, { secretKey: SECRET, userId: USER_ID, timeoutMs: 5 }),
+    /createSession timed out after 5ms.*may have created the session/i,
+  );
+});
+
 test('createSession: throws if returned session user_id does not match', async () => {
   const clerkFetch = makeClerkFetch({
     'POST /sessions': {

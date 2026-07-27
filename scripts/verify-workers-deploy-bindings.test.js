@@ -27,6 +27,28 @@ test('preview migration validation uses a separate least-privilege Doppler token
   );
 });
 
+test('canary smoke rounds preserve the probe exit code while printing evidence', () => {
+  const workflow = fs.readFileSync(
+    path.resolve(__dirname, '..', '.github', 'workflows', 'workers-deploy.yml'),
+    'utf8',
+  );
+
+  for (const round of [1, 2]) {
+    const step = workflow.match(
+      new RegExp(
+        `- name: Canary round ${round}[^\\r\\n]*\\r?\\n([\\s\\S]*?)(?=\\r?\\n\\s+- name:)`,
+      ),
+    );
+    assert.ok(step, `canary round ${round} step must exist`);
+    assert.match(step[1], /set \+e/);
+    assert.match(step[1], new RegExp(`SMOKE_EXIT=\\$\\?`));
+    assert.match(step[1], /set -e/);
+    assert.match(step[1], new RegExp(`cat canary-round-${round}\\.json`));
+    assert.match(step[1], new RegExp(`cat canary-round-${round}\\.stderr >&2`));
+    assert.match(step[1], /exit "\$SMOKE_EXIT"/);
+  }
+});
+
 test('real workflow: NEON_CONNECTION_STRING binding step precedes wrangler deploy', () => {
   const workflow = loadWorkflow();
   const errors = verifyProductionBindingOrder(workflow);
