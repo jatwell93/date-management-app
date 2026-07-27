@@ -30,8 +30,57 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { performAdoption, selectAdoptionTarget, type AdoptionColumnException } from './adopt';
+import {
+  isAdoptionModeMutating,
+  performAdoption,
+  selectAdoptionTarget,
+  type AdoptionColumnException,
+} from './adopt';
+import { assertTargetKind } from './target';
 import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
+
+test('adoption target guard treats dry-run as read-only and apply as mutating', () => {
+  assert.equal(isAdoptionModeMutating('dry-run'), false);
+  assert.equal(isAdoptionModeMutating('apply'), true);
+
+  assert.equal(
+    assertTargetKind({
+      targetKind: 'development',
+      mutating: isAdoptionModeMutating('dry-run'),
+    }),
+    'development',
+  );
+  assert.equal(
+    assertTargetKind({
+      targetKind: 'restore-drill',
+      mutating: isAdoptionModeMutating('dry-run'),
+    }),
+    'restore-drill',
+  );
+  assert.throws(
+    () =>
+      assertTargetKind({
+        targetKind: 'development',
+        mutating: isAdoptionModeMutating('apply'),
+      }),
+    /only "primary" is allowed/,
+  );
+  assert.throws(
+    () =>
+      assertTargetKind({
+        targetKind: 'restore-drill',
+        mutating: isAdoptionModeMutating('apply'),
+      }),
+    /only "primary" is allowed/,
+  );
+  assert.equal(
+    assertTargetKind({
+      targetKind: 'primary',
+      mutating: isAdoptionModeMutating('apply'),
+    }),
+    'primary',
+  );
+});
 
 const TEST_DEPLOYMENT_SHA = 'a'.repeat(40);
 const HISTORY_DIR = path.resolve('database/migrations');

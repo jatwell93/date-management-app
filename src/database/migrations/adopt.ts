@@ -67,6 +67,11 @@ import {
 
 export type AdoptionMode = 'dry-run' | 'apply';
 
+/** Only approved adoption stamps mutate the database; catalog dry-runs are read-only. */
+export function isAdoptionModeMutating(mode: AdoptionMode): boolean {
+  return mode === 'apply';
+}
+
 /**
  * The result of an adoption check. Describes whether the existing database
  * matches the expected schema, what would be stamped, and any differences.

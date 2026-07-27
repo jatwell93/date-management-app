@@ -314,8 +314,8 @@
             messages. Regression tests cover ledger-access denial,
             undefined-column false-success (42703 must fail), sequence
             non-use, identifier quoting, and nested-error redaction.
-            Total script tests: 179 (95 existing + 68 runtime-role +
-            16 Worker-binding/isolation; the 95 existing tests include
+            Total script tests: 180 (96 existing + 68 runtime-role +
+            16 Worker-binding/isolation; the 96 existing tests include
             89 across the four migration scripts + 6 across
             `validate-stripe-deployment-config` and
             `mem-memory-scripts`).

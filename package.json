@@ -46,9 +46,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "compile": "tsc",
-    "prepare": "npm.cmd run compile",
-    "pretest": "npm.cmd run compile",
-    "posttest": "npm.cmd run lint"
+    "prepare": "npm run compile",
+    "pretest": "npm run compile",
+    "posttest": "npm run lint"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",

@@ -12,7 +12,7 @@
  *   MIGRATION_ENVIRONMENT            — development | test | staging | production
  *   MIGRATION_CONFIRM_PRODUCTION     — "APPLY <host>/<database>" (production only)
  *   MIGRATION_DEPLOYMENT_SHA         — git commit SHA for the audit ledger
- *   MIGRATION_TARGET_KIND            — must be "primary" for a mutating command
+ *   MIGRATION_TARGET_KIND            — any declared kind for --dry-run; "primary" for --apply
  *   MIGRATION_ROLE                   — dedicated DDL migration role (must match current_user)
  *   MIGRATION_ADOPTION_POINT         — optional historical migration ID (for example "0009")
  *
@@ -40,7 +40,12 @@ import path from 'node:path';
 
 import { Client } from 'pg';
 
-import { performAdoption, formatMigrationError, selectAdoptionTarget } from './adopt';
+import {
+  performAdoption,
+  formatMigrationError,
+  isAdoptionModeMutating,
+  selectAdoptionTarget,
+} from './adopt';
 import { loadMigrationHistory, MigrationExecutionError, validateMigrationTarget } from './runner';
 import { assertTargetKind, verifyMigrationRole } from './target';
 
@@ -80,7 +85,10 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
-  assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: true });
+  assertTargetKind({
+    targetKind: process.env.MIGRATION_TARGET_KIND,
+    mutating: isAdoptionModeMutating(mode),
+  });
   const deploymentSha = process.env.MIGRATION_DEPLOYMENT_SHA;
   if (!deploymentSha) throw new Error('MIGRATION_DEPLOYMENT_SHA is required');
 

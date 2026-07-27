@@ -833,7 +833,7 @@ section is filled.**
 **Outstanding evidence from this session.** The e2e suite compiles clean
 and fails-closed correctly (verified: exit code 1, clear error message
 when `MIGRATION_E2E_DATABASE_URL` is unset). The pglite suite still passes
-(65/65). The e2e suite was **not** executed against a real Postgres locally
+(66/66). The e2e suite was **not** executed against a real Postgres locally
 because the Docker daemon was not running on the Windows dev machine. CI
 will exercise it on PR open. The operator Neon gate (1.6.B-execute) is
 deferred to the operator.
@@ -1159,8 +1159,8 @@ production config for the canary orchestrator's session minting. These
 are documented in the runbook's secrets reference section.
 
 **Outstanding evidence from this session.** The CI workflow, scripts, and
-runbook are complete and verified locally (compile clean, 179 script tests
-pass — 95 existing + 68 from `verify-runtime-role` + 16 from
+runbook are complete and verified locally (compile clean, 180 script tests
+pass — 96 existing + 68 from `verify-runtime-role` + 16 from
 `verify-workers-deploy-bindings`, lint clean, OpenSpec valid).
 The first real production deploy with this workflow (1.7.B-execute) is
 deferred to the operator. New GitHub environment secrets and variables
