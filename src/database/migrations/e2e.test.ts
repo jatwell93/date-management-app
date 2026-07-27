@@ -205,13 +205,8 @@ after(async () => {
 async function applyMigrationsDirectly(client: Client, stopId?: string): Promise<void> {
   const history = await loadMigrationHistory(HISTORY_DIR);
   for (const migration of history) {
-    if (stopId !== undefined && migration.id === stopId) {
-      await client.query(migration.sql);
-      return;
-    }
-    if (stopId === undefined) {
-      await client.query(migration.sql);
-    }
+    await client.query(migration.sql);
+    if (stopId !== undefined && migration.id === stopId) return;
   }
   if (stopId !== undefined) {
     throw new Error(`Migration ${stopId} not found in history`);
@@ -346,7 +341,7 @@ test('e2e: concurrent invocation refusal — advisory lock held → runner refus
     // Client A manually acquires the migration advisory lock and holds it.
     // This simulates a concurrent migration process (or a stuck lock).
     const { MIGRATION_LOCK_NAMESPACE, MIGRATION_LOCK_KEY } = await import('./runner');
-    const lockResult = await clientA.query('SELECT pg_advisory_lock($1, $2) AS acquired', [
+    const lockResult = await clientA.query('SELECT pg_try_advisory_lock($1, $2) AS acquired', [
       MIGRATION_LOCK_NAMESPACE,
       MIGRATION_LOCK_KEY,
     ]);
@@ -372,11 +367,11 @@ test('e2e: concurrent invocation refusal — advisory lock held → runner refus
 
 /**
  * Build a temp migration history that is a copy of the real history plus one
- * extra migration `0011` marked `transaction: forbidden`. The 0011 up.sql is
- * deliberately multi-statement: a visible first DDL that succeeds, a second
- * statement that succeeds, and a third statement that fails. Because the
- * migration is non-transactional, the first two statements COMMIT and remain
- * visible after the third throws — producing a real partial-schema state.
+ * extra migration `0011` marked `transaction: forbidden`. Its single
+ * `CREATE UNIQUE INDEX CONCURRENTLY` statement targets duplicate data, so
+ * PostgreSQL fails the build but deliberately leaves an invalid index behind.
+ * This is a real partial catalog state produced by a non-transactional DDL
+ * failure, without relying on multi-statement query transaction semantics.
  *
  * Used by the interruption/recovery test to exercise the actual
  * `applyNonTransactional` interruption path (not a faked ledger row).
@@ -388,6 +383,7 @@ async function buildTempHistoryWithFailingNonTxMigration(): Promise<{
   upFile: string;
   downFile: string;
   probeTable: string;
+  probeIndex: string;
 }> {
   const dir = await mkdtemp(path.join(tmpdir(), 'migration-interruption-'));
   await cp(HISTORY_DIR, dir, { recursive: true });
@@ -397,17 +393,12 @@ async function buildTempHistoryWithFailingNonTxMigration(): Promise<{
     migrations: unknown[];
   };
   const probeTable = 'e2e_interruption_probe';
+  const probeIndex = 'e2e_interruption_probe_value_idx';
   const upFile = `0011_${probeTable}.up.sql`;
   const downFile = `0011_${probeTable}.down.sql`;
 
-  // First two statements succeed and COMMIT (non-transactional); the third
-  // fails and aborts the runner. This leaves the table and the row visible.
-  const failingUpSql = [
-    `CREATE TABLE ${probeTable} (id integer NOT NULL);`,
-    `INSERT INTO ${probeTable} (id) VALUES (1);`,
-    `SELECT * FROM e2e_interruption_does_not_exist;`,
-  ].join('\n');
-  const downSql = `DROP TABLE IF EXISTS ${probeTable};`;
+  const failingUpSql = `CREATE UNIQUE INDEX CONCURRENTLY ${probeIndex} ON ${probeTable} (value);`;
+  const downSql = `DROP INDEX CONCURRENTLY IF EXISTS ${probeIndex};`;
 
   await writeFile(path.join(dir, upFile), failingUpSql);
   await writeFile(path.join(dir, downFile), downSql);
@@ -428,10 +419,10 @@ async function buildTempHistoryWithFailingNonTxMigration(): Promise<{
   });
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 
-  return { dir, upFile, downFile, probeTable };
+  return { dir, upFile, downFile, probeTable, probeIndex };
 }
 
-test('e2e: interruption/recovery — real partial non-transactional DDL → resume refused → repair → resume succeeds', async () => {
+test('e2e: interruption/recovery — failed concurrent index → resume refused → repair → resume succeeds', async () => {
   const client = await createClient();
   let tempDir: string | undefined;
   try {
@@ -441,39 +432,33 @@ test('e2e: interruption/recovery — real partial non-transactional DDL → resu
     const realHistory = await loadMigrationHistory(HISTORY_DIR);
     await applyPendingMigrations(client, realHistory, { deploymentSha: TEST_DEPLOYMENT_SHA });
 
-    // 2. Build a temp history with an extra 0011 migration that is
-    //    transaction: forbidden and fails on its THIRD statement. The first
-    //    two statements (CREATE TABLE + INSERT) commit outside a transaction,
-    //    so the partial schema is visible after the failure.
+    // 2. Build a temp history with an extra transaction-forbidden migration.
+    //    Duplicate source rows make CREATE UNIQUE INDEX CONCURRENTLY fail,
+    //    leaving an invalid index as PostgreSQL's documented partial state.
     const temp = await buildTempHistoryWithFailingNonTxMigration();
     tempDir = temp.dir;
+    await client.query(`CREATE TABLE ${temp.probeTable} (value integer NOT NULL)`);
+    await client.query(`INSERT INTO ${temp.probeTable} (value) VALUES (1), (1)`);
     const tempHistory = await loadMigrationHistory(temp.dir);
 
     // 3. Apply the temp history. The runner sees 0011 as pending, calls
     //    applyNonTransactional, writes 'applying', runs the SQL, and the
-    //    third statement throws. The ledger row for 0011 stays at 'applying'.
+    //    concurrent unique-index build fails. The ledger stays at 'applying'.
     await assert.rejects(
       applyPendingMigrations(client, tempHistory, { deploymentSha: TEST_DEPLOYMENT_SHA }),
-      /e2e_interruption_does_not_exist/,
+      /could not create unique index|duplicate key/i,
     );
 
-    // 4. Prove the partial DDL is really visible — the table exists with the
-    //    row inserted before the failure. This is the crux: a faked ledger
-    //    row would not produce this evidence.
-    const probeExists = await client.query(
-      `SELECT to_regclass('public.${temp.probeTable}') AS regclass`,
+    // 4. Prove PostgreSQL left the failed concurrent index behind and marked
+    //    it invalid. A fabricated ledger row would not produce this evidence.
+    const invalidIndex = await client.query(
+      `SELECT i.indisvalid
+       FROM pg_index i
+       JOIN pg_class c ON c.oid = i.indexrelid
+       WHERE c.relname = $1`,
+      [temp.probeIndex],
     );
-    assert.equal(
-      (probeExists.rows[0] as { regclass?: string | null }).regclass,
-      temp.probeTable,
-      'Partial DDL (CREATE TABLE) should be visible after non-tx interruption',
-    );
-    const probeRows = await client.query(`SELECT count(*)::int AS n FROM ${temp.probeTable}`);
-    assert.equal(
-      (probeRows.rows[0] as { n: number }).n,
-      1,
-      'Partial DML (INSERT) should be visible',
-    );
+    assert.equal((invalidIndex.rows[0] as { indisvalid?: boolean }).indisvalid, false);
 
     // 5. The ledger row for 0011 is stuck at 'applying'.
     const ledgerRow = await client.query("SELECT state FROM schema_migrations WHERE id = '0011'");
@@ -490,16 +475,16 @@ test('e2e: interruption/recovery — real partial non-transactional DDL → resu
     assert.deepEqual(statusBefore.interrupted, ['0011']);
 
     // 8. Explicit repair — the documented operator path:
-    //    a) roll back the partial DDL (drop the probe table),
+    //    a) roll back the partial DDL (drop the invalid index),
     //    b) delete the interrupted ledger row,
     //    c) fix the migration SQL (rewrite the up.sql without the failing
     //       third statement),
     //    d) re-apply.
-    await client.query(`DROP TABLE IF EXISTS ${temp.probeTable}`);
+    await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${temp.probeIndex}`);
     await client.query("DELETE FROM schema_migrations WHERE id = '0011'");
     await writeFile(
       path.join(temp.dir, temp.upFile),
-      `CREATE TABLE ${temp.probeTable} (id integer NOT NULL);`,
+      `CREATE INDEX CONCURRENTLY ${temp.probeIndex} ON ${temp.probeTable} (value);`,
     );
 
     // Re-load the history after rewriting 0011's up.sql (the checksum changes).
@@ -509,12 +494,15 @@ test('e2e: interruption/recovery — real partial non-transactional DDL → resu
     });
     assert.deepEqual(result.applied, ['0011']);
 
-    // 9. The probe table exists (clean, no row from the interrupted run), and
-    //    the ledger is healthy.
-    const probeAfter = await client.query(
-      `SELECT to_regclass('public.${temp.probeTable}') AS regclass`,
+    // 9. The repaired index is valid and the ledger is healthy.
+    const indexAfter = await client.query(
+      `SELECT i.indisvalid
+       FROM pg_index i
+       JOIN pg_class c ON c.oid = i.indexrelid
+       WHERE c.relname = $1`,
+      [temp.probeIndex],
     );
-    assert.equal((probeAfter.rows[0] as { regclass?: string | null }).regclass, temp.probeTable);
+    assert.equal((indexAfter.rows[0] as { indisvalid?: boolean }).indisvalid, true);
     const ledgerAfter = await client.query("SELECT state FROM schema_migrations WHERE id = '0011'");
     assert.equal((ledgerAfter.rows[0] as { state: string }).state, 'applied');
 
@@ -630,17 +618,11 @@ test('e2e: safe down migration — execute 0010 down SQL directly → schema rev
     const diff = report.catalogDiff;
     assert.equal(diff.tablesOnlyInExpected.length, 0, 'No tables should be missing');
     assert.equal(diff.tablesOnlyInActual.length, 0, 'No extra tables expected');
-    assert.equal(diff.columnsOnlyInExpected.length, 0, 'No columns should be missing');
-    assert.equal(diff.columnsOnlyInActual.length, 0, 'No extra columns expected');
-    assert.ok(
-      diff.columnsWithKnownDifferences.length > 0,
-      'Expected limit_value in columnsWithKnownDifferences',
-    );
-    const limitValueDiff = diff.columnsWithKnownDifferences.find((c) => c.includes('limit_value'));
-    assert.ok(
-      limitValueDiff,
-      `Expected limit_value in known differences: ${JSON.stringify(diff.columnsWithKnownDifferences)}`,
-    );
+    assert.equal(diff.columnsOnlyInExpected.length, 1);
+    assert.equal(diff.columnsOnlyInActual.length, 1);
+    assert.match(diff.columnsOnlyInExpected[0], /tier_feature_flags\|limit_value/);
+    assert.match(diff.columnsOnlyInActual[0], /tier_feature_flags\|limit_value/);
+    assert.deepEqual(diff.columnsWithKnownDifferences, []);
   } finally {
     await client.end();
   }

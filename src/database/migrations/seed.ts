@@ -169,7 +169,7 @@ export async function seedTierFeatureFlags(client: MigrationClient): Promise<See
     try {
       await client.query('ROLLBACK');
     } catch (rollbackError) {
-      throw new MigrationExecutionError('Seed failed and rollback also failed', [
+      primaryError = new MigrationExecutionError('Seed failed and rollback also failed', [
         error,
         rollbackError,
       ]);

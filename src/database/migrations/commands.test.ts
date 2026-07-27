@@ -12,7 +12,12 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
-import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
+import {
+  applyPendingMigrations,
+  loadMigrationHistory,
+  MigrationExecutionError,
+  type MigrationClient,
+} from './runner';
 import { assertTargetKind, verifyMigrationRole, type TargetKind } from './target';
 import { getMigrationStatus } from './status';
 import { runPreflight } from './preflight';
@@ -303,6 +308,31 @@ test('seed declares all eight required features for all six tiers', () => {
       new Set(requiredFeatures),
     );
   }
+});
+
+test('seed preserves seed, rollback, and advisory-unlock errors when all three fail', async () => {
+  const seedError = new Error('seed failure');
+  const rollbackError = new Error('rollback failure');
+  const unlockError = new Error('unlock failure');
+  const client: MigrationClient = {
+    async query(sql: string) {
+      if (sql.includes('pg_try_advisory_lock')) return { rows: [{ acquired: true }] };
+      if (sql.startsWith('INSERT INTO tier_feature_flags')) throw seedError;
+      if (sql === 'ROLLBACK') throw rollbackError;
+      if (sql.includes('pg_advisory_unlock')) throw unlockError;
+      return { rows: [] };
+    },
+  };
+
+  await assert.rejects(
+    seedTierFeatureFlags(client),
+    (error: unknown) =>
+      error instanceof MigrationExecutionError &&
+      error.errors.length === 3 &&
+      error.errors.includes(seedError) &&
+      error.errors.includes(rollbackError) &&
+      error.errors.includes(unlockError),
+  );
 });
 
 test('seed upserts the 48 tier_feature_flags rows and verifies them', async () => {

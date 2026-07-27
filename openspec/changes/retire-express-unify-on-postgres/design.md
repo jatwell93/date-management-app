@@ -833,7 +833,7 @@ section is filled.**
 **Outstanding evidence from this session.** The e2e suite compiles clean
 and fails-closed correctly (verified: exit code 1, clear error message
 when `MIGRATION_E2E_DATABASE_URL` is unset). The pglite suite still passes
-(66/66). The e2e suite was **not** executed against a real Postgres locally
+(67/67). The e2e suite was **not** executed against a real Postgres locally
 because the Docker daemon was not running on the Windows dev machine. CI
 will exercise it on PR open. The operator Neon gate (1.6.B-execute) is
 deferred to the operator.
