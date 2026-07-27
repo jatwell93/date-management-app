@@ -152,9 +152,9 @@
       not have ever inserted them. Added migration `0010_alter_tier_feature_flags_limit_value_to_bigint`
       (expand-compatible, forward-fix recovery) and regenerated `catalog-fingerprint.json`. The
       bigint-vs-integer divergence is allowlisted in `catalog-comparison.ts` until the Prisma schema
-      is updated (Phase 4). Tests: `commands.test.ts` covers all guards + commands (25 new tests,
+      is updated (Phase 4). Tests: `commands.test.ts` covers all guards + commands (26 new tests,
       pglite-backed); existing `adopt.test.ts`/`runner.test.ts`/`baseline.fingerprint.test.ts`
-      updated for 0010. `npm run test:migrations` → 61/61 pass.
+      updated for 0010. Current `npm run test:migrations` → 68/68 pass.
 - [ ] 1.6 Prove the runner end-to-end against isolated PostgreSQL/Neon targets: fresh install,
       existing-schema adoption, concurrent invocation refusal, interruption/recovery, checksum/catalog
       drift, safe down migration, forward fix, Worker rollback with expanded schema, and restore recovery.
@@ -197,9 +197,10 @@
             the Worker at the post-0010 branch via `NEON_CONNECTION_STRING` — the env var the Worker
             reads — and smoke-tests real endpoints `/health` and `/api/subscription/current`); teardown;
             and a sign-off section for operator evidence. Connection strings are not echoed in full
-            (passwords redacted). The stale `storage_bytes` oversized-row expectation was corrected:
-            the current 48-row seed's largest `limit_value` is 250000, so the down succeeds cleanly on
-            a fresh branch (the destructive classification is forward-looking).
+            (passwords redacted). The 54-row contract includes the six current `storage_bytes` limits,
+            so the guarded down first proves that PostgreSQL refuses the five out-of-int4 values, then
+            succeeds only after an explicit lossy preparation on the isolated branch; the forward fix
+            widens the column and reseeds the declared values.
       - [ ] **1.6.B-execute** Operator-driven Neon gate execution. The runbook must be exercised
             end-to-end on a real Neon dev branch and the sign-off section filled with evidence (CI run
             URL, psql output, restore verification, old Worker smoke test). **Task 1.6 is not complete

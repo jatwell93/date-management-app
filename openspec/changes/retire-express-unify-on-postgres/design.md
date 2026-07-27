@@ -618,7 +618,7 @@ authoritative migration path no longer depends on Prisma or Express.
 | `migrate:preflight` | `preflight-cli.ts`        | `preflight.ts` | no         | Read-only readiness: connection, `current_user` role, schema/database `CREATE` privileges, write probe, ledger state, interrupted rows, ready verdict.  |
 | `migrate:apply`     | `cli.ts` (extended)       | `runner.ts`    | yes        | Apply pending migrations under the advisory lock with deployment-SHA audit. Now gated by role + target-kind.                                            |
 | `migrate:adopt`     | `adopt-cli.ts` (extended) | `adopt.ts`     | yes        | One-time ledger stamp for an existing schema. Now gated by role + target-kind.                                                                          |
-| `migrate:seed`      | `seed-cli.ts`             | `seed.ts`      | yes        | Idempotent upsert of the 48 `tier_feature_flags` reference rows + verify. Production requires `MIGRATION_SEED_CONFIRMATION=SEED <host>/<db>`.           |
+| `migrate:seed`      | `seed-cli.ts`             | `seed.ts`      | yes        | Idempotent upsert of the 54 `tier_feature_flags` reference rows + verify. Production requires `MIGRATION_SEED_CONFIRMATION=SEED <host>/<db>`.           |
 | `migrate:verify`    | `verify-cli.ts`           | `verify.ts`    | no         | Post-apply verification: expected tables present, `tier_feature_flags` row count + values match, catalog-vs-fingerprint drift check, PASS/FAIL verdict. |
 
 **Shared guards (`target.ts`):**
@@ -646,16 +646,19 @@ commands emit human-readable text with the same redacted target identity.
 Errors are formatted via `formatMigrationError`, which recursively redacts
 connection strings in nested causes.
 
-**Seed contract (`seed.ts`):** the 48 declared `(tier_level, feature_key,
+**Seed contract (`seed.ts`):** the 54 declared `(tier_level, feature_key,
 enabled, limit_value)` rows are upserted via `ON CONFLICT (tier_level,
 feature_key) DO UPDATE`. After upsert, the rows are re-read and compared
 field-by-field; any mismatch is reported and the command fails. This is
-idempotent and converges a pre-existing incorrect row to the declared value.
+idempotent and converges the retired production seed's `storage_bytes` rows
+to the current limits. The matrix contains nine keys for each of six tiers;
+the legacy backend startup validator intentionally checks only its existing
+eight-key subset until the Prisma `Int` mapping is replaced in Phase 4.
 
 **Verify contract (`verify.ts`):** three independent checks, all must pass:
 
 1. **Tables** — every table named in the fingerprint exists in `public`.
-2. **Reference data** — `tier_feature_flags` has exactly 48 rows and every
+2. **Reference data** — `tier_feature_flags` has exactly 54 rows and every
    declared `(tier_level, feature_key, enabled, limit_value)` tuple matches.
 3. **Catalog** — introspect the live catalog, normalize, deep-compare against
    `database/migrations/catalog-fingerprint.json` (the same artifact the
@@ -833,7 +836,7 @@ section is filled.**
 **Outstanding evidence from this session.** The e2e suite compiles clean
 and fails-closed correctly (verified: exit code 1, clear error message
 when `MIGRATION_E2E_DATABASE_URL` is unset). The pglite suite still passes
-(67/67). The e2e suite was **not** executed against a real Postgres locally
+(68/68). The e2e suite was **not** executed against a real Postgres locally
 because the Docker daemon was not running on the Windows dev machine. CI
 will exercise it on PR open. The operator Neon gate (1.6.B-execute) is
 deferred to the operator.
@@ -858,7 +861,7 @@ once on a single checked-out revision:
   (`migrate:preflight`, read-only readiness) → `pitr-check`
   (`scripts/check-neon-pitr.js`, Neon REST API restore-point verification
   scoped to the target branch) → `apply` (`migrate:apply`, expand-compatible
-  schema under advisory lock) → `seed` (`migrate:seed`, idempotent 48-row
+  schema under advisory lock) → `seed` (`migrate:seed`, idempotent 54-row
   reference data) → `verify` (`migrate:verify`, schema + reference data +
   catalog fingerprint check). Each step uploads its stdout as a CI artifact
   (30-day retention, `if: always()`) for audit. A failure in any step stops

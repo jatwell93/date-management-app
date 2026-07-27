@@ -2,14 +2,14 @@
  * Phase 1 task 1.5 — idempotent reference-data seed.
  *
  * Replaces the backend-owned `seed-tier-flags.js` (Prisma-based) with a
- * Prisma-independent raw-SQL upsert of the required 48-row `tier_feature_flags`
- * reference set: eight feature keys for each of the six current and transitional
- * tiers validated by backend startup health checks.
+ * Prisma-independent raw-SQL upsert of the required 54-row `tier_feature_flags`
+ * reference set: the eight keys checked by backend startup health plus
+ * `storage_bytes`, for each of the six current and transitional tiers.
  *
  * Idempotent: `INSERT ... ON CONFLICT (tier_level, feature_key) DO UPDATE` so
  * re-running after a migration converges the reference set to the declared
  * values without duplicating rows. After upserting, the seed verifies the row
- * count is exactly 20 and every row matches the declared value, then reports.
+ * count is exactly 54 and every row matches the declared value, then reports.
  *
  * Uses the same advisory lock as the migration runner so a seed cannot race a
  * concurrent apply. Mutating: requires a primary target and explicit production
@@ -31,18 +31,18 @@ export interface TierFeatureFlag {
 }
 
 /**
- * The authoritative 48-row reference set. This is the single source of truth
+ * The authoritative 54-row reference set. This is the single source of truth
  * for tier feature flags in the Postgres migration path; the backend-owned
  * Prisma seed is retired with the backend.
  */
 export const TIER_FEATURE_FLAGS: readonly TierFeatureFlag[] = (() => {
   const tiers = [
-    ['free', 500, 1, 500],
-    ['starter', 5_000, 3, 5_000],
-    ['professional', 50_000, 10, 50_000],
-    ['enterprise', 250_000, 10, 250_000],
-    ['premium', 50_000, 10, 50_000],
-    ['concierge', 250_000, 10, 250_000],
+    ['free', 500, 1, 500, 1_073_741_824],
+    ['starter', 5_000, 3, 5_000, 10_737_418_240],
+    ['professional', 50_000, 10, 50_000, 107_374_182_400],
+    ['enterprise', 250_000, 10, 250_000, 107_374_182_400],
+    ['premium', 50_000, 10, 50_000, 107_374_182_400],
+    ['concierge', 250_000, 10, 250_000, 107_374_182_400],
   ] as const;
   const unlimitedFeatures = [
     'advanced_analytics',
@@ -52,7 +52,7 @@ export const TIER_FEATURE_FLAGS: readonly TierFeatureFlag[] = (() => {
     'custom_integrations',
   ] as const;
 
-  return tiers.flatMap(([tierLevel, maxSkus, maxUsers, maxInventoryItems]) => [
+  return tiers.flatMap(([tierLevel, maxSkus, maxUsers, maxInventoryItems, storageBytes]) => [
     { tierLevel, featureKey: 'max_skus', enabled: true, limitValue: maxSkus },
     { tierLevel, featureKey: 'max_users', enabled: true, limitValue: maxUsers },
     {
@@ -61,6 +61,7 @@ export const TIER_FEATURE_FLAGS: readonly TierFeatureFlag[] = (() => {
       enabled: true,
       limitValue: maxInventoryItems,
     },
+    { tierLevel, featureKey: 'storage_bytes', enabled: true, limitValue: storageBytes },
     ...unlimitedFeatures.map((featureKey) => ({
       tierLevel,
       featureKey,
@@ -119,7 +120,7 @@ export async function seedTierFeatureFlags(client: MigrationClient): Promise<See
     }
     await client.query('COMMIT');
 
-    // Verification: exactly 48 rows, each matching the declared value.
+    // Verification: exactly 54 rows, each matching the declared value.
     const rows = await client.query(
       `SELECT tier_level, feature_key, enabled, limit_value
        FROM tier_feature_flags

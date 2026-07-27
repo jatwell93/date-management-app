@@ -932,7 +932,7 @@ migration-prep (production, full)
    - **preflight**: `migrate:preflight` output — check `ready: true`
    - **pitr-check**: `pitr-evidence.json` artifact — check `ready: true`
    - **apply**: `migration-apply.txt` artifact — check `applied: [...]` lists the expected migrations
-   - **seed**: `migration-seed.txt` artifact — check 48 rows upserted
+   - **seed**: `migration-seed.txt` artifact — check 54 rows upserted
    - **verify**: `migration-verify.txt` artifact — check PASS
    - **deploy-production**: Worker deployed successfully
    - **canary**: both smoke rounds pass, no new critical Sentry issues

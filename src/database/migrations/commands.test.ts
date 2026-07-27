@@ -282,12 +282,13 @@ test('preflight reports interrupted migrations left in the applying state', asyn
 // Tests: seed (idempotent reference-data)
 // ===========================================================================
 
-test('seed declares all eight required features for all six tiers', () => {
+test('seed declares all nine required features for all six tiers', () => {
   const requiredTiers = ['free', 'starter', 'professional', 'enterprise', 'premium', 'concierge'];
   const requiredFeatures = [
     'max_skus',
     'max_users',
     'max_inventory_items',
+    'storage_bytes',
     'advanced_analytics',
     'api_access',
     'priority_support',
@@ -295,7 +296,7 @@ test('seed declares all eight required features for all six tiers', () => {
     'custom_integrations',
   ];
 
-  assert.equal(TIER_FEATURE_FLAGS.length, 48);
+  assert.equal(TIER_FEATURE_FLAGS.length, 54);
   assert.deepEqual(
     new Set(TIER_FEATURE_FLAGS.map((flag) => flag.tierLevel)),
     new Set(requiredTiers),
@@ -307,6 +308,43 @@ test('seed declares all eight required features for all six tiers', () => {
       ),
       new Set(requiredFeatures),
     );
+  }
+});
+
+test('seed converges legacy production storage rows to the current 54-row contract', async () => {
+  const { pg, client } = await createPglite();
+  try {
+    await applyAllMigrations(client);
+    await pg.exec(`
+      INSERT INTO tier_feature_flags (tier_level, feature_key, enabled, limit_value)
+      VALUES
+        ('starter', 'storage_bytes', true, 1073741824),
+        ('professional', 'storage_bytes', true, 10737418240),
+        ('premium', 'storage_bytes', true, 107374182400),
+        ('concierge', 'storage_bytes', true, NULL)
+    `);
+
+    const report = await seedTierFeatureFlags(client);
+    assert.equal(report.verified, true);
+    assert.equal(report.rowCount, 54);
+    assert.deepEqual(report.mismatches, []);
+
+    const storageRows = await pg.query(
+      `SELECT tier_level, limit_value::text AS limit_value
+       FROM tier_feature_flags
+       WHERE feature_key = 'storage_bytes'
+       ORDER BY tier_level`,
+    );
+    assert.deepEqual(storageRows.rows, [
+      { tier_level: 'concierge', limit_value: '107374182400' },
+      { tier_level: 'enterprise', limit_value: '107374182400' },
+      { tier_level: 'free', limit_value: '1073741824' },
+      { tier_level: 'premium', limit_value: '107374182400' },
+      { tier_level: 'professional', limit_value: '107374182400' },
+      { tier_level: 'starter', limit_value: '10737418240' },
+    ]);
+  } finally {
+    await pg.close();
   }
 });
 
@@ -335,13 +373,13 @@ test('seed preserves seed, rollback, and advisory-unlock errors when all three f
   );
 });
 
-test('seed upserts the 48 tier_feature_flags rows and verifies them', async () => {
+test('seed upserts the 54 tier_feature_flags rows and verifies them', async () => {
   const { pg, client } = await createPglite();
   try {
     await applyAllMigrations(client);
     const report = await seedTierFeatureFlags(client);
     assert.equal(report.upserted, TIER_FEATURE_FLAGS.length);
-    assert.equal(report.rowCount, 48);
+    assert.equal(report.rowCount, 54);
     assert.equal(report.verified, true);
     assert.equal(report.mismatches.length, 0);
     assert.match(report.report, /Verified: YES/);
@@ -350,16 +388,16 @@ test('seed upserts the 48 tier_feature_flags rows and verifies them', async () =
   }
 });
 
-test('seed is idempotent — running twice leaves exactly 48 rows', async () => {
+test('seed is idempotent — running twice leaves exactly 54 rows', async () => {
   const { pg, client } = await createPglite();
   try {
     await applyAllMigrations(client);
     await seedTierFeatureFlags(client);
     const second = await seedTierFeatureFlags(client);
-    assert.equal(second.rowCount, 48);
+    assert.equal(second.rowCount, 54);
     assert.equal(second.verified, true);
     const countResult = await pg.query('SELECT COUNT(*)::int AS count FROM tier_feature_flags');
-    assert.equal((countResult.rows[0] as { count: number }).count, 48);
+    assert.equal((countResult.rows[0] as { count: number }).count, 54);
   } finally {
     await pg.close();
   }
@@ -438,7 +476,7 @@ test('verify passes on a migrated and seeded database', async () => {
     assert.equal(report.referenceDataOk, true);
     assert.equal(report.catalogOk, true);
     assert.equal(report.verified, true);
-    assert.match(report.report, /Reference data \(tier_feature_flags\): OK \(48 rows\)/);
+    assert.match(report.report, /Reference data \(tier_feature_flags\): OK \(54 rows\)/);
     assert.match(report.report, /Verdict: PASS/);
   } finally {
     await pg.close();
@@ -472,7 +510,7 @@ test('verify fails when the tier_feature_flags row count is wrong', async () => 
     const report = await verifyMigration(client, FINGERPRINT_PATH);
     assert.equal(report.referenceDataOk, false);
     assert.equal(report.verified, false);
-    assert.match(report.report, /row count 47 expected 48/);
+    assert.match(report.report, /row count 53 expected 54/);
   } finally {
     await pg.close();
   }

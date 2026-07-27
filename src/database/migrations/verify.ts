@@ -7,7 +7,7 @@
  *
  *   1. confirms every expected table (from the checked-in catalog fingerprint)
  *      exists in the `public` schema;
- *   2. verifies the `tier_feature_flags` reference set is exactly 48 rows and
+ *   2. verifies the `tier_feature_flags` reference set is exactly 54 rows and
  *      every row matches the declared value (reuses the seed's source of
  *      truth so seed and verify cannot drift);
  *   3. structurally compares the live catalog against the checked-in
@@ -95,7 +95,7 @@ export async function verifyMigration(
   const missingTables = expectedTables.filter((name) => !actualTables.has(name));
   const tablesOk = missingTables.length === 0;
 
-  // 2. Reference data: tier_feature_flags must be exactly the declared 48 rows.
+  // 2. Reference data: tier_feature_flags must be exactly the declared 54 rows.
   const flagRows = await client.query(
     `SELECT tier_level, feature_key, enabled, limit_value
      FROM tier_feature_flags

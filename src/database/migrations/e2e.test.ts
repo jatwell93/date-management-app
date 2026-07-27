@@ -15,10 +15,10 @@
  *   5. Checksum drift — tampered migration file → status reports drift →
  *      apply refuses
  *   6. Catalog drift — manual schema tampering after apply → verify fails
- *   7. Safe down migration — execute 0010 down SQL directly → schema
- *      reverts to int4 → verify fails with only the limit_value diff
- *   8. Forward fix — re-apply 0010 after down → schema returns to bigint →
- *      verify passes
+ *   7. Guarded down migration — 0010 down refuses out-of-range storage
+ *      limits, then succeeds only after the operator makes them int4-safe
+ *   8. Forward fix — re-apply 0010 and reseed after down → schema and
+ *      reference data return to the declared bigint contract
  *
  * **Fail-closed policy.** This suite does NOT skip when required env vars are
  * unset — it fails. A skipped e2e suite provides zero proof; a failing one is
@@ -580,7 +580,7 @@ test('e2e: catalog drift — manual schema tampering after apply → verify fail
   }
 });
 
-test('e2e: safe down migration — execute 0010 down SQL directly → schema reverts to int4 → verify fails with only limit_value diff', async () => {
+test('e2e: guarded down migration refuses bigint storage limits before an explicit lossy preparation', async () => {
   const client = await createClient();
   try {
     await resetSchema(client);
@@ -599,18 +599,32 @@ test('e2e: safe down migration — execute 0010 down SQL directly → schema rev
       path.join(HISTORY_DIR, '0010_alter_tier_feature_flags_limit_value_to_bigint.down.sql'),
       'utf8',
     );
+    await assert.rejects(
+      client.query(downSql),
+      /integer|int4|out of range/i,
+      '0010 down must refuse while declared storage limits exceed int4',
+    );
+
+    // The documented manual-only recovery requires an explicit data-loss
+    // decision before narrowing. Null the out-of-range limits to model that
+    // operator preparation; the forward-fix test proves they are restored.
+    await client.query(
+      'UPDATE tier_feature_flags SET limit_value = NULL WHERE limit_value > 2147483647',
+    );
     await client.query(downSql);
 
     // The column is now integer (int4) — the down migration narrowed it.
     const typeAfter = await getColumnType(client, 'tier_feature_flags', 'limit_value');
     assert.equal(typeAfter, 'integer');
 
-    // Verify must fail — the fingerprint expects bigint, the actual is integer.
+    // Verify must fail — the fingerprint expects bigint, and the explicit
+    // lossy preparation also differs from the declared reference data.
     // The ADOPTION_COMPARISON profile is strict (no broad column exceptions),
     // so this difference is a mismatch. The ONLY diff should be limit_value.
     const report = await verifyMigration(client, FINGERPRINT_PATH);
     assert.equal(report.verified, false, 'Expected verify to FAIL after down migration');
     assert.equal(report.catalogOk, false);
+    assert.equal(report.referenceDataOk, false);
     assert.ok(report.catalogDiff !== null);
 
     // The only column-level difference should be tier_feature_flags.limit_value.
@@ -631,7 +645,7 @@ test('e2e: safe down migration — execute 0010 down SQL directly → schema rev
   }
 });
 
-test('e2e: forward fix — re-apply 0010 after down → schema returns to bigint → verify passes', async () => {
+test('e2e: forward fix — re-apply 0010 and reseed after guarded down → verify passes', async () => {
   const client = await createClient();
   try {
     await resetSchema(client);
@@ -645,6 +659,9 @@ test('e2e: forward fix — re-apply 0010 after down → schema returns to bigint
       path.join(HISTORY_DIR, '0010_alter_tier_feature_flags_limit_value_to_bigint.down.sql'),
       'utf8',
     );
+    await client.query(
+      'UPDATE tier_feature_flags SET limit_value = NULL WHERE limit_value > 2147483647',
+    );
     await client.query(downSql);
 
     // Forward-fix recovery: delete the 0010 ledger row so the runner sees it
@@ -656,6 +673,7 @@ test('e2e: forward fix — re-apply 0010 after down → schema returns to bigint
       deploymentSha: TEST_DEPLOYMENT_SHA,
     });
     assert.deepEqual(result.applied, ['0010']);
+    await seedTierFeatureFlags(client);
 
     // The column is bigint again.
     const typeAfterForwardFix = await getColumnType(client, 'tier_feature_flags', 'limit_value');

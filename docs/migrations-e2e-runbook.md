@@ -148,7 +148,7 @@ npm run migrate:status
 ```
 
 **Expected:** preflight READY, apply succeeds with 11 applied, seed upserts
-48 rows, verify PASS, status shows all applied / no pending / no drift.
+54 rows, verify PASS, status shows all applied / no pending / no drift.
 
 **Record:**
 - Preflight verdict: `____________________________`
@@ -234,8 +234,8 @@ node -e "
 - [ ] `dataLoss` is `destructive` (data may be lost)
 - [ ] `completeness` is `partial` (forward-fix is the recovery path)
 
-**Check for rows exceeding int4** (none expected on the current 48-row seed,
-but check anyway — a future seed or manual insert could exceed int4 max):
+**Check for rows exceeding int4.** The current 54-row contract includes
+10/100 GiB `storage_bytes` limits, so this check is expected to find rows:
 
 ```bash
 psql "$DATABASE_URL_UNPOOLED" -c \
@@ -245,11 +245,11 @@ psql "$DATABASE_URL_UNPOOLED" -c \
    ORDER BY limit_value DESC;"
 ```
 
-**Expected on the current 48-row seed:** zero rows. The seed's largest
-`limit_value` is 250000 (well under int4 max 2147483647), so the down
-migration will SUCCEED — narrowing bigint→integer loses no data. The
-`destructive` classification is forward-looking: if any future row exceeds
-int4 max, the down would fail or truncate. Record the row count either way.
+**Expected on the current 54-row seed:** five rows (`starter`,
+`professional`, `enterprise`, `premium`, and `concierge`). The first down
+attempt must therefore fail with `integer out of range`, leaving the bigint
+column unchanged. This is the intended proof that the partial/destructive
+down fails safely instead of silently truncating reference data.
 
 **Set the down confirmation env var.** This is NOT just an echo — the
 executable guard below refuses to invoke `psql` unless the token is exact.
@@ -269,14 +269,33 @@ if [ "${MIGRATION_DOWN_CONFIRMATION:-}" != "$EXPECTED_DOWN_CONFIRMATION" ]; then
   exit 1
 fi
 
+if psql "$DATABASE_URL_UNPOOLED" \
+  -f database/migrations/0010_alter_tier_feature_flags_limit_value_to_bigint.down.sql; then
+  echo "::error::0010 down unexpectedly accepted out-of-range storage limits." >&2
+  exit 1
+else
+  echo "Expected refusal: oversized storage limits prevented int4 narrowing."
+fi
+```
+
+**Expected first attempt:** `integer out of range`; the `ALTER` is atomic and
+the column remains bigint.
+
+To exercise the working rollback on this isolated adoption branch, make the
+destructive preparation explicit. This deliberately removes the oversized
+limits; never perform it on production as a default recovery path:
+
+```bash
+psql "$DATABASE_URL_UNPOOLED" -c \
+  "UPDATE tier_feature_flags
+      SET limit_value = NULL
+    WHERE limit_value > 2147483647;"
+
 psql "$DATABASE_URL_UNPOOLED" \
   -f database/migrations/0010_alter_tier_feature_flags_limit_value_to_bigint.down.sql
 ```
 
-**If the down fails** (e.g., `integer out of range` from a row exceeding int4):
-this is the documented destructive failure mode. The recovery path is the
-forward fix (Step 2e) — re-apply 0010 to widen back to bigint. Record the
-failure as evidence that the down is correctly classified as destructive.
+**Expected second attempt:** succeeds and narrows the column to integer.
 
 ### 2d. Verify the schema reverted
 
@@ -286,9 +305,8 @@ psql "$DATABASE_URL_UNPOOLED" -c \
    WHERE table_name = 'tier_feature_flags' AND column_name = 'limit_value';"
 ```
 
-**Expected (down succeeded on the current seed):** `data_type = integer`.
-**Expected (down failed on oversized rows):** `data_type = bigint` (the
-ALTER was atomic and rolled back). Record which outcome occurred.
+**Expected after the explicit preparation and second attempt:**
+`data_type = integer`.
 
 Run verify — it must FAIL (the catalog no longer matches the bigint
 fingerprint):
@@ -309,9 +327,11 @@ psql "$DATABASE_URL_UNPOOLED" -c \
   "DELETE FROM schema_migrations WHERE id = '0010';"
 
 npm run migrate:apply
+npm run migrate:seed
 ```
 
-**Expected:** apply succeeds with `0010` in the applied list.
+**Expected:** apply succeeds with `0010` in the applied list; seed restores
+the six declared `storage_bytes` values and the complete 54-row contract.
 
 ### 2f. Confirm the schema is restored
 
