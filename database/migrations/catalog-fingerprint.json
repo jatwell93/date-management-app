@@ -1,0 +1,5530 @@
+{
+  "tables": [
+    "audit_log",
+    "bay_checks",
+    "brands",
+    "catalogue_corrections",
+    "catalogue_seed_runs",
+    "check_cycles",
+    "clerk_webhook_events",
+    "credit_claim_events",
+    "credit_claim_lines",
+    "credit_claim_photos",
+    "credit_claims",
+    "expired_item_transactions",
+    "inventory_items",
+    "item_transactions",
+    "master_catalogue_entries",
+    "metrics_snapshots",
+    "migrations",
+    "organization_invites",
+    "organization_markdown_config",
+    "organization_usage",
+    "organizations",
+    "processed_webhook_events",
+    "products",
+    "refresh_tokens",
+    "schema_migrations",
+    "store_areas",
+    "subscription_tiers",
+    "suppliers",
+    "tier_feature_flags",
+    "trial_events",
+    "uploads",
+    "users",
+    "webhook_metrics"
+  ],
+  "columns": [
+    {
+      "table": "audit_log",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('audit_log_id_seq'::regclass)"
+    },
+    {
+      "table": "audit_log",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "name": "inventory_item_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "name": "action",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "name": "change_description",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "bay_checks",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('bay_checks_id_seq'::regclass)"
+    },
+    {
+      "table": "bay_checks",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "cycle_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "store_area_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "checked_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "bay_checks",
+      "name": "items_added_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "bay_checks",
+      "name": "notes",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "bay_checks",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "brands",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('brands_id_seq'::regclass)"
+    },
+    {
+      "table": "brands",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "brands",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "brands",
+      "name": "manufacturer_name",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "brands",
+      "name": "suggested_supplier_name",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "brands",
+      "name": "supplier_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "brands",
+      "name": "source",
+      "type": "text",
+      "not_null": true,
+      "default": "'REFERENCE'::text"
+    },
+    {
+      "table": "brands",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "brands",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('catalogue_corrections_id_seq'::regclass)"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "product_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "brand_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "barcode",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "entered_brand_name",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "chosen_supplier_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "kind",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'PENDING'::text"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "created_by_user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('catalogue_seed_runs_id_seq'::regclass)"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "version",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "seeded_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "source_file_name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "inserted",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "updated",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "unchanged",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "retired",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "reinstated",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "error_count",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('check_cycles_id_seq'::regclass)"
+    },
+    {
+      "table": "check_cycles",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'active'::text"
+    },
+    {
+      "table": "check_cycles",
+      "name": "started_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "check_cycles",
+      "name": "completed_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "check_cycles",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "event_type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "processed_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('credit_claim_events_id_seq'::regclass)"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "claim_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "note",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('credit_claim_lines_id_seq'::regclass)"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "claim_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "expired_item_transaction_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "batch_number",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "units_claimed",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "expected_credit_units",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "expected_credit_value",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('credit_claim_photos_id_seq'::regclass)"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "claim_line_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "storage_key",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "file_name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "size_bytes",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "delete_after",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "credit_claims",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('credit_claims_id_seq'::regclass)"
+    },
+    {
+      "table": "credit_claims",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "supplier_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "created_by_user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'DRAFT'::text"
+    },
+    {
+      "table": "credit_claims",
+      "name": "contact_email_snapshot",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "expected_credit_units",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "expected_credit_value",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "credited_value",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "sent_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "next_follow_up_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "follow_up_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "credit_claims",
+      "name": "settled_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "credit_claims",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('expired_item_transactions_id_seq'::regclass)"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "inventory_item_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "action",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "units_discarded",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "financial_loss",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "transaction_date",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "markdown_level",
+      "type": "smallint",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "credit_disposition",
+      "type": "text",
+      "not_null": true,
+      "default": "'PENDING'::text"
+    },
+    {
+      "table": "inventory_items",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('inventory_items_id_seq'::regclass)"
+    },
+    {
+      "table": "inventory_items",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "product_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "expiry_date",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "location_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'Normal'::text"
+    },
+    {
+      "table": "inventory_items",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "inventory_items",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('item_transactions_id_seq'::regclass)"
+    },
+    {
+      "table": "item_transactions",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "inventory_item_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "quantity_change",
+      "type": "double precision",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "notes",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "transaction_date",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('master_catalogue_entries_id_seq'::regclass)"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "barcode",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "description",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "api_sku",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "sigma_sku",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "ch2_sku",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "brand_name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "manufacturer_name",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "category",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "sub_category",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "rrp",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "metro_price",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "retired_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('metrics_snapshots_id_seq'::regclass)"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "date",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "trial_conversion_rate",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "avg_revenue_per_user",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "churn_rate",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "total_trials",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "total_conversions",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "total_churn",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "total_revenue_cents",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "tier_distribution",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "migrations",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('migrations_id_seq'::regclass)"
+    },
+    {
+      "table": "migrations",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "migrations",
+      "name": "applied_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "organization_invites",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "email",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "role",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "token",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'PENDING'::text"
+    },
+    {
+      "table": "organization_invites",
+      "name": "expires_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "accepted_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "invited_by_user_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('organization_markdown_config_id_seq'::regclass)"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "band1_percentage",
+      "type": "double precision",
+      "not_null": true,
+      "default": "50"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "band2_percentage",
+      "type": "double precision",
+      "not_null": true,
+      "default": "60"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "band3_percentage",
+      "type": "double precision",
+      "not_null": true,
+      "default": "75"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "band1_basis",
+      "type": "text",
+      "not_null": true,
+      "default": "'cost'::text"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "band2_basis",
+      "type": "text",
+      "not_null": true,
+      "default": "'cost'::text"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "band3_basis",
+      "type": "text",
+      "not_null": true,
+      "default": "'cost'::text"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "credit_scope",
+      "type": "text",
+      "not_null": true,
+      "default": "'NO_CREDIT'::text"
+    },
+    {
+      "table": "organization_usage",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('organization_usage_id_seq'::regclass)"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_usage",
+      "name": "active_users",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "organization_usage",
+      "name": "max_users",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_usage",
+      "name": "total_skus",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "organization_usage",
+      "name": "max_skus",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organization_usage",
+      "name": "total_inventory_items",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "organization_usage",
+      "name": "max_inventory_items",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "organization_usage",
+      "name": "storage_used_bytes",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "organization_usage",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "organization_usage",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "clerk_organization_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "slug",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "contact_email",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "organizations",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "organizations",
+      "name": "is_creation_locked",
+      "type": "boolean",
+      "not_null": true,
+      "default": "false"
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "event_type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "products",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('products_id_seq'::regclass)"
+    },
+    {
+      "table": "products",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "barcode",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "sku",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "cost_price",
+      "type": "double precision",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "notes",
+      "type": "text",
+      "not_null": true,
+      "default": "''::text"
+    },
+    {
+      "table": "products",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "products",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "retail_price",
+      "type": "double precision",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "supplier_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "products",
+      "name": "brand_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('refresh_tokens_id_seq'::regclass)"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "token",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "expires_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "revoked_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "checksum",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "state",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "transaction_rule",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "data_loss_class",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "recovery_strategy",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "migration_name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "deployment_sha",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "started_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "applied_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "runner_version",
+      "type": "integer",
+      "not_null": true,
+      "default": "1"
+    },
+    {
+      "table": "store_areas",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('store_areas_id_seq'::regclass)"
+    },
+    {
+      "table": "store_areas",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "store_areas",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "store_areas",
+      "name": "sub_department",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "store_areas",
+      "name": "last_checked",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "store_areas",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "store_areas",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "store_areas",
+      "name": "parent_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('subscription_tiers_id_seq'::regclass)"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "tier_level",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "stripe_subscription_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "trial_end_date",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "trial_started_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "trial_converted_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "past_due_since",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'active'::text"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "billing_cycle",
+      "type": "text",
+      "not_null": true,
+      "default": "'monthly'::text"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "stripe_customer_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('suppliers_id_seq'::regclass)"
+    },
+    {
+      "table": "suppliers",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "contact_email",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "credit_policy_note",
+      "type": "text",
+      "not_null": true,
+      "default": "''::text"
+    },
+    {
+      "table": "suppliers",
+      "name": "policy_write_off_qty",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "policy_credit_qty",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "follow_up_days",
+      "type": "integer",
+      "not_null": true,
+      "default": "7"
+    },
+    {
+      "table": "suppliers",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "suppliers",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "suppliers",
+      "name": "representative_name",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "representative_email",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "contact_phone",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "policy_updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "suppliers",
+      "name": "credit_type",
+      "type": "text",
+      "not_null": true,
+      "default": "'NONE'::text"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('tier_feature_flags_id_seq'::regclass)"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_level",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "feature_key",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "enabled",
+      "type": "boolean",
+      "not_null": true,
+      "default": "true"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "limit_value",
+      "type": "bigint",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "trial_events",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "trial_events",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "trial_events",
+      "name": "event_type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "trial_events",
+      "name": "occurred_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "trial_events",
+      "name": "metadata",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "trial_events",
+      "name": "sent_reminders_at",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('uploads_id_seq'::regclass)"
+    },
+    {
+      "table": "uploads",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "user_id",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "file_key",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "file_name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "file_size_bytes",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "content_type",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'pending'::text"
+    },
+    {
+      "table": "uploads",
+      "name": "upload_progress",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "processing_message",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "error_message",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "rows_processed",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "rows_total",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "rows_imported",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "rows_updated",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "rows_skipped",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "row_error_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "columns_used",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "columns_ignored",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "uploads",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "import_type",
+      "type": "text",
+      "not_null": true,
+      "default": "'product-catalog'::text"
+    },
+    {
+      "table": "uploads",
+      "name": "tier_snapshot",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "max_skus_snapshot",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "max_active_expiries_snapshot",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "rows_unchanged",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "row_errors",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "processing_offset",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "retry_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "uploads",
+      "name": "failure_category",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "error_report_key",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "queued_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "validation_started_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "processing_started_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "completed_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "uploads",
+      "name": "failed_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('users_id_seq'::regclass)"
+    },
+    {
+      "table": "users",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "clerk_user_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "email",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "username",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "role",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "deleted_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "users",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "users",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('webhook_metrics_id_seq'::regclass)"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "event_type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "total_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "failure_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "date",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "created_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    }
+  ],
+  "indexes": [
+    {
+      "table": "audit_log",
+      "name": "audit_log_action_idx",
+      "definition": "CREATE INDEX audit_log_action_idx ON public.audit_log USING btree (action)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_inventory_item_id_idx",
+      "definition": "CREATE INDEX audit_log_inventory_item_id_idx ON public.audit_log USING btree (inventory_item_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_organization_id_idx",
+      "definition": "CREATE INDEX audit_log_organization_id_idx ON public.audit_log USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_pkey",
+      "definition": "CREATE UNIQUE INDEX audit_log_pkey ON public.audit_log USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_user_id_idx",
+      "definition": "CREATE INDEX audit_log_user_id_idx ON public.audit_log USING btree (user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_pkey",
+      "definition": "CREATE UNIQUE INDEX bay_checks_pkey ON public.bay_checks USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "idx_bay_checks_checked_at",
+      "definition": "CREATE INDEX idx_bay_checks_checked_at ON public.bay_checks USING btree (checked_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "idx_bay_checks_cycle_id",
+      "definition": "CREATE INDEX idx_bay_checks_cycle_id ON public.bay_checks USING btree (cycle_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "idx_bay_checks_organization_id",
+      "definition": "CREATE INDEX idx_bay_checks_organization_id ON public.bay_checks USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "bay_checks",
+      "name": "idx_bay_checks_store_area_id",
+      "definition": "CREATE INDEX idx_bay_checks_store_area_id ON public.bay_checks USING btree (store_area_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "brands",
+      "name": "brands_organization_id_name_key",
+      "definition": "CREATE UNIQUE INDEX brands_organization_id_name_key ON public.brands USING btree (organization_id, name)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "brands",
+      "name": "brands_pkey",
+      "definition": "CREATE UNIQUE INDEX brands_pkey ON public.brands USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "brands",
+      "name": "idx_brands_organization_id",
+      "definition": "CREATE INDEX idx_brands_organization_id ON public.brands USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "brands",
+      "name": "idx_brands_supplier_id",
+      "definition": "CREATE INDEX idx_brands_supplier_id ON public.brands USING btree (supplier_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_pkey",
+      "definition": "CREATE UNIQUE INDEX catalogue_corrections_pkey ON public.catalogue_corrections USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "idx_catalogue_corrections_brand_id",
+      "definition": "CREATE INDEX idx_catalogue_corrections_brand_id ON public.catalogue_corrections USING btree (brand_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "idx_catalogue_corrections_organization_id",
+      "definition": "CREATE INDEX idx_catalogue_corrections_organization_id ON public.catalogue_corrections USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "idx_catalogue_corrections_product_id",
+      "definition": "CREATE INDEX idx_catalogue_corrections_product_id ON public.catalogue_corrections USING btree (product_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "idx_catalogue_corrections_status",
+      "definition": "CREATE INDEX idx_catalogue_corrections_status ON public.catalogue_corrections USING btree (status)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_pkey",
+      "definition": "CREATE UNIQUE INDEX catalogue_seed_runs_pkey ON public.catalogue_seed_runs USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_version_key",
+      "definition": "CREATE UNIQUE INDEX catalogue_seed_runs_version_key ON public.catalogue_seed_runs USING btree (version)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_pkey",
+      "definition": "CREATE UNIQUE INDEX check_cycles_pkey ON public.check_cycles USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "idx_check_cycles_organization_id",
+      "definition": "CREATE INDEX idx_check_cycles_organization_id ON public.check_cycles USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "idx_check_cycles_started_at",
+      "definition": "CREATE INDEX idx_check_cycles_started_at ON public.check_cycles USING btree (started_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "check_cycles",
+      "name": "one_active_cycle_per_org",
+      "definition": "CREATE UNIQUE INDEX one_active_cycle_per_org ON public.check_cycles USING btree (organization_id) WHERE (status = 'active'::text)",
+      "unique": true,
+      "primary": false,
+      "predicate": "(status = 'active'::text)"
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "clerk_webhook_events_event_type_processed_at_idx",
+      "definition": "CREATE INDEX clerk_webhook_events_event_type_processed_at_idx ON public.clerk_webhook_events USING btree (event_type, processed_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "clerk_webhook_events_pkey",
+      "definition": "CREATE UNIQUE INDEX clerk_webhook_events_pkey ON public.clerk_webhook_events USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_pkey",
+      "definition": "CREATE UNIQUE INDEX credit_claim_events_pkey ON public.credit_claim_events USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "idx_credit_claim_events_claim_id",
+      "definition": "CREATE INDEX idx_credit_claim_events_claim_id ON public.credit_claim_events USING btree (claim_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "idx_credit_claim_events_organization_id",
+      "definition": "CREATE INDEX idx_credit_claim_events_organization_id ON public.credit_claim_events USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_expired_item_transaction_id_key",
+      "definition": "CREATE UNIQUE INDEX credit_claim_lines_expired_item_transaction_id_key ON public.credit_claim_lines USING btree (expired_item_transaction_id)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_pkey",
+      "definition": "CREATE UNIQUE INDEX credit_claim_lines_pkey ON public.credit_claim_lines USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "idx_credit_claim_lines_claim_id",
+      "definition": "CREATE INDEX idx_credit_claim_lines_claim_id ON public.credit_claim_lines USING btree (claim_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "idx_credit_claim_lines_organization_id",
+      "definition": "CREATE INDEX idx_credit_claim_lines_organization_id ON public.credit_claim_lines USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_pkey",
+      "definition": "CREATE UNIQUE INDEX credit_claim_photos_pkey ON public.credit_claim_photos USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "idx_credit_claim_photos_claim_line_id",
+      "definition": "CREATE INDEX idx_credit_claim_photos_claim_line_id ON public.credit_claim_photos USING btree (claim_line_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "idx_credit_claim_photos_delete_after",
+      "definition": "CREATE INDEX idx_credit_claim_photos_delete_after ON public.credit_claim_photos USING btree (delete_after)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "idx_credit_claim_photos_organization_id",
+      "definition": "CREATE INDEX idx_credit_claim_photos_organization_id ON public.credit_claim_photos USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_pkey",
+      "definition": "CREATE UNIQUE INDEX credit_claims_pkey ON public.credit_claims USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "idx_credit_claims_next_follow_up_at",
+      "definition": "CREATE INDEX idx_credit_claims_next_follow_up_at ON public.credit_claims USING btree (next_follow_up_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "idx_credit_claims_organization_id",
+      "definition": "CREATE INDEX idx_credit_claims_organization_id ON public.credit_claims USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "idx_credit_claims_status",
+      "definition": "CREATE INDEX idx_credit_claims_status ON public.credit_claims USING btree (status)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "credit_claims",
+      "name": "idx_credit_claims_supplier_id",
+      "definition": "CREATE INDEX idx_credit_claims_supplier_id ON public.credit_claims USING btree (supplier_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_action_idx",
+      "definition": "CREATE INDEX expired_item_transactions_action_idx ON public.expired_item_transactions USING btree (action)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_inventory_item_id_idx",
+      "definition": "CREATE INDEX expired_item_transactions_inventory_item_id_idx ON public.expired_item_transactions USING btree (inventory_item_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_organization_id_idx",
+      "definition": "CREATE INDEX expired_item_transactions_organization_id_idx ON public.expired_item_transactions USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_pkey",
+      "definition": "CREATE UNIQUE INDEX expired_item_transactions_pkey ON public.expired_item_transactions USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_transaction_date_idx",
+      "definition": "CREATE INDEX expired_item_transactions_transaction_date_idx ON public.expired_item_transactions USING btree (transaction_date)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_user_id_idx",
+      "definition": "CREATE INDEX expired_item_transactions_user_id_idx ON public.expired_item_transactions USING btree (user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "idx_expired_transactions_credit_disposition",
+      "definition": "CREATE INDEX idx_expired_transactions_credit_disposition ON public.expired_item_transactions USING btree (credit_disposition)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_expiry_date_idx",
+      "definition": "CREATE INDEX inventory_items_expiry_date_idx ON public.inventory_items USING btree (expiry_date)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_location_id_idx",
+      "definition": "CREATE INDEX inventory_items_location_id_idx ON public.inventory_items USING btree (location_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_organization_id_idx",
+      "definition": "CREATE INDEX inventory_items_organization_id_idx ON public.inventory_items USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_pkey",
+      "definition": "CREATE UNIQUE INDEX inventory_items_pkey ON public.inventory_items USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_product_id_idx",
+      "definition": "CREATE INDEX inventory_items_product_id_idx ON public.inventory_items USING btree (product_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_status_idx",
+      "definition": "CREATE INDEX inventory_items_status_idx ON public.inventory_items USING btree (status)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_inventory_item_id_idx",
+      "definition": "CREATE INDEX item_transactions_inventory_item_id_idx ON public.item_transactions USING btree (inventory_item_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_organization_id_idx",
+      "definition": "CREATE INDEX item_transactions_organization_id_idx ON public.item_transactions USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_pkey",
+      "definition": "CREATE UNIQUE INDEX item_transactions_pkey ON public.item_transactions USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_transaction_date_idx",
+      "definition": "CREATE INDEX item_transactions_transaction_date_idx ON public.item_transactions USING btree (transaction_date)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_type_idx",
+      "definition": "CREATE INDEX item_transactions_type_idx ON public.item_transactions USING btree (type)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_user_id_idx",
+      "definition": "CREATE INDEX item_transactions_user_id_idx ON public.item_transactions USING btree (user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "idx_master_catalogue_entries_api_sku",
+      "definition": "CREATE INDEX idx_master_catalogue_entries_api_sku ON public.master_catalogue_entries USING btree (api_sku)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "idx_master_catalogue_entries_ch2_sku",
+      "definition": "CREATE INDEX idx_master_catalogue_entries_ch2_sku ON public.master_catalogue_entries USING btree (ch2_sku)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "idx_master_catalogue_entries_sigma_sku",
+      "definition": "CREATE INDEX idx_master_catalogue_entries_sigma_sku ON public.master_catalogue_entries USING btree (sigma_sku)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_barcode_key",
+      "definition": "CREATE UNIQUE INDEX master_catalogue_entries_barcode_key ON public.master_catalogue_entries USING btree (barcode)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_pkey",
+      "definition": "CREATE UNIQUE INDEX master_catalogue_entries_pkey ON public.master_catalogue_entries USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_date_idx",
+      "definition": "CREATE INDEX metrics_snapshots_date_idx ON public.metrics_snapshots USING btree (date)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_date_key",
+      "definition": "CREATE UNIQUE INDEX metrics_snapshots_date_key ON public.metrics_snapshots USING btree (date)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_pkey",
+      "definition": "CREATE UNIQUE INDEX metrics_snapshots_pkey ON public.metrics_snapshots USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "migrations",
+      "name": "migrations_name_key",
+      "definition": "CREATE UNIQUE INDEX migrations_name_key ON public.migrations USING btree (name)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "migrations",
+      "name": "migrations_pkey",
+      "definition": "CREATE UNIQUE INDEX migrations_pkey ON public.migrations USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_email_idx",
+      "definition": "CREATE INDEX organization_invites_email_idx ON public.organization_invites USING btree (email)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_organization_id_idx",
+      "definition": "CREATE INDEX organization_invites_organization_id_idx ON public.organization_invites USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_pkey",
+      "definition": "CREATE UNIQUE INDEX organization_invites_pkey ON public.organization_invites USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_status_idx",
+      "definition": "CREATE INDEX organization_invites_status_idx ON public.organization_invites USING btree (status)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_token_key",
+      "definition": "CREATE UNIQUE INDEX organization_invites_token_key ON public.organization_invites USING btree (token)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_org_scope_key",
+      "definition": "CREATE UNIQUE INDEX organization_markdown_config_org_scope_key ON public.organization_markdown_config USING btree (organization_id, credit_scope)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_pkey",
+      "definition": "CREATE UNIQUE INDEX organization_markdown_config_pkey ON public.organization_markdown_config USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_organization_id_key",
+      "definition": "CREATE UNIQUE INDEX organization_usage_organization_id_key ON public.organization_usage USING btree (organization_id)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_pkey",
+      "definition": "CREATE UNIQUE INDEX organization_usage_pkey ON public.organization_usage USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_clerk_organization_id_key",
+      "definition": "CREATE UNIQUE INDEX organizations_clerk_organization_id_key ON public.organizations USING btree (clerk_organization_id)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_pkey",
+      "definition": "CREATE UNIQUE INDEX organizations_pkey ON public.organizations USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_slug_key",
+      "definition": "CREATE UNIQUE INDEX organizations_slug_key ON public.organizations USING btree (slug)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_event_type_processed_at_idx",
+      "definition": "CREATE INDEX processed_webhook_events_event_type_processed_at_idx ON public.processed_webhook_events USING btree (event_type, processed_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_pkey",
+      "definition": "CREATE UNIQUE INDEX processed_webhook_events_pkey ON public.processed_webhook_events USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "idx_products_brand_id",
+      "definition": "CREATE INDEX idx_products_brand_id ON public.products USING btree (brand_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "idx_products_supplier_id",
+      "definition": "CREATE INDEX idx_products_supplier_id ON public.products USING btree (supplier_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_barcode_idx",
+      "definition": "CREATE INDEX products_barcode_idx ON public.products USING btree (barcode)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_organization_id_barcode_idx",
+      "definition": "CREATE INDEX products_organization_id_barcode_idx ON public.products USING btree (organization_id, barcode)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_organization_id_barcode_key",
+      "definition": "CREATE UNIQUE INDEX products_organization_id_barcode_key ON public.products USING btree (organization_id, barcode)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_organization_id_sku_idx",
+      "definition": "CREATE INDEX products_organization_id_sku_idx ON public.products USING btree (organization_id, sku)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_organization_id_sku_key",
+      "definition": "CREATE UNIQUE INDEX products_organization_id_sku_key ON public.products USING btree (organization_id, sku)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_pkey",
+      "definition": "CREATE UNIQUE INDEX products_pkey ON public.products USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "products",
+      "name": "products_sku_idx",
+      "definition": "CREATE INDEX products_sku_idx ON public.products USING btree (sku)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_expires_at_idx",
+      "definition": "CREATE INDEX refresh_tokens_expires_at_idx ON public.refresh_tokens USING btree (expires_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_pkey",
+      "definition": "CREATE UNIQUE INDEX refresh_tokens_pkey ON public.refresh_tokens USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_token_idx",
+      "definition": "CREATE INDEX refresh_tokens_token_idx ON public.refresh_tokens USING btree (token)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_token_key",
+      "definition": "CREATE UNIQUE INDEX refresh_tokens_token_key ON public.refresh_tokens USING btree (token)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_user_id_idx",
+      "definition": "CREATE INDEX refresh_tokens_user_id_idx ON public.refresh_tokens USING btree (user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_pkey",
+      "definition": "CREATE UNIQUE INDEX schema_migrations_pkey ON public.schema_migrations USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "store_areas",
+      "name": "idx_store_areas_parent_id",
+      "definition": "CREATE INDEX idx_store_areas_parent_id ON public.store_areas USING btree (parent_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_name_idx",
+      "definition": "CREATE INDEX store_areas_name_idx ON public.store_areas USING btree (name)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_organization_id_idx",
+      "definition": "CREATE INDEX store_areas_organization_id_idx ON public.store_areas USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_organization_id_name_sub_department_key",
+      "definition": "CREATE UNIQUE INDEX store_areas_organization_id_name_sub_department_key ON public.store_areas USING btree (organization_id, name, sub_department)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_pkey",
+      "definition": "CREATE UNIQUE INDEX store_areas_pkey ON public.store_areas USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_organization_id_idx",
+      "definition": "CREATE INDEX subscription_tiers_organization_id_idx ON public.subscription_tiers USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_past_due_since_idx",
+      "definition": "CREATE INDEX subscription_tiers_past_due_since_idx ON public.subscription_tiers USING btree (past_due_since)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_pkey",
+      "definition": "CREATE UNIQUE INDEX subscription_tiers_pkey ON public.subscription_tiers USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_status_idx",
+      "definition": "CREATE INDEX subscription_tiers_status_idx ON public.subscription_tiers USING btree (status)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_tier_level_idx",
+      "definition": "CREATE INDEX subscription_tiers_tier_level_idx ON public.subscription_tiers USING btree (tier_level)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_trial_end_date_idx",
+      "definition": "CREATE INDEX subscription_tiers_trial_end_date_idx ON public.subscription_tiers USING btree (trial_end_date)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "suppliers",
+      "name": "idx_suppliers_organization_id",
+      "definition": "CREATE INDEX idx_suppliers_organization_id ON public.suppliers USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_organization_id_name_key",
+      "definition": "CREATE UNIQUE INDEX suppliers_organization_id_name_key ON public.suppliers USING btree (organization_id, name)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_pkey",
+      "definition": "CREATE UNIQUE INDEX suppliers_pkey ON public.suppliers USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_pkey",
+      "definition": "CREATE UNIQUE INDEX tier_feature_flags_pkey ON public.tier_feature_flags USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_tier_level_feature_key_key",
+      "definition": "CREATE UNIQUE INDEX tier_feature_flags_tier_level_feature_key_key ON public.tier_feature_flags USING btree (tier_level, feature_key)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_tier_level_idx",
+      "definition": "CREATE INDEX tier_feature_flags_tier_level_idx ON public.tier_feature_flags USING btree (tier_level)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_event_type_idx",
+      "definition": "CREATE INDEX trial_events_event_type_idx ON public.trial_events USING btree (event_type)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_occurred_at_idx",
+      "definition": "CREATE INDEX trial_events_occurred_at_idx ON public.trial_events USING btree (occurred_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_organization_id_idx",
+      "definition": "CREATE INDEX trial_events_organization_id_idx ON public.trial_events USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_pkey",
+      "definition": "CREATE UNIQUE INDEX trial_events_pkey ON public.trial_events USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_created_at_idx",
+      "definition": "CREATE INDEX uploads_created_at_idx ON public.uploads USING btree (created_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_file_key_key",
+      "definition": "CREATE UNIQUE INDEX uploads_file_key_key ON public.uploads USING btree (file_key)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_one_active_catalogue_per_org",
+      "definition": "CREATE UNIQUE INDEX uploads_one_active_catalogue_per_org ON public.uploads USING btree (organization_id) WHERE ((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))",
+      "unique": true,
+      "primary": false,
+      "predicate": "((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_organization_id_created_at_idx",
+      "definition": "CREATE INDEX uploads_organization_id_created_at_idx ON public.uploads USING btree (organization_id, created_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_pkey",
+      "definition": "CREATE UNIQUE INDEX uploads_pkey ON public.uploads USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_status_idx",
+      "definition": "CREATE INDEX uploads_status_idx ON public.uploads USING btree (status)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_user_id_created_at_idx",
+      "definition": "CREATE INDEX uploads_user_id_created_at_idx ON public.uploads USING btree (user_id, created_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_clerk_user_id_idx",
+      "definition": "CREATE INDEX users_clerk_user_id_idx ON public.users USING btree (clerk_user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_clerk_user_id_key",
+      "definition": "CREATE UNIQUE INDEX users_clerk_user_id_key ON public.users USING btree (clerk_user_id)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_email_idx",
+      "definition": "CREATE INDEX users_email_idx ON public.users USING btree (email)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_email_key",
+      "definition": "CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_organization_id_idx",
+      "definition": "CREATE INDEX users_organization_id_idx ON public.users USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_pkey",
+      "definition": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_username_idx",
+      "definition": "CREATE INDEX users_username_idx ON public.users USING btree (username)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "users",
+      "name": "users_username_key",
+      "definition": "CREATE UNIQUE INDEX users_username_key ON public.users USING btree (username)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_date_idx",
+      "definition": "CREATE INDEX webhook_metrics_date_idx ON public.webhook_metrics USING btree (date)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_event_type_date_key",
+      "definition": "CREATE UNIQUE INDEX webhook_metrics_event_type_date_key ON public.webhook_metrics USING btree (event_type, date)",
+      "unique": true,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_event_type_idx",
+      "definition": "CREATE INDEX webhook_metrics_event_type_idx ON public.webhook_metrics USING btree (event_type)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_pkey",
+      "definition": "CREATE UNIQUE INDEX webhook_metrics_pkey ON public.webhook_metrics USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    }
+  ],
+  "constraints": [
+    {
+      "table": "audit_log",
+      "name": "audit_log_action_not_null",
+      "type": "n",
+      "definition": "NOT NULL action"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_change_description_not_null",
+      "type": "n",
+      "definition": "NOT NULL change_description"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_inventory_item_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON UPDATE CASCADE ON DELETE SET NULL"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_checked_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL checked_at"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_cycle_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (cycle_id) REFERENCES check_cycles(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_cycle_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL cycle_id"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_items_added_count_check",
+      "type": "c",
+      "definition": "CHECK ((items_added_count >= 0))"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_items_added_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL items_added_count"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_store_area_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (store_area_id) REFERENCES store_areas(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_store_area_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL store_area_id"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "brands",
+      "name": "brands_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "brands",
+      "name": "brands_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "brands",
+      "name": "brands_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "brands",
+      "name": "brands_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "brands",
+      "name": "brands_organization_id_name_key",
+      "type": "u",
+      "definition": "UNIQUE (organization_id, name)"
+    },
+    {
+      "table": "brands",
+      "name": "brands_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "brands",
+      "name": "brands_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "brands",
+      "name": "brands_source_check",
+      "type": "c",
+      "definition": "CHECK ((source = ANY (ARRAY['REFERENCE'::text, 'USER_ADDED'::text, 'CONFIRMED'::text])))"
+    },
+    {
+      "table": "brands",
+      "name": "brands_source_not_null",
+      "type": "n",
+      "definition": "NOT NULL source"
+    },
+    {
+      "table": "brands",
+      "name": "brands_supplier_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "brands",
+      "name": "brands_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_brand_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_chosen_supplier_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (chosen_supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_created_by_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_kind_check",
+      "type": "c",
+      "definition": "CHECK ((kind = ANY (ARRAY['UNMATCHED'::text, 'BRAND_ADDED'::text, 'SUPPLIER_OVERRIDE'::text])))"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_kind_not_null",
+      "type": "n",
+      "definition": "NOT NULL kind"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_product_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_status_check",
+      "type": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['PENDING'::text, 'ACCEPTED'::text, 'REJECTED'::text])))"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "catalogue_corrections",
+      "name": "catalogue_corrections_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_error_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL error_count"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_inserted_not_null",
+      "type": "n",
+      "definition": "NOT NULL inserted"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_reinstated_not_null",
+      "type": "n",
+      "definition": "NOT NULL reinstated"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_retired_not_null",
+      "type": "n",
+      "definition": "NOT NULL retired"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_seeded_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL seeded_at"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_source_file_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL source_file_name"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_unchanged_not_null",
+      "type": "n",
+      "definition": "NOT NULL unchanged"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_updated_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_version_key",
+      "type": "u",
+      "definition": "UNIQUE (version)"
+    },
+    {
+      "table": "catalogue_seed_runs",
+      "name": "catalogue_seed_runs_version_not_null",
+      "type": "n",
+      "definition": "NOT NULL version"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_completed_at_check",
+      "type": "c",
+      "definition": "CHECK ((((status = 'completed'::text) AND (completed_at IS NOT NULL)) OR ((status = 'active'::text) AND (completed_at IS NULL))))"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_started_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL started_at"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_status_check",
+      "type": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'completed'::text])))"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "check_cycles",
+      "name": "check_cycles_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "clerk_webhook_events_event_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL event_type"
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "clerk_webhook_events_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "clerk_webhook_events_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "clerk_webhook_events",
+      "name": "clerk_webhook_events_processed_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL processed_at"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_claim_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (claim_id) REFERENCES credit_claims(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_claim_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL claim_id"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL type"
+    },
+    {
+      "table": "credit_claim_events",
+      "name": "credit_claim_events_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_claim_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (claim_id) REFERENCES credit_claims(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_claim_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL claim_id"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_expired_item_transaction_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (expired_item_transaction_id) REFERENCES expired_item_transactions(id)"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_expired_item_transaction_id_key",
+      "type": "u",
+      "definition": "UNIQUE (expired_item_transaction_id)"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_expired_item_transaction_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL expired_item_transaction_id"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_units_claimed_not_null",
+      "type": "n",
+      "definition": "NOT NULL units_claimed"
+    },
+    {
+      "table": "credit_claim_lines",
+      "name": "credit_claim_lines_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_claim_line_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (claim_line_id) REFERENCES credit_claim_lines(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_claim_line_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL claim_line_id"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_file_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL file_name"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_size_bytes_not_null",
+      "type": "n",
+      "definition": "NOT NULL size_bytes"
+    },
+    {
+      "table": "credit_claim_photos",
+      "name": "credit_claim_photos_storage_key_not_null",
+      "type": "n",
+      "definition": "NOT NULL storage_key"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_created_by_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_follow_up_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL follow_up_count"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_supplier_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id)"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_supplier_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL supplier_id"
+    },
+    {
+      "table": "credit_claims",
+      "name": "credit_claims_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_action_not_null",
+      "type": "n",
+      "definition": "NOT NULL action"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_credit_disposition_not_null",
+      "type": "n",
+      "definition": "NOT NULL credit_disposition"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_inventory_item_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_inventory_item_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL inventory_item_id"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_transaction_date_not_null",
+      "type": "n",
+      "definition": "NOT NULL transaction_date"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_item_transactions_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+    },
+    {
+      "table": "expired_item_transactions",
+      "name": "expired_transactions_credit_disposition_check",
+      "type": "c",
+      "definition": "CHECK ((credit_disposition = ANY (ARRAY['PENDING'::text, 'DISPOSED'::text])))"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_expiry_date_not_null",
+      "type": "n",
+      "definition": "NOT NULL expiry_date"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_location_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (location_id) REFERENCES store_areas(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_location_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL location_id"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_product_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (product_id) REFERENCES products(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_product_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL product_id"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "inventory_items",
+      "name": "inventory_items_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_inventory_item_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_inventory_item_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL inventory_item_id"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_quantity_change_not_null",
+      "type": "n",
+      "definition": "NOT NULL quantity_change"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_transaction_date_not_null",
+      "type": "n",
+      "definition": "NOT NULL transaction_date"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL type"
+    },
+    {
+      "table": "item_transactions",
+      "name": "item_transactions_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_barcode_key",
+      "type": "u",
+      "definition": "UNIQUE (barcode)"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_barcode_not_null",
+      "type": "n",
+      "definition": "NOT NULL barcode"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_brand_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL brand_name"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_description_not_null",
+      "type": "n",
+      "definition": "NOT NULL description"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "master_catalogue_entries",
+      "name": "master_catalogue_entries_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_date_not_null",
+      "type": "n",
+      "definition": "NOT NULL date"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_total_churn_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_churn"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_total_conversions_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_conversions"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_total_revenue_cents_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_revenue_cents"
+    },
+    {
+      "table": "metrics_snapshots",
+      "name": "metrics_snapshots_total_trials_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_trials"
+    },
+    {
+      "table": "migrations",
+      "name": "migrations_applied_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL applied_at"
+    },
+    {
+      "table": "migrations",
+      "name": "migrations_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "migrations",
+      "name": "migrations_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "migrations",
+      "name": "migrations_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_email_not_null",
+      "type": "n",
+      "definition": "NOT NULL email"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_expires_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_invited_by_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (invited_by_user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_invited_by_user_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL invited_by_user_id"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_role_not_null",
+      "type": "n",
+      "definition": "NOT NULL role"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "organization_invites",
+      "name": "organization_invites_token_not_null",
+      "type": "n",
+      "definition": "NOT NULL token"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band1_basis_check",
+      "type": "c",
+      "definition": "CHECK ((band1_basis = ANY (ARRAY['cost'::text, 'retail'::text])))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band1_basis_not_null",
+      "type": "n",
+      "definition": "NOT NULL band1_basis"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band1_pct_check",
+      "type": "c",
+      "definition": "CHECK (((band1_percentage >= (0)::double precision) AND (band1_percentage <= (100)::double precision)))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band1_percentage_not_null",
+      "type": "n",
+      "definition": "NOT NULL band1_percentage"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band2_basis_check",
+      "type": "c",
+      "definition": "CHECK ((band2_basis = ANY (ARRAY['cost'::text, 'retail'::text])))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band2_basis_not_null",
+      "type": "n",
+      "definition": "NOT NULL band2_basis"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band2_pct_check",
+      "type": "c",
+      "definition": "CHECK (((band2_percentage >= (0)::double precision) AND (band2_percentage <= (100)::double precision)))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band2_percentage_not_null",
+      "type": "n",
+      "definition": "NOT NULL band2_percentage"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band3_basis_check",
+      "type": "c",
+      "definition": "CHECK ((band3_basis = ANY (ARRAY['cost'::text, 'retail'::text])))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band3_basis_not_null",
+      "type": "n",
+      "definition": "NOT NULL band3_basis"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band3_pct_check",
+      "type": "c",
+      "definition": "CHECK (((band3_percentage >= (0)::double precision) AND (band3_percentage <= (100)::double precision)))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_band3_percentage_not_null",
+      "type": "n",
+      "definition": "NOT NULL band3_percentage"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_credit_scope_check",
+      "type": "c",
+      "definition": "CHECK ((credit_scope = ANY (ARRAY['NO_CREDIT'::text, 'FULL_CREDIT'::text])))"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_credit_scope_not_null",
+      "type": "n",
+      "definition": "NOT NULL credit_scope"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_org_scope_key",
+      "type": "u",
+      "definition": "UNIQUE (organization_id, credit_scope)"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "organization_markdown_config",
+      "name": "organization_markdown_config_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_active_users_not_null",
+      "type": "n",
+      "definition": "NOT NULL active_users"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_max_skus_not_null",
+      "type": "n",
+      "definition": "NOT NULL max_skus"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_max_users_not_null",
+      "type": "n",
+      "definition": "NOT NULL max_users"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_storage_used_bytes_not_null",
+      "type": "n",
+      "definition": "NOT NULL storage_used_bytes"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_total_inventory_items_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_inventory_items"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_total_skus_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_skus"
+    },
+    {
+      "table": "organization_usage",
+      "name": "organization_usage_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_is_creation_locked_not_null",
+      "type": "n",
+      "definition": "NOT NULL is_creation_locked"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_slug_not_null",
+      "type": "n",
+      "definition": "NOT NULL slug"
+    },
+    {
+      "table": "organizations",
+      "name": "organizations_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_event_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL event_type"
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_processed_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL processed_at"
+    },
+    {
+      "table": "products",
+      "name": "products_barcode_not_null",
+      "type": "n",
+      "definition": "NOT NULL barcode"
+    },
+    {
+      "table": "products",
+      "name": "products_brand_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "products",
+      "name": "products_cost_price_not_null",
+      "type": "n",
+      "definition": "NOT NULL cost_price"
+    },
+    {
+      "table": "products",
+      "name": "products_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "products",
+      "name": "products_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "products",
+      "name": "products_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "products",
+      "name": "products_notes_not_null",
+      "type": "n",
+      "definition": "NOT NULL notes"
+    },
+    {
+      "table": "products",
+      "name": "products_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "products",
+      "name": "products_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "products",
+      "name": "products_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "products",
+      "name": "products_sku_not_null",
+      "type": "n",
+      "definition": "NOT NULL sku"
+    },
+    {
+      "table": "products",
+      "name": "products_supplier_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "products",
+      "name": "products_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_expires_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_token_not_null",
+      "type": "n",
+      "definition": "NOT NULL token"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "refresh_tokens",
+      "name": "refresh_tokens_user_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL user_id"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_checksum_not_null",
+      "type": "n",
+      "definition": "NOT NULL checksum"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_data_loss_class_check",
+      "type": "c",
+      "definition": "CHECK ((data_loss_class = ANY (ARRAY['none'::text, 'possible'::text, 'destructive'::text])))"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_data_loss_class_not_null",
+      "type": "n",
+      "definition": "NOT NULL data_loss_class"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_deployment_sha_not_null",
+      "type": "n",
+      "definition": "NOT NULL deployment_sha"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_migration_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL migration_name"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_recovery_strategy_check",
+      "type": "c",
+      "definition": "CHECK ((recovery_strategy = ANY (ARRAY['rollback-sql'::text, 'forward-fix'::text, 'restore'::text])))"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_recovery_strategy_not_null",
+      "type": "n",
+      "definition": "NOT NULL recovery_strategy"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_runner_version_not_null",
+      "type": "n",
+      "definition": "NOT NULL runner_version"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_started_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL started_at"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_state_check",
+      "type": "c",
+      "definition": "CHECK ((state = ANY (ARRAY['applying'::text, 'applied'::text])))"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_state_not_null",
+      "type": "n",
+      "definition": "NOT NULL state"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_transaction_rule_check",
+      "type": "c",
+      "definition": "CHECK ((transaction_rule = ANY (ARRAY['required'::text, 'forbidden'::text])))"
+    },
+    {
+      "table": "schema_migrations",
+      "name": "schema_migrations_transaction_rule_not_null",
+      "type": "n",
+      "definition": "NOT NULL transaction_rule"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_parent_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (parent_id) REFERENCES store_areas(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_parent_not_self_check",
+      "type": "c",
+      "definition": "CHECK (((parent_id IS NULL) OR (parent_id <> id)))"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "store_areas",
+      "name": "store_areas_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_billing_cycle_not_null",
+      "type": "n",
+      "definition": "NOT NULL billing_cycle"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_tier_level_not_null",
+      "type": "n",
+      "definition": "NOT NULL tier_level"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_credit_policy_note_not_null",
+      "type": "n",
+      "definition": "NOT NULL credit_policy_note"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_credit_type_check",
+      "type": "c",
+      "definition": "CHECK ((credit_type = ANY (ARRAY['NONE'::text, 'FULL_CREDIT'::text])))"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_credit_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL credit_type"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_follow_up_days_not_null",
+      "type": "n",
+      "definition": "NOT NULL follow_up_days"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL name"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_organization_id_name_key",
+      "type": "u",
+      "definition": "UNIQUE (organization_id, name)"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "suppliers",
+      "name": "suppliers_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_enabled_not_null",
+      "type": "n",
+      "definition": "NOT NULL enabled"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_feature_key_not_null",
+      "type": "n",
+      "definition": "NOT NULL feature_key"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "tier_feature_flags",
+      "name": "tier_feature_flags_tier_level_not_null",
+      "type": "n",
+      "definition": "NOT NULL tier_level"
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_event_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL event_type"
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_occurred_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL occurred_at"
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "trial_events",
+      "name": "trial_events_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_columns_ignored_not_null",
+      "type": "n",
+      "definition": "NOT NULL columns_ignored"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_file_key_not_null",
+      "type": "n",
+      "definition": "NOT NULL file_key"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_file_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL file_name"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_file_size_bytes_not_null",
+      "type": "n",
+      "definition": "NOT NULL file_size_bytes"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_import_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL import_type"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_processing_offset_not_null",
+      "type": "n",
+      "definition": "NOT NULL processing_offset"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_retry_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL retry_count"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_row_error_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL row_error_count"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_rows_imported_not_null",
+      "type": "n",
+      "definition": "NOT NULL rows_imported"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_rows_processed_not_null",
+      "type": "n",
+      "definition": "NOT NULL rows_processed"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_rows_skipped_not_null",
+      "type": "n",
+      "definition": "NOT NULL rows_skipped"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_rows_unchanged_not_null",
+      "type": "n",
+      "definition": "NOT NULL rows_unchanged"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_rows_updated_not_null",
+      "type": "n",
+      "definition": "NOT NULL rows_updated"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_status_not_null",
+      "type": "n",
+      "definition": "NOT NULL status"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_upload_progress_not_null",
+      "type": "n",
+      "definition": "NOT NULL upload_progress"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_user_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "uploads",
+      "name": "uploads_user_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL user_id"
+    },
+    {
+      "table": "users",
+      "name": "users_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "users",
+      "name": "users_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "users",
+      "name": "users_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "users",
+      "name": "users_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "users",
+      "name": "users_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "users",
+      "name": "users_role_not_null",
+      "type": "n",
+      "definition": "NOT NULL role"
+    },
+    {
+      "table": "users",
+      "name": "users_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_date_not_null",
+      "type": "n",
+      "definition": "NOT NULL date"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_event_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL event_type"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_failure_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL failure_count"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "webhook_metrics",
+      "name": "webhook_metrics_total_count_not_null",
+      "type": "n",
+      "definition": "NOT NULL total_count"
+    }
+  ],
+  "functions": [
+    {
+      "name": "enforce_bay_check_leaf_store_area",
+      "definition": "CREATE OR REPLACE FUNCTION public.enforce_bay_check_leaf_store_area()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1\n    FROM store_areas\n    WHERE id = NEW.store_area_id\n      AND organization_id = NEW.organization_id\n      AND parent_id IS NOT NULL\n  ) THEN\n    RAISE EXCEPTION 'bay_checks.store_area_id must reference a leaf bay in the same organization';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM check_cycles\n    WHERE id = NEW.cycle_id\n      AND organization_id = NEW.organization_id\n  ) THEN\n    RAISE EXCEPTION 'bay_checks.cycle_id must reference a cycle in the same organization';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+    }
+  ],
+  "triggers": [
+    {
+      "table": "bay_checks",
+      "name": "bay_checks_leaf_store_area_check",
+      "timing": "BEFORE",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "statement": "EXECUTE FUNCTION enforce_bay_check_leaf_store_area()"
+    }
+  ]
+}

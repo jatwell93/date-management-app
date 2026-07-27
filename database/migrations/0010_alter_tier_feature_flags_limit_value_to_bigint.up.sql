@@ -1,0 +1,15 @@
+-- Migration 0010: Widen tier_feature_flags.limit_value from integer to bigint.
+--
+-- The column stores tier limits including storage_bytes, whose declared values
+-- (up to 100 GB = 107374182400) exceed the int4 range (~2.1B). The previous
+-- int4 type could not hold the professional/premium/concierge storage_bytes
+-- values, so the backend-owned Prisma seed could not have inserted them. This
+-- widening is expand-compatible: bigint holds every int4 value, so an old
+-- Worker that reads the column continues to work, and no data is lost.
+--
+-- Recovery (manual-only, destructive, partial): the down migration narrows the
+-- column back to integer, which fails or loses data if any row exceeds the int4
+-- range. Only use it after confirming no row exceeds int4; otherwise recover via
+-- a forward fix. Primary recovery strategy is forward-fix, matching migration
+-- 0004's partial-recovery pattern.
+ALTER TABLE "tier_feature_flags" ALTER COLUMN "limit_value" TYPE bigint;

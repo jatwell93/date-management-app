@@ -1,0 +1,190 @@
+name: Migrations E2E (real PostgreSQL)
+
+# End-to-end migration runner proof against a real PostgreSQL engine.
+# Pinned by amd64 digest to postgres:17.10-trixie to match the production Neon
+# project `date-management-prod` (pg_version: 17, verified via Neon MCP
+# 2026-07-25). The tag is kept in the reference for readability; the digest
+# makes the image immutable so a registry-side republish cannot silently
+# change the PG minor version under us. If production upgrades to PG 18+,
+# bump both the tag and the digest.
+#
+# Triggered on EVERY pull request and push to main/master — NO `paths:` filter.
+# This is deliberate and matches backend-test.yml: a required status check must
+# always report. A workflow filtered out by `paths:` never runs, so its check
+# never appears and a required check waits forever — permanently blocking any
+# PR that does not touch that path. The `changes` job below does path detection
+# inside the workflow, and the `gate` job at the bottom lets the gate pass when
+# migration files are unchanged.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect migration changes
+    runs-on: ubuntu-latest
+    outputs:
+      migrations: ${{ steps.filter.outputs.migrations }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.before }}
+          PUSH_AFTER: ${{ github.after }}
+        run: |
+          # Deliberately NOT `set -e`. Every failure path here must fall back to
+          # RUNNING the tests. Aborting mid-script would fail this job, which
+          # would leave the dependent e2e job *skipped* — and the gate job is
+          # the real backstop, but we still prefer to run when unsure.
+          set -u
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "::error::GITHUB_OUTPUT is unset"
+            exit 1
+          fi
+
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_AFTER"
+          fi
+
+          # Fail safe: if we cannot determine the diff, run the tests.
+          run_tests() {
+            echo "$1"
+            echo "migrations=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            run_tests "Base commit unavailable; running e2e tests."
+          fi
+
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            run_tests "Base commit ${base} not found; running e2e tests."
+          fi
+
+          if ! changed=$(git diff --name-only "$base" "$head" 2>&1); then
+            run_tests "git diff failed (${changed}); running e2e tests."
+          fi
+
+          if printf '%s\n' "$changed" | grep -qE '^(src/database/migrations/|database/migrations/|\.github/workflows/migrations-e2e\.yml)'; then
+            echo "migrations=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "migrations=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e:
+    name: Migrations E2E Tests
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
+    runs-on: ubuntu-latest
+
+    # PostgreSQL service container pinned by amd64 digest to match production
+    # (Neon PG 17). Tag: postgres:17.10-trixie
+    # amd64 digest: sha256:cb875afe6d2e8593c28c22d37d0fd7aaf035c43a42e2f7792cd4c09ceb6beac5
+    # Verified 2026-07-25 via Docker Hub API + Neon MCP project metadata.
+    services:
+      postgres:
+        image: postgres:17.10-trixie@sha256:cb875afe6d2e8593c28c22d37d0fd7aaf035c43a42e2f7792cd4c09ceb6beac5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # Dedicated e2e database — the suite's safety guard requires the URL
+          # path to name a non-production-shaped database, and the confirmation
+          # token must match it. Using `migration_e2e` here keeps the service
+          # container's default DB name aligned with the suite's expectations.
+          POSTGRES_DB: migration_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run E2E Migration Tests
+        env:
+          # Direct (non-pooled) connection to the service container.
+          # The e2e suite fails closed if either env var is unset, and refuses
+          # to run against a production-shaped target.
+          MIGRATION_E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/migration_e2e
+          MIGRATION_E2E_CONFIRMATION: DROP migration_e2e AT localhost
+        run: npm run test:migrations:e2e
+
+      - name: Generate E2E Test Summary
+        if: always()
+        run: |
+          echo "## Migrations E2E Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Real-PostgreSQL end-to-end proof of the migration runner." >> $GITHUB_STEP_SUMMARY
+          echo "Service: postgres:17.10-trixie@sha256:cb875afe... (matches Neon production PG 17)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Covers: fresh install, adoption, concurrent refusal, interruption/recovery (real partial non-tx DDL), checksum drift, catalog drift, safe down, forward fix." >> $GITHUB_STEP_SUMMARY
+
+  # THE required status check — same pattern as backend-test.yml.
+  # Runs unconditionally so it can never be skipped. If `changes` fails, the
+  # e2e job is skipped and a required check placed on `e2e` would pass
+  # without any test having run. This gate inspects the real results.
+  gate:
+    name: Migrations E2E Gate
+    if: always()
+    needs: [changes, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate e2e job results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          MIGRATIONS_CHANGED: ${{ needs.changes.outputs.migrations }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          set -u
+          echo "changes=${CHANGES_RESULT} migrations_changed=${MIGRATIONS_CHANGED:-<unset>}"
+          echo "e2e=${E2E_RESULT}"
+
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate."
+            exit 1
+          fi
+
+          if [ "${MIGRATIONS_CHANGED:-}" != "true" ]; then
+            echo "No migration changes detected - gate passes with e2e job skipped."
+            exit 0
+          fi
+
+          if [ "$E2E_RESULT" != "success" ]; then
+            echo "::error::Migrations E2E Tests did not succeed (result: ${E2E_RESULT})."
+            exit 1
+          fi
+
+          echo "Migrations E2E Tests passed."
+          exit 0

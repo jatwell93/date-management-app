@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "id": "0000",
+      "forward": "0000_baseline.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0000_baseline.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0001",
+      "forward": "0001_queued_catalogue_imports.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0001_queued_catalogue_imports.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0002",
+      "forward": "0002_add_markdown_level_to_expired_item_transactions.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0002_add_markdown_level_to_expired_item_transactions.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0003",
+      "forward": "0003_add_configurable_markdown_matrix.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0003_add_configurable_markdown_matrix.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0004",
+      "forward": "0004_add_store_walk_bay_tracking.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "forward-fix",
+        "file": "0004_add_store_walk_bay_tracking.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "partial"
+      }
+    },
+    {
+      "id": "0005",
+      "forward": "0005_add_supplier_credit_claims.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0005_add_supplier_credit_claims.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0006",
+      "forward": "0006_add_brand_supplier_mapping.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0006_add_brand_supplier_mapping.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0007",
+      "forward": "0007_add_supplier_policy_fields.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0007_add_supplier_policy_fields.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0008",
+      "forward": "0008_add_credit_scoped_markdown_matrix.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0008_add_credit_scoped_markdown_matrix.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0009",
+      "forward": "0009_add_catalogue_provenance.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0009_add_catalogue_provenance.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
+    },
+    {
+      "id": "0010",
+      "forward": "0010_alter_tier_feature_flags_limit_value_to_bigint.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "forward-fix",
+        "file": "0010_alter_tier_feature_flags_limit_value_to_bigint.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "partial"
+      }
+    }
+  ]
+}

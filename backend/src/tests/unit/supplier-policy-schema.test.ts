@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import { MigrationService, type Migration } from '../../migrations/migration.service';
 
 const backendRoot = path.resolve(__dirname, '../../..');
+const migrationRoot = path.resolve(backendRoot, '../database/migrations');
 
 async function supplierPolicyMigration(): Promise<Migration> {
   const service = new MigrationService() as unknown as {
@@ -28,11 +29,11 @@ describe('supplier policy schema parity', () => {
 
   it('ships forward and rollback Neon migrations with a conditional backfill', () => {
     const forward = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0007_add_supplier_policy_fields.sql'),
+      path.join(migrationRoot, '0007_add_supplier_policy_fields.up.sql'),
       'utf8',
     );
     const rollback = fs.readFileSync(
-      path.join(backendRoot, 'prisma/neon-sql/0007_add_supplier_policy_fields_rollback.sql'),
+      path.join(migrationRoot, '0007_add_supplier_policy_fields.down.sql'),
       'utf8',
     );
 

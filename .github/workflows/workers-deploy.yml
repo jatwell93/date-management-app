@@ -7,23 +7,77 @@ on:
       - main
     paths:
       - 'workers/**'
+      - 'database/migrations/**'
+      - 'src/database/migrations/**'
       - '.github/workflows/workers-deploy.yml'
+      - '.github/workflows/migration-prep.yml'
   push:
     branches:
       - main
     paths:
       - 'workers/**'
+      - 'database/migrations/**'
+      - 'src/database/migrations/**'
       - '.github/workflows/workers-deploy.yml'
+      - '.github/workflows/migration-prep.yml'
 
 permissions:
   contents: read
 
+# Concurrency: serialize all production deploys under one fixed group so a
+# push or manual dispatch can never cancel or overlap an in-flight
+# apply/seed/verify sequence. PR (preview) deploys keep ref-specific groups
+# with cancel-in-progress so superseded preview runs are cancelled.
 concurrency:
-  group: workers-deploy-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'pull_request' && format('workers-deploy-pr-{0}', github.ref) || 'workers-deploy-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Phase 1 task 1.7 — migration preparation before Worker deploy.
+  # Preview (PR) deploys run in validate mode (read-only status + preflight)
+  # so migration files are checked without mutating the shared dev database.
+  # Production deploys run in full mode (status → preflight → PITR → apply →
+  # seed → verify) before the Worker is deployed.
+  migration-prep-preview:
+    name: Migration prep (preview, validate-only)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
+    needs: []
+    uses: ./.github/workflows/migration-prep.yml
+    with:
+      environment: preview
+      deployment_sha: ${{ github.event.pull_request.head.sha }}
+      mode: validate
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.MIGRATION_DOPPLER_TOKEN }}
+
+  migration-prep-production:
+    name: Migration prep (production, full)
+    # Production deploys run on push to main ONLY when the repository
+    # variable PRODUCTION_AUTO_DEPLOY_ENABLED == 'true'. This is an
+    # opt-in switch: the variable defaults to unset (disabled), so a
+    # push to main does not trigger a production deploy until the
+    # operator explicitly enables it. Manual `workflow_dispatch` from
+    # main always works regardless of the variable — this is the
+    # supported break-glass / rollback path and is never gated by the
+    # variable. Set the variable in GitHub → Settings → Secrets and
+    # variables → Actions → Variables.
+    if: >
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/main' &&
+       vars.PRODUCTION_AUTO_DEPLOY_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
+    needs: []
+    uses: ./.github/workflows/migration-prep.yml
+    with:
+      environment: production
+      deployment_sha: ${{ github.sha }}
+      mode: full
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
   deploy-development:
+    needs: [migration-prep-preview]
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment:
@@ -62,6 +116,14 @@ jobs:
       - name: Build worker
         run: npm run build
 
+      # Static assertion that this workflow binds NEON_CONNECTION_STRING
+      # as a Worker secret (via wrangler secret put) BEFORE wrangler
+      # deploy runs in deploy-production. Runs in <100ms, no deps.
+      # See scripts/verify-workers-deploy-bindings.js for the rationale.
+      - name: Validate workflow binding order
+        working-directory: .
+        run: node --test scripts/verify-workers-deploy-bindings.test.js
+
       - name: Validate required Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -84,12 +146,22 @@ jobs:
         run: doppler run -- npx wrangler deploy --env development --keep-vars
 
   deploy-production:
-    # Deploy to production on push to main or on a manual workflow_dispatch
-    # from main (for rollbacks / emergency patches). Pull requests trigger this
-    # workflow only for the development preview deploy; the production
-    # environment's branch protection rejects non-main refs, so guard the job
-    # explicitly instead of letting it start and fail. Mirrors pages-deploy.yml.
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    # Deploy to production on push to main ONLY when the repository
+    # variable PRODUCTION_AUTO_DEPLOY_ENABLED == 'true' (opt-in; defaults
+    # to disabled), or on a manual workflow_dispatch from main (for
+    # rollbacks / emergency patches — always available, never gated by
+    # the variable). Pull requests trigger this workflow only for the
+    # development preview deploy; the production environment's branch
+    # protection rejects non-main refs, so guard the job explicitly
+    # instead of letting it start and fail. Mirrors pages-deploy.yml.
+    # See migration-prep-production above for the variable's rationale.
+    needs: [migration-prep-production]
+    if: >
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/main' &&
+       vars.PRODUCTION_AUTO_DEPLOY_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -128,6 +200,16 @@ jobs:
 
       - name: Build worker
         run: npm run build
+
+      # Static assertion that this workflow binds NEON_CONNECTION_STRING
+      # as a Worker secret (via wrangler secret put) BEFORE wrangler
+      # deploy runs in deploy-production. Runs in <100ms, no deps.
+      # This is the regression guard for the production cutover: a PR
+      # that reorders or removes the binding step fails here before any
+      # deploy runs. See scripts/verify-workers-deploy-bindings.js.
+      - name: Validate workflow binding order
+        working-directory: .
+        run: node --test scripts/verify-workers-deploy-bindings.test.js
 
       - name: Validate required Doppler secrets
         env:
@@ -201,7 +283,141 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- bash -lc 'printf "%s" "$FRONTEND_URL" | npx wrangler secret put FRONTEND_URL --env production'
 
+      # Bind NEON_CONNECTION_STRING to the worker as a secret BEFORE deploying.
+      # `wrangler deploy` does NOT upload surrounding-shell env vars as Worker
+      # secret bindings — it only registers what is in wrangler.toml
+      # [env.*.vars] plus secrets previously registered via `wrangler secret
+      # put`. NEON_CONNECTION_STRING is a secret (wrangler.toml:168,
+      # workers/src/types/env.d.ts:35), not a [env.production.vars] entry, so
+      # `doppler run -- npx wrangler deploy` alone would leave the Worker bound
+      # to whatever NEON_CONNECTION_STRING was last `secret put`'d — potentially
+      # the pre-cutover neondb_owner credential. This step re-binds the value
+      # from Doppler on every production deploy, so a Doppler update (e.g. the
+      # app_runtime cutover, or a rollback to the previous credential) takes
+      # effect on the next deploy without any manual `wrangler secret put`.
+      # printf (no trailing newline) keeps the connection string exact (no
+      # trailing newline added to the secret value). The regression test
+      # scripts/verify-workers-deploy-bindings.test.js asserts this step runs
+      # before `Deploy production worker`.
+      - name: Bind NEON_CONNECTION_STRING secret to worker
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: doppler run -- bash -lc 'printf "%s" "$NEON_CONNECTION_STRING" | npx wrangler secret put NEON_CONNECTION_STRING --env production'
+
       - name: Deploy production worker
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- npx wrangler deploy --env production
+
+  # Phase 1 task 1.7 — post-deploy canary with delayed gate.
+  # Runs authenticated smoke tests immediately after deploy, waits
+  # CANARY_WAIT_MINUTES, then re-runs smoke tests and checks Sentry for new
+  # issues. A failure in either round blocks the canary gate.
+  #
+  # Authentication: the canary mints a short-lived Clerk session token for a
+  # dedicated smoke-test identity (configured in Doppler as SMOKE_USER_ID)
+  # immediately before each smoke round, then revokes the session in a
+  # finally block. The JWT is never stored in GitHub or carried across the
+  # canary window. CLERK_SECRET_KEY and SMOKE_USER_ID are injected by
+  # `doppler run` — the protected GitHub `production` environment holds only
+  # DOPPLER_TOKEN. The /api/subscription/current endpoint requires
+  # authentication (authenticateApiRequest → verifyToken), so an
+  # unauthenticated canary would get 401 and fail spuriously.
+  #
+  # The Sentry check fails open (warns but does not block) if
+  # SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT are unset.
+  canary:
+    name: Post-deploy canary
+    needs: [deploy-production]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SMOKE_TARGET_URL: https://api.expirymate.com.au
+      CANARY_WAIT_MINUTES: ${{ vars.CANARY_WAIT_MINUTES || '15' }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
+      - name: Canary round 1 — authenticated smoke test
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set +e
+          doppler run -- node scripts/run-authenticated-smoke.js > canary-round-1.json 2> canary-round-1.stderr
+          SMOKE_EXIT=$?
+          set -e
+          cat canary-round-1.json
+          cat canary-round-1.stderr >&2
+          exit "$SMOKE_EXIT"
+
+      - name: Canary wait window
+        run: |
+          echo "Waiting $CANARY_WAIT_MINUTES minutes before re-checking..."
+          sleep "$((CANARY_WAIT_MINUTES * 60))"
+
+      - name: Canary round 2 — authenticated smoke test after wait
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set +e
+          doppler run -- node scripts/run-authenticated-smoke.js > canary-round-2.json 2> canary-round-2.stderr
+          SMOKE_EXIT=$?
+          set -e
+          cat canary-round-2.json
+          cat canary-round-2.stderr >&2
+          exit "$SMOKE_EXIT"
+
+      - name: Canary round 2 — Sentry new-issue check (fail open)
+        if: ${{ env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != '' }}
+        run: |
+          # Check for new unresolved Sentry issues in the canary window.
+          # Queries both fatal and critical severity levels using Sentry's
+          # multiple-value search syntax (level:[fatal,critical] = OR).
+          # `fatal` is Sentry's standard highest severity; `critical` is
+          # included defensively in case of custom level configurations.
+          # Fails the gate only if new fatal/critical issues are found.
+          set -u
+          SINCE="${CANARY_WAIT_MINUTES}m"
+          RESPONSE=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
+            "https://sentry.io/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/?query=is:unresolved+level:%5Bfatal,critical%5D+last_seen:-${SINCE}&statsSince=${SINCE}" || true)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "Sentry issues HTTP $HTTP_CODE"
+          echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Sentry API returned $HTTP_CODE; skipping fatal/critical-issue gate (fail open)."
+            exit 0
+          fi
+          NEW_CRITICAL=$(echo "$BODY" | jq 'length' 2>/dev/null || echo "0")
+          if [ "$NEW_CRITICAL" -gt 0 ]; then
+            echo "::error::$NEW_CRITICAL new fatal/critical Sentry issue(s) detected during canary window. ROLLBACK."
+            exit 1
+          fi
+          echo "No new fatal/critical Sentry issues in the canary window."
+
+      - name: Canary round 2 — Sentry check skipped (no token)
+        if: ${{ env.SENTRY_AUTH_TOKEN == '' || env.SENTRY_ORG == '' || env.SENTRY_PROJECT == '' }}
+        run: echo "::warning::SENTRY_AUTH_TOKEN/SENTRY_ORG/SENTRY_PROJECT not set; Sentry canary check skipped (fail open)."
+
+      - name: Upload canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-evidence-${{ github.sha }}
+          path: |
+            canary-round-1.json
+            canary-round-1.stderr
+            canary-round-2.json
+            canary-round-2.stderr
+          retention-days: 30
