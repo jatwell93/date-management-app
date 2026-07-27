@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   loadWorkflow,
@@ -7,6 +9,23 @@ const {
   verifyProductionBindingOrder,
   verifyRoleCheckIsolation,
 } = require('./verify-workers-deploy-bindings.js');
+
+test('preview migration validation uses a separate least-privilege Doppler token', () => {
+  const workflow = fs.readFileSync(
+    path.resolve(__dirname, '..', '.github', 'workflows', 'workers-deploy.yml'),
+    'utf8',
+  );
+  const previewJob = workflow.match(
+    / {2}migration-prep-preview:\r?\n([\s\S]*?)(?=\r?\n {2}migration-prep-production:)/,
+  );
+  assert.ok(previewJob, 'migration-prep-preview job must exist');
+  assert.match(previewJob[1], /DOPPLER_TOKEN:\s*\$\{\{\s*secrets\.MIGRATION_DOPPLER_TOKEN\s*\}\}/);
+  assert.doesNotMatch(
+    previewJob[1],
+    /DOPPLER_TOKEN:\s*\$\{\{\s*secrets\.DOPPLER_TOKEN\s*\}\}/,
+    'preview migration validation must not receive the broader deployment token',
+  );
+});
 
 test('real workflow: NEON_CONNECTION_STRING binding step precedes wrangler deploy', () => {
   const workflow = loadWorkflow();

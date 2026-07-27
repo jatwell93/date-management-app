@@ -48,7 +48,7 @@ jobs:
       deployment_sha: ${{ github.event.pull_request.head.sha }}
       mode: validate
     secrets:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TOKEN: ${{ secrets.MIGRATION_DOPPLER_TOKEN }}
 
   migration-prep-production:
     name: Migration prep (production, full)

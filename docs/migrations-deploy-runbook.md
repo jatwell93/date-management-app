@@ -87,7 +87,11 @@ production GitHub environment is the enforcement boundary.
 
 ## Prerequisites
 
-- [ ] `DOPPLER_TOKEN` GitHub secret configured (repo-level, used by all deploy jobs)
+- [ ] `MIGRATION_DOPPLER_TOKEN` GitHub environment secret configured in
+      `preview`, scoped read-only to the minimal migration-validation config
+- [ ] `DOPPLER_TOKEN` GitHub environment secret configured separately in
+      `preview` (development Worker deploy config) and `production`
+      (production deploy config)
 - [ ] `NEON_API_KEY` GitHub environment secret configured in `production`
       (read-only Neon API key for the PITR readiness check)
 - [ ] `SENTRY_AUTH_TOKEN` GitHub environment secret configured in `production`
@@ -1371,10 +1375,18 @@ off task 1.7.B-execute and the parent 1.7 checkbox.
 
 ## New secrets and variables reference
 
+### GitHub environment secrets (preview)
+
+| Secret | Purpose | Required |
+|--------|---------|----------|
+| `MIGRATION_DOPPLER_TOKEN` | Read-only token scoped to the minimal preview migration-validation config | Yes |
+| `DOPPLER_TOKEN` | Token scoped to the development Worker deployment config | Yes |
+
 ### GitHub environment secrets (production)
 
 | Secret | Purpose | Required |
 |--------|---------|----------|
+| `DOPPLER_TOKEN` | Token scoped to the production deployment config | Yes |
 | `NEON_API_KEY` | Neon API read-only key for PITR readiness check | Yes |
 | `SENTRY_AUTH_TOKEN` | Sentry API read-only token for canary check | No (canary fails open) |
 

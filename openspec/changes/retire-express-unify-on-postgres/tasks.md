@@ -340,10 +340,13 @@
             same way, with an explicit cleanup step that deletes the
             Worker (and its secrets) after the cutover. A static
             regression test,
-            `scripts/verify-workers-deploy-bindings.test.js` (16 tests,
+            `scripts/verify-workers-deploy-bindings.test.js` (17 tests,
             dependency-free line-based YAML scanner), parses
             `workers-deploy.yml` and asserts the binding step exists
-            and precedes `wrangler deploy`. It also verifies that the
+            and precedes `wrangler deploy`. It also verifies that preview
+            migration validation uses the dedicated least-privilege
+            `MIGRATION_DOPPLER_TOKEN`, not the broader development deployment
+            token, and that the
             dedicated `role_check` Wrangler environment exists, uses
             the isolated Worker name, exposes only a workers.dev URL,
             declares no routes, queues, Hyperdrive, R2, KV, or Analytics

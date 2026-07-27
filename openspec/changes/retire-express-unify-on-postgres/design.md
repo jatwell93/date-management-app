@@ -939,6 +939,10 @@ data.
 `SENTRY_AUTH_TOKEN`) are scoped to the protected `production` GitHub
 environment, which has branch policy (only `main`), a 15-minute wait timer,
 and `can_admins_bypass: false` (verified via GitHub API 2026-07-25).
+Preview migration validation uses a separate `MIGRATION_DOPPLER_TOKEN`,
+scoped read-only to the minimal migration-validation Doppler config. The
+preview `DOPPLER_TOKEN` remains scoped to the development Worker deployment
+config; the migration job never receives that broader deployment credential.
 `CLERK_SECRET_KEY` and `SMOKE_USER_ID` are stored in Doppler production
 config (not GitHub) and injected via `doppler run` in the canary job —
 the canary receives the full production Clerk secret key because Clerk
@@ -1032,7 +1036,7 @@ cutover, or a rollback to the previous credential) takes effect on the
 next deploy with no manual `wrangler secret put`. The preview
 role-check Worker (a separately-named Worker with its own secret store)
 is bound the same way in the runbook. A static regression test,
-`scripts/verify-workers-deploy-bindings.test.js` (16 tests), parses the
+`scripts/verify-workers-deploy-bindings.test.js` (17 tests), parses the
 workflow YAML and asserts the binding step exists and precedes
 `wrangler deploy`. It also verifies that the dedicated
 `workers/wrangler.toml` `role_check` environment exists, uses the
@@ -1159,8 +1163,8 @@ production config for the canary orchestrator's session minting. These
 are documented in the runbook's secrets reference section.
 
 **Outstanding evidence from this session.** The CI workflow, scripts, and
-runbook are complete and verified locally (compile clean, 180 script tests
-pass — 96 existing + 68 from `verify-runtime-role` + 16 from
+runbook are complete and verified locally (compile clean, 181 script tests
+pass — 96 existing + 68 from `verify-runtime-role` + 17 from
 `verify-workers-deploy-bindings`, lint clean, OpenSpec valid).
 The first real production deploy with this workflow (1.7.B-execute) is
 deferred to the operator. New GitHub environment secrets and variables
