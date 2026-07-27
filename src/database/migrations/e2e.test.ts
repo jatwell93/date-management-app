@@ -619,9 +619,12 @@ test('e2e: safe down migration — execute 0010 down SQL directly → schema rev
     assert.equal(diff.tablesOnlyInExpected.length, 0, 'No tables should be missing');
     assert.equal(diff.tablesOnlyInActual.length, 0, 'No extra tables expected');
     assert.equal(diff.columnsOnlyInExpected.length, 1);
-    assert.equal(diff.columnsOnlyInActual.length, 1);
+    assert.equal(
+      diff.columnsOnlyInActual.length,
+      0,
+      'Paired column changes are reported on the expected side only',
+    );
     assert.match(diff.columnsOnlyInExpected[0], /tier_feature_flags\|limit_value/);
-    assert.match(diff.columnsOnlyInActual[0], /tier_feature_flags\|limit_value/);
     assert.deepEqual(diff.columnsWithKnownDifferences, []);
   } finally {
     await client.end();
