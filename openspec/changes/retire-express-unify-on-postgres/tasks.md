@@ -132,6 +132,43 @@
       one-time guard, wrong-definition refusal, missing-table refusal, missing-CHECK-constraint refusal
       (strict), missing-partial-index refusal (strict), invalid SHA rejection, and exact-column-exception
       acceptance.**
+      **Hardening (2026-07-28, after the real Neon `migration-role-check`
+      branch exercise surfaced two safety gaps):**
+      - **Dry-run exit code.** The adopt CLI now exits **non-zero** on
+        EVERY refusal — catalog mismatch OR a populated ledger — in BOTH
+        dry-run and apply modes. `STATUS: READY` (and only that) exits 0.
+        Previously a `--dry-run` refusal exited 0 (treated as
+        "informational"), which let a refused dry-run pass a `set -e` /
+        CI gate silently: the branch exercise ran
+        `migrate:adopt -- --dry-run` against a production-shaped database
+        missing migration `0001_queued_catalogue_imports`, the report
+        printed `STATUS: REFUSED — catalog does not match expected
+        schema`, but the process exited 0 and did not stop the sequence.
+        The decision lives in `adoptExitCode(report)` (`adopt.ts`),
+        consumed by `adopt-cli.ts`, with a unit test covering READY
+        (exit 0), catalog mismatch (exit 1), and populated ledger
+        (exit 1). The runbook's first-production adoption procedure
+        (step B) now relies on this: the read-only dry-run is the
+        operator gate, and a refusal MUST fail `set -euo pipefail`.
+      - **First-production adoption procedure.** The runbook now
+        documents the one-time adoption gate as a corrected, ordered
+        sequence: preflight → reconcile-0001-if-required (read-only
+        dry-run → review → guarded psql apply of the reviewed
+        `0001_queued_catalogue_imports.up.sql` → re-dry-run until
+        `STATUS: READY`) → adopt apply at `MIGRATION_ADOPTION_POINT=0009`
+        (stamps `0000`–`0009`, leaves `0010` pending) → status (confirm
+        only `0010` pending) → apply `0010` → status → seed → verify →
+        re-REVOKE ledger access → runtime-role verification. The
+        `0001` schema gap (15 missing `uploads` columns + the
+        `uploads_one_active_catalogue_per_org` partial index) is
+        reconciled by applying the reviewed 0001 SQL directly via a
+        guarded psql confirmation token — it is NOT allowlisted
+        (allowlisting would leave production with a schema that does
+        not match the migration history, breaking every future
+        `migrate:verify`). Adopt-at-0009 (not 0010) is documented with
+        its rationale: `0010` is a real expand migration whose SQL has
+        not yet run, so stamping it as `applied` would leave the column
+        at `integer` while the ledger claims `0010` is done.
 - [x] 1.5 Provide separate ordered commands outside `backend/` for migration status/preflight/apply,
       required idempotent reference-data seed, and schema/data verification. Require a dedicated DDL
       migration role, allowlisted target identity, redacted output, explicit production confirmation,
@@ -320,6 +357,49 @@
             90 across the four migration scripts + 6 across
             `validate-stripe-deployment-config` and
             `mem-memory-scripts`, plus 1 root lifecycle test).
+            **Ledger detection hardening (2026-07-28):**
+            `checkCannotAccessLedger` now probes ledger existence via
+            `pg_catalog` (`pg_class` joined to `pg_namespace`), NOT
+            `information_schema.tables`. The old probe queried
+            `information_schema.tables`, which only lists tables the
+            current role has some privilege on — so once
+            `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM
+            app_runtime` is applied, `information_schema.tables` HIDES
+            the ledger and the existence check reported
+            `ledgerExists: false`, passing vacuously without ever
+            verifying that all seven privileges are denied. This is
+            exactly the false negative observed during the real Neon
+            `migration-role-check` branch exercise:
+            `runtime-role-evidence.json` reported `ledgerExists: false`
+            while a direct `pg_class` / `has_table_privilege` probe
+            (`runtime-ledger-privileges-role-check.txt`) proved
+            `ledger_exists=t` with all seven privileges denied.
+            `pg_class` is a system catalog visible to every role
+            regardless of table privileges, so an existing-but-
+            inaccessible ledger is always detected. Three regression
+            tests cover the inaccessible-ledger detection, the
+            residual-granted-privilege failure (no vacuous pass), and a
+            structural guard that the existence query hits
+            `pg_class`/`pg_namespace` and does NOT hit
+            `information_schema.tables`. Runtime-role script tests:
+            71 (68 + 3 new).
+            **Post-adoption REVOKE ordering (2026-07-28):** the
+            provisioning-time `REVOKE ALL PRIVILEGES ON TABLE
+            schema_migrations FROM app_runtime` is necessary but not
+            sufficient — adoption runs `ensureLedger` as `neondb_owner`,
+            and `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN
+            SCHEMA public GRANT ... ON TABLES TO app_runtime`
+            auto-grants DML on the ledger the moment adoption creates
+            it. A REVOKE applied before the ledger exists does not
+            cover this auto-grant. The runbook's first-production
+            adoption procedure (step F) re-applies the REVOKE
+            immediately after adoption creates the ledger, and step G
+            runs the corrected verifier (expecting `ledgerExists=true`)
+            after that re-REVOKE. The runbook sign-off section now
+            includes an Adoption sign-off block (adoption point,
+            migrations stamped, `0010` applied, seed/verify PASS, 0001
+            gap reconciled, ledger REVOKE re-applied, runtime-role
+            verification PASS with `ledgerExists=true`).
             **Worker secret binding on deploy (2026-07-26):**
             `NEON_CONNECTION_STRING` is a Worker secret
             (`wrangler.toml:168`, `workers/src/types/env.d.ts:35`), not
@@ -489,6 +569,63 @@
             `main (old)…`, and the operator types the exact ID to
             confirm — preventing accidental deletion of the active
             production branch.
+            **Adoption safety hardening (2026-07-28):** nine findings
+            from the `migration-role-check` branch exercise were
+            addressed. (1) The adoption procedure is split into two
+            tracks — a **branch proof track** (disposable
+            `migration-role-check` branch, full manual A–G including
+            `migrate:apply`/`migrate:seed`/`migrate:verify`) and a
+            **production adoption track** (A–D, F–G, then hand off to
+            the protected GitHub workflow which applies `0010`, seeds,
+            verifies, deploys, and canaries inside the CI gate). Step E
+            (manual apply/seed/verify) is branch-proof only — running it
+            manually on production bypasses the protected workflow and
+            is forbidden. (2) A **pre-adoption PITR gate** is mandatory
+            before any production reconciliation or adoption DDL — a
+            fresh restore-to-new-branch drill (Step 1) must pass within
+            2 hours of starting step A on production; the branch proof
+            track does not require this (the branch is disposable). (3)
+            The direct `0001` reconciliation psql invocation is guarded
+            with four checks: reuses `$DATABASE_URL_UNPOOLED` (no
+            separately pasted URL), derives the confirmation token from
+            the validated target, confirms `current_user = neondb_owner`
+            before any DDL, prechecks for organizations with multiple
+            active uploads (which would prevent the unique partial index
+            from being created), and runs
+            `psql --single-transaction -v ON_ERROR_STOP=1` so any error
+            rolls back the entire migration. (4) The `set -e` conflict
+            with the expected adoption dry-run refusal is fixed — the
+            dry-run exit code is initialized to 0 then captured
+            explicitly (`DRY_RUN_EXIT=0; ... || DRY_RUN_EXIT=$?`) and
+            the script branches on `READY` (exit 0) versus `REFUSED`
+            (exit 1) instead of letting `set -e` close the interactive
+            shell on the expected refusal. (5) Thirteen operator
+            evidence files from the branch exercise were moved outside
+            the worktree (`~/migration-role-check-evidence/`) so they
+            are not included in the source commit. (6) The precheck
+            query was fixed to query only `status` (not `import_type`,
+            which is one of the missing columns) — the original query
+            failed silently with `column does not exist`, became
+            `PRECHECK_SKIPPED`, and allowed execution to continue; the
+            error suppression (`2>/dev/null || echo PRECHECK_SKIPPED`)
+            and skip path were removed so any precheck error aborts. (7)
+            The dry-run exit code is now initialized to `0` before each
+            run (`DRY_RUN_EXIT=0`) so a stale value from a previous
+            dry-run in the same shell cannot persist if the current one
+            succeeds. (8) A one-time environment setup block (step 0)
+            was added before step A — it securely exports
+            `DATABASE_URL_UNPOOLED` and all migration guard variables
+            (host, database, environment, role, confirmation token
+            derived from the validated target) so subsequent steps A–G
+            reuse them instead of redeclaring inline (which did not
+            persist between blocks). (9) The URL prompt uses
+            `read -r -s` (silent, no echo) so the production password
+            is not visible in the terminal, and the deployment SHA is
+            derived from `git rev-parse HEAD` instead of typed manually
+            to prevent a typo or unrelated SHA from entering the
+            adoption ledger. The sign-off section was updated to
+            reflect the two-track structure (branch proof completion,
+            pre-adoption PITR gate, production hand-off via workflow).
             **Canary authentication redesign (2026-07-25):** the original
             `SMOKE_AUTH_TOKEN` design (static GitHub secret) was replaced
             because `authenticateApiRequest` → `verifyToken` verifies Clerk
