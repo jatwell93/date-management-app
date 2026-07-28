@@ -199,14 +199,36 @@ async function checkTablePrivileges(client, role) {
  * migration has run), the check passes vacuously and records
  * `ledgerExists: false`.
  *
+ * **Ledger existence is probed via `pg_catalog` (`pg_class` joined to
+ * `pg_namespace`), NOT `information_schema.tables`.** This is a
+ * deliberate safety choice: `information_schema.tables` only lists
+ * tables the current role has some privilege on, so once
+ * `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime`
+ * has been applied, `information_schema.tables` HIDES the ledger and a
+ * naive existence check would report `ledgerExists: false` — passing
+ * vacuously without ever verifying that all seven privileges are
+ * denied. This is exactly the false negative observed during the real
+ * Neon `migration-role-check` branch exercise: `runtime-role-evidence.json`
+ * reported `ledgerExists: false` while a direct `pg_class`/`has_table_privilege`
+ * probe (`runtime-ledger-privileges-role-check.txt`) proved `ledger_exists=t`
+ * with all seven privileges denied. `pg_class` is a system catalog visible
+ * to every role regardless of table privileges, so an existing-but-
+ * inaccessible ledger is always detected, and the seven-privilege denial
+ * check is then actually exercised.
+ *
  * @param {import('pg').Client} client
  * @param {string} role
  * @returns {Promise<{ ok: boolean, ledgerExists: boolean, grantedPrivileges: string[] }>}
  */
 async function checkCannotAccessLedger(client, role) {
   const exists = await client.query(
-    `SELECT 1 FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name = $1 LIMIT 1`,
+    `SELECT 1
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname = $1
+        AND c.relkind = 'r'
+      LIMIT 1`,
     [LEDGER_TABLE],
   );
   if (exists.rows.length === 0) {

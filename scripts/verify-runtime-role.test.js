@@ -519,7 +519,8 @@ test('checkTablePrivileges passes (vacuously) when public has no non-ledger tabl
 
 test('checkCannotAccessLedger passes when the runtime role has NO privileges on the ledger', async () => {
   const client = makeClient((text) => {
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/has_table_privilege/i.test(text)) {
@@ -535,7 +536,8 @@ test('checkCannotAccessLedger passes when the runtime role has NO privileges on 
 
 test('checkCannotAccessLedger fails when the runtime role has SELECT on the ledger', async () => {
   const client = makeClient((text, params) => {
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/has_table_privilege/i.test(text)) {
@@ -552,7 +554,8 @@ test('checkCannotAccessLedger fails when the runtime role has SELECT on the ledg
 
 test('checkCannotAccessLedger fails when the runtime role has INSERT on the ledger', async () => {
   const client = makeClient((text, params) => {
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/has_table_privilege/i.test(text)) {
@@ -568,7 +571,8 @@ test('checkCannotAccessLedger fails when the runtime role has INSERT on the ledg
 
 test('checkCannotAccessLedger fails listing ALL granted privileges', async () => {
   const client = makeClient((text) => {
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/has_table_privilege/i.test(text)) {
@@ -584,7 +588,7 @@ test('checkCannotAccessLedger fails listing ALL granted privileges', async () =>
 
 test('checkCannotAccessLedger passes vacuously when the ledger does not exist yet', async () => {
   const client = makeClient((text) => {
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
+    if (/pg_class/i.test(text) && /relkind/i.test(text) && /LIMIT 1/i.test(text)) {
       return { rows: [] };
     }
     throw new Error(`unexpected: ${text}`);
@@ -593,6 +597,106 @@ test('checkCannotAccessLedger passes vacuously when the ledger does not exist ye
   assert.equal(r.ok, true);
   assert.equal(r.ledgerExists, false);
   assert.deepEqual(r.grantedPrivileges, []);
+});
+
+test('checkCannotAccessLedger detects an existing-but-inaccessible ledger via pg_catalog (regression: information_schema hides revoked ledger)', async () => {
+  // Regression for the real Neon migration-role-check finding: after
+  // REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime,
+  // information_schema.tables HIDES schema_migrations (it only lists
+  // tables the current role has some privilege on). The old verifier
+  // queried information_schema.tables for existence, so it reported
+  // ledgerExists: false and passed VACUOUSLY — never actually checking
+  // that all seven privileges were denied. The runtime-role-evidence.json
+  // from the branch exercise showed exactly this false negative while
+  // runtime-ledger-privileges-role-check.txt proved ledger_exists=t with
+  // all seven privileges denied.
+  //
+  // The fix queries pg_catalog (pg_class + pg_namespace), which is a
+  // system catalog visible to every role regardless of table privileges,
+  // so an existing-but-inaccessible ledger is detected. This test
+  // simulates the bug scenario: information_schema.tables returns EMPTY
+  // for the ledger (hidden), but pg_class returns the ledger row. The
+  // verifier must report ledgerExists: true and verify all seven
+  // privileges are denied (not pass vacuously).
+  const client = makeClient((text) => {
+    // information_schema.tables must NOT be used for the existence check.
+    // If it is, this mock returns empty (the bug scenario) and the test
+    // fails on the ledgerExists assertion — proving the fix uses
+    // pg_catalog instead.
+    if (/information_schema.tables/i.test(text)) {
+      return { rows: [] };
+    }
+    // pg_catalog existence check (pg_class + pg_namespace).
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      return { rows: [{ '?column?': 1 }] };
+    }
+    // All seven table privileges denied on the ledger.
+    if (/has_table_privilege/i.test(text)) {
+      return { rows: [{ ok: false }] };
+    }
+    throw new Error(`unexpected: ${text}`);
+  });
+  const r = await checkCannotAccessLedger(client, 'app_runtime');
+  assert.equal(
+    r.ledgerExists,
+    true,
+    'ledger must be detected via pg_catalog even when information_schema hides it',
+  );
+  assert.equal(r.ok, true, 'all seven privileges denied must pass');
+  assert.deepEqual(r.grantedPrivileges, []);
+});
+
+test('checkCannotAccessLedger fails when an inaccessible ledger has a residual granted privilege (regression: false-negative pass)', async () => {
+  // Companion to the inaccessible-ledger regression: even when
+  // information_schema hides the ledger, pg_catalog detects it, and the
+  // verifier must still FAIL if any of the seven privileges is granted.
+  // The old code would have passed vacuously (ledgerExists: false). The
+  // fix must report ledgerExists: true and surface the granted privilege.
+  const client = makeClient((text, params) => {
+    if (/information_schema.tables/i.test(text)) {
+      return { rows: [] };
+    }
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      return { rows: [{ '?column?': 1 }] };
+    }
+    if (/has_table_privilege/i.test(text)) {
+      const priv = params?.[2];
+      // SELECT leaked through — must be caught.
+      return { rows: [{ ok: priv === 'SELECT' }] };
+    }
+    throw new Error(`unexpected: ${text}`);
+  });
+  const r = await checkCannotAccessLedger(client, 'app_runtime');
+  assert.equal(r.ledgerExists, true);
+  assert.equal(r.ok, false, 'a residual granted privilege must fail, not pass vacuously');
+  assert.deepEqual(r.grantedPrivileges, ['SELECT']);
+});
+
+test('checkCannotAccessLedger queries pg_catalog (not information_schema) for ledger existence', async () => {
+  // Structural guard: the existence check must use pg_catalog so a
+  // revoked ledger is never hidden. Verify the issued SQL hits pg_class
+  // and does NOT hit information_schema.tables for the existence probe.
+  const client = makeClient((text) => {
+    if (/information_schema.tables/i.test(text)) {
+      throw new Error('existence check must NOT query information_schema.tables');
+    }
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      return { rows: [{ '?column?': 1 }] };
+    }
+    if (/has_table_privilege/i.test(text)) {
+      return { rows: [{ ok: false }] };
+    }
+    throw new Error(`unexpected: ${text}`);
+  });
+  const r = await checkCannotAccessLedger(client, 'app_runtime');
+  assert.equal(r.ledgerExists, true);
+  assert.equal(r.ok, true);
+  // Confirm a pg_class existence query was actually issued.
+  assert.equal(
+    client.calls.some((c) => /pg_class/i.test(c.text) && /pg_namespace/i.test(c.text)),
+    true,
+    'a pg_class/pg_namespace existence query must be issued',
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -793,8 +897,8 @@ test('runAllChecks (read-only mode) skips active probes and returns ok=true when
     if (/pg_has_role/i.test(text)) {
       return { rows: [{ is_member: false }] };
     }
-    if (/SELECT 1 FROM information_schema.tables/i.test(text)) {
-      // ledger exists check
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/information_schema.tables/i.test(text)) {
@@ -839,8 +943,8 @@ test('runAllChecks (active mode) runs the active probes', async () => {
     if (/pg_has_role/i.test(text)) {
       return { rows: [{ is_member: false }] };
     }
-    if (/SELECT 1 FROM information_schema.tables/i.test(text)) {
-      // ledger exists check
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/information_schema.tables/i.test(text)) {
@@ -882,11 +986,12 @@ test('runAllChecks returns ok=false when the runtime role has ledger access', as
     if (/has_schema_privilege.*CREATE/i.test(text)) {
       return { rows: [{ can_create: false }] };
     }
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
+      return { rows: [{ '?column?': 1 }] };
+    }
     if (/pg_class/i.test(text) && /relkind/i.test(text)) {
       return { rows: [] };
-    }
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
-      return { rows: [{ '?column?': 1 }] };
     }
     if (/information_schema.tables/i.test(text)) {
       return { rows: [] };
@@ -1072,7 +1177,8 @@ test('main exits 0 in read-only mode when all catalog checks pass and redacts th
     if (/pg_has_role/i.test(text)) {
       return { rows: [{ is_member: false }] };
     }
-    if (/SELECT 1 FROM information_schema.tables/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/information_schema.tables/i.test(text)) {
@@ -1120,7 +1226,8 @@ test('main exits 0 in active mode when all checks pass', async () => {
     if (/pg_has_role/i.test(text)) {
       return { rows: [{ is_member: false }] };
     }
-    if (/SELECT 1 FROM information_schema.tables/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
     if (/information_schema.tables/i.test(text)) {
@@ -1190,10 +1297,11 @@ test('main exits 1 when the runtime role has ledger access', async () => {
     if (/has_schema_privilege.*CREATE/i.test(text)) {
       return { rows: [{ can_create: false }] };
     }
-    if (/pg_class/i.test(text)) return { rows: [] };
-    if (/information_schema.tables/i.test(text) && /LIMIT 1/i.test(text)) {
+    if (/pg_class/i.test(text) && /pg_namespace/i.test(text) && /LIMIT 1/i.test(text)) {
+      // ledger exists check (pg_catalog — visible even after REVOKE)
       return { rows: [{ '?column?': 1 }] };
     }
+    if (/pg_class/i.test(text)) return { rows: [] };
     if (/information_schema.tables/i.test(text)) {
       return { rows: [] };
     }

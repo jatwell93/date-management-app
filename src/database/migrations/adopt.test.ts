@@ -31,13 +31,61 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  adoptExitCode,
   isAdoptionModeMutating,
   performAdoption,
   selectAdoptionTarget,
   type AdoptionColumnException,
+  type AdoptionReport,
 } from './adopt';
 import { assertTargetKind } from './target';
 import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
+
+test('adoptExitCode returns 0 only for STATUS: READY (canAdopt true), regardless of mode', () => {
+  // Regression for the real Neon migration-role-check finding: the
+  // adopt CLI previously exited 0 on a --dry-run refusal (catalog
+  // mismatch or populated ledger), treating dry-run refusals as
+  // "informational". That let a refused dry-run pass a CI/operator gate
+  // silently. The exit code must be non-zero for EVERY refusal and 0
+  // ONLY when canAdopt is true (STATUS: READY) — for both dry-run and
+  // apply modes.
+  const ready: AdoptionReport = {
+    canAdopt: true,
+    adoptionPoint: '0009',
+    wouldStamp: ['0000'],
+    ledgerAlreadyPopulated: false,
+    diff: { matches: true } as AdoptionReport['diff'],
+    report: 'STATUS: READY',
+  };
+  const catalogMismatch: AdoptionReport = {
+    canAdopt: false,
+    adoptionPoint: '0009',
+    wouldStamp: [],
+    ledgerAlreadyPopulated: false,
+    diff: { matches: false } as AdoptionReport['diff'],
+    report: 'STATUS: REFUSED — catalog does not match',
+  };
+  const ledgerPopulated: AdoptionReport = {
+    canAdopt: false,
+    adoptionPoint: '0009',
+    wouldStamp: [],
+    ledgerAlreadyPopulated: true,
+    diff: { matches: true } as AdoptionReport['diff'],
+    report: 'STATUS: REFUSED — ledger already populated',
+  };
+
+  assert.equal(adoptExitCode(ready), 0, 'READY must exit 0');
+  assert.equal(
+    adoptExitCode(catalogMismatch),
+    1,
+    'catalog mismatch must exit non-zero even in dry-run',
+  );
+  assert.equal(
+    adoptExitCode(ledgerPopulated),
+    1,
+    'populated ledger must exit non-zero even in dry-run',
+  );
+});
 
 test('adoption target guard treats dry-run as read-only and apply as mutating', () => {
   assert.equal(isAdoptionModeMutating('dry-run'), false);

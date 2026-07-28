@@ -524,6 +524,21 @@ ledger, and wraps the catalog introspection in a `ROLLBACK`-only transaction for
 consistency. No schema object or ledger state is changed — verified by a dedicated test that
 asserts the table does not exist before and after dry-run.
 
+**Dry-run exit code (hardened 2026-07-28).** The adopt CLI exits **non-zero**
+on EVERY refusal — catalog mismatch OR a populated ledger — in BOTH dry-run
+and apply modes. `STATUS: READY` (and only that) exits 0. Previously a
+`--dry-run` refusal exited 0 (treated as "informational"), which let a
+refused dry-run pass a `set -e` / CI gate silently: the real Neon
+`migration-role-check` branch exercise ran `migrate:adopt -- --dry-run`
+against a production-shaped database missing migration
+`0001_queued_catalogue_imports`, the report printed `STATUS: REFUSED —
+catalog does not match expected schema`, but the process exited 0 and did
+not stop the sequence. A dry-run is the operator's read-only adoption gate;
+a refusal there MUST fail the gate so the mismatch is reconciled before
+any apply. The decision lives in `adoptExitCode(report)` (`adopt.ts`),
+consumed by `adopt-cli.ts`, with a unit test covering READY (exit 0),
+catalog mismatch (exit 1), and populated ledger (exit 1).
+
 **Strict adoption comparison profile.** Adoption uses a separate `ADOPTION_COMPARISON` profile that
 is stricter than the fingerprint test's `TEST_COMPARISON` profile:
 
@@ -1020,6 +1035,51 @@ re-provisioning. A prior malformed `" migration_runner"` role (leading
 space in the name, created via Neon Console) is deleted from main after
 confirming it owns no objects — it is unnecessary under this model and
 is not recreated.
+
+**Ledger existence probe via `pg_catalog` (hardened 2026-07-28).**
+`checkCannotAccessLedger` probes ledger existence via `pg_catalog`
+(`pg_class` joined to `pg_namespace`), NOT `information_schema.tables`.
+This is a deliberate safety choice: `information_schema.tables` only
+lists tables the current role has some privilege on, so once
+`REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime` is
+applied, `information_schema.tables` HIDES the ledger and a naive
+existence check reports `ledgerExists: false` — passing vacuously
+without ever verifying that all seven privileges are denied. This is
+exactly the false negative observed during the real Neon
+`migration-role-check` branch exercise: `runtime-role-evidence.json`
+reported `ledgerExists: false` while a direct `pg_class` /
+`has_table_privilege` probe (`runtime-ledger-privileges-role-check.txt`)
+proved `ledger_exists=t` with all seven privileges denied. `pg_class`
+is a system catalog visible to every role regardless of table
+privileges, so an existing-but-inaccessible ledger is always detected,
+and the seven-privilege denial check is then actually exercised. Three
+regression tests cover the inaccessible-ledger detection, the
+residual-granted-privilege failure (no vacuous pass), and a structural
+guard that the existence query hits `pg_class`/`pg_namespace` and does
+NOT hit `information_schema.tables`.
+
+**Post-adoption REVOKE ordering (hardened 2026-07-28).** The
+provisioning-time `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM
+app_runtime` is necessary but not sufficient on its own. Adoption runs
+`ensureLedger` (`CREATE TABLE IF NOT EXISTS schema_migrations`) as
+`neondb_owner`, and the provisioning step's `ALTER DEFAULT PRIVILEGES
+FOR ROLE neondb_owner IN SCHEMA public GRANT ... ON TABLES TO
+app_runtime` **auto-grants DML on the ledger the moment adoption creates
+it**. A REVOKE applied before the ledger exists does not cover this
+auto-grant. Therefore the REVOKE must be re-applied **immediately after
+adoption creates the ledger**, and the runtime-role verifier must run
+**after** that re-REVOKE. The runbook's
+[First-production adoption procedure](../../../docs/migrations-deploy-runbook.md)
+documents this ordering (step F: re-REVOKE; step G: verify with the
+corrected `pg_catalog`-based verifier, expecting `ledgerExists=true`).
+The first-production adoption procedure also documents the observed
+`0001_queued_catalogue_imports` schema gap (15 missing `uploads` columns
++ the `uploads_one_active_catalogue_per_org` partial index on the
+production-shaped branch), the guarded reconciliation procedure
+(read-only dry-run → review → guarded psql apply of the reviewed 0001
+SQL → re-dry-run until `STATUS: READY`), and the explicit adopt-at-0009
+ordering (stamps `0000`–`0009`, leaves `0010` pending so `migrate:apply`
+runs its SQL for real rather than stamping an unapplied migration).
 
 **Worker secret binding on deploy.** `NEON_CONNECTION_STRING` is a
 Worker secret (`wrangler.toml:168`, `workers/src/types/env.d.ts:35`),

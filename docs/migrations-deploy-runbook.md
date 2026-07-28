@@ -360,6 +360,24 @@ REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime;
 > `scripts/verify-runtime-role.js` enforces this: its
 > `checkCannotAccessLedger` check fails if the runtime role holds ANY
 > of the seven table privileges on the ledger.
+>
+> **This REVOKE must be re-applied AFTER adoption creates the ledger.**
+> The provisioning REVOKE here covers the ledger only if it already
+> exists at provisioning time. But adoption runs `ensureLedger`
+> (`CREATE TABLE IF NOT EXISTS schema_migrations`) as `neondb_owner`,
+> and `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
+> GRANT ... ON TABLES TO app_runtime` (set below) **auto-grants DML on
+> the ledger the moment adoption creates it**. A REVOKE applied before
+> the ledger exists does not cover this auto-grant. Therefore the
+> REVOKE must be re-applied immediately after adoption creates the
+> ledger, and the runtime-role verifier must run after that re-REVOKE.
+> See [First-production adoption procedure — step F](#f-revoke-ledger-access-after-adoption-creates-schema_migrations)
+> for the corrected ordering. `checkCannotAccessLedger` now probes
+> ledger existence via `pg_catalog` (`pg_class` + `pg_namespace`)
+> instead of `information_schema.tables`, so it detects an
+> existing-but-inaccessible ledger instead of passing vacuously with
+> `ledgerExists: false` (the false negative observed during the real
+> `migration-role-check` branch exercise).
 
 Future objects created by migrations also need privileges. The
 `ALTER DEFAULT PRIVILEGES` statements ensure any table, sequence, or
@@ -672,6 +690,584 @@ After the role separation is proven on main and the canary passes:
    Console (Settings → Roles). Do **not** recreate it — it is
    unnecessary under this ownership model.
 3. **Record the cleanup** in the sign-off section below.
+
+---
+
+## First-production adoption procedure (one-time gate)
+
+Adoption is the **one-time** operation that transitions the production
+database from Prisma-managed (`prisma db push` + hand-written neon-sql
+deltas) to migration-runner-managed (the authoritative `schema_migrations`
+ledger). It must be completed **before the first regular deploy workflow**
+(Step 1 → Step 5) is allowed to run `migrate:apply`, because `migrate:apply`
+only applies *pending* migrations — it does not stamp the historical
+baseline. Until adoption stamps `0000`–`0009`, the ledger is absent and
+`migrate:apply` would attempt to re-run the entire history against an
+already-shaped database (failing on `ALTER TABLE ... ADD COLUMN IF NOT
+EXISTS` no-ops for some objects, but refusing on any object that already
+exists with a different definition).
+
+This section has **two tracks** that share steps A–D and F–G but diverge
+at the apply/seed/verify stage:
+
+- **Branch proof track** (`migration-role-check` Neon branch): runs the
+  **full manual sequence** A–G including step E (manual `migrate:apply`,
+  `migrate:seed`, `migrate:verify`). This proves the entire adoption +
+  first-migration flow end-to-end against a production-shaped copy before
+  touching production. **Do not skip the branch exercise** — the sequence
+  below was hardened after the real branch exercise surfaced two safety
+  gaps (the missing `0001` schema gap and the `information_schema`
+  ledger-detection false negative; see the callouts below).
+
+- **Production adoption track** (main): runs steps A–D, F–G, then **hands
+  off to the protected GitHub deploy workflow** (Step 2 below) which
+  applies `0010`, seeds, verifies, deploys the Worker, and runs canary —
+  all inside the CI gate that records artifacts and enforces the audit
+  trail. Step E (manual `migrate:apply` / `migrate:seed` / `migrate:verify`)
+  is **branch-proof only** and must NOT be run manually on production.
+  The production track ordering is A → B → C → D → F → G → **hand off to
+  workflow** (the workflow applies 0010, seeds, verifies, deploys,
+  canaries). The REVOKE (F) and runtime-role verification (G) happen
+  **before** the workflow so the ledger is locked down the moment adoption
+  creates it, not after the workflow finishes.
+
+### Pre-adoption PITR gate (mandatory, before any production DDL)
+
+> **Critical ordering (2026-07-28 hardening).** Production adoption
+> performs irreversible DDL (reconciliation `ALTER TABLE` / `CREATE
+> INDEX`, then `CREATE TABLE schema_migrations` + stamping). A fresh
+> PITR drill MUST pass **immediately before** any production
+> reconciliation or adoption mutation — not the CI PITR readiness check
+> (which only verifies a snapshot exists), but the full
+> restore-to-new-branch drill in [Step 1 — Pre-deploy PITR drill](#step-1--pre-deploy-pitr-drill-operator-gate)
+> below. If the drill fails or is stale (older than 2 hours from the
+> start of adoption), **stop** — do not proceed to step A on production.
+
+Before starting the production adoption track:
+
+1. Complete the full PITR drill (Step 1a → 1c) and confirm it passes.
+2. Record the drill completion time. The drill must be **fresh** —
+   completed within the last 2 hours before step A begins on production.
+3. If the branch proof track is run on the same day, the branch drill
+   does NOT satisfy this gate — the production drill must be against the
+   main branch's snapshots.
+
+The branch proof track does not require a PITR drill (the branch is
+disposable), but the production track MUST NOT proceed past step A
+without a fresh, passing PITR drill on record.
+
+### Corrected sequence (in order)
+
+**Branch proof track** (disposable `migration-role-check` branch):
+
+```
+env setup (step 0 — export shared variables once)
+  → preflight
+  → reconcile 0001 if required (read-only dry-run → review → guarded apply → re-dry-run)
+  → adopt dry-run        (capture exit code; branch on READY vs REFUSED — see step B)
+  → adopt apply at 0009  (MIGRATION_ADOPTION_POINT=0009; stamps 0000–0009; creates schema_migrations)
+  → status               (confirm 0000–0009 applied, only 0010 pending)
+  → apply 0010           (migrate:apply — applies the one pending migration)
+  → status               (confirm 0000–0010 applied, none pending)
+  → seed                 (migrate:seed — 54 tier_feature_flags rows)
+  → verify               (migrate:verify — PASS)
+  → revoke ledger access (REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime)
+  → runtime-role verification  (corrected verify-runtime-role.js — pg_catalog ledger detection)
+```
+
+**Production adoption track** (main — no manual apply/seed/verify):
+
+```
+[pre-adoption PITR gate: fresh drill MUST pass]
+env setup (step 0 — export shared variables once)
+  → preflight
+  → reconcile 0001 if required (read-only dry-run → review → guarded apply → re-dry-run)
+  → adopt dry-run        (capture exit code; branch on READY vs REFUSED — see step B)
+  → adopt apply at 0009  (MIGRATION_ADOPTION_POINT=0009; stamps 0000–0009; creates schema_migrations)
+  → status               (confirm 0000–0009 applied, only 0010 pending)
+  → revoke ledger access (REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime)
+  → runtime-role verification  (corrected verify-runtime-role.js — pg_catalog ledger detection)
+  → HAND OFF to protected GitHub workflow (Step 2) — workflow applies 0010, seeds, verifies, deploys, canaries
+```
+
+Each step must pass before the next begins. The sequence runs under
+`set -euo pipefail`, but the initial adopt dry-run (step B.1) is
+**expected** to exit non-zero when `0001` is missing — that refusal is
+the operator gate, not a failure. Step B.1 captures the dry-run exit
+code explicitly and branches on `READY` (exit 0) versus `REFUSED`
+(exit 1) so `set -e` does not close the interactive shell on the
+expected refusal.
+
+### 0. One-time environment setup (run once per target, reuse for all steps)
+
+All steps below (A–G) reuse the variables exported here. Run this block
+**once** per target (branch proof or production) in the interactive shell
+before starting step A. This avoids the failure mode where step B.1
+supplies variables as inline assignments (which do not persist) while
+step B.2 expects them to be exported — an operator following the blocks
+literally would reach `DATABASE_URL_UNPOOLED is required` mid-sequence.
+
+```bash
+set -euo pipefail
+
+# Set these values for the target. The URL is the neondb_owner
+# DIRECT (non-pooled) connection string. The host and database are the
+# allowlist values the migration CLIs validate against. The SHA is
+# derived from the current git HEAD — do not type it manually, to
+# prevent a typo or unrelated SHA from entering the adoption ledger.
+# -s reads the URL silently (no echo) because it contains the
+# production password; printf '\n' moves to a fresh line afterwards.
+read -r -s -p "DATABASE_URL_UNPOOLED (neondb_owner direct URL): " DATABASE_URL_UNPOOLED
+printf '\n'
+read -r -p "MIGRATION_ALLOWED_HOST: " MIGRATION_ALLOWED_HOST
+read -r -p "MIGRATION_ALLOWED_DATABASE: " MIGRATION_ALLOWED_DATABASE
+MIGRATION_DEPLOYMENT_SHA="$(git rev-parse HEAD)"
+
+# Derive host and database from the URL and validate against the
+# allowlist (mirrors validateMigrationTarget in
+# src/database/migrations/runner.ts:469). Refuses pooled URLs.
+export DATABASE_URL_UNPOOLED MIGRATION_ALLOWED_HOST MIGRATION_ALLOWED_DATABASE MIGRATION_DEPLOYMENT_SHA
+TARGET=$(node -e '
+  const u = new URL(process.env.DATABASE_URL_UNPOOLED);
+  const host = u.hostname.toLowerCase();
+  const db = decodeURIComponent(u.pathname.replace(/^\//, ""));
+  if (host.includes("-pooler."))
+    { console.error("Refusing: pooled connection string"); process.exit(1); }
+  if (host !== process.env.MIGRATION_ALLOWED_HOST.toLowerCase() ||
+      db !== process.env.MIGRATION_ALLOWED_DATABASE)
+    { console.error("Refusing: target does not match allowlist"); process.exit(1); }
+  console.log(host + "/" + db);
+  ')
+echo "Validated target: ${TARGET}"
+
+# Export the shared migration guard variables. The confirmation token
+# is derived from the validated host/database so it cannot drift.
+export MIGRATION_ENVIRONMENT=production
+export MIGRATION_TARGET_KIND=primary
+export MIGRATION_ROLE=neondb_owner
+export MIGRATION_CONFIRM_PRODUCTION="APPLY ${TARGET}"
+```
+
+After this block, all subsequent steps (A–G) reuse the exported
+variables — do not redeclare them inline.
+
+### A. Preflight
+
+```bash
+set -euo pipefail
+npm run migrate:preflight
+```
+
+**Expected:** `Ready: YES`, `schema_migrations ledger: not initialized`.
+If preflight reports the ledger already initialized, adoption has already
+run — use `migrate:status` and `migrate:apply` instead (this section is
+one-time).
+
+### B. Reconcile the 0001 schema gap (if the dry-run refuses)
+
+> **Observed production-shaped schema gap (2026-07-28, real Neon
+> `migration-role-check` branch exercise).** The first
+> `migrate:adopt -- --dry-run` against the production-shaped branch
+> reported `STATUS: REFUSED — catalog does not match expected schema`:
+> migration `0001_queued_catalogue_imports` was missing — 15 columns on
+> `uploads` (`import_type`, `tier_snapshot`, `max_skus_snapshot`,
+> `max_active_expiries_snapshot`, `rows_unchanged`, `row_errors`,
+> `processing_offset`, `retry_count`, `failure_category`,
+> `error_report_key`, `queued_at`, `validation_started_at`,
+> `processing_started_at`, `completed_at`, `failed_at`) and the partial
+> index `uploads_one_active_catalogue_per_org`. The branch had been
+> shaped by `prisma db push` plus a subset of the neon-sql deltas, so
+> `0001` had never been applied through any authoritative path. See
+> `migration-adopt-dry-run-role-check.txt` for the exact refusal report.
+
+**Do NOT silently allowlist the missing 0001 objects.** The adoption
+comparison profile (`ADOPTION_COMPARISON`) is strict by design — a
+missing column or partial index is a real schema drift that must be
+reconciled, not hidden behind an exception tuple. Allowlisting would
+leave production with a schema that does not match the migration
+history, so every future `migrate:verify` would fail and every future
+migration would be built against a false baseline.
+
+The reconciliation procedure is:
+
+1. **Run a read-only adoption dry-run first** and review the EXACT
+   mismatch. The dry-run is read-only (no ledger creation, no stamping)
+   and exits **non-zero** on any refusal (catalog mismatch OR a populated
+   ledger) — `STATUS: READY` (and only that) exits 0. Because `set -e`
+   is active, the expected non-zero refusal would close the interactive
+   shell — the same failure we hit during the branch exercise. **Capture
+   the exit code explicitly** and branch on `READY` versus `REFUSED`:
+
+   ```bash
+   set -euo pipefail
+   # Initialize before the command so a stale value from a previous
+   # dry-run in the same shell does not persist if this one succeeds.
+   DRY_RUN_EXIT=0
+   npm run migrate:adopt -- --dry-run > adopt-dry-run-1.txt 2>&1 \
+     || DRY_RUN_EXIT=$?
+
+   if [ "$DRY_RUN_EXIT" -eq 0 ]; then
+     echo "STATUS: READY — catalog matches. Skip to step C (adopt apply)."
+   elif [ "$DRY_RUN_EXIT" -eq 1 ]; then
+     echo "STATUS: REFUSED — review adopt-dry-run-1.txt, then proceed to step B.2."
+   else
+     echo "::error::Unexpected dry-run exit code: $DRY_RUN_EXIT. Aborting."
+     exit 1
+   fi
+   ```
+
+   If the report is `STATUS: REFUSED`, **do not proceed to `--apply`**.
+   Read the diff in `adopt-dry-run-1.txt` (columns/indexes only in
+   expected) and confirm it matches `0001_queued_catalogue_imports.up.sql`
+   exactly. If the diff contains anything beyond the 15 columns and the
+   `uploads_one_active_catalogue_per_org` partial index listed in the
+   callout above, **stop** — a different migration may also be missing.
+
+2. **Apply the reviewed 0001 SQL through a guarded operator procedure.**
+   The missing objects are reconciled by applying the reviewed
+   `database/migrations/0001_queued_catalogue_imports.up.sql` directly
+   as `neondb_owner` via psql. The file is idempotent
+   (`ADD COLUMN IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`), so
+   it is safe to re-run against a partially-shaped database. The psql
+   invocation is guarded with four checks so it cannot be run accidentally
+   or against the wrong target:
+
+   - **Reuses `$DATABASE_URL_UNPOOLED`** — exported by the one-time
+     setup block (step 0). No separately pasted URL that could drift to
+     a different database.
+   - **Derives the confirmation token from the validated target** —
+     `ADOPT-RECONCILE <host>/<database> 0001` — computed from the same
+     host/database the setup block already validated against the
+     allowlist. The validation is not repeated here; if the setup block
+     passed, the target is already confirmed.
+   - **Confirms `current_user = neondb_owner`** before any DDL, so a
+     wrong-role session cannot mutate the schema.
+   - **Prechecks for organizations with multiple active catalogue
+     uploads** — the `CREATE UNIQUE INDEX` partial index
+     `uploads_one_active_catalogue_per_org` requires that no
+     organization has more than one row with
+     `import_type = 'product-catalog'` and
+     `status IN ('pending', 'queued', 'validating', 'processing')`.
+     Because the migration adds `import_type` with a default of
+     `'product-catalog'`, **every existing row** in an active status
+     would satisfy the partial-index predicate. If any org has multiple
+     active uploads, the index creation fails inside
+     `--single-transaction` and the entire migration rolls back —
+     wasting a reconciliation round and leaving the database unchanged.
+     The precheck catches this before the transaction starts. The
+     precheck queries **only** `status` (not `import_type`) because
+     `import_type` is one of the missing columns this migration adds —
+     querying it would fail with `column does not exist`, and the
+     default `'product-catalog'` means every active row will satisfy
+     the predicate anyway, so checking `status` alone is both correct
+     and safe against the pre-migration schema. Any precheck error
+     aborts — there is no skip path.
+   - **Runs `psql --single-transaction -v ON_ERROR_STOP=1`** so any
+     error rolls back the entire migration (columns + index), leaving
+     the database unchanged rather than partially reconciled.
+
+   ```bash
+   set -euo pipefail
+   : "${DATABASE_URL_UNPOOLED:?DATABASE_URL_UNPOOLED is required (run step 0 setup first)}"
+   : "${MIGRATION_ALLOWED_HOST:?MIGRATION_ALLOWED_HOST is required (run step 0 setup first)}"
+   : "${MIGRATION_ALLOWED_DATABASE:?MIGRATION_ALLOWED_DATABASE is required (run step 0 setup first)}"
+
+   # Derive the confirmation token from the validated target. The
+   # setup block (step 0) already validated host/database against the
+   # allowlist and refused pooled URLs, so we reuse that result.
+   TARGET="${MIGRATION_ALLOWED_HOST}/${MIGRATION_ALLOWED_DATABASE}"
+   EXPECTED_TOKEN="ADOPT-RECONCILE ${TARGET} 0001"
+
+   echo "Target: ${TARGET}"
+   echo "Type the following confirmation token to proceed:"
+   echo "  ${EXPECTED_TOKEN}"
+   read -r CONFIRM
+   if [ "$CONFIRM" != "$EXPECTED_TOKEN" ]; then
+     echo "::error::Confirmation does not match. Aborting 0001 reconcile."
+     exit 1
+   fi
+
+   # Confirm the session identity is neondb_owner — a wrong-role session
+   # must not mutate the production schema.
+   CURRENT_USER=$(psql "$DATABASE_URL_UNPOOLED" -tAc "SELECT current_user")
+   if [ "$CURRENT_USER" != "neondb_owner" ]; then
+     echo "::error::Connected as '${CURRENT_USER}', expected 'neondb_owner'. Aborting."
+     exit 1
+   fi
+
+   # Precheck: the unique partial index uploads_one_active_catalogue_per_org
+   # will fail if any organization has multiple uploads in an active status.
+   # Query ONLY status (not import_type) because import_type is one of the
+   # missing columns this migration adds — querying it would fail with
+   # "column does not exist". After this migration, every existing row gets
+   # import_type='product-catalog' (the column default), so every active
+   # row satisfies the partial-index predicate regardless. Checking status
+   # alone is both correct and safe against the pre-migration schema.
+   # Any error here MUST abort — there is no skip path.
+   BLOCKING=$(psql "$DATABASE_URL_UNPOOLED" -tAc "
+     SELECT count(*) FROM (
+       SELECT organization_id
+         FROM uploads
+        WHERE status IN ('pending', 'queued', 'validating', 'processing')
+        GROUP BY organization_id
+       HAVING count(*) > 1
+     ) s
+   ")
+   if [ "$BLOCKING" != "0" ]; then
+     echo "::error::Found ${BLOCKING} organization(s) with multiple active uploads."
+     echo "::error::The unique partial index cannot be created until these are resolved."
+     echo "::error::Abort the duplicate uploads or wait for them to complete, then re-run."
+     exit 1
+   fi
+
+   # Apply the migration in a single transaction. --single-transaction
+   # wraps the entire file in BEGIN/COMMIT so any error (e.g. the CREATE
+   # UNIQUE INDEX failing on conflicts) rolls back the ADD COLUMN
+   # statements too, leaving the database unchanged. ON_ERROR_STOP=1
+   # makes psql exit non-zero on the first error instead of continuing.
+   psql "$DATABASE_URL_UNPOOLED" \
+     --single-transaction \
+     -v ON_ERROR_STOP=1 \
+     -f database/migrations/0001_queued_catalogue_imports.up.sql
+   ```
+
+   Do **not** bundle the reconciliation into a new migration file —
+   `0001` already exists in the history; re-applying its SQL directly
+   brings the production-shaped database up to the migration-derived
+   schema without inventing a duplicate history entry.
+
+3. **Repeat the read-only dry-run** (using the same exit-code capture
+   from step B.1, including the `DRY_RUN_EXIT=0` initialization) until it
+   reports `STATUS: READY — catalog matches expected schema` (exit 0).
+   Only then proceed to adoption apply. If the second dry-run still
+   refuses (exit 1), do NOT allowlist the remaining diff — investigate
+   it (a different migration may also be missing, or an object may exist
+   with the wrong definition). Every object in the diff must be
+   reconciled to match the fingerprint exactly before adoption.
+
+   ```bash
+   set -euo pipefail
+   DRY_RUN_EXIT=0
+   npm run migrate:adopt -- --dry-run > adopt-dry-run-2.txt 2>&1 \
+     || DRY_RUN_EXIT=$?
+   if [ "$DRY_RUN_EXIT" -ne 0 ]; then
+     echo "::error::Dry-run did not report READY (exit $DRY_RUN_EXIT)."
+     echo "::error::Review adopt-dry-run-2.txt and reconcile remaining diffs."
+     exit 1
+   fi
+   echo "STATUS: READY — proceed to step C (adopt apply)."
+   ```
+
+### C. Adopt at 0009 (stamp the historical baseline)
+
+Once the dry-run reports `STATUS: READY`, adopt at the historical
+adoption point `0009` (the last migration before `0010`). This stamps
+`0000`–`0009` into the newly-created `schema_migrations` ledger and
+leaves `0010` as the only pending migration, so the subsequent
+`migrate:apply` applies exactly one migration:
+
+```bash
+set -euo pipefail
+MIGRATION_ADOPTION_POINT=0009 \
+MIGRATION_ADOPT_CONFIRMATION="ADOPT ${MIGRATION_ALLOWED_HOST}/${MIGRATION_ALLOWED_DATABASE} AT 0009" \
+npm run migrate:adopt -- --apply
+```
+
+**Expected:** `STATUS: READY — catalog matches expected schema`,
+`Adoption point: 0009`, `Migrations to stamp: 0000, 0001, ..., 0009`.
+
+> **Why adopt at 0009, not 0010.** `0010_alter_tier_feature_flags_limit_value_to_bigint`
+> is a real expand migration that has NOT yet been applied to the
+> production-shaped database (the column is still `integer`). Adopting
+> at `0010` would stamp `0010` as `applied` without ever running its
+> SQL — leaving the column at `integer` while the ledger claims
+> `0010` is done, so `migrate:verify` would fail on the
+> bigint-vs-integer drift and the storage_bytes limits (10 GB / 100 GB)
+> that exceed int32 could never be seeded. Adopting at `0009` stamps
+> only the already-shaped history and leaves `0010` pending so
+> `migrate:apply` runs its SQL for real.
+
+### D. Confirm only 0010 is pending
+
+```bash
+set -euo pipefail
+npm run migrate:status
+```
+
+**Expected:** `Ledger: present`, `Applied: 0000, 0001, ..., 0009`,
+`Pending: 0010`, `Health: OK`. If anything other than `0010` is pending,
+**stop** — adoption stamped the wrong prefix; do not proceed to apply.
+
+### E. Apply 0010, then status, seed, verify — BRANCH PROOF ONLY
+
+> **Production track: SKIP THIS STEP.** On production, after step D
+> confirms exactly `0010` pending, proceed directly to step F (revoke
+> ledger access), then step G (runtime-role verification), then hand off
+> to the protected GitHub deploy workflow (Step 2 below). The workflow
+> applies `0010`, seeds, verifies, deploys the Worker, and runs canary
+> — all inside the CI gate that records artifacts and enforces the audit
+> trail. Manually running `migrate:apply` / `migrate:seed` /
+> `migrate:verify` on production bypasses that gate and is forbidden.
+
+**Branch proof track only:** after step D confirms exactly `0010`
+pending on the disposable `migration-role-check` branch, run the regular
+apply → status → seed → verify sequence manually. This proves the entire
+adoption + first-migration flow end-to-end against the production-shaped
+copy before touching production:
+
+```bash
+set -euo pipefail
+# apply 0010
+npm run migrate:apply
+
+# status — confirm 0000–0010 applied, none pending
+npm run migrate:status
+
+# seed — 54 tier_feature_flags rows
+MIGRATION_SEED_CONFIRMATION="SEED ${MIGRATION_ALLOWED_HOST}/${MIGRATION_ALLOWED_DATABASE}" \
+npm run migrate:seed
+
+# verify — PASS
+npm run migrate:verify
+```
+
+**Expected (branch proof):** apply reports `applied: ["0010"]`; status
+reports `Pending: (none — up to date)`; seed reports `Upserted: 54`,
+`Verified: YES`; verify reports `Verdict: PASS`.
+
+### F. Revoke ledger access AFTER adoption creates schema_migrations
+
+> **Critical ordering (2026-07-28 hardening).** The
+> `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime`
+> in the [Runtime role separation](#runtime-role-separation-appruntime-provisioning)
+> provisioning step (step 2) is necessary but **not sufficient** on its
+> own. Adoption runs `ensureLedger` (`CREATE TABLE IF NOT EXISTS
+> schema_migrations`) as `neondb_owner`. Because the provisioning step
+> also ran `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA
+> public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_runtime`,
+> **the moment adoption creates `schema_migrations`, PostgreSQL
+> auto-grants DML on it to `app_runtime`** via those default privileges.
+> A `REVOKE` applied during provisioning (before the ledger exists) does
+> not cover this auto-grant — the default privileges re-grant on
+> creation. Therefore the `REVOKE` MUST be re-applied **immediately
+> after adoption creates the ledger**, and the runtime-role verifier
+> must run **after** that re-REVOKE. This is the ordering this section
+> enforces.
+
+**Branch proof track:** run this after step E's `migrate:verify` PASS.
+**Production track:** run this immediately after step D (confirm only
+`0010` pending) — do NOT wait for the workflow to apply `0010` first.
+The REVOKE strips `app_runtime`'s auto-granted DML on the ledger; the
+workflow's `migrate:apply` runs as `neondb_owner` (which retains full
+access), so the REVOKE does not interfere with the workflow's ability
+to stamp `0010`.
+
+Re-apply the REVOKE as `neondb_owner` via an interactive psql session:
+
+```sql
+-- Run as neondb_owner on the target branch (then main).
+-- This strips the DML that ALTER DEFAULT PRIVILEGES auto-granted on
+-- schema_migrations when adoption created it. Covers ALL seven table
+-- privileges (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES,
+-- TRIGGER) so no residual access remains.
+REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime;
+```
+
+Verify the revoke took effect with a direct catalog probe (this is the
+query that produced `runtime-ledger-privileges-role-check.txt` during
+the branch exercise — it uses `pg_class`, not `information_schema`, so
+it sees the ledger even after the REVOKE):
+
+```sql
+-- Run as neondb_owner. Confirms the ledger exists and every supported
+-- table privilege is denied to app_runtime.
+SELECT EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relname = 'schema_migrations'
+      ) AS ledger_exists,
+       priv.privilege,
+       has_table_privilege('app_runtime', 'public.schema_migrations', priv.privilege) AS granted
+  FROM (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+               ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS priv(privilege);
+```
+
+**Expected:** `ledger_exists = t` and `granted = f` for all seven
+privileges (matches `runtime-ledger-privileges-role-check.txt`). If any
+`granted = t`, **stop** — re-run the REVOKE and re-probe.
+
+### G. Runtime-role verification (corrected verifier)
+
+Run the corrected `scripts/verify-runtime-role.js` **after** the
+re-REVOKE. The verifier's `checkCannotAccessLedger` now probes ledger
+existence via `pg_catalog` (`pg_class` + `pg_namespace`) instead of
+`information_schema.tables`, so it detects an existing-but-inaccessible
+ledger instead of passing vacuously with `ledgerExists: false` (the
+false negative observed in `runtime-role-evidence.json` during the
+branch exercise, while `runtime-ledger-privileges-role-check.txt` proved
+the ledger existed with all seven privileges denied).
+
+On the `migration-role-check` branch, use active-probe mode:
+
+```bash
+set -euo pipefail
+export RUNTIME_ROLE_URL="<app_runtime connection string for the branch>"
+RUNTIME_ROLE_ACTIVE_PROBE=1 \
+  node scripts/verify-runtime-role.js > runtime-role-evidence.json
+```
+
+On main, use read-only mode (no `RUNTIME_ROLE_ACTIVE_PROBE`):
+
+```bash
+set -euo pipefail
+export RUNTIME_ROLE_URL="<app_runtime connection string for main>"
+node scripts/verify-runtime-role.js > runtime-role-evidence-main.json
+```
+
+**Expected:** `Overall: PASS`, and `ledgerAccessDenied: PASS
+(ledgerExists=true, granted=none)`. The `ledgerExists` field MUST read
+`true` (not `false`) — a `false` here means the verifier is still using
+`information_schema` and would pass vacuously; do not accept it. If any
+check fails, **stop** — re-run the REVOKE from step F and re-verify.
+
+### After adoption: hand off to the protected deploy workflow
+
+**Branch proof track:** after steps A–G pass on the
+`migration-role-check` branch (adoption stamped `0000`–`0009`, `0010`
+applied manually, seed + verify PASS, ledger access revoked, runtime-role
+verification PASS), the branch proof is complete. The branch can be
+deleted (or kept for reference until production adoption is signed off).
+
+**Production track:** after steps A, B (if needed), C, D, F, G pass on
+main (adoption stamped `0000`–`0009`, `0010` confirmed as the only
+pending migration, ledger access revoked, runtime-role verification
+PASS), the database is **adoption-stamped but not yet migration-complete**
+— `0010` is still pending. Do NOT run `migrate:apply` manually. Instead,
+hand off to the protected GitHub deploy workflow (Step 2 below) via
+`workflow_dispatch` from `main`:
+
+1. **Keep `PRODUCTION_AUTO_DEPLOY_ENABLED` unset** — do not enable
+   auto-deploy yet. Trigger the workflow manually with
+   `workflow_dispatch` from `main`.
+2. The workflow runs the full sequence: `migrate:status` →
+   `migrate:preflight` → PITR check → `migrate:apply` (applies `0010`)
+   → `migrate:seed` → `migrate:verify` → `wrangler deploy --env
+   production` → canary. Every step records an artifact for the audit
+   trail.
+3. Monitor the workflow per Step 2a. Confirm `migrate:apply` reports
+   `applied: ["0010"]`, `migrate:seed` reports `Upserted: 54`,
+   `migrate:verify` reports `Verdict: PASS`, and canary passes.
+4. Only after the first post-adoption canary passes may you set
+   `PRODUCTION_AUTO_DEPLOY_ENABLED=true` for future deploys.
+
+From this point on, the regular deploy workflow (Step 1 → Step 5) may
+run `migrate:apply` — it will see `0000`–`0010` applied and apply only
+future migrations.
+
+Record the adoption in the sign-off section below (adoption point,
+migrations stamped, 0010 applied by the workflow, ledger REVOKE
+re-applied,
+runtime-role verification PASS with `ledgerExists=true`).
 
 ---
 
@@ -1321,12 +1917,34 @@ session — its evidence document is the manual verification record.
 | Git SHA deployed | `____________________________` |
 | Workflow run URL | `____________________________` |
 | Runtime role separation (app_runtime provisioned, REVOKE on schema_migrations applied, verify-runtime-role.js PASS — active on branch, read-only on main) | [ ] PASS |
+| First-production adoption (one-time gate — see [First-production adoption procedure](#first-production-adoption-procedure-one-time-gate)) | [ ] N/A (already adopted) [ ] PASS |
 | Step 1 (PITR drill) | [ ] PASS |
 | Step 2 (CI deploy) | [ ] PASS |
 | Step 3 (canary) | [ ] PASS |
 | Step 4 (rollback) | [ ] N/A [ ] executed |
 | Step 5 (post-deploy verify) | [ ] PASS |
 | Runtime role cleanup (migration-role-check branch deleted, malformed " migration_runner" role deleted) | [ ] done |
+
+### Adoption sign-off (one-time)
+
+Recorded once when the first-production adoption procedure is completed.
+Required only for the first deploy after the migration runner becomes
+authoritative; leave N/A for subsequent deploys.
+
+| Field | Value |
+|-------|-------|
+| Branch proof track completed (`migration-role-check` branch — steps A–G including manual apply/seed/verify) | [ ] PASS |
+| Pre-adoption PITR gate (fresh drill on main, within 2 hours of step A) | [ ] PASS |
+| Adoption point (`MIGRATION_ADOPTION_POINT`) | `____________________________` (expected `0009`) |
+| Migrations stamped (`0000`–`0009`) | [ ] confirmed via `migrate:status` |
+| `0010` confirmed as the only pending migration (step D) | [ ] confirmed |
+| 0001 schema gap reconciled (if the dry-run refused) | [ ] N/A (no gap) [ ] reconciled via guarded psql |
+| Ledger REVOKE re-applied AFTER adoption created `schema_migrations` (step F, before workflow) | [ ] confirmed |
+| Runtime-role verification PASS with `ledgerExists=true` (corrected `pg_catalog` detection, step G) | [ ] confirmed |
+| Production hand-off: `0010` applied by the protected GitHub workflow (not manually) | [ ] confirmed via workflow artifact |
+| `migrate:seed` — 54 `tier_feature_flags` rows (via workflow) | [ ] Verified: YES |
+| `migrate:verify` — PASS (via workflow) | [ ] confirmed |
+| `PRODUCTION_AUTO_DEPLOY_ENABLED` left unset until adoption + first canary PASS | [ ] confirmed |
 
 ### Evidence attachments
 
@@ -1335,6 +1953,9 @@ Paste links to CI runs, artifacts, or commit output files to the PR:
 - [ ] CI workflow run URL: `____________________________`
 - [ ] PITR drill output: `____________________________`
 - [ ] Runtime role verification evidence (`runtime-role-evidence.json`): `____________________________`
+- [ ] Adoption dry-run report (`migration-adopt-dry-run-role-check.txt`): `____________________________`
+- [ ] Adoption apply report (`migration-adopt-apply-role-check.txt`): `____________________________`
+- [ ] Ledger-privileges probe (`runtime-ledger-privileges-role-check.txt` — `ledger_exists=t`, all seven `granted=f`): `____________________________`
 - [ ] Migration artifacts (status/preflight/apply/seed/verify): `____________________________`
 - [ ] Canary evidence artifact: `____________________________`
 - [ ] Post-deploy verify output: `____________________________`

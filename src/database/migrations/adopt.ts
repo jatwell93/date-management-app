@@ -73,6 +73,29 @@ export function isAdoptionModeMutating(mode: AdoptionMode): boolean {
 }
 
 /**
+ * Decide the CLI exit code from an adoption report. Returns 0 ONLY when
+ * the catalog matches and adoption is ready (`canAdopt: true`,
+ * `STATUS: READY`). Returns 1 for EVERY refusal — catalog mismatch OR a
+ * populated ledger — in BOTH dry-run and apply modes.
+ *
+ * This is a deliberate safety change. The adopt CLI previously exited 0
+ * on a `--dry-run` refusal, treating dry-run refusals as
+ * "informational". That let a refused dry-run pass a CI/operator gate
+ * silently: the real Neon `migration-role-check` branch exercise ran
+ * `migrate:adopt -- --dry-run` against a production-shaped database
+ * missing migration `0001_queued_catalogue_imports`, the report printed
+ * `STATUS: REFUSED — catalog does not match expected schema`, but the
+ * process exited 0 — so a `set -e` / CI gate did not stop the sequence.
+ * A dry-run is the operator's read-only adoption gate; a refusal there
+ * MUST fail the gate so the mismatch is reconciled before any apply.
+ *
+ * `STATUS: READY` (and only that) exits 0.
+ */
+export function adoptExitCode(report: AdoptionReport): number {
+  return report.canAdopt ? 0 : 1;
+}
+
+/**
  * The result of an adoption check. Describes whether the existing database
  * matches the expected schema, what would be stamped, and any differences.
  */
