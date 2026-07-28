@@ -25,7 +25,8 @@
  * Environment variables:
  *   NEON_API_KEY     — Neon API key (read-only is sufficient)
  *   NEON_PROJECT_ID  — the Neon project ID to check (e.g. dawn-darkness-22587117)
- *   NEON_BRANCH      — optional branch name to filter by (defaults to "main")
+ *   NEON_BRANCH      — optional branch name to filter by (defaults to the Neon
+ *                      production branch, "production" — NOT the Git branch "main")
  *   PITR_MAX_AGE_HOURS — max acceptable age of the newest restore point (default 2)
  *
  * Exit codes:
@@ -37,7 +38,12 @@
 
 const NEON_API_BASE = 'https://console.neon.tech/api/v2';
 const DEFAULT_MAX_AGE_HOURS = 2;
-const DEFAULT_BRANCH = 'main';
+// The Neon production branch is named "production" in this project. This is
+// the Neon branch name, NOT the Git branch "main" that the deploy workflow
+// gates on — the two are distinct. Defaults here so a local invocation of
+// `node scripts/check-neon-pitr.js` (e.g. the runbook's Step 1a) checks the
+// correct branch when NEON_BRANCH is not explicitly set.
+const DEFAULT_BRANCH = 'production';
 
 /**
  * Fetch the list of project snapshots from the Neon API.
@@ -99,9 +105,18 @@ async function resolveBranch(projectId, branchName, apiKey, fetchImpl) {
  * Extract snapshot timestamps from the Neon API response.
  *
  * The Neon snapshots endpoint returns either `{ snapshots: [...] }` or a bare
- * array. Each snapshot has a `created_at` ISO 8601 timestamp and a `branch_id`
- * identifying the root branch it originated from. We extract timestamps
- * defensively so a shape change does not crash the gate silently.
+ * array. Each snapshot has a `created_at` ISO 8601 timestamp and a branch
+ * identifier naming the root branch it originated from. The API exposes that
+ * identifier under two different keys depending on the response shape:
+ *   - `branch_id` (the shape documented for the project snapshots endpoint),
+ *   - `source_branch_id` (the shape returned for snapshot-restore / branch
+ *     creation responses, where the snapshot records the branch it was taken
+ *     from rather than the branch it materializes into).
+ * We normalize to `branch_id ?? source_branch_id` so the branch filter works
+ * against either response shape — a snapshot attributable to the target
+ * branch must satisfy the gate regardless of which key the API used. We
+ * extract timestamps defensively so a shape change does not crash the gate
+ * silently.
  * @param {unknown} payload
  * @returns {Array<{ id: string; createdAt: Date; branchId?: string }>}
  */
@@ -118,10 +133,20 @@ function extractSnapshots(payload) {
     if (typeof raw !== 'string') continue;
     const createdAt = new Date(raw);
     if (Number.isNaN(createdAt.getTime())) continue;
+    // Normalize the branch identifier. Prefer `branch_id`; fall back to
+    // `source_branch_id` for response shapes that use that key. A snapshot
+    // with neither key is left unattributed (branchId undefined) and the
+    // branch filter excludes it — we cannot prove it belongs to the target.
+    const branchId =
+      typeof entry.branch_id === 'string'
+        ? entry.branch_id
+        : typeof entry.source_branch_id === 'string'
+          ? entry.source_branch_id
+          : undefined;
     out.push({
       id: typeof entry.id === 'string' ? entry.id : '<unknown>',
       createdAt,
-      branchId: typeof entry.branch_id === 'string' ? entry.branch_id : undefined,
+      branchId,
     });
   }
   return out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
