@@ -104,6 +104,55 @@ test('filterSnapshotsByBranch: returns empty array when no snapshots match', () 
   assert.deepEqual(filtered, []);
 });
 
+// --- branch_id / source_branch_id normalization (real production drill finding) ---
+//
+// The Neon snapshots API exposes the originating branch under two different
+// keys depending on the response shape: `branch_id` (project snapshots) and
+// `source_branch_id` (snapshot-restore / branch-creation responses).
+// extractSnapshots must normalize both so the branch filter attributes a
+// snapshot to the correct branch regardless of which key the API used.
+
+test('extractSnapshots: normalizes source_branch_id when branch_id is absent', () => {
+  const out = extractSnapshots({
+    snapshots: [{ id: 's1', created_at: '2026-07-25T10:00:00Z', source_branch_id: 'br-prod' }],
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].branchId, 'br-prod');
+});
+
+test('extractSnapshots: prefers branch_id when both branch_id and source_branch_id are present', () => {
+  const out = extractSnapshots({
+    snapshots: [
+      {
+        id: 's1',
+        created_at: '2026-07-25T10:00:00Z',
+        branch_id: 'br-prod',
+        source_branch_id: 'br-other',
+      },
+    ],
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].branchId, 'br-prod');
+});
+
+test('extractSnapshots: leaves branchId undefined when neither key is present', () => {
+  const out = extractSnapshots({
+    snapshots: [{ id: 's1', created_at: '2026-07-25T10:00:00Z' }],
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].branchId, undefined);
+});
+
+test('filterSnapshotsByBranch: matches snapshots normalized from source_branch_id', () => {
+  const snapshots = [
+    { id: 's1', createdAt: withinHours(1), branchId: 'br-prod' },
+    { id: 's2', createdAt: withinHours(2), branchId: 'br-dev' },
+  ];
+  const filtered = filterSnapshotsByBranch(snapshots, 'br-prod');
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].id, 's1');
+});
+
 test('evaluatePitrReadiness: ready when newest snapshot is within threshold', () => {
   const snapshots = [{ id: 's1', createdAt: withinHours(1) }];
   const verdict = evaluatePitrReadiness(snapshots, DEFAULT_MAX_AGE_HOURS, NOW);
@@ -145,7 +194,7 @@ test('main: exits 0 when a recent restore point exists for the target branch', a
     },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123' },
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'main' },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -171,7 +220,7 @@ test('main: exits 1 when no restore points exist for the target branch', async (
     [SNAPSHOTS_URL('proj-123')]: { snapshots: [] },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123' },
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'main' },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -195,7 +244,12 @@ test('main: exits 1 when newest restore point for the target branch is too old',
     },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', PITR_MAX_AGE_HOURS: '2' },
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'main',
+      PITR_MAX_AGE_HOURS: '2',
+    },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -227,7 +281,12 @@ test('main: cross-branch — recent dev snapshot does NOT satisfy gate when prod
     },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', PITR_MAX_AGE_HOURS: '2' },
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'main',
+      PITR_MAX_AGE_HOURS: '2',
+    },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -258,7 +317,12 @@ test('main: cross-branch — fails when production branch has NO snapshots but d
     },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', PITR_MAX_AGE_HOURS: '2' },
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'main',
+      PITR_MAX_AGE_HOURS: '2',
+    },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -284,7 +348,7 @@ test('main: fails closed (exit 1) when the target branch cannot be resolved', as
     },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123' },
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'main' },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -320,7 +384,12 @@ test('main: rejects future timestamps for the target branch (fail closed)', asyn
     },
   });
   const code = await main(
-    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', PITR_MAX_AGE_HOURS: '2' },
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'main',
+      PITR_MAX_AGE_HOURS: '2',
+    },
     {
       fetch: fetchImpl,
       now: () => NOW,
@@ -397,7 +466,7 @@ test('main: exits 1 on Neon API error (snapshots endpoint)', async () => {
   };
   await assert.rejects(
     main(
-      { NEON_API_KEY: 'bad', NEON_PROJECT_ID: 'proj-123' },
+      { NEON_API_KEY: 'bad', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'main' },
       {
         fetch: fetchImpl,
         now: () => NOW,
@@ -407,4 +476,123 @@ test('main: exits 1 on Neon API error (snapshots endpoint)', async () => {
     ),
     /returned 500/,
   );
+});
+
+// --- Default branch + source_branch_id end-to-end (real production drill findings) ---
+
+test('main: defaults to the Neon production branch "production" when NEON_BRANCH is unset', async () => {
+  // The Neon production branch is named "production" (NOT the Git branch
+  // "main"). When NEON_BRANCH is unset, the gate must resolve and filter on
+  // the "production" branch — a local runbook invocation (Step 1a) relies on
+  // this default. A recent snapshot on a "main"-named branch must NOT satisfy
+  // the gate when the default target is "production".
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production', deleted: false }],
+    },
+    [BRANCHES_URL('proj-123', 'main')]: {
+      branches: [{ id: 'br-main', name: 'main', deleted: false }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [
+        // Recent snapshot on a "main"-named branch — must NOT satisfy the
+        // gate for the default "production" target.
+        { id: 's-main-recent', created_at: withinHours(0.5).toISOString(), branch_id: 'br-main' },
+        // Stale snapshot on the "production" branch — this is what should be
+        // evaluated, and it must fail the age threshold.
+        { id: 's-prod-stale', created_at: withinHours(10).toISOString(), branch_id: 'br-prod' },
+      ],
+    },
+  });
+  const code = await main(
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', PITR_MAX_AGE_HOURS: '2' },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 1);
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.branch.name, 'production');
+  assert.equal(evidence.branch.id, 'br-prod');
+  assert.equal(evidence.branchSnapshotCount, 1);
+  assert.equal(evidence.newestAgeHours, 10);
+  // Must have resolved the "production" branch, not "main".
+  assert.equal(
+    fetchImpl.calls.some((u) => u.includes('search=production')),
+    true,
+    'Default branch must resolve "production", not "main"',
+  );
+});
+
+test('main: source_branch_id shape — recent snapshot satisfies gate for the target branch', async () => {
+  // The snapshot-restore / branch-creation response shape attributes the
+  // snapshot via source_branch_id (not branch_id). The gate must still
+  // attribute it to the correct branch and pass when it is recent.
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production', deleted: false }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [
+        { id: 's1', created_at: withinHours(0.5).toISOString(), source_branch_id: 'br-prod' },
+      ],
+    },
+  });
+  const code = await main(
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'production' },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 0);
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.ready, true);
+  assert.equal(evidence.branchSnapshotCount, 1);
+  assert.equal(evidence.newestAgeHours, 0.5);
+});
+
+test('main: source_branch_id shape — cross-branch snapshot does NOT satisfy gate for another branch', async () => {
+  // A recent snapshot attributed via source_branch_id to a dev branch must
+  // NOT satisfy the gate for the production branch.
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production', deleted: false }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [
+        { id: 's-dev', created_at: withinHours(0.5).toISOString(), source_branch_id: 'br-dev' },
+      ],
+    },
+  });
+  const code = await main(
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'production',
+      PITR_MAX_AGE_HOURS: '2',
+    },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 1);
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.ready, false);
+  assert.equal(evidence.branchSnapshotCount, 0);
+  assert.match(errChunks.join(''), /No Neon restore points found for branch "production"/);
 });

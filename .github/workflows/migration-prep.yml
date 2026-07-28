@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: 'dawn-darkness-22587117'
+      neon_branch:
+        description: 'Neon branch name to filter PITR restore points by (the Neon production branch, not the Git branch)'
+        required: false
+        type: string
+        default: 'production'
       pitr_max_age_hours:
         description: 'Max acceptable age (hours) of the newest Neon restore point'
         required: false
@@ -141,6 +146,7 @@ jobs:
           # secrets because environment-level secrets are available directly.
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_PROJECT_ID: ${{ inputs.neon_project_id }}
+          NEON_BRANCH: ${{ inputs.neon_branch }}
           PITR_MAX_AGE_HOURS: ${{ inputs.pitr_max_age_hours }}
         run: node scripts/check-neon-pitr.js > pitr-evidence.json 2> pitr-check.stderr
 

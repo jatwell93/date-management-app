@@ -115,12 +115,14 @@ production GitHub environment is the enforcement boundary.
       `MIGRATION_CONFIRM_PRODUCTION`, `MIGRATION_ROLE`, `MIGRATION_SEED_CONFIRMATION`,
       `NEON_CONNECTION_STRING`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
       `CLERK_SECRET_KEY`, `SMOKE_USER_ID`
-- [ ] Runtime role separation complete: `app_runtime` provisioned on main
-      via SQL `CREATE ROLE` (not Neon's "Add Role" button), grants + default
-      privileges applied, `REVOKE ALL PRIVILEGES ON TABLE schema_migrations
-      FROM app_runtime` applied, `scripts/verify-runtime-role.js` passes
-      against main's `app_runtime` URL in **read-only mode** (active-probe
-      mode was used on the `migration-role-check` branch first), and Doppler
+- [ ] Runtime role separation complete: `app_runtime` provisioned on the
+      Neon `production` branch (not the Git branch `main` — the two are
+      distinct) via SQL `CREATE ROLE` (not Neon's "Add Role" button), grants
+      + default privileges applied, `REVOKE ALL PRIVILEGES ON TABLE
+      schema_migrations FROM app_runtime` applied,
+      `scripts/verify-runtime-role.js` passes against the `production`
+      branch's `app_runtime` URL in **read-only mode** (active-probe mode was
+      used on the `migration-role-check` branch first), and Doppler
       config updated so `DATABASE_URL_UNPOOLED`/`MIGRATION_ROLE` use
       `neondb_owner` and `NEON_CONNECTION_STRING` uses the pooled
       `app_runtime` URL (see
@@ -257,37 +259,116 @@ cannot run DDL.
 > attempt created a role with a leading space in its name
 > (`" migration_runner"`) via Neon Console. That role is unnecessary
 > under this ownership model (`neondb_owner` is the migration identity)
-> and should be deleted from main through the Neon Console after
-> confirming it owns no objects and is unused (see
+> and should be deleted from the Neon `production` branch through the Neon
+> Console after confirming it owns no objects and is unused (see
 > [Cleanup](#runtime-role-cleanup) below).
 
 **Provision `app_runtime` on a temporary branch first.** Create a
-Neon branch named `migration-role-check` from `main` and execute the
-provisioning SQL there. This lets you test the grants and the Worker
-against a realistic schema without touching production. Only after
-verification passes on the branch do you provision `app_runtime` on
-main and cut the Worker over.
+Neon branch named `migration-role-check` from the Neon `production`
+branch (the Neon branch named `production`, not the Git branch `main`)
+and execute the provisioning SQL there. This lets you test the grants
+and the Worker against a realistic schema without touching production.
+Only after
+verification passes on the branch do you provision `app_runtime` on the
+Neon `production` branch and cut the Worker over.
 
 #### 1. Create the role (interactive psql as `neondb_owner`)
 
 Connect to the `migration-role-check` branch as `neondb_owner` (the
-schema owner) via psql. Do **not** put a password in committed SQL or
-shell history — use the interactive `\password` meta-command:
+schema owner) via psql. Do **not** put a password in committed SQL,
+shell history, psql history, or process arguments. The procedure
+below generates the password to a `chmod 600` temp file, installs an
+EXIT/INT/TERM cleanup trap that validates the path before removing it,
+reads the password into a psql variable via `\set` backtick expansion,
+and runs `ALTER ROLE` with the `:'variable'` quoting syntax — so the
+password value never appears in `.psql_history`, shell history, or
+`ps aux` argument lists.
+
+> **Why not `\password`:** the `\password` psql meta-command prompts
+> without echoing and is history-safe in principle, but it is fragile
+> in some terminal environments (e.g., Git Bash on Windows can fail to
+> suppress echo or mishandle the double-prompt), and it cannot be used
+> in a semi-automated procedure. The file-based `ALTER ROLE` procedure
+> below is robust in all terminals, works in interactive psql sessions,
+> and keeps the password out of every persistent artifact. It also
+> generates a cryptographically strong password (`openssl rand`) rather
+> than relying on the operator to type one.
+
+> **Do NOT hand-construct the `app_runtime` connection URI.** Base64
+> passwords contain `+`, `/`, and `=` characters that are NOT
+> URL-safe and MUST be percent-encoded if interpolated into a
+> `postgresql://` URI. Instead, after the password is set, obtain the
+> pooled `app_runtime` connection URI from Neon's
+> `connection_uri` REST API (same endpoint used in Step 1b step 4),
+> which returns a complete, callable, correctly-encoded URI. The
+> history-safe procedure for obtaining and storing that URI in Doppler
+> is step 1d below — run it **before** the temp password file is
+> destroyed by the cleanup trap.
 
 ```bash
 set -euo pipefail
 
-# Connect to the migration-role-check branch as neondb_owner.
-# The connection string is obtained from the Neon console or the
-# connection_uri API (see Step 1b for the API call shape).
+# 1. Generate a strong password to a chmod 600 temp file. openssl rand
+#    produces 32 bytes of entropy, base64-encoded (44 chars). The
+#    password is never in a shell variable that could be logged — it
+#    lives only in the temp file (deleted after use) and in psql's
+#    process memory (the `pw` variable, unset after the ALTER ROLE).
+PWFILE=$(mktemp)
+chmod 600 "$PWFILE"
+openssl rand -base64 32 > "$PWFILE"
+
+# 2. Install a cleanup trap IMMEDIATELY after PWFILE is created, so the
+#    temp file is destroyed even if the operator Ctrl-C's the psql
+#    session, the terminal sends SIGHUP, or the script exits early for
+#    any reason. The trap fires on EXIT, INT (Ctrl-C), and TERM.
 #
-# Do NOT use `psql ... -c "SELECT current_user;"` here: `-c` runs the
-# query and exits immediately, so the CREATE ROLE and \password
-# instructions below would have no interactive session to run in.
-# Start a plain interactive psql session instead — the SQL and
-# meta-commands in the next block run inside it.
+#    The trap VALIDATES the path before removing it: it checks that
+#    PWFILE is non-empty, that the path starts with the system temp
+#    dir ($TMPDIR or /tmp), and that the path is a regular file (not a
+#    directory, symlink, device, or empty string). This prevents the
+#    trap from ever calling `shred`/`rm` on an unexpected path if
+#    PWFILE is somehow unset or reassigned later. shred -u overwrites
+#    then removes; fall back to rm -f if shred is unavailable (e.g.,
+#    on macOS, where shred is not installed by default).
+cleanup_pwfile() {
+  if [ -n "${PWFILE:-}" ] && [ -f "$PWFILE" ]; then
+    case "$PWFILE" in
+      "${TMPDIR:-/tmp}"/*)
+        shred -u "$PWFILE" 2>/dev/null || rm -f "$PWFILE"
+        ;;
+      *)
+        echo "::warning::Refusing to clean PWFILE outside TMPDIR: $PWFILE (remove manually)"
+        ;;
+    esac
+  fi
+  unset PWFILE
+}
+trap cleanup_pwfile EXIT INT TERM
+
+# 3. Connect to the migration-role-check branch as neondb_owner.
+#    The connection string is obtained from the Neon console or the
+#    connection_uri API (see Step 1b for the API call shape).
+#
+#    Do NOT use `psql ... -c "SELECT current_user;"` here: `-c` runs the
+#    query and exits immediately, so the CREATE ROLE and ALTER ROLE
+#    instructions below would have no interactive session to run in.
+#    Start a plain interactive psql session instead — the SQL and
+#    meta-commands in the next block run inside it.
+#
+#    The PWFILE path is exported so the psql `\set` backtick expansion
+#    can read it inside the session. The path is not sensitive — only
+#    the file contents are.
+export PWFILE
 export OWNER_URL="postgresql://neondb_owner@<branch-host>/neondb"
 psql "$OWNER_URL"
+
+# 4. After the psql session exits (step 2's grants + step 1d's
+#    connection-URI capture are done inside it), the EXIT trap fires
+#    automatically and securely deletes the temp file. No explicit
+#    shred/rm call is needed here — the trap handles it. The `unset
+#    PWFILE` below is defensive (the trap also unsets); it is safe
+#    because the trap re-checks `-n "${PWFILE:-}"` and `-f "$PWFILE"`.
+unset PWFILE
 ```
 
 At the `psql` prompt (`neondb=>`), run:
@@ -299,12 +380,21 @@ SELECT current_user;
 -- Create the runtime role. NO INHERIT is not required, but creating
 -- via SQL (not Neon's Add Role button) ensures it does NOT inherit
 -- neon_superuser. LOGIN allows it to authenticate; the password is
--- set interactively so it is never in committed SQL or shell history.
+-- set via ALTER ROLE below so it is never in committed SQL or history.
 CREATE ROLE app_runtime LOGIN;
 
--- Set the password interactively (NOT in SQL text or shell history).
--- psql will prompt without echoing:
-\password app_runtime
+-- Set the password from the temp file via \set backtick expansion.
+-- psql history records this line (with the $PWFILE path) and the
+-- ALTER ROLE line (with :'pw' — the variable NAME, not its value).
+-- Neither line contains the password. The :'pw' syntax expands to a
+-- properly-quoted string literal at execution time, so special
+-- characters in the base64 password are handled correctly.
+\set pw `cat $PWFILE`
+ALTER ROLE app_runtime PASSWORD :'pw';
+
+-- Unset the variable so the password is not retained in psql's
+-- variable space for the rest of the session.
+\unset pw
 ```
 
 Then proceed to step 2's grants **in the same psql session** (do not
@@ -402,6 +492,87 @@ ALTER DEFAULT PRIVILEGES
   GRANT EXECUTE ON FUNCTIONS TO app_runtime;
 ```
 
+#### 1d. Capture and store the pooled `app_runtime` connection URI (before the temp password is destroyed)
+
+> **Timing (2026-07-28 hardening).** This step MUST run **after** step 2's
+> grants complete (so the role is fully provisioned) and **before** the
+> shell exits and the EXIT trap destroys the temp password file. The
+> connection URI is obtained from Neon's `connection_uri` REST API,
+> which authenticates to Neon as the role and returns a complete,
+> correctly-percent-encoded URI — the password is never read from the
+> temp file or interpolated by hand. Run this from the **same shell**
+> as step 1 (the trap is still armed; it fires when the shell exits,
+> not when psql exits).
+
+The `app_runtime` password is base64-encoded and contains `+`, `/`,
+and `=` characters that are NOT URL-safe. Hand-interpolating it into a
+`postgresql://` URI would produce a malformed connection string (the
+`+` would be decoded as a space, `/` would break the path, `=` would
+be misparsed as a query separator). Neon's `connection_uri` REST API
+handles the percent-encoding correctly and returns a callable URI
+that embeds the role and the password. Use it.
+
+```bash
+set -euo pipefail
+# Assumes NEON_API_KEY, NEON_PROJECT_ID are exported (same shell as step 1).
+# Assumes the migration-role-check branch ID is resolved (or resolve it here).
+
+# 1. Resolve the migration-role-check branch ID (if not already resolved).
+ROLE_CHECK_BRANCH_ID=$(curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer $NEON_API_KEY" \
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches?search=migration-role-check" \
+  | jq -r 'first(.branches[] | select(.name=="migration-role-check") | .id) // empty')
+if [ -z "$ROLE_CHECK_BRANCH_ID" ]; then
+  echo "::error::Could not resolve migration-role-check branch ID. Aborting."
+  exit 1
+fi
+
+# 2. Obtain the POOLED app_runtime connection URI from Neon's
+#    connection_uri API. pooled=true routes through PgBouncer (the
+#    Worker uses pooled connections). The API returns a complete,
+#    callable URI with the password correctly percent-encoded — do NOT
+#    hand-construct the URI from the password in $PWFILE.
+#    https://api-docs.neon.tech/reference/getconnectionuri
+APP_RUNTIME_URI=$(curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer $NEON_API_KEY" \
+  --get \
+  --data-urlencode "branch_id=$ROLE_CHECK_BRANCH_ID" \
+  --data-urlencode "database_name=neondb" \
+  --data-urlencode "role_name=app_runtime" \
+  --data-urlencode "pooled=true" \
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/connection_uri" \
+  | jq -r '.uri // empty')
+if [ -z "$APP_RUNTIME_URI" ]; then
+  echo "::error::connection_uri endpoint returned an empty URI. Aborting."
+  exit 1
+fi
+
+# 3. Store the URI in Doppler for the role_check Worker environment.
+#    `doppler secrets set` reads the value from stdin (via printf, no
+#    trailing newline) so the URI is not in shell history or process
+#    args. Use the role_check-scoped Doppler config so this branch-
+#    specific URI does NOT overwrite the production NEON_CONNECTION_STRING.
+#    (The production URI is captured separately in step 6.3 when
+#    provisioning on the Neon production branch.)
+printf '%s' "$APP_RUNTIME_URI" | doppler secrets set NEON_CONNECTION_STRING \
+  --config role_check 2>/dev/null \
+  || echo "::warning::Could not set Doppler role_check NEON_CONNECTION_STRING. \
+Set it manually in the Doppler dashboard before deploying the role_check Worker (step 5)."
+
+# 4. Unset the URI from the shell — it is now in Doppler and no longer
+#    needed in process memory. The temp password file is still on disk
+#    (the EXIT trap will destroy it when the shell exits).
+unset APP_RUNTIME_URI
+```
+
+> **History safety:** the URI is piped from `curl` to `jq` to
+> `printf` to `doppler` — it is never in a shell variable that is
+> echoed, never in a command argument (Doppler reads from stdin), and
+> never in psql history. The `APP_RUNTIME_URI` shell variable exists
+> only briefly between the `curl` and the `doppler secrets set`, and
+> is unset immediately after. The password in `$PWFILE` is never read
+> by this step — Neon's API handles the authentication and encoding.
+
 #### 3. Verify the runtime role's privileges
 
 The verifier has two modes:
@@ -432,7 +603,7 @@ including nested probe error messages.
 
 **On the `migration-role-check` branch, use active-probe mode** so the
 write and alter-denial probes are exercised against a realistic schema
-before touching main:
+before touching the Neon `production` branch:
 
 ```bash
 set -euo pipefail
@@ -464,13 +635,14 @@ RUNTIME_ROLE_ACTIVE_PROBE=1 \
 # password).
 ```
 
-**On main, use read-only mode** (no `RUNTIME_ROLE_ACTIVE_PROBE`) so
-no write or ALTER attempt is made against production:
+**On the Neon `production` branch, use read-only mode** (no
+`RUNTIME_ROLE_ACTIVE_PROBE`) so no write or ALTER attempt is made
+against production:
 
 ```bash
 set -euo pipefail
-export RUNTIME_ROLE_URL="<app_runtime connection string for main>"
-node scripts/verify-runtime-role.js > runtime-role-evidence-main.json
+export RUNTIME_ROLE_URL="<app_runtime connection string for the Neon production branch>"
+node scripts/verify-runtime-role.js > runtime-role-evidence-production.json
 ```
 
 **Expected:** all checks PASS. If any check fails, **stop** — the
@@ -497,8 +669,8 @@ MIGRATION_ROLE=neondb_owner \
 MIGRATION_CONFIRM_PRODUCTION="APPLY <branch-host>/neondb" \
 npm run migrate:preflight
 
-# Then seed + verify (apply is a no-op if the branch was created from
-# main with the schema already at the latest migration):
+# Then seed + verify (apply is a no-op if the branch was created from the
+# Neon production branch with the schema already at the latest migration):
 DATABASE_URL_UNPOOLED="<neondb_owner direct URL>" \
 MIGRATION_ROLE=neondb_owner \
 MIGRATION_SEED_CONFIRMATION="SEED <branch-host>/neondb" \
@@ -529,6 +701,15 @@ smoke checks against it.
 ```bash
 set -euo pipefail
 
+# Build the Worker FIRST. `wrangler deploy` uploads the built artifact
+# at workers/dist/index.js (the `main` field in workers/wrangler.toml,
+# produced by `node build.js`). Skipping the build deploys a stale or
+# empty artifact — `wrangler deploy` does NOT build for you. The root
+# `build:workers` script runs `npm run build --prefix workers`, matching
+# the production deploy workflow (`.github/workflows/workers-deploy.yml`
+# runs `npm run build` from `working-directory: ./workers`).
+npm run build:workers
+
 # Deploy the Worker to a separately-named preview URL pointed at the
 # migration-role-check branch. NEON_CONNECTION_STRING is a Worker
 # secret (wrangler.toml:168, workers/src/types/env.d.ts:35), NOT a
@@ -544,7 +725,15 @@ set -euo pipefail
 # declares no routes, queues, Hyperdrive, R2, KV, or Analytics bindings,
 # so it cannot consume background work or share mutable application
 # resources with production/development.
-npx wrangler deploy --env role_check
+#
+# Wrangler must find workers/wrangler.toml. Run Wrangler from workers/
+# (the production deploy workflow uses `working-directory: ./workers`),
+# OR pass an explicit `--config workers/wrangler.toml` from the repo
+# root. The commands below use `--config` so they can run from the repo
+# root alongside the root-level `npm run build:workers` and `npm run
+# test:db` scripts. (`--config` resolves the `main`/build paths relative
+# to the config file, so the built artifact is found correctly.)
+npx wrangler deploy --env role_check --config workers/wrangler.toml
 
 # Bind the branch-specific pooled app_runtime URL as the preview
 # Worker's NEON_CONNECTION_STRING secret. printf (no trailing newline)
@@ -552,7 +741,7 @@ npx wrangler deploy --env role_check
 # the separately-named Worker's secret store, not the dev Worker.
 printf '%s' "<pooled app_runtime URL for migration-role-check>" \
   | npx wrangler secret put NEON_CONNECTION_STRING \
-    --env role_check
+    --env role_check --config workers/wrangler.toml
 
 # Run the Worker DB tests (pglite real-SQL) — these do not hit Neon but
 # prove the Worker code compiles and the SQL is valid:
@@ -564,12 +753,22 @@ curl --fail-with-body --silent --show-error \
   "https://date-management-api-role-check.<subdomain>.workers.dev/health?deep=true" | jq .
 ```
 
+> **Equivalent: run Wrangler from `workers/`.** Instead of
+> `--config workers/wrangler.toml`, you may `cd workers` and run
+> `npx wrangler deploy --env role_check` (and the matching
+> `secret put` / `delete`) without `--config` — Wrangler discovers
+> `wrangler.toml` in the current directory. This matches how the
+> production deploy workflow runs. Either form is correct; pick one and
+> use it consistently within a single run so the `role_check` environment
+> resolves the same Worker name.
+
 **Expected:** `/health?deep=true` reports DB readiness pass. If it
 fails with a connection or permission error, a grant is missing — do
 not cut over. Add the missing grant (re-run step 2's SQL for the
 specific privilege) and re-test. A 5xx with a connection-string error
-specifically suggests the `wrangler secret put` step was skipped or
-targeted the wrong `--name`.
+specifically suggests the `wrangler secret put` step was skipped,
+targeted the wrong `--name`, or the build step was skipped so the
+deployed artifact is stale.
 
 #### 5b. Clean up the role-check preview Worker
 
@@ -584,8 +783,11 @@ set -euo pipefail
 
 # Delete the role-check Worker. This also drops its secret bindings
 # (including the branch-specific NEON_CONNECTION_STRING). The dedicated
-# role_check environment resolves the exact Worker name from wrangler.toml.
-npx wrangler delete --env role_check
+# role_check environment resolves the exact Worker name from
+# wrangler.toml. Pass --config (or run from workers/) so Wrangler finds
+# the same config used to deploy it in step 5 — see step 5 for the
+# rationale. No build is needed for `wrangler delete`.
+npx wrangler delete --env role_check --config workers/wrangler.toml
 ```
 
 If `wrangler delete` is unavailable in your pinned Wrangler version,
@@ -595,31 +797,43 @@ secret is gone. Do **not** leave the role-check Worker running after
 the cutover — it would be an unmonitored Worker holding a credential
 for a deleted Neon branch.
 
-#### 6. Provision on main and cut over
+#### 6. Provision on the Neon `production` branch and cut over
 
 Only after steps 3–5 pass on the `migration-role-check` branch:
 
-1. Repeat steps 1–2 on **main** (create `app_runtime` via SQL, set
-   password interactively, run the grants + default privileges **and
-   the `REVOKE ALL PRIVILEGES ON TABLE schema_migrations`**).
-2. Run `scripts/verify-runtime-role.js` against main's `app_runtime`
-   connection string in **read-only mode** (no `RUNTIME_ROLE_ACTIVE_PROBE`)
-   — see Step 3 for the read-only command. Read-only mode makes no
-   write or ALTER attempt against production; the catalog checks
-   (including ledger-access denial and non-ownership proof) are
-   sufficient evidence on main because the same grants were already
-   proven with active probes on the `migration-role-check` branch.
-3. Update Doppler production config (see
+1. Repeat steps 1–2 on the Neon **`production`** branch (create
+   `app_runtime` via SQL, set the password via the history-protected
+   `ALTER ROLE` procedure (step 1), run the grants +
+   default privileges **and the `REVOKE ALL PRIVILEGES ON TABLE
+   schema_migrations`**).
+2. Run `scripts/verify-runtime-role.js` against the `production`
+   branch's `app_runtime` connection string in **read-only mode** (no
+   `RUNTIME_ROLE_ACTIVE_PROBE`) — see Step 3 for the read-only command.
+   Read-only mode makes no write or ALTER attempt against production;
+   the catalog checks (including ledger-access denial and non-ownership
+   proof) are sufficient evidence on the `production` branch because the
+   same grants were already proven with active probes on the
+   `migration-role-check` branch.
+3. Capture the pooled `app_runtime` connection URI for the Neon
+   `production` branch via the same `connection_uri` REST API procedure
+   as step 1d (substituting the `production` branch ID and storing into
+   the **production** Doppler config, not `role_check`). This MUST run
+   before the temp password file is destroyed by the EXIT trap. See
+   step 1d for the exact history-safe procedure.
+4. Update Doppler production config (see
    [Doppler production config](#doppler-production-config-existing--new)
    below):
    - `DATABASE_URL_UNPOOLED` → direct `neondb_owner` URL (migrations)
    - `MIGRATION_ROLE` → `neondb_owner`
-   - `NEON_CONNECTION_STRING` → pooled `app_runtime` URL (Worker)
+   - `NEON_CONNECTION_STRING` → pooled `app_runtime` URL (Worker,
+     captured in step 3 above via the `connection_uri` API — do NOT
+     hand-construct it; the base64 password contains `+`, `/`, `=`
+     characters that must be percent-encoded)
    - confirmation tokens remain based on the same host/database
-4. **Retain the previous Worker connection secret** (the old
+5. **Retain the previous Worker connection secret** (the old
    `NEON_CONNECTION_STRING` value) securely until the canary passes —
    see [Role-cutover rollback](#role-cutover-rollback) below.
-5. Trigger a production deploy (`workflow_dispatch` from `main`) and
+6. Trigger a production deploy (`workflow_dispatch` from `main`) and
    observe the canary.
 
 **No workflow output exposes either password.** The migration CLIs
@@ -647,13 +861,14 @@ runtime grant:
    manual `wrangler secret put` is required for rollback. The Worker
    reconnects with the restored credential on the next request.
 3. **Add the missing runtime grant** through a reviewed forward fix —
-   re-run the specific `GRANT` statement from step 2 on main as
-   `neondb_owner` via an interactive psql session. Do not bundle grant
-   changes into a migration file; role administration is not schema
-   DDL.
+   re-run the specific `GRANT` statement from step 2 on the Neon
+   `production` branch as `neondb_owner` via an interactive psql session.
+   Do not bundle grant changes into a migration file; role administration
+   is not schema DDL.
 4. **Repeat verification:** run `scripts/verify-runtime-role.js`
-   against main's `app_runtime` URL in **read-only mode**, then re-cut
-   over (step 6.3–6.5). If the missing grant was on `schema_migrations`
+   against the `production` branch's `app_runtime` URL in **read-only
+   mode**, then re-cut over (step 6.3–6.5). If the missing grant was on
+   `schema_migrations`
    (i.e., the `REVOKE` was not applied), re-apply the
    `REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime`
    before re-verifying.
@@ -666,16 +881,18 @@ re-verify. Do not default to a destructive down migration.
 
 #### Runtime role cleanup
 
-After the role separation is proven on main and the canary passes:
+After the role separation is proven on the Neon `production` branch and
+the canary passes:
 
 1. **Delete the `migration-role-check` branch** via the Neon console or
    API. It is no longer needed.
-2. **Delete the malformed `" migration_runner"` role** from main through
-   the Neon Console. Before deleting, confirm it owns no objects and is
-   unused:
+2. **Delete the malformed `" migration_runner"` role** from the Neon
+   `production` branch through the Neon Console. Before deleting, confirm
+   it owns no objects and is unused:
    ```sql
-   -- Run as neondb_owner on main. If either query returns rows, do NOT
-   -- delete the role — reassign or drop the dependent objects first.
+   -- Run as neondb_owner on the Neon production branch. If either query
+   -- returns rows, do NOT delete the role — reassign or drop the
+   -- dependent objects first.
    SELECT n.nspname || '.' || c.relname AS owned_object
      FROM pg_class c
      JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -719,8 +936,9 @@ at the apply/seed/verify stage:
   gaps (the missing `0001` schema gap and the `information_schema`
   ledger-detection false negative; see the callouts below).
 
-- **Production adoption track** (main): runs steps A–D, F–G, then **hands
-  off to the protected GitHub deploy workflow** (Step 2 below) which
+- **Production adoption track** (Neon `production` branch): runs steps
+  A–D, F–G, then **hands off to the protected GitHub deploy workflow**
+  (Step 2 below) which
   applies `0010`, seeds, verifies, deploys the Worker, and runs canary —
   all inside the CI gate that records artifacts and enforces the audit
   trail. Step E (manual `migrate:apply` / `migrate:seed` / `migrate:verify`)
@@ -745,16 +963,64 @@ at the apply/seed/verify stage:
 
 Before starting the production adoption track:
 
-1. Complete the full PITR drill (Step 1a → 1c) and confirm it passes.
+1. Complete the full PITR drill (Step 1a → 1c) and confirm it passes
+   **against the pre-adoption acceptance criteria below** (NOT the
+   latest-schema `migrate:verify` PASS that Step 1b lists for the
+   regular post-adoption drill — see the callout below).
 2. Record the drill completion time. The drill must be **fresh** —
    completed within the last 2 hours before step A begins on production.
 3. If the branch proof track is run on the same day, the branch drill
    does NOT satisfy this gate — the production drill must be against the
-   main branch's snapshots.
+   Neon `production` branch's snapshots.
 
 The branch proof track does not require a PITR drill (the branch is
 disposable), but the production track MUST NOT proceed past step A
 without a fresh, passing PITR drill on record.
+
+> **Pre-adoption acceptance criteria (2026-07-28 drill finding).**
+> Step 1b's `migrate:verify` PASS expectation assumes the restored
+> snapshot is at the **latest** schema (the regular pre-deploy drill,
+> run before a normal migration on an already-adopted database). A
+> **pre-adoption** snapshot predates adoption: the
+> `schema_migrations` ledger does not exist yet, and migration `0010`
+> (the `tier_feature_flags.limit_value` `integer → bigint` change) has
+> not been applied. `migrate:verify` checks the catalog against the
+> latest fingerprint **and** requires the ledger — so it **cannot
+> pass** on a pre-adoption restored branch, and treating its failure as
+> a drill failure would block adoption on a perfectly good restore.
+>
+> For the pre-adoption drill, replace Step 1b step 6 (`migrate:verify`)
+> with these acceptance criteria — all three must pass:
+>
+> 1. **Successful restore polling** — every operation returned by the
+>    snapshot-restore call reaches a terminal success state
+>    (`finished` / `skipped` / `cancelled`) via
+>    `scripts/neon-poll-operations.js` (Step 1b step 3). A `failed`
+>    operation or poll deadline exits non-zero and fails the drill.
+> 2. **Restored-state fidelity checks** — the restored branch
+>    materializes the expected pre-adoption schema. Run the Step 1b
+>    step 5 `information_schema.tables` count, plus a targeted check of
+>    the tables that adoption will reconcile (e.g. the `uploads` columns
+>    that `0001` adds, if the 0001 gap is still open) so the restore is
+>    not silently empty or partial. The table count must match
+>    production's pre-adoption count, not the post-0010 count.
+> 3. **`migrate:preflight` PASS against the restored branch** —
+>    preflight is read-only and reports `Ready: YES,
+>    schema_migrations ledger: not initialized` for a pre-adoption
+>    snapshot, which is exactly the expected pre-adoption state. Run it
+>    with `MIGRATION_TARGET_KIND=restore-drill` (read-only target kind)
+>    and the same `DATABASE_URL_UNPOOLED="$DRILL_URL"` /
+>    `MIGRATION_ROLE="$DRILL_ROLE"` wiring as Step 1b step 6.
+>
+> **Reserve latest-schema `migrate:verify` for AFTER the protected
+> workflow applies `0010`.** Once adoption stamps `0000`–`0009` and the
+> protected GitHub workflow applies `0010` (seeds, verifies, deploys,
+> canaries), the database is at the latest schema and the regular
+> Step 1b `migrate:verify` PASS expectation is correct for every
+> subsequent pre-deploy drill. The branch proof track's step E
+> (`migrate:verify` PASS on the disposable branch) is the place that
+> proves latest-schema verification works end-to-end before production
+> gets there.
 
 ### Corrected sequence (in order)
 
@@ -775,7 +1041,8 @@ env setup (step 0 — export shared variables once)
   → runtime-role verification  (corrected verify-runtime-role.js — pg_catalog ledger detection)
 ```
 
-**Production adoption track** (main — no manual apply/seed/verify):
+**Production adoption track** (Neon `production` branch — no manual
+apply/seed/verify):
 
 ```
 [pre-adoption PITR gate: fresh drill MUST pass]
@@ -1165,7 +1432,7 @@ to stamp `0010`.
 Re-apply the REVOKE as `neondb_owner` via an interactive psql session:
 
 ```sql
--- Run as neondb_owner on the target branch (then main).
+-- Run as neondb_owner on the target branch (then the Neon production branch).
 -- This strips the DML that ALTER DEFAULT PRIVILEGES auto-granted on
 -- schema_migrations when adoption created it. Covers ALL seven table
 -- privileges (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES,
@@ -1216,12 +1483,13 @@ RUNTIME_ROLE_ACTIVE_PROBE=1 \
   node scripts/verify-runtime-role.js > runtime-role-evidence.json
 ```
 
-On main, use read-only mode (no `RUNTIME_ROLE_ACTIVE_PROBE`):
+On the Neon `production` branch, use read-only mode (no
+`RUNTIME_ROLE_ACTIVE_PROBE`):
 
 ```bash
 set -euo pipefail
-export RUNTIME_ROLE_URL="<app_runtime connection string for main>"
-node scripts/verify-runtime-role.js > runtime-role-evidence-main.json
+export RUNTIME_ROLE_URL="<app_runtime connection string for the Neon production branch>"
+node scripts/verify-runtime-role.js > runtime-role-evidence-production.json
 ```
 
 **Expected:** `Overall: PASS`, and `ledgerAccessDenied: PASS
@@ -1239,12 +1507,13 @@ verification PASS), the branch proof is complete. The branch can be
 deleted (or kept for reference until production adoption is signed off).
 
 **Production track:** after steps A, B (if needed), C, D, F, G pass on
-main (adoption stamped `0000`–`0009`, `0010` confirmed as the only
-pending migration, ledger access revoked, runtime-role verification
-PASS), the database is **adoption-stamped but not yet migration-complete**
-— `0010` is still pending. Do NOT run `migrate:apply` manually. Instead,
-hand off to the protected GitHub deploy workflow (Step 2 below) via
-`workflow_dispatch` from `main`:
+the Neon `production` branch (adoption stamped `0000`–`0009`, `0010`
+confirmed as the only pending migration, ledger access revoked,
+runtime-role verification PASS), the database is **adoption-stamped but
+not yet migration-complete** — `0010` is still pending. Do NOT run
+`migrate:apply` manually. Instead, hand off to the protected GitHub
+deploy workflow (Step 2 below) via `workflow_dispatch` from the Git
+branch `main`:
 
 1. **Keep `PRODUCTION_AUTO_DEPLOY_ENABLED` unset** — do not enable
    auto-deploy yet. Trigger the workflow manually with
@@ -1285,8 +1554,10 @@ the restored data.
 set -euo pipefail
 
 # Via the CI PITR check script locally (requires NEON_API_KEY).
-# This is the same script CI runs; it resolves the main branch, filters
-# snapshots by branch_id, and fails closed if no recent snapshot exists.
+# This is the same script CI runs; it resolves the Neon production branch
+# (named "production", not the Git branch "main"), filters snapshots by
+# branch_id (normalizing branch_id ?? source_branch_id), and fails closed
+# if no recent snapshot exists.
 NEON_API_KEY=<key> NEON_PROJECT_ID=dawn-darkness-22587117 node scripts/check-neon-pitr.js
 
 # Or query the Neon REST API directly (same endpoint the script uses):
@@ -1303,7 +1574,7 @@ Neon to create a new snapshot or create one manually via the REST API:
 ```bash
 set -euo pipefail
 
-# Create a snapshot of the main branch via the Neon REST API.
+# Create a snapshot of the Neon production branch via the Neon REST API.
 # (neonctl@2.27.0 has no `snapshots` subcommand, so use the API directly.)
 # The branch ID is a path parameter; `name` is a QUERY parameter per the
 # Neon create-snapshot API (https://api-docs.neon.tech/reference/createsnapshot).
@@ -1312,29 +1583,29 @@ set -euo pipefail
 # jq's first(...) is used instead of `| head -1` so the pipeline does not
 # abort under `set -o pipefail` (head closing the pipe early would surface
 # SIGPIPE as a non-zero exit and trip `set -e`).
-MAIN_BRANCH_ID=$(curl --fail-with-body --silent --show-error \
+PROD_BRANCH_ID=$(curl --fail-with-body --silent --show-error \
   -H "Authorization: Bearer $NEON_API_KEY" \
-  "https://console.neon.tech/api/v2/projects/dawn-darkness-22587117/branches?search=main" \
-  | jq -r 'first(.branches[] | select(.name=="main") | .id) // empty')
-if [ -z "$MAIN_BRANCH_ID" ]; then
-  echo "::error::Could not resolve main branch ID. Aborting."
+  "https://console.neon.tech/api/v2/projects/dawn-darkness-22587117/branches?search=production" \
+  | jq -r 'first(.branches[] | select(.name=="production") | .id) // empty')
+if [ -z "$PROD_BRANCH_ID" ]; then
+  echo "::error::Could not resolve the Neon production branch ID. Aborting."
   exit 1
 fi
 curl --fail-with-body --silent --show-error --request POST \
   -H "Authorization: Bearer $NEON_API_KEY" \
   --get \
   --data-urlencode "name=pre-migration-manual" \
-  "https://console.neon.tech/api/v2/projects/dawn-darkness-22587117/branches/$MAIN_BRANCH_ID/snapshot" \
+  "https://console.neon.tech/api/v2/projects/dawn-darkness-22587117/branches/$PROD_BRANCH_ID/snapshot" \
   | jq '.'
 ```
 
 ### 1b. Restore-to-new-branch drill
 
 This step must restore a **specific snapshot** into a new preview branch —
-creating an ordinary child branch from current main does **not** prove
-PITR. The drill verifies that a snapshot can be materialized via Neon's
-snapshot-restore REST API and the application works against the restored
-data.
+creating an ordinary child branch from the current Neon production branch
+does **not** prove PITR. The drill verifies that a snapshot can be
+materialized via Neon's snapshot-restore REST API and the application
+works against the restored data.
 
 > **Tooling note (verified 2026-07-26):** `neonctl@2.27.0` does **not**
 > expose a `snapshots` subcommand (its `branches` command has no
@@ -1343,7 +1614,7 @@ data.
 > (`scripts/check-neon-pitr.js`) uses to list snapshots. The endpoint is
 > `POST /api/v2/projects/{project_id}/snapshots/{snapshot_id}/restore`
 > with `finalize_restore: false` to create a preview branch without
-> touching main. Do not connect to the restored branch until every
+> touching the Neon production branch. Do not connect to the restored branch until every
 > operation returned by the restore call reaches a terminal state
 > (`finished`, `skipped`, `cancelled`, or `failed`); connecting earlier
 > will either fail or hit the pre-restore state. See
@@ -1357,7 +1628,7 @@ export NEON_PROJECT_ID=dawn-darkness-22587117
 export NEON_API_KEY="<your-neon-api-key>"
 export DRILL_BRANCH=pitr-drill-$(date +%Y%m%d%H%M)
 
-# 1. Pick the newest snapshot ID for the main branch from Step 1a.
+# 1. Pick the newest snapshot ID for the Neon production branch from Step 1a.
 #    Step 1a already confirmed it is within 2 hours. If you only have the
 #    timestamp, list snapshots via the REST API to resolve the ID:
 #   curl --fail-with-body --silent --show-error \
@@ -1371,7 +1642,7 @@ if [ -z "$SNAPSHOT_ID" ]; then
 fi
 
 # 2. Restore the snapshot into a NEW preview branch (un-finalized).
-#    finalize_restore: false means main is NOT touched — the restore
+#    finalize_restore: false means the Neon production branch is NOT touched — the restore
 #    materializes a separate preview branch we can inspect and delete.
 #    --fail-with-body makes curl exit non-zero on 4xx/5xx so an error
 #    response is not silently captured as the "restore response".
@@ -1463,19 +1734,32 @@ MIGRATION_ROLE="$DRILL_ROLE" \
 npm run migrate:verify
 ```
 
-**Expected:** `migrate:verify` reports PASS. If it fails, the production
-schema has drift that must be investigated before migrating.
+**Expected (regular / post-adoption drill):** `migrate:verify` reports
+PASS. If it fails, the production schema has drift that must be
+investigated before migrating.
+
+> **Pre-adoption drill — different acceptance criteria.** The
+> `migrate:verify` PASS expectation above is correct for the **regular**
+> pre-deploy drill (an already-adopted database at the latest schema).
+> For the **pre-adoption** drill (run before the one-time adoption
+> gate), the restored snapshot predates the `schema_migrations` ledger
+> and migration `0010`, so `migrate:verify` **cannot** pass and its
+> failure is NOT a drill failure. Use the pre-adoption acceptance
+> criteria in [Pre-adoption PITR gate](#pre-adoption-pitr-gate-mandatory-before-any-production-ddl)
+> instead: successful restore polling, restored-state fidelity checks,
+> and `migrate:preflight` PASS. Reserve latest-schema `migrate:verify`
+> for after the protected workflow applies `0010`.
 
 > **Why the snapshot-restore API and not `neonctl branches create
-> --parent main`:** `--parent main` creates a child branch from the
-> current tip of main — that is a copy of the live branch, not a
-> restore from a saved snapshot. PITR proves you can recover a
-> **captured point-in-time state**. The snapshot-restore REST endpoint
-> with `finalize_restore: false` materializes a new preview branch from
-> the named snapshot and leaves main untouched — which is exactly the
-> recovery primitive the drill must exercise. The accompanying
-> operation-polling step is the same discipline a real rollback
-> requires.
+> --parent production`:** `--parent production` creates a child branch
+> from the current tip of the Neon production branch — that is a copy of
+> the live branch, not a restore from a saved snapshot. PITR proves you
+> can recover a **captured point-in-time state**. The snapshot-restore
+> REST endpoint with `finalize_restore: false` materializes a new
+> preview branch from the named snapshot and leaves the Neon production
+> branch untouched — which is exactly the recovery primitive the drill
+> must exercise. The accompanying operation-polling step is the same
+> discipline a real rollback requires.
 
 ### 1c. Clean up the drill branch
 
@@ -1488,7 +1772,10 @@ neonctl branches delete \
 **Record:**
 - Restore point timestamp: `____________________________`
 - Drill branch table count: `____________________________`
-- `migrate:verify` result: [ ] PASS [ ] FAIL
+- Drill type: [ ] regular (post-adoption) [ ] pre-adoption
+- Restore polling: [ ] PASS (all operations terminal-success) [ ] FAIL
+- Restored-state fidelity checks: [ ] PASS [ ] FAIL
+- `migrate:preflight` (pre-adoption) / `migrate:verify` (regular): [ ] PASS [ ] FAIL
 - Drill branch deleted: [ ] yes
 - RPO (restore point age): `____________________________`
 - RTO (time to restore + verify): `____________________________`
@@ -1666,10 +1953,11 @@ for non-transactional or partial migrations.
 If both the Worker rollback and forward-fix are not viable (e.g., data
 corruption), restore the database from a pre-migration snapshot. This
 uses the Neon snapshot-restore REST API with `finalize_restore: true`
-and `target_branch_id` set to main's branch ID, so the restored branch
-**swaps in for main and preserves the production connection string** —
-the Worker does not need to be repointed. The pre-restore main branch is
-preserved by Neon under an auto-generated `main (old)` name.
+and `target_branch_id` set to the Neon production branch's ID, so the
+restored branch **swaps in for the Neon production branch and preserves
+the production connection string** — the Worker does not need to be
+repointed. The pre-restore Neon production branch is preserved by Neon
+under an auto-generated `production (old)` name.
 
 > **Tooling:** same REST API as the Step 1b drill
 > (`POST /api/v2/projects/{project_id}/snapshots/{snapshot_id}/restore`).
@@ -1684,16 +1972,16 @@ set -euo pipefail
 export NEON_PROJECT_ID=dawn-darkness-22587117
 export NEON_API_KEY="<your-neon-api-key>"
 
-# 1. Resolve main's branch ID (the restore target).
+# 1. Resolve the Neon production branch's ID (the restore target).
 #    jq's first(...) is used instead of `| head -1` so the pipeline does
 #    not abort under `set -o pipefail` (head closing the pipe early would
 #    surface SIGPIPE as a non-zero exit and trip `set -e`).
-MAIN_BRANCH_ID=$(curl --fail-with-body --silent --show-error \
+PROD_BRANCH_ID=$(curl --fail-with-body --silent --show-error \
   -H "Authorization: Bearer $NEON_API_KEY" \
-  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches?search=main" \
-  | jq -r 'first(.branches[] | select(.name=="main") | .id) // empty')
-if [ -z "$MAIN_BRANCH_ID" ]; then
-  echo "::error::Could not resolve main branch ID. Aborting rollback."
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches?search=production" \
+  | jq -r 'first(.branches[] | select(.name=="production") | .id) // empty')
+if [ -z "$PROD_BRANCH_ID" ]; then
+  echo "::error::Could not resolve the Neon production branch ID. Aborting rollback."
   exit 1
 fi
 
@@ -1706,22 +1994,23 @@ if [ -z "$SNAPSHOT_ID" ]; then
   exit 1
 fi
 
-# 3. Restore the snapshot onto main, finalizing immediately so the
-#    production connection string is preserved. Neon renames the old
-#    main to "main (old)" automatically. --fail-with-body makes curl
-#    exit non-zero on 4xx/5xx so an error response is not silently
-#    captured as the "restore response".
+# 3. Restore the snapshot onto the Neon production branch, finalizing
+#    immediately so the production connection string is preserved. Neon
+#    renames the old production branch to "production (old)"
+#    automatically. --fail-with-body makes curl exit non-zero on 4xx/5xx
+#    so an error response is not silently captured as the "restore
+#    response".
 RESTORE_RESPONSE=$(curl --fail-with-body --silent --show-error --request POST \
   -H "Authorization: Bearer $NEON_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"target_branch_id\":\"$MAIN_BRANCH_ID\",\"finalize_restore\":true}" \
+  -d "{\"target_branch_id\":\"$PROD_BRANCH_ID\",\"finalize_restore\":true}" \
   "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/snapshots/$SNAPSHOT_ID/restore")
 echo "$RESTORE_RESPONSE" | jq '.' > rollback-restore-response.json
 
 # 4. Poll every returned operation ID to a terminal state. The
 #    connection string is stable, but the branch ID changes after a
-#    finalized restore — re-resolve main's branch ID after completion
-#    if you need it for subsequent API calls.
+#    finalized restore — re-resolve the Neon production branch's ID
+#    after completion if you need it for subsequent API calls.
 #
 #    This step uses scripts/neon-poll-operations.js instead of a Bash
 #    `while read` loop. A pipeline-side `while read` loop runs in a
@@ -1745,23 +2034,24 @@ fi
 # stops the rollback before any production query.
 
 # 5. Record the EXACT orphaned branch ID. A finalized restore renames
-#    the PRE-RESTORE main branch to "main (old)" and swaps in the
-#    restored branch as the new active main. The orphaned branch is
-#    therefore the pre-restore MAIN_BRANCH_ID captured in step 1 — NOT
-#    .branch.id from the restore response (that is the newly restored
-#    branch, i.e. the NEW active main; deleting it would delete
-#    production). Do NOT delete it yet. Do NOT use a name-based fallback
-#    (a prior restore may have left a different "main (old)" branch).
-OLD_MAIN_ID="$MAIN_BRANCH_ID"
-printf '%s\n' "$OLD_MAIN_ID" > rollback-old-main-id.txt
-echo "Orphaned main (old) branch ID (RETAIN until step 8): $OLD_MAIN_ID"
+#    the PRE-RESTORE Neon production branch to "production (old)" and
+#    swaps in the restored branch as the new active production branch.
+#    The orphaned branch is therefore the pre-restore PROD_BRANCH_ID
+#    captured in step 1 — NOT .branch.id from the restore response (that
+#    is the newly restored branch, i.e. the NEW active production branch;
+#    deleting it would delete production). Do NOT delete it yet. Do NOT
+#    use a name-based fallback (a prior restore may have left a different
+#    "production (old)" branch).
+OLD_PROD_ID="$PROD_BRANCH_ID"
+printf '%s\n' "$OLD_PROD_ID" > rollback-old-prod-id.txt
+echo "Orphaned production (old) branch ID (RETAIN until step 8): $OLD_PROD_ID"
 
 # 6. Verify the restored data using the existing connection string
 #    (unchanged because finalize_restore preserved it).
 psql "$DATABASE_URL_UNPOOLED" -c "SELECT count(*) FROM tier_feature_flags;"
 
-# 7. Redeploy the Worker so it reconnects to the restored main.
-#    The connection string is unchanged, but the Worker's pooled
+# 7. Redeploy the Worker so it reconnects to the restored Neon production
+#    branch. The connection string is unchanged, but the Worker's pooled
 #    connections may be stale — a redeploy forces a clean reconnect.
 #    Use the known-good SHA (the pre-migration Worker), not the
 #    post-migration one.
@@ -1771,93 +2061,97 @@ git push origin main     # triggers workers-deploy.yml (if auto-deploy is enable
 #   Actions → Deploy Workers API → Run workflow → known-good SHA
 
 # 8. ONLY after recovery is explicitly verified (canary passes, Sentry
-#    clean, business data confirmed), delete the orphaned main (old)
-#    branch recorded in step 5. This is a separate, deliberate action —
-#    not part of the restore. Do not run it in the same script run.
-#    Retaining the orphaned branch preserves the pre-restore state in
-#    case the restored data is itself bad and a second restore is needed.
+#    clean, business data confirmed), delete the orphaned
+#    "production (old)" branch recorded in step 5. This is a separate,
+#    deliberate action — not part of the restore. Do not run it in the
+#    same script run. Retaining the orphaned branch preserves the
+#    pre-restore state in case the restored data is itself bad and a
+#    second restore is needed.
 #
 #    Four safety checks BEFORE the DELETE — all must pass:
 #    (a) the recorded old ID is non-empty;
-#    (b) the recorded old ID differs from the CURRENT post-restore main
-#        branch ID (re-resolved live — if they match, the restore did
-#        not swap branches and deleting would kill production);
+#    (b) the recorded old ID differs from the CURRENT post-restore Neon
+#        production branch ID (re-resolved live — if they match, the
+#        restore did not swap branches and deleting would kill
+#        production);
 #    (c) the branch at the recorded old ID still exists and its name
-#        begins with "main (old)" (confirms Neon actually renamed it);
+#        begins with "production (old)" (confirms Neon actually renamed
+#        it);
 #    (d) the operator supplies an explicit confirmation containing the
 #        exact old branch ID (typed, not a y/N prompt).
-OLD_MAIN_ID=$(cat rollback-old-main-id.txt 2>/dev/null)
-if [ -z "$OLD_MAIN_ID" ]; then
+OLD_PROD_ID=$(cat rollback-old-prod-id.txt 2>/dev/null)
+if [ -z "$OLD_PROD_ID" ]; then
   echo "::error::No recorded orphaned branch ID. Resolve it manually from the Neon console before deleting."
   exit 1
 fi
 
-# (b) Re-resolve the current main branch ID and confirm it differs.
-CURRENT_MAIN_ID=$(curl --fail-with-body --silent --show-error \
+# (b) Re-resolve the current Neon production branch ID and confirm it differs.
+CURRENT_PROD_ID=$(curl --fail-with-body --silent --show-error \
   -H "Authorization: Bearer $NEON_API_KEY" \
-  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches?search=main" \
-  | jq -r 'first(.branches[] | select(.name=="main") | .id) // empty')
-if [ -z "$CURRENT_MAIN_ID" ]; then
-  echo "::error::Could not re-resolve the current main branch ID. Aborting delete — production state is uncertain."
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches?search=production" \
+  | jq -r 'first(.branches[] | select(.name=="production") | .id) // empty')
+if [ -z "$CURRENT_PROD_ID" ]; then
+  echo "::error::Could not re-resolve the current Neon production branch ID. Aborting delete — production state is uncertain."
   exit 1
 fi
-if [ "$OLD_MAIN_ID" = "$CURRENT_MAIN_ID" ]; then
-  echo "::error::Recorded old branch ID equals the current main branch ID ($OLD_MAIN_ID). Aborting delete — this would delete the active production branch."
+if [ "$OLD_PROD_ID" = "$CURRENT_PROD_ID" ]; then
+  echo "::error::Recorded old branch ID equals the current Neon production branch ID ($OLD_PROD_ID). Aborting delete — this would delete the active production branch."
   exit 1
 fi
 
-# (c) Confirm the branch at OLD_MAIN_ID still exists and is named "main (old)...".
+# (c) Confirm the branch at OLD_PROD_ID still exists and is named "production (old)...".
 OLD_BRANCH_INFO=$(curl --fail-with-body --silent --show-error \
   -H "Authorization: Bearer $NEON_API_KEY" \
-  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$OLD_MAIN_ID" \
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$OLD_PROD_ID" \
   | jq -r '.branch.name // empty')
 if [ -z "$OLD_BRANCH_INFO" ]; then
-  echo "::error::Branch $OLD_MAIN_ID no longer exists (already deleted?). Aborting."
+  echo "::error::Branch $OLD_PROD_ID no longer exists (already deleted?). Aborting."
   exit 1
 fi
 case "$OLD_BRANCH_INFO" in
-  "main (old)"*) ;;
+  "production (old)"*) ;;
   *)
-    echo "::error::Branch $OLD_MAIN_ID is named \"$OLD_BRANCH_INFO\", not \"main (old)…\". Aborting delete — this does not look like the orphaned pre-restore branch."
+    echo "::error::Branch $OLD_PROD_ID is named \"$OLD_BRANCH_INFO\", not \"production (old)…\". Aborting delete — this does not look like the orphaned pre-restore branch."
     exit 1
     ;;
 esac
 
 # (d) Operator must type the exact old branch ID to confirm.
-echo "About to DELETE branch $OLD_MAIN_ID (\"$OLD_BRANCH_INFO\")."
+echo "About to DELETE branch $OLD_PROD_ID (\"$OLD_BRANCH_INFO\")."
 echo "Type the exact branch ID to confirm deletion:"
 read -r CONFIRM_ID
-if [ "$CONFIRM_ID" != "$OLD_MAIN_ID" ]; then
+if [ "$CONFIRM_ID" != "$OLD_PROD_ID" ]; then
   echo "::error::Confirmation does not match the recorded old branch ID. Aborting delete."
   exit 1
 fi
 
 curl --fail-with-body --silent --show-error --request DELETE \
   -H "Authorization: Bearer $NEON_API_KEY" \
-  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$OLD_MAIN_ID"
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$OLD_PROD_ID"
 ```
 
-**Warning:** A finalized snapshot restore replaces main in-place. Data
-written to main after the snapshot was taken is preserved on the
-orphaned `main (old)` branch — **retained until recovery is explicitly
-verified (step 8)**, then deletable. It is no longer reachable from the
-production connection string once the restore finalizes. This is a last
-resort.
+**Warning:** A finalized snapshot restore replaces the Neon production
+branch in-place. Data written to the production branch after the
+snapshot was taken is preserved on the orphaned `production (old)`
+branch — **retained until recovery is explicitly verified (step 8)**,
+then deletable. It is no longer reachable from the production connection
+string once the restore finalizes. This is a last resort.
 
-> **Why the orphaned ID is the PRE-restore main ID, not `.branch.id`
-> from the restore response:** a finalized restore swaps the restored
-> branch into the active main slot and renames the previous main to
-> `main (old)`. The restore response's `.branch` is therefore the
-> **newly restored** branch (the new active main) — recording it as
-> `OLD_MAIN_ID` and deleting it would delete production. The orphaned
-> branch is the branch that used to be main: the `MAIN_BRANCH_ID`
-> captured in step 1, before the restore call. Step 8 verifies this
-> explicitly (the recorded old ID must differ from the live main ID,
-> the branch at the old ID must still exist and be named `main (old)…`,
-> and the operator must type the exact ID to confirm). There is no
-> name-based fallback — a prior restore may have left a different
-> `main (old)` branch, and matching by name alone could delete the
-> wrong one.
+> **Why the orphaned ID is the PRE-restore production branch ID, not
+> `.branch.id` from the restore response:** a finalized restore swaps
+> the restored branch into the active production slot and renames the
+> previous production branch to `production (old)`. The restore
+> response's `.branch` is therefore the **newly restored** branch (the
+> new active production branch) — recording it as `OLD_PROD_ID` and
+> deleting it would delete production. The orphaned branch is the branch
+> that used to be the production branch: the `PROD_BRANCH_ID` captured
+> in step 1, before the restore call. Step 8 verifies this explicitly
+> (the recorded old ID must differ from the live production branch ID,
+> the branch at the old ID must still exist and be named
+> `production (old)…`, and the operator must type the exact ID to
+> confirm). There is no name-based fallback — a prior restore may have
+> left a different `production (old)` branch, and matching by name
+> alone could delete the wrong one.
 
 **Record (if rollback was triggered):**
 - Rollback method: [ ] Worker rollback [ ] Forward fix [ ] PITR restore
@@ -1916,7 +2210,7 @@ session — its evidence document is the manual verification record.
 | Date completed | `____________________________` |
 | Git SHA deployed | `____________________________` |
 | Workflow run URL | `____________________________` |
-| Runtime role separation (app_runtime provisioned, REVOKE on schema_migrations applied, verify-runtime-role.js PASS — active on branch, read-only on main) | [ ] PASS |
+| Runtime role separation (app_runtime provisioned, REVOKE on schema_migrations applied, verify-runtime-role.js PASS — active on branch, read-only on the Neon production branch) | [ ] PASS |
 | First-production adoption (one-time gate — see [First-production adoption procedure](#first-production-adoption-procedure-one-time-gate)) | [ ] N/A (already adopted) [ ] PASS |
 | Step 1 (PITR drill) | [ ] PASS |
 | Step 2 (CI deploy) | [ ] PASS |
@@ -1934,7 +2228,7 @@ authoritative; leave N/A for subsequent deploys.
 | Field | Value |
 |-------|-------|
 | Branch proof track completed (`migration-role-check` branch — steps A–G including manual apply/seed/verify) | [ ] PASS |
-| Pre-adoption PITR gate (fresh drill on main, within 2 hours of step A) | [ ] PASS |
+| Pre-adoption PITR gate (fresh drill on the Neon production branch, within 2 hours of step A) | [ ] PASS |
 | Adoption point (`MIGRATION_ADOPTION_POINT`) | `____________________________` (expected `0009`) |
 | Migrations stamped (`0000`–`0009`) | [ ] confirmed via `migrate:status` |
 | `0010` confirmed as the only pending migration (step D) | [ ] confirmed |
