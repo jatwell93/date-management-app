@@ -41,6 +41,7 @@ import path from 'node:path';
 import { Client } from 'pg';
 
 import {
+  adoptExitCode,
   performAdoption,
   formatMigrationError,
   isAdoptionModeMutating,
@@ -159,11 +160,15 @@ async function main(): Promise<void> {
     `Target: ${target.host}/${target.database} (role: ${role})\n\n${report.report}\n`,
   );
 
-  // Exit with non-zero if an approved adoption was refused.
-  // Dry-run refusals are informational — the operator reviews the report.
-  if (mode === 'apply' && !report.canAdopt) {
-    process.exitCode = 1;
-  }
+  // Exit non-zero whenever adoption is REFUSED — catalog mismatch OR a
+  // populated ledger — in BOTH dry-run and apply modes. Exit 0 ONLY for
+  // STATUS: READY (canAdopt true). A dry-run is the operator's read-only
+  // adoption gate: a refusal there MUST fail a `set -e` / CI gate so the
+  // mismatch is reconciled before any apply. The real Neon
+  // migration-role-check exercise surfaced this gap: a refused dry-run
+  // (missing 0001_queued_catalogue_imports) previously exited 0 and did
+  // not stop the sequence. See adoptExitCode in ./adopt.
+  process.exitCode = adoptExitCode(report);
 }
 
 void main().catch((error: unknown) => {
