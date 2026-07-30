@@ -231,7 +231,7 @@ function applyOptions() {
     deploymentSha: TEST_DEPLOYMENT_SHA,
     mode: 'apply' as const,
     fingerprintPath: FINGERPRINT_PATH,
-    adoptionConfirmation: 'ADOPT test-host/test-db AT 0010',
+    adoptionConfirmation: 'ADOPT test-host/test-db AT 0011',
     targetHost: 'test-host',
     targetDatabase: 'test-db',
   };
@@ -251,7 +251,7 @@ test('dry-run adoption on a matching database reports canAdopt', async () => {
 
     assert.equal(report.canAdopt, true);
     assert.equal(report.ledgerAlreadyPopulated, false);
-    assert.equal(report.adoptionPoint, '0010');
+    assert.equal(report.adoptionPoint, '0011');
     assert.deepEqual(
       report.wouldStamp,
       history.map(({ id }) => id),
@@ -305,7 +305,10 @@ test('a pre-0010 database can adopt through 0009 before applying 0010', async ()
   const { pg, client } = await createPglite();
   try {
     const history = await loadMigrationHistory(HISTORY_DIR);
-    const historyThrough0009 = history.slice(0, -1);
+    const historyThrough0009 = history.slice(
+      0,
+      history.findIndex((migration) => migration.id === '0009') + 1,
+    );
     await applyMigrationsDirectlyUpTo(pg, historyThrough0009.length);
 
     const report = await performAdoption(client, historyThrough0009, {
@@ -330,7 +333,9 @@ test('selectAdoptionTarget selects the requested history prefix and historical f
 
   assert.deepEqual(
     target.history.map((migration) => migration.id),
-    history.slice(0, -1).map((migration) => migration.id),
+    history
+      .slice(0, history.findIndex((migration) => migration.id === '0009') + 1)
+      .map((migration) => migration.id),
   );
   assert.equal(target.fingerprintPath, FINGERPRINT_0009_PATH);
 });
@@ -403,7 +408,7 @@ test('approved adoption requires explicit confirmation', async () => {
         deploymentSha: TEST_DEPLOYMENT_SHA,
         mode: 'apply',
         fingerprintPath: FINGERPRINT_PATH,
-        adoptionConfirmation: 'ADOPT test-host/test-db AT 0010',
+        adoptionConfirmation: 'ADOPT test-host/test-db AT 0011',
       }),
       /requires targetHost and targetDatabase/,
     );
@@ -423,7 +428,7 @@ test('wrong adoption confirmation is rejected', async () => {
         deploymentSha: TEST_DEPLOYMENT_SHA,
         mode: 'apply',
         fingerprintPath: FINGERPRINT_PATH,
-        adoptionConfirmation: 'ADOPT wrong-host/wrong-db AT 0010',
+        adoptionConfirmation: 'ADOPT wrong-host/wrong-db AT 0011',
         targetHost: 'test-host',
         targetDatabase: 'test-db',
       }),

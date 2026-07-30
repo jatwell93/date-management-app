@@ -1786,6 +1786,20 @@
       "default": null
     },
     {
+      "table": "subscription_tiers",
+      "name": "current_period_end",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "cancel_at_period_end",
+      "type": "boolean",
+      "not_null": true,
+      "default": "false"
+    },
+    {
       "table": "suppliers",
       "name": "id",
       "type": "integer",
@@ -5099,6 +5113,12 @@
       "name": "subscription_tiers_billing_cycle_not_null",
       "type": "n",
       "definition": "NOT NULL billing_cycle"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_cancel_at_period_end_not_null",
+      "type": "n",
+      "definition": "NOT NULL cancel_at_period_end"
     },
     {
       "table": "subscription_tiers",
