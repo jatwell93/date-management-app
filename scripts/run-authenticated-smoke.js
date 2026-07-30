@@ -101,7 +101,20 @@ async function fetchWithTimeout(fetchImpl, label, url, init, timeoutMs) {
 
 async function readErrorDetail(response) {
   try {
-    return JSON.stringify(await response.json());
+    const body = await response.json();
+    // Surface only Clerk's structured error code + message — never the whole
+    // response body. Frontend API bodies can carry client/session objects or
+    // token fragments, and this detail is embedded in error messages that flow
+    // into the evidence document on stdout; serializing the full body would
+    // break this script's guarantee that its output never contains the JWT,
+    // sign-in token, or secret key.
+    if (Array.isArray(body.errors) && body.errors.length > 0) {
+      return JSON.stringify(body.errors.map((e) => ({ code: e.code, message: e.message })));
+    }
+    if (body.status) {
+      return JSON.stringify({ status: body.status });
+    }
+    return '';
   } catch {
     return '';
   }
@@ -151,9 +164,10 @@ async function createSignInToken(clerkFetch, opts) {
  * sign-in and returning the created session id plus its session token (JWT).
  *
  * The session token is read from the `client.sessions[].last_active_token.jwt`
- * field of the sign_ins response (populated when the sign-in completes). If the
- * session was created but no token is present, `jwt` is `null` so the caller can
- * still revoke the orphaned session.
+ * field of the sign_ins response (populated when the sign-in completes). If a
+ * session was created but no token is present — or the sign-in did not reach
+ * `complete` status — `jwt` is `null` (with the session id still returned) so
+ * the caller can revoke the session instead of orphaning it.
  * @param {typeof fetch} clerkFetch
  * @param {{ fapiHost: string; origin: string; ticket: string; timeoutMs?: number; jsVersion?: string }} opts
  * @returns {Promise<{ sessionId: string; jwt: string | null }>}
@@ -182,11 +196,22 @@ async function redeemTicket(clerkFetch, opts) {
   }
   const body = await response.json();
   const signIn = body.response || body;
+  // Resolve the session id BEFORE the completeness check. Clerk may have
+  // created a session server-side even when the sign-in response is not
+  // `complete`; if we threw here without surfacing that id, the orchestrator's
+  // `session` would stay null and the finally-block revocation would be
+  // skipped, orphaning an un-revokable session until it expires naturally.
+  const sessionId =
+    signIn.created_session_id || (body.client && body.client.last_active_session_id) || null;
   if (signIn.status !== 'complete') {
+    // Hand back any created session with a null JWT so the caller can still
+    // revoke it. The missing JWT makes the orchestration fail (the correct
+    // outcome for an incomplete sign-in) while guaranteeing cleanup.
+    if (sessionId) {
+      return { sessionId, jwt: null };
+    }
     throw new Error(`redeemTicket: sign-in not complete (status=${signIn.status ?? 'unknown'})`);
   }
-  const sessionId =
-    signIn.created_session_id || (body.client && body.client.last_active_session_id);
   if (!sessionId) {
     throw new Error('redeemTicket: sign-in complete but no created_session_id');
   }

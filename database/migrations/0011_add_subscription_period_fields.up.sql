@@ -6,8 +6,12 @@
 -- production. This migration (together with the matching production Prisma
 -- fields) closes that gap. Additive / expand-safe: current_period_end is
 -- nullable and cancel_at_period_end defaults to false, so no backfill is needed.
+--
+-- current_period_end is TIMESTAMP(3) (without time zone) to match the other
+-- timestamp columns on this table (trial_end_date, past_due_since, ...) and the
+-- production Prisma model's `DateTime?` mapping, which resolves to timestamp(3).
 ALTER TABLE subscription_tiers
-  ADD COLUMN IF NOT EXISTS current_period_end timestamptz;
+  ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP(3);
 
 ALTER TABLE subscription_tiers
   ADD COLUMN IF NOT EXISTS cancel_at_period_end boolean NOT NULL DEFAULT false;

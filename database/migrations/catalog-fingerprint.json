@@ -1788,7 +1788,7 @@
     {
       "table": "subscription_tiers",
       "name": "current_period_end",
-      "type": "timestamp with time zone",
+      "type": "timestamp(3) without time zone",
       "not_null": false,
       "default": null
     },

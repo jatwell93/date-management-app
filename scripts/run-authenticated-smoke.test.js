@@ -9,7 +9,6 @@ const {
   runAuthenticatedSmoke,
 } = require('./run-authenticated-smoke.js');
 
-const CLERK_BASE = 'https://api.clerk.com/v1';
 const FAPI_HOST = 'clerk.example.test';
 const SECRET = 'sk_test_secret_value_never_print';
 const USER_ID = 'user_smoke_test_123';
@@ -252,6 +251,56 @@ test('redeemTicket: returns jwt=null when session created but no token present',
   });
   assert.equal(result.sessionId, SESSION_ID);
   assert.equal(result.jwt, null);
+});
+
+test('redeemTicket: not complete but a session was created → returns jwt=null so it can be revoked', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/client/sign_ins': {
+      status: 200,
+      body: {
+        response: { status: 'needs_second_factor', created_session_id: SESSION_ID },
+        client: { sessions: [] },
+      },
+    },
+  });
+  // Must NOT throw — the session exists server-side and would otherwise be
+  // orphaned (un-revokable). The caller relies on the returned id to revoke it.
+  const result = await redeemTicket(clerkFetch, {
+    fapiHost: FAPI_HOST,
+    origin: 'https://x',
+    ticket: 'y',
+    timeoutMs: 5000,
+  });
+  assert.equal(result.sessionId, SESSION_ID);
+  assert.equal(result.jwt, null);
+});
+
+test('redeemTicket: error detail surfaces only Clerk code/message, never the raw body', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/client/sign_ins': {
+      status: 401,
+      body: {
+        errors: [{ code: 'authentication_invalid', message: 'Invalid ticket', long_message: 'x' }],
+        // Fields that must never leak into the error message / evidence doc.
+        session_token: 'SENSITIVE_JWT_FRAGMENT',
+        client: { sessions: [{ id: 's', last_active_token: { jwt: 'LEAKED_JWT' } }] },
+      },
+    },
+  });
+  await assert.rejects(
+    redeemTicket(clerkFetch, {
+      fapiHost: FAPI_HOST,
+      origin: 'https://x',
+      ticket: 'y',
+      timeoutMs: 5000,
+    }),
+    (error) => {
+      assert.match(error.message, /redeemTicket failed.*401/);
+      assert.match(error.message, /authentication_invalid/);
+      assert.doesNotMatch(error.message, /LEAKED_JWT|SENSITIVE_JWT_FRAGMENT|long_message/);
+      return true;
+    },
+  );
 });
 
 // ── revokeSession ───────────────────────────────────────────────────────
