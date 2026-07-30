@@ -9,74 +9,89 @@
  * wait window) — each round gets a fresh session, never carrying a JWT across
  * the 15-minute canary window.
  *
+ * Production session minting: the Backend API `POST /sessions` endpoint is
+ * DEV-ONLY (it returns HTTP 400 `request_invalid_for_environment` on a
+ * production `sk_live_` instance). So on production we mint via the supported
+ * two-step flow:
+ *   1. `POST /sign_in_tokens` (Backend API) — create a single-use sign-in token
+ *      for the smoke user.
+ *   2. Redeem the token as a `ticket` against the Frontend API
+ *      (`POST https://<fapi-host>/v1/client/sign_ins`), which completes the
+ *      sign-in and returns a real session + session token (JWT). The Frontend
+ *      API host is derived from `CLERK_PUBLISHABLE_KEY`; the request `Origin`
+ *      (which becomes the token's `azp`) must match `FRONTEND_URL` so the
+ *      Worker's `authorizedParties` check accepts the token.
+ * The session is revoked via the Backend API `POST /sessions/{id}/revoke`.
+ *
  * Usage:
  *   doppler run -- node scripts/run-authenticated-smoke.js
  *
  * Environment variables (injected by `doppler run` against production config):
- *   CLERK_SECRET_KEY     — production Clerk secret key (powerful credential;
- *                          blast radius controlled by the protected GitHub
- *                          `production` environment + reviewed main branch)
- *   SMOKE_USER_ID        — Clerk user ID of the dedicated smoke-test identity
- *   SMOKE_TARGET_URL     — base URL of the deployed Worker (required)
- *   SMOKE_ENDPOINTS      — optional comma-separated list of paths
- *   SMOKE_LATENCY_MS     — optional per-endpoint latency budget in ms
- *   SMOKE_TIMEOUT_MS     — optional per-request timeout in ms
- *   CLERK_API_TIMEOUT_MS — optional timeout for Clerk API calls (default 10000)
+ *   CLERK_SECRET_KEY      — production Clerk secret key (powerful credential;
+ *                           blast radius controlled by the protected GitHub
+ *                           `production` environment + reviewed main branch)
+ *   CLERK_PUBLISHABLE_KEY — production Clerk publishable key; the Frontend API
+ *                           host is derived from it. `CLERK_FAPI_HOST` overrides.
+ *   FRONTEND_URL          — production frontend origin; used as the FAPI request
+ *                           `Origin` so the minted token's `azp` is authorized.
+ *                           `SMOKE_ORIGIN` overrides.
+ *   SMOKE_USER_ID         — Clerk user ID of the dedicated smoke-test identity
+ *   SMOKE_ORG_ID          — optional Clerk org ID to scope the session to
+ *   SMOKE_TARGET_URL      — base URL of the deployed Worker (required)
+ *   SMOKE_ENDPOINTS       — optional comma-separated list of paths
+ *   SMOKE_LATENCY_MS      — optional per-endpoint latency budget in ms
+ *   SMOKE_TIMEOUT_MS      — optional per-request timeout in ms
+ *   CLERK_API_TIMEOUT_MS  — optional timeout for Clerk API calls (default 10000)
+ *   CLERK_JS_VERSION      — optional _clerk_js_version query value (default 5.0.0)
  *
  * Exit codes:
  *   0 — smoke probes passed AND session was revoked
- *   1 — probe failure, mint failure, createSession failure, or revocation failure
+ *   1 — probe failure, mint failure, redeem failure, or revocation failure
  *
  * Output: a JSON evidence document on stdout (sanitized — never contains the
- * JWT or Clerk secret key). Errors and warnings go to stderr.
+ * JWT, sign-in token, or Clerk secret key). Errors and warnings go to stderr.
  */
 const { main: smokeMain } = require('./post-deploy-smoke.js');
 
 const CLERK_API_BASE = 'https://api.clerk.com/v1';
 const DEFAULT_CLERK_TIMEOUT_MS = 10_000;
+const DEFAULT_CLERK_JS_VERSION = '5.0.0';
 
 /**
- * Create an active Clerk session for a user.
- * @param {typeof fetch} clerkFetch
- * @param {{ secretKey: string; userId: string; timeoutMs?: number }} opts
- * @returns {Promise<{ sessionId: string; userId: string }>}
+ * Derive the Frontend API host from a Clerk publishable key. Publishable keys
+ * are `pk_(live|test)_<base64(fapiHost + "$")>`; decoding yields the FAPI host
+ * with a trailing `$` marker that we strip.
+ * @param {string | undefined} publishableKey
+ * @returns {string | null}
  */
-async function createSession(clerkFetch, opts) {
-  const timeoutMs = opts.timeoutMs || DEFAULT_CLERK_TIMEOUT_MS;
+function deriveFapiHost(publishableKey) {
+  if (!publishableKey) return null;
+  const b64 = publishableKey.replace(/^pk_(?:live|test)_/, '');
+  try {
+    const decoded = Buffer.from(b64, 'base64').toString('utf8');
+    const host = decoded.replace(/\$+$/, '').trim();
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run a fetch with an abort-based timeout. Returns the Response.
+ * @param {typeof fetch} fetchImpl
+ * @param {string} label — used in the timeout error message
+ * @param {string} url
+ * @param {RequestInit} init
+ * @param {number} timeoutMs
+ */
+async function fetchWithTimeout(fetchImpl, label, url, init, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await clerkFetch(`${CLERK_API_BASE}/sessions`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${opts.secretKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ user_id: opts.userId }),
-    });
-    if (!response.ok) {
-      const status = response.status;
-      let detail = '';
-      try {
-        detail = JSON.stringify(await response.json());
-      } catch {
-        // non-JSON body — ignore
-      }
-      throw new Error(`createSession failed: HTTP ${status}${detail ? ` ${detail}` : ''}`);
-    }
-    const body = await response.json();
-    if (body.user_id !== opts.userId) {
-      throw new Error(
-        `createSession: session user_id mismatch — expected ${opts.userId}, got ${body.user_id}`,
-      );
-    }
-    return { sessionId: body.id, userId: body.user_id };
+    return await fetchImpl(url, { ...init, signal: controller.signal });
   } catch (error) {
     if (error && error.name === 'AbortError') {
-      throw new Error(
-        `createSession timed out after ${timeoutMs}ms; Clerk may have created the session before the response was received`,
-      );
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
     }
     throw error;
   } finally {
@@ -84,77 +99,132 @@ async function createSession(clerkFetch, opts) {
   }
 }
 
-/**
- * Mint a session token (JWT) from an active session.
- * @param {typeof fetch} clerkFetch
- * @param {{ secretKey: string; sessionId: string; timeoutMs?: number }} opts
- * @returns {Promise<{ token: string }>}
- */
-async function mintSessionToken(clerkFetch, opts) {
-  const timeoutMs = opts.timeoutMs || DEFAULT_CLERK_TIMEOUT_MS;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function readErrorDetail(response) {
   try {
-    const response = await clerkFetch(`${CLERK_API_BASE}/sessions/${opts.sessionId}/tokens`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${opts.secretKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) {
-      const status = response.status;
-      let detail = '';
-      try {
-        detail = JSON.stringify(await response.json());
-      } catch {
-        // non-JSON body — ignore
-      }
-      throw new Error(`mintSessionToken failed: HTTP ${status}${detail ? ` ${detail}` : ''}`);
-    }
-    const body = await response.json();
-    if (!body.jwt) {
-      throw new Error('mintSessionToken: response missing jwt field');
-    }
-    return { token: body.jwt };
-  } finally {
-    clearTimeout(timer);
+    return JSON.stringify(await response.json());
+  } catch {
+    return '';
   }
 }
 
 /**
- * Revoke a Clerk session. Returns { revoked: true } on success, { revoked: false }
- * on failure — does not throw, so it can be used in a finally block without
- * masking an earlier error.
+ * Create a single-use sign-in token for a user (Backend API). Optionally scoped
+ * to an organization, which Clerk activates for the resulting session.
+ * @param {typeof fetch} clerkFetch
+ * @param {{ secretKey: string; userId: string; orgId?: string; timeoutMs?: number }} opts
+ * @returns {Promise<{ token: string }>}
+ */
+async function createSignInToken(clerkFetch, opts) {
+  const timeoutMs = opts.timeoutMs || DEFAULT_CLERK_TIMEOUT_MS;
+  const response = await fetchWithTimeout(
+    clerkFetch,
+    'createSignInToken',
+    `${CLERK_API_BASE}/sign_in_tokens`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${opts.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: opts.userId,
+        ...(opts.orgId ? { org_id: opts.orgId } : {}),
+      }),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new Error(
+      `createSignInToken failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
+    );
+  }
+  const body = await response.json();
+  if (!body.token) {
+    throw new Error('createSignInToken: response missing token field');
+  }
+  return { token: body.token };
+}
+
+/**
+ * Redeem a sign-in token as a `ticket` against the Frontend API, completing the
+ * sign-in and returning the created session id plus its session token (JWT).
+ *
+ * The session token is read from the `client.sessions[].last_active_token.jwt`
+ * field of the sign_ins response (populated when the sign-in completes). If the
+ * session was created but no token is present, `jwt` is `null` so the caller can
+ * still revoke the orphaned session.
+ * @param {typeof fetch} clerkFetch
+ * @param {{ fapiHost: string; origin: string; ticket: string; timeoutMs?: number; jsVersion?: string }} opts
+ * @returns {Promise<{ sessionId: string; jwt: string | null }>}
+ */
+async function redeemTicket(clerkFetch, opts) {
+  const timeoutMs = opts.timeoutMs || DEFAULT_CLERK_TIMEOUT_MS;
+  const jsVersion = opts.jsVersion || DEFAULT_CLERK_JS_VERSION;
+  const url = `https://${opts.fapiHost}/v1/client/sign_ins?_clerk_js_version=${encodeURIComponent(jsVersion)}`;
+  const response = await fetchWithTimeout(
+    clerkFetch,
+    'redeemTicket',
+    url,
+    {
+      method: 'POST',
+      headers: {
+        Origin: opts.origin,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ strategy: 'ticket', ticket: opts.ticket }).toString(),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new Error(`redeemTicket failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+  }
+  const body = await response.json();
+  const signIn = body.response || body;
+  if (signIn.status !== 'complete') {
+    throw new Error(`redeemTicket: sign-in not complete (status=${signIn.status ?? 'unknown'})`);
+  }
+  const sessionId =
+    signIn.created_session_id || (body.client && body.client.last_active_session_id);
+  if (!sessionId) {
+    throw new Error('redeemTicket: sign-in complete but no created_session_id');
+  }
+  const sessions = (body.client && body.client.sessions) || [];
+  const session = Array.isArray(sessions) ? sessions.find((s) => s.id === sessionId) : null;
+  const jwt = (session && session.last_active_token && session.last_active_token.jwt) || null;
+  return { sessionId, jwt };
+}
+
+/**
+ * Revoke a Clerk session (Backend API). Returns { revoked: true } on success,
+ * { revoked: false } on failure — does not throw, so it can be used in a
+ * finally block without masking an earlier error.
  * @param {typeof fetch} clerkFetch
  * @param {{ secretKey: string; sessionId: string; timeoutMs?: number }} opts
  * @returns {Promise<{ revoked: boolean; error?: string }>}
  */
 async function revokeSession(clerkFetch, opts) {
   const timeoutMs = opts.timeoutMs || DEFAULT_CLERK_TIMEOUT_MS;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await clerkFetch(`${CLERK_API_BASE}/sessions/${opts.sessionId}/revoke`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${opts.secretKey}`,
-        'Content-Type': 'application/json',
+    const response = await fetchWithTimeout(
+      clerkFetch,
+      'revokeSession',
+      `${CLERK_API_BASE}/sessions/${opts.sessionId}/revoke`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${opts.secretKey}`,
+          'Content-Type': 'application/json',
+        },
       },
-    });
+      timeoutMs,
+    );
     if (!response.ok) {
-      const status = response.status;
-      let detail = '';
-      try {
-        detail = JSON.stringify(await response.json());
-      } catch {
-        // non-JSON body — ignore
-      }
+      const detail = await readErrorDetail(response);
       return {
         revoked: false,
-        error: `revokeSession failed: HTTP ${status}${detail ? ` ${detail}` : ''}`,
+        error: `revokeSession failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
       };
     }
     return { revoked: true };
@@ -163,15 +233,13 @@ async function revokeSession(clerkFetch, opts) {
       revoked: false,
       error: `revokeSession failed: ${error instanceof Error ? error.message : String(error)}`,
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 /**
- * Orchestrate the authenticated smoke test: create session → mint token →
- * run smoke probes → revoke session. The JWT and Clerk secret are never
- * written to stdout or stderr.
+ * Orchestrate the authenticated smoke test: create sign-in token → redeem
+ * ticket for a session JWT → run smoke probes → revoke session. The JWT,
+ * sign-in token, and Clerk secret are never written to stdout or stderr.
  *
  * @param {Record<string, string | undefined>} env
  * @param {{ clerkFetch?: typeof fetch; smokeMain?: typeof smokeMain; stdout?: { write: (s: string) => void }; stderr?: { write: (s: string) => void } }} [deps]
@@ -187,7 +255,19 @@ async function runAuthenticatedSmoke(env, deps) {
   if (!secretKey) throw new Error('CLERK_SECRET_KEY is required');
   const userId = env.SMOKE_USER_ID;
   if (!userId) throw new Error('SMOKE_USER_ID is required');
+  const fapiHost = env.CLERK_FAPI_HOST || deriveFapiHost(env.CLERK_PUBLISHABLE_KEY);
+  if (!fapiHost) {
+    throw new Error(
+      'CLERK_PUBLISHABLE_KEY (or CLERK_FAPI_HOST) is required to derive the Frontend API host',
+    );
+  }
+  const origin = env.SMOKE_ORIGIN || env.FRONTEND_URL;
+  if (!origin) {
+    throw new Error('FRONTEND_URL (or SMOKE_ORIGIN) is required for the session token azp');
+  }
+  const orgId = env.SMOKE_ORG_ID;
   const clerkTimeoutMs = Number(env.CLERK_API_TIMEOUT_MS || DEFAULT_CLERK_TIMEOUT_MS);
+  const jsVersion = env.CLERK_JS_VERSION || DEFAULT_CLERK_JS_VERSION;
 
   let session = null;
   let smokeExitCode = null;
@@ -198,22 +278,37 @@ async function runAuthenticatedSmoke(env, deps) {
   let orchestrationError = null;
 
   try {
-    // 1. Create a fresh session for the smoke identity
-    session = await createSession(clerkFetch, { secretKey, userId, timeoutMs: clerkTimeoutMs });
-
-    // 2. Mint a short-lived JWT from that session
-    const { token } = await mintSessionToken(clerkFetch, {
+    // 1. Create a single-use sign-in token for the smoke identity (Backend API).
+    const { token } = await createSignInToken(clerkFetch, {
       secretKey,
-      sessionId: session.sessionId,
+      userId,
+      orgId,
       timeoutMs: clerkTimeoutMs,
     });
+
+    // 2. Redeem it as a ticket against the Frontend API to complete sign-in
+    //    and obtain a session + session token. Capture the session id as soon
+    //    as it exists so the finally block can revoke it even if the token is
+    //    missing from the response.
+    const redeemed = await redeemTicket(clerkFetch, {
+      fapiHost,
+      origin,
+      ticket: token,
+      timeoutMs: clerkTimeoutMs,
+      jsVersion,
+    });
+    session = { sessionId: redeemed.sessionId };
+    if (!redeemed.jwt) {
+      throw new Error('redeemTicket: session created but no session token returned');
+    }
+    const jwt = redeemed.jwt;
 
     // 3. Run the existing smoke probes in-process with the JWT as auth.
     //    Capture smoke stdout/stderr into buffers so the wrapper's own
     //    evidence document is the only thing on the real stdout.
     const smokeOutChunks = [];
     const smokeErrChunks = [];
-    const smokeEnv = { ...env, SMOKE_AUTH_TOKEN: token };
+    const smokeEnv = { ...env, SMOKE_AUTH_TOKEN: jwt };
     try {
       smokeExitCode = await smoke(smokeEnv, {
         fetch,
@@ -282,12 +377,14 @@ async function runAuthenticatedSmoke(env, deps) {
 }
 
 module.exports = {
-  createSession,
-  mintSessionToken,
+  deriveFapiHost,
+  createSignInToken,
+  redeemTicket,
   revokeSession,
   runAuthenticatedSmoke,
   CLERK_API_BASE,
   DEFAULT_CLERK_TIMEOUT_MS,
+  DEFAULT_CLERK_JS_VERSION,
 };
 
 if (require.main === module) {

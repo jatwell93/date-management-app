@@ -2,32 +2,44 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  runAuthenticatedSmoke,
-  createSession,
-  mintSessionToken,
+  deriveFapiHost,
+  createSignInToken,
+  redeemTicket,
   revokeSession,
+  runAuthenticatedSmoke,
 } = require('./run-authenticated-smoke.js');
 
 const CLERK_BASE = 'https://api.clerk.com/v1';
+const FAPI_HOST = 'clerk.example.test';
 const SECRET = 'sk_test_secret_value_never_print';
 const USER_ID = 'user_smoke_test_123';
+const ORG_ID = 'org_smoke_test_123';
 const SESSION_ID = 'ses_abc456';
 const JWT = 'eyJ.eyJ.eyJ_fake_jwt_never_print';
+const SIGN_IN_TOKEN = 'sit_fake_ticket_never_print';
 
 /**
- * Build a fake Clerk API fetch that responds to the three endpoints in the
- * canary lifecycle. Each response map is keyed by `${method} ${path}`.
+ * Build a fake fetch that responds to the Backend API (sign_in_tokens, revoke)
+ * and Frontend API (client/sign_ins) endpoints in the canary lifecycle. Each
+ * response map is keyed by `${method} ${pathname}` so Backend and Frontend API
+ * calls (different hosts) are addressed by their path.
  */
 function makeClerkFetch(responses = {}) {
   const calls = [];
   const fn = async (url, opts = {}) => {
     const method = (opts.method || 'GET').toUpperCase();
-    const path = url.replace(CLERK_BASE, '');
-    calls.push({ url, method, path, body: opts.body });
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    calls.push({ url, method, path, host: parsed.host, body: opts.body, headers: opts.headers });
     const key = `${method} ${path}`;
     const entry = responses[key];
     if (!entry) {
-      return { ok: false, status: 404, json: async () => ({ error: 'not mocked' }) };
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'not mocked' }),
+        text: async () => JSON.stringify({ error: 'not mocked' }),
+      };
     }
     if (entry instanceof Error) throw entry;
     return {
@@ -50,7 +62,6 @@ function makeSmokeMain(probeExitCode = 0) {
   const calls = [];
   const fn = async (env, deps) => {
     calls.push({ env: { ...env }, depsPresent: !!deps });
-    // Write a minimal evidence doc to stdout so the wrapper can parse it.
     deps.stdout.write(
       JSON.stringify({
         summary: {
@@ -79,10 +90,21 @@ function makeIO() {
   };
 }
 
+const SIGN_INS_COMPLETE = {
+  status: 200,
+  body: {
+    response: { status: 'complete', created_session_id: SESSION_ID },
+    client: { sessions: [{ id: SESSION_ID, last_active_token: { jwt: JWT } }] },
+  },
+};
+
 const DEFAULT_CLERK_RESPONSES = {
-  'POST /sessions': { status: 201, body: { id: SESSION_ID, user_id: USER_ID, status: 'active' } },
-  [`POST /sessions/${SESSION_ID}/tokens`]: { status: 200, body: { object: 'token', jwt: JWT } },
-  [`POST /sessions/${SESSION_ID}/revoke`]: {
+  'POST /v1/sign_in_tokens': {
+    status: 200,
+    body: { object: 'sign_in_token', token: SIGN_IN_TOKEN },
+  },
+  'POST /v1/client/sign_ins': SIGN_INS_COMPLETE,
+  [`POST /v1/sessions/${SESSION_ID}/revoke`]: {
     status: 200,
     body: { id: SESSION_ID, status: 'revoked' },
   },
@@ -92,87 +114,149 @@ const BASE_ENV = {
   CLERK_SECRET_KEY: SECRET,
   SMOKE_USER_ID: USER_ID,
   SMOKE_TARGET_URL: 'https://api.example.com',
+  CLERK_FAPI_HOST: FAPI_HOST,
+  FRONTEND_URL: 'https://app.example.test',
 };
 
-// ── Unit tests for the three Clerk API helpers ──────────────────────────
+// ── deriveFapiHost ──────────────────────────────────────────────────────
 
-test('createSession: POSTs to /sessions with Bearer secret and user_id body', async () => {
+test('deriveFapiHost: decodes the FAPI host from a publishable key', () => {
+  const pk = 'pk_live_' + Buffer.from(`${FAPI_HOST}$`).toString('base64');
+  assert.equal(deriveFapiHost(pk), FAPI_HOST);
+});
+
+test('deriveFapiHost: returns null for empty input', () => {
+  assert.equal(deriveFapiHost(undefined), null);
+  assert.equal(deriveFapiHost(''), null);
+});
+
+// ── createSignInToken ───────────────────────────────────────────────────
+
+test('createSignInToken: POSTs /sign_in_tokens with Bearer secret and user_id', async () => {
   const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
-  const result = await createSession(clerkFetch, {
+  const result = await createSignInToken(clerkFetch, {
     secretKey: SECRET,
     userId: USER_ID,
     timeoutMs: 5000,
   });
-  assert.equal(result.sessionId, SESSION_ID);
-  assert.equal(result.userId, USER_ID);
+  assert.equal(result.token, SIGN_IN_TOKEN);
   assert.equal(clerkFetch.calls.length, 1);
   assert.equal(clerkFetch.calls[0].method, 'POST');
-  assert.equal(clerkFetch.calls[0].path, '/sessions');
+  assert.equal(clerkFetch.calls[0].path, '/v1/sign_in_tokens');
   const body = JSON.parse(clerkFetch.calls[0].body);
   assert.equal(body.user_id, USER_ID);
+  assert.equal(body.org_id, undefined);
 });
 
-test('createSession: throws on non-2xx response', async () => {
+test('createSignInToken: includes org_id when provided', async () => {
+  const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
+  await createSignInToken(clerkFetch, {
+    secretKey: SECRET,
+    userId: USER_ID,
+    orgId: ORG_ID,
+    timeoutMs: 5000,
+  });
+  const body = JSON.parse(clerkFetch.calls[0].body);
+  assert.equal(body.org_id, ORG_ID);
+});
+
+test('createSignInToken: throws on non-2xx response', async () => {
   const clerkFetch = makeClerkFetch({
-    'POST /sessions': { status: 400, body: { error: 'bad user' } },
+    'POST /v1/sign_in_tokens': { status: 422, body: { error: 'bad user' } },
   });
   await assert.rejects(
-    createSession(clerkFetch, { secretKey: SECRET, userId: USER_ID, timeoutMs: 5000 }),
-    /createSession failed.*400/,
+    createSignInToken(clerkFetch, { secretKey: SECRET, userId: USER_ID, timeoutMs: 5000 }),
+    /createSignInToken failed.*422/,
   );
 });
 
-test('createSession: reports timeout and possible server-side creation on abort', async () => {
-  const clerkFetch = (_url, options) =>
-    new Promise((_resolve, reject) => {
-      options.signal.addEventListener('abort', () => {
-        const error = new Error('The operation was aborted');
-        error.name = 'AbortError';
-        reject(error);
-      });
-    });
-
-  await assert.rejects(
-    createSession(clerkFetch, { secretKey: SECRET, userId: USER_ID, timeoutMs: 5 }),
-    /createSession timed out after 5ms.*may have created the session/i,
-  );
-});
-
-test('createSession: throws if returned session user_id does not match', async () => {
+test('createSignInToken: throws when token missing from response', async () => {
   const clerkFetch = makeClerkFetch({
-    'POST /sessions': {
-      status: 201,
-      body: { id: SESSION_ID, user_id: 'user_other', status: 'active' },
+    'POST /v1/sign_in_tokens': { status: 200, body: { object: 'sign_in_token' } },
+  });
+  await assert.rejects(
+    createSignInToken(clerkFetch, { secretKey: SECRET, userId: USER_ID, timeoutMs: 5000 }),
+    /missing token field/,
+  );
+});
+
+// ── redeemTicket ────────────────────────────────────────────────────────
+
+test('redeemTicket: POSTs FAPI /client/sign_ins with ticket strategy and returns sessionId + jwt', async () => {
+  const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
+  const result = await redeemTicket(clerkFetch, {
+    fapiHost: FAPI_HOST,
+    origin: 'https://app.example.test',
+    ticket: SIGN_IN_TOKEN,
+    timeoutMs: 5000,
+  });
+  assert.equal(result.sessionId, SESSION_ID);
+  assert.equal(result.jwt, JWT);
+  const call = clerkFetch.calls[0];
+  assert.equal(call.host, FAPI_HOST);
+  assert.equal(call.path, '/v1/client/sign_ins');
+  assert.equal(call.headers.Origin, 'https://app.example.test');
+  const params = new URLSearchParams(call.body);
+  assert.equal(params.get('strategy'), 'ticket');
+  assert.equal(params.get('ticket'), SIGN_IN_TOKEN);
+});
+
+test('redeemTicket: throws on non-2xx response', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/client/sign_ins': { status: 401, body: { error: 'bad ticket' } },
+  });
+  await assert.rejects(
+    redeemTicket(clerkFetch, {
+      fapiHost: FAPI_HOST,
+      origin: 'https://x',
+      ticket: 'y',
+      timeoutMs: 5000,
+    }),
+    /redeemTicket failed.*401/,
+  );
+});
+
+test('redeemTicket: throws when sign-in is not complete', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/client/sign_ins': {
+      status: 200,
+      body: { response: { status: 'needs_first_factor' }, client: { sessions: [] } },
     },
   });
   await assert.rejects(
-    createSession(clerkFetch, { secretKey: SECRET, userId: USER_ID, timeoutMs: 5000 }),
-    /session user_id mismatch/,
+    redeemTicket(clerkFetch, {
+      fapiHost: FAPI_HOST,
+      origin: 'https://x',
+      ticket: 'y',
+      timeoutMs: 5000,
+    }),
+    /sign-in not complete.*needs_first_factor/,
   );
 });
 
-test('mintSessionToken: POSTs to /sessions/{id}/tokens and returns jwt', async () => {
-  const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
-  const result = await mintSessionToken(clerkFetch, {
-    secretKey: SECRET,
-    sessionId: SESSION_ID,
+test('redeemTicket: returns jwt=null when session created but no token present', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/client/sign_ins': {
+      status: 200,
+      body: {
+        response: { status: 'complete', created_session_id: SESSION_ID },
+        client: { sessions: [] },
+      },
+    },
+  });
+  const result = await redeemTicket(clerkFetch, {
+    fapiHost: FAPI_HOST,
+    origin: 'https://x',
+    ticket: 'y',
     timeoutMs: 5000,
   });
-  assert.equal(result.token, JWT);
-  assert.equal(clerkFetch.calls[0].path, `/sessions/${SESSION_ID}/tokens`);
+  assert.equal(result.sessionId, SESSION_ID);
+  assert.equal(result.jwt, null);
 });
 
-test('mintSessionToken: throws on non-2xx', async () => {
-  const clerkFetch = makeClerkFetch({
-    [`POST /sessions/${SESSION_ID}/tokens`]: { status: 403, body: { error: 'forbidden' } },
-  });
-  await assert.rejects(
-    mintSessionToken(clerkFetch, { secretKey: SECRET, sessionId: SESSION_ID, timeoutMs: 5000 }),
-    /mintSessionToken failed.*403/,
-  );
-});
+// ── revokeSession ───────────────────────────────────────────────────────
 
-test('revokeSession: POSTs to /sessions/{id}/revoke and returns revoked=true on success', async () => {
+test('revokeSession: POSTs /sessions/{id}/revoke and returns revoked=true on success', async () => {
   const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
   const result = await revokeSession(clerkFetch, {
     secretKey: SECRET,
@@ -180,12 +264,12 @@ test('revokeSession: POSTs to /sessions/{id}/revoke and returns revoked=true on 
     timeoutMs: 5000,
   });
   assert.equal(result.revoked, true);
-  assert.equal(clerkFetch.calls[0].path, `/sessions/${SESSION_ID}/revoke`);
+  assert.equal(clerkFetch.calls[0].path, `/v1/sessions/${SESSION_ID}/revoke`);
 });
 
 test('revokeSession: returns revoked=false on non-2xx (does not throw)', async () => {
   const clerkFetch = makeClerkFetch({
-    [`POST /sessions/${SESSION_ID}/revoke`]: { status: 500, body: { error: 'server' } },
+    [`POST /v1/sessions/${SESSION_ID}/revoke`]: { status: 500, body: { error: 'server' } },
   });
   const result = await revokeSession(clerkFetch, {
     secretKey: SECRET,
@@ -208,13 +292,10 @@ test('runAuthenticatedSmoke: successful mint → probe → revoke exits 0', asyn
     stderr: io.stderr,
   });
   assert.equal(code, 0);
-  // smokeMain was called once with the JWT as SMOKE_AUTH_TOKEN
   assert.equal(smokeMain.calls.length, 1);
   assert.equal(smokeMain.calls[0].env.SMOKE_AUTH_TOKEN, JWT);
-  // session was revoked
   const revokeCall = clerkFetch.calls.find((c) => c.path.endsWith('/revoke'));
   assert.ok(revokeCall, 'revoke was called');
-  // evidence was emitted on stdout
   const evidence = JSON.parse(io.outChunks.join(''));
   assert.equal(evidence.smokeUserId, USER_ID);
   assert.equal(evidence.session.revoked, true);
@@ -232,7 +313,6 @@ test('runAuthenticatedSmoke: probe failure still revokes and exits 1', async () 
     stderr: io.stderr,
   });
   assert.equal(code, 1);
-  // revocation still happened
   const revokeCall = clerkFetch.calls.find((c) => c.path.endsWith('/revoke'));
   assert.ok(revokeCall, 'revoke was called even after probe failure');
   const evidence = JSON.parse(io.outChunks.join(''));
@@ -240,11 +320,58 @@ test('runAuthenticatedSmoke: probe failure still revokes and exits 1', async () 
   assert.equal(evidence.session.revoked, true);
 });
 
-test('runAuthenticatedSmoke: token mint failure exits 1 (no session to revoke is fine)', async () => {
+test('runAuthenticatedSmoke: sign-in-token failure exits 1 (no session to revoke)', async () => {
   const clerkFetch = makeClerkFetch({
-    'POST /sessions': { status: 201, body: { id: SESSION_ID, user_id: USER_ID, status: 'active' } },
-    [`POST /sessions/${SESSION_ID}/tokens`]: { status: 500, body: { error: 'mint failed' } },
-    [`POST /sessions/${SESSION_ID}/revoke`]: {
+    'POST /v1/sign_in_tokens': { status: 403, body: { error: 'forbidden' } },
+  });
+  const smokeMain = makeSmokeMain(0);
+  const io = makeIO();
+  const code = await runAuthenticatedSmoke(BASE_ENV, {
+    clerkFetch,
+    smokeMain,
+    stdout: io.stdout,
+    stderr: io.stderr,
+  });
+  assert.equal(code, 1);
+  assert.equal(smokeMain.calls.length, 0);
+  const revokeCall = clerkFetch.calls.find((c) => c.path.endsWith('/revoke'));
+  assert.equal(revokeCall, undefined);
+  const evidence = JSON.parse(io.outChunks.join(''));
+  assert.match(evidence.orchestrationError, /createSignInToken failed/);
+});
+
+test('runAuthenticatedSmoke: redeem failure exits 1 (no session to revoke)', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/sign_in_tokens': { status: 200, body: { token: SIGN_IN_TOKEN } },
+    'POST /v1/client/sign_ins': { status: 401, body: { error: 'bad ticket' } },
+  });
+  const smokeMain = makeSmokeMain(0);
+  const io = makeIO();
+  const code = await runAuthenticatedSmoke(BASE_ENV, {
+    clerkFetch,
+    smokeMain,
+    stdout: io.stdout,
+    stderr: io.stderr,
+  });
+  assert.equal(code, 1);
+  assert.equal(smokeMain.calls.length, 0);
+  const revokeCall = clerkFetch.calls.find((c) => c.path.endsWith('/revoke'));
+  assert.equal(revokeCall, undefined);
+  const evidence = JSON.parse(io.outChunks.join(''));
+  assert.match(evidence.orchestrationError, /redeemTicket failed/);
+});
+
+test('runAuthenticatedSmoke: session created but no token → still revokes and exits 1', async () => {
+  const clerkFetch = makeClerkFetch({
+    'POST /v1/sign_in_tokens': { status: 200, body: { token: SIGN_IN_TOKEN } },
+    'POST /v1/client/sign_ins': {
+      status: 200,
+      body: {
+        response: { status: 'complete', created_session_id: SESSION_ID },
+        client: { sessions: [] },
+      },
+    },
+    [`POST /v1/sessions/${SESSION_ID}/revoke`]: {
       status: 200,
       body: { id: SESSION_ID, status: 'revoked' },
     },
@@ -258,20 +385,18 @@ test('runAuthenticatedSmoke: token mint failure exits 1 (no session to revoke is
     stderr: io.stderr,
   });
   assert.equal(code, 1);
-  // smokeMain was never called (mint failed before probing)
   assert.equal(smokeMain.calls.length, 0);
-  // session was still revoked (created but mint failed → cleanup)
   const revokeCall = clerkFetch.calls.find((c) => c.path.endsWith('/revoke'));
-  assert.ok(revokeCall, 'revoke was called even after mint failure');
+  assert.ok(revokeCall, 'revoke was called for the orphaned session');
   const evidence = JSON.parse(io.outChunks.join(''));
-  assert.match(evidence.orchestrationError, /mintSessionToken failed/);
+  assert.match(evidence.orchestrationError, /no session token returned/);
 });
 
 test('runAuthenticatedSmoke: revoke failure is reported and fails the canary', async () => {
   const clerkFetch = makeClerkFetch({
-    'POST /sessions': { status: 201, body: { id: SESSION_ID, user_id: USER_ID, status: 'active' } },
-    [`POST /sessions/${SESSION_ID}/tokens`]: { status: 200, body: { object: 'token', jwt: JWT } },
-    [`POST /sessions/${SESSION_ID}/revoke`]: { status: 500, body: { error: 'revoke failed' } },
+    'POST /v1/sign_in_tokens': { status: 200, body: { token: SIGN_IN_TOKEN } },
+    'POST /v1/client/sign_ins': SIGN_INS_COMPLETE,
+    [`POST /v1/sessions/${SESSION_ID}/revoke`]: { status: 500, body: { error: 'revoke failed' } },
   });
   const smokeMain = makeSmokeMain(0);
   const io = makeIO();
@@ -285,11 +410,10 @@ test('runAuthenticatedSmoke: revoke failure is reported and fails the canary', a
   const evidence = JSON.parse(io.outChunks.join(''));
   assert.equal(evidence.session.revoked, false);
   assert.match(evidence.session.revocationError, /revokeSession failed/);
-  // stderr warns about revocation failure
   assert.match(io.errChunks.join(''), /revocation failed/i);
 });
 
-test('runAuthenticatedSmoke: neither JWT nor Clerk secret appears in stdout, stderr, or evidence', async () => {
+test('runAuthenticatedSmoke: neither JWT, sign-in token, nor Clerk secret appears in output', async () => {
   const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
   const smokeMain = makeSmokeMain(0);
   const io = makeIO();
@@ -300,44 +424,21 @@ test('runAuthenticatedSmoke: neither JWT nor Clerk secret appears in stdout, std
     stderr: io.stderr,
   });
   const allOutput = io.outChunks.join('') + io.errChunks.join('');
-  assert.doesNotMatch(
-    allOutput,
-    /sk_test_secret_value_never_print/,
-    'secret must not appear in output',
-  );
-  assert.doesNotMatch(
-    allOutput,
-    /eyJ\.eyJ\.eyJ_fake_jwt_never_print/,
-    'JWT must not appear in output',
-  );
-});
-
-test('runAuthenticatedSmoke: createSession failure exits 1 (no session to revoke)', async () => {
-  const clerkFetch = makeClerkFetch({
-    'POST /sessions': { status: 403, body: { error: 'forbidden' } },
-  });
-  const smokeMain = makeSmokeMain(0);
-  const io = makeIO();
-  const code = await runAuthenticatedSmoke(BASE_ENV, {
-    clerkFetch,
-    smokeMain,
-    stdout: io.stdout,
-    stderr: io.stderr,
-  });
-  assert.equal(code, 1);
-  assert.equal(smokeMain.calls.length, 0);
-  // no revoke call (no session was created)
-  const revokeCall = clerkFetch.calls.find((c) => c.path.endsWith('/revoke'));
-  assert.equal(revokeCall, undefined);
-  const evidence = JSON.parse(io.outChunks.join(''));
-  assert.match(evidence.orchestrationError, /createSession failed/);
+  assert.doesNotMatch(allOutput, /sk_test_secret_value_never_print/, 'secret must not appear');
+  assert.doesNotMatch(allOutput, /eyJ\.eyJ\.eyJ_fake_jwt_never_print/, 'JWT must not appear');
+  assert.doesNotMatch(allOutput, /sit_fake_ticket_never_print/, 'sign-in token must not appear');
 });
 
 test('runAuthenticatedSmoke: throws when CLERK_SECRET_KEY is missing', async () => {
   const io = makeIO();
   await assert.rejects(
     runAuthenticatedSmoke(
-      { SMOKE_USER_ID: USER_ID, SMOKE_TARGET_URL: 'https://x' },
+      {
+        SMOKE_USER_ID: USER_ID,
+        SMOKE_TARGET_URL: 'https://x',
+        CLERK_FAPI_HOST: FAPI_HOST,
+        FRONTEND_URL: 'https://a',
+      },
       {
         clerkFetch: makeClerkFetch(),
         smokeMain: makeSmokeMain(0),
@@ -353,7 +454,12 @@ test('runAuthenticatedSmoke: throws when SMOKE_USER_ID is missing', async () => 
   const io = makeIO();
   await assert.rejects(
     runAuthenticatedSmoke(
-      { CLERK_SECRET_KEY: SECRET, SMOKE_TARGET_URL: 'https://x' },
+      {
+        CLERK_SECRET_KEY: SECRET,
+        SMOKE_TARGET_URL: 'https://x',
+        CLERK_FAPI_HOST: FAPI_HOST,
+        FRONTEND_URL: 'https://a',
+      },
       {
         clerkFetch: makeClerkFetch(),
         smokeMain: makeSmokeMain(0),
@@ -365,27 +471,44 @@ test('runAuthenticatedSmoke: throws when SMOKE_USER_ID is missing', async () => 
   );
 });
 
-test('runAuthenticatedSmoke: each call creates a fresh session (no reuse)', async () => {
-  const clerkFetch = makeClerkFetch(DEFAULT_CLERK_RESPONSES);
-  const smokeMain = makeSmokeMain(0);
-  const io1 = makeIO();
-  await runAuthenticatedSmoke(BASE_ENV, {
-    clerkFetch,
-    smokeMain,
-    stdout: io1.stdout,
-    stderr: io1.stderr,
-  });
-  const io2 = makeIO();
-  await runAuthenticatedSmoke(BASE_ENV, {
-    clerkFetch,
-    smokeMain,
-    stdout: io2.stdout,
-    stderr: io2.stderr,
-  });
-  // Two create-session calls (one per run)
-  const createCalls = clerkFetch.calls.filter((c) => c.path === '/sessions');
-  assert.equal(createCalls.length, 2, 'each run must create its own session');
-  // Two revoke calls
-  const revokeCalls = clerkFetch.calls.filter((c) => c.path.endsWith('/revoke'));
-  assert.equal(revokeCalls.length, 2, 'each run must revoke its own session');
+test('runAuthenticatedSmoke: throws when FAPI host cannot be resolved', async () => {
+  const io = makeIO();
+  await assert.rejects(
+    runAuthenticatedSmoke(
+      {
+        CLERK_SECRET_KEY: SECRET,
+        SMOKE_USER_ID: USER_ID,
+        SMOKE_TARGET_URL: 'https://x',
+        FRONTEND_URL: 'https://a',
+      },
+      {
+        clerkFetch: makeClerkFetch(),
+        smokeMain: makeSmokeMain(0),
+        stdout: io.stdout,
+        stderr: io.stderr,
+      },
+    ),
+    /Frontend API host/,
+  );
+});
+
+test('runAuthenticatedSmoke: throws when origin (FRONTEND_URL) is missing', async () => {
+  const io = makeIO();
+  await assert.rejects(
+    runAuthenticatedSmoke(
+      {
+        CLERK_SECRET_KEY: SECRET,
+        SMOKE_USER_ID: USER_ID,
+        SMOKE_TARGET_URL: 'https://x',
+        CLERK_FAPI_HOST: FAPI_HOST,
+      },
+      {
+        clerkFetch: makeClerkFetch(),
+        smokeMain: makeSmokeMain(0),
+        stdout: io.stdout,
+        stderr: io.stderr,
+      },
+    ),
+    /azp/,
+  );
 });
