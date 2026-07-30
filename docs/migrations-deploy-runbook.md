@@ -939,12 +939,12 @@ at the apply/seed/verify stage:
 - **Production adoption track** (Neon `production` branch): runs steps
   A–D, F–G, then **hands off to the protected GitHub deploy workflow**
   (Step 2 below) which
-  applies `0010`, seeds, verifies, deploys the Worker, and runs canary —
+  applies `0010` and `0011`, seeds, verifies, deploys the Worker, and runs canary —
   all inside the CI gate that records artifacts and enforces the audit
   trail. Step E (manual `migrate:apply` / `migrate:seed` / `migrate:verify`)
   is **branch-proof only** and must NOT be run manually on production.
   The production track ordering is A → B → C → D → F → G → **hand off to
-  workflow** (the workflow applies 0010, seeds, verifies, deploys,
+  workflow** (the workflow applies 0010 and 0011, seeds, verifies, deploys,
   canaries). The REVOKE (F) and runtime-role verification (G) happen
   **before** the workflow so the ledger is locked down the moment adoption
   creates it, not after the workflow finishes.
@@ -982,8 +982,9 @@ without a fresh, passing PITR drill on record.
 > snapshot is at the **latest** schema (the regular pre-deploy drill,
 > run before a normal migration on an already-adopted database). A
 > **pre-adoption** snapshot predates adoption: the
-> `schema_migrations` ledger does not exist yet, and migration `0010`
-> (the `tier_feature_flags.limit_value` `integer → bigint` change) has
+> `schema_migrations` ledger does not exist yet, and migrations `0010`
+> (the `tier_feature_flags.limit_value` `integer → bigint` change) and
+> `0011` (the `subscription_tiers` period columns) have
 > not been applied. `migrate:verify` checks the catalog against the
 > latest fingerprint **and** requires the ledger — so it **cannot
 > pass** on a pre-adoption restored branch, and treating its failure as
@@ -1003,7 +1004,7 @@ without a fresh, passing PITR drill on record.
 >    the tables that adoption will reconcile (e.g. the `uploads` columns
 >    that `0001` adds, if the 0001 gap is still open) so the restore is
 >    not silently empty or partial. The table count must match
->    production's pre-adoption count, not the post-0010 count.
+>    production's pre-adoption count, not the post-migration count.
 > 3. **`migrate:preflight` PASS against the restored branch** —
 >    preflight is read-only and reports `Ready: YES,
 >    schema_migrations ledger: not initialized` for a pre-adoption
@@ -1013,8 +1014,8 @@ without a fresh, passing PITR drill on record.
 >    `MIGRATION_ROLE="$DRILL_ROLE"` wiring as Step 1b step 6.
 >
 > **Reserve latest-schema `migrate:verify` for AFTER the protected
-> workflow applies `0010`.** Once adoption stamps `0000`–`0009` and the
-> protected GitHub workflow applies `0010` (seeds, verifies, deploys,
+> workflow applies `0010` and `0011`.** Once adoption stamps `0000`–`0009` and the
+> protected GitHub workflow applies `0010` and `0011` (seeds, verifies, deploys,
 > canaries), the database is at the latest schema and the regular
 > Step 1b `migrate:verify` PASS expectation is correct for every
 > subsequent pre-deploy drill. The branch proof track's step E
@@ -1032,9 +1033,9 @@ env setup (step 0 — export shared variables once)
   → reconcile 0001 if required (read-only dry-run → review → guarded apply → re-dry-run)
   → adopt dry-run        (capture exit code; branch on READY vs REFUSED — see step B)
   → adopt apply at 0009  (MIGRATION_ADOPTION_POINT=0009; stamps 0000–0009; creates schema_migrations)
-  → status               (confirm 0000–0009 applied, only 0010 pending)
-  → apply 0010           (migrate:apply — applies the one pending migration)
-  → status               (confirm 0000–0010 applied, none pending)
+  → status               (confirm 0000–0009 applied, 0010 and 0011 pending)
+  → apply 0010, 0011     (migrate:apply — applies the two pending migrations)
+  → status               (confirm 0000–0011 applied, none pending)
   → seed                 (migrate:seed — 54 tier_feature_flags rows)
   → verify               (migrate:verify — PASS)
   → revoke ledger access (REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime)
@@ -1051,10 +1052,10 @@ env setup (step 0 — export shared variables once)
   → reconcile 0001 if required (read-only dry-run → review → guarded apply → re-dry-run)
   → adopt dry-run        (capture exit code; branch on READY vs REFUSED — see step B)
   → adopt apply at 0009  (MIGRATION_ADOPTION_POINT=0009; stamps 0000–0009; creates schema_migrations)
-  → status               (confirm 0000–0009 applied, only 0010 pending)
+  → status               (confirm 0000–0009 applied, 0010 and 0011 pending)
   → revoke ledger access (REVOKE ALL PRIVILEGES ON TABLE schema_migrations FROM app_runtime)
   → runtime-role verification  (corrected verify-runtime-role.js — pg_catalog ledger detection)
-  → HAND OFF to protected GitHub workflow (Step 2) — workflow applies 0010, seeds, verifies, deploys, canaries
+  → HAND OFF to protected GitHub workflow (Step 2) — workflow applies 0010 and 0011, seeds, verifies, deploys, canaries
 ```
 
 Each step must pass before the next begins. The sequence runs under
@@ -1330,8 +1331,8 @@ The reconciliation procedure is:
 Once the dry-run reports `STATUS: READY`, adopt at the historical
 adoption point `0009` (the last migration before `0010`). This stamps
 `0000`–`0009` into the newly-created `schema_migrations` ledger and
-leaves `0010` as the only pending migration, so the subsequent
-`migrate:apply` applies exactly one migration:
+leaves `0010` and `0011` as the pending migrations, so the subsequent
+`migrate:apply` applies exactly two migrations:
 
 ```bash
 set -euo pipefail
@@ -1351,10 +1352,12 @@ npm run migrate:adopt -- --apply
 > `0010` is done, so `migrate:verify` would fail on the
 > bigint-vs-integer drift and the storage_bytes limits (10 GB / 100 GB)
 > that exceed int32 could never be seeded. Adopting at `0009` stamps
-> only the already-shaped history and leaves `0010` pending so
-> `migrate:apply` runs its SQL for real.
+> only the already-shaped history and leaves `0010` and `0011` pending so
+> `migrate:apply` runs their SQL for real. (`0011` adds the
+> `subscription_tiers` period columns and is likewise unapplied on the
+> pre-adoption database, so it too must stay pending, not be stamped.)
 
-### D. Confirm only 0010 is pending
+### D. Confirm 0010 and 0011 are pending
 
 ```bash
 set -euo pipefail
@@ -1362,32 +1365,33 @@ npm run migrate:status
 ```
 
 **Expected:** `Ledger: present`, `Applied: 0000, 0001, ..., 0009`,
-`Pending: 0010`, `Health: OK`. If anything other than `0010` is pending,
-**stop** — adoption stamped the wrong prefix; do not proceed to apply.
+`Pending: 0010, 0011`, `Health: OK`. If anything other than `0010` and
+`0011` is pending, **stop** — adoption stamped the wrong prefix; do not
+proceed to apply.
 
-### E. Apply 0010, then status, seed, verify — BRANCH PROOF ONLY
+### E. Apply 0010 and 0011, then status, seed, verify — BRANCH PROOF ONLY
 
 > **Production track: SKIP THIS STEP.** On production, after step D
-> confirms exactly `0010` pending, proceed directly to step F (revoke
-> ledger access), then step G (runtime-role verification), then hand off
-> to the protected GitHub deploy workflow (Step 2 below). The workflow
-> applies `0010`, seeds, verifies, deploys the Worker, and runs canary
+> confirms exactly `0010` and `0011` pending, proceed directly to step F
+> (revoke ledger access), then step G (runtime-role verification), then
+> hand off to the protected GitHub deploy workflow (Step 2 below). The
+> workflow applies `0010` and `0011`, seeds, verifies, deploys the Worker, and runs canary
 > — all inside the CI gate that records artifacts and enforces the audit
 > trail. Manually running `migrate:apply` / `migrate:seed` /
 > `migrate:verify` on production bypasses that gate and is forbidden.
 
-**Branch proof track only:** after step D confirms exactly `0010`
-pending on the disposable `migration-role-check` branch, run the regular
+**Branch proof track only:** after step D confirms exactly `0010` and
+`0011` pending on the disposable `migration-role-check` branch, run the regular
 apply → status → seed → verify sequence manually. This proves the entire
 adoption + first-migration flow end-to-end against the production-shaped
 copy before touching production:
 
 ```bash
 set -euo pipefail
-# apply 0010
+# apply 0010 and 0011
 npm run migrate:apply
 
-# status — confirm 0000–0010 applied, none pending
+# status — confirm 0000–0011 applied, none pending
 npm run migrate:status
 
 # seed — 54 tier_feature_flags rows
@@ -1398,7 +1402,7 @@ npm run migrate:seed
 npm run migrate:verify
 ```
 
-**Expected (branch proof):** apply reports `applied: ["0010"]`; status
+**Expected (branch proof):** apply reports `applied: ["0010", "0011"]`; status
 reports `Pending: (none — up to date)`; seed reports `Upserted: 54`,
 `Verified: YES`; verify reports `Verdict: PASS`.
 
@@ -1422,12 +1426,13 @@ reports `Pending: (none — up to date)`; seed reports `Upserted: 54`,
 > enforces.
 
 **Branch proof track:** run this after step E's `migrate:verify` PASS.
-**Production track:** run this immediately after step D (confirm only
-`0010` pending) — do NOT wait for the workflow to apply `0010` first.
+**Production track:** run this immediately after step D (confirm `0010`
+and `0011` pending) — do NOT wait for the workflow to apply `0010` and
+`0011` first.
 The REVOKE strips `app_runtime`'s auto-granted DML on the ledger; the
 workflow's `migrate:apply` runs as `neondb_owner` (which retains full
 access), so the REVOKE does not interfere with the workflow's ability
-to stamp `0010`.
+to stamp `0010` and `0011`.
 
 Re-apply the REVOKE as `neondb_owner` via an interactive psql session:
 
@@ -1502,15 +1507,15 @@ check fails, **stop** — re-run the REVOKE from step F and re-verify.
 
 **Branch proof track:** after steps A–G pass on the
 `migration-role-check` branch (adoption stamped `0000`–`0009`, `0010`
-applied manually, seed + verify PASS, ledger access revoked, runtime-role
+and `0011` applied manually, seed + verify PASS, ledger access revoked, runtime-role
 verification PASS), the branch proof is complete. The branch can be
 deleted (or kept for reference until production adoption is signed off).
 
 **Production track:** after steps A, B (if needed), C, D, F, G pass on
 the Neon `production` branch (adoption stamped `0000`–`0009`, `0010`
-confirmed as the only pending migration, ledger access revoked,
+and `0011` confirmed as the pending migrations, ledger access revoked,
 runtime-role verification PASS), the database is **adoption-stamped but
-not yet migration-complete** — `0010` is still pending. Do NOT run
+not yet migration-complete** — `0010` and `0011` are still pending. Do NOT run
 `migrate:apply` manually. Instead, hand off to the protected GitHub
 deploy workflow (Step 2 below) via `workflow_dispatch` from the Git
 branch `main`:
@@ -1519,22 +1524,22 @@ branch `main`:
    auto-deploy yet. Trigger the workflow manually with
    `workflow_dispatch` from `main`.
 2. The workflow runs the full sequence: `migrate:status` →
-   `migrate:preflight` → PITR check → `migrate:apply` (applies `0010`)
+   `migrate:preflight` → PITR check → `migrate:apply` (applies `0010` and `0011`)
    → `migrate:seed` → `migrate:verify` → `wrangler deploy --env
    production` → canary. Every step records an artifact for the audit
    trail.
 3. Monitor the workflow per Step 2a. Confirm `migrate:apply` reports
-   `applied: ["0010"]`, `migrate:seed` reports `Upserted: 54`,
+   `applied: ["0010", "0011"]`, `migrate:seed` reports `Upserted: 54`,
    `migrate:verify` reports `Verdict: PASS`, and canary passes.
 4. Only after the first post-adoption canary passes may you set
    `PRODUCTION_AUTO_DEPLOY_ENABLED=true` for future deploys.
 
 From this point on, the regular deploy workflow (Step 1 → Step 5) may
-run `migrate:apply` — it will see `0000`–`0010` applied and apply only
+run `migrate:apply` — it will see `0000`–`0011` applied and apply only
 future migrations.
 
 Record the adoption in the sign-off section below (adoption point,
-migrations stamped, 0010 applied by the workflow, ledger REVOKE
+migrations stamped, 0010 and 0011 applied by the workflow, ledger REVOKE
 re-applied,
 runtime-role verification PASS with `ledgerExists=true`).
 
@@ -1743,12 +1748,12 @@ investigated before migrating.
 > pre-deploy drill (an already-adopted database at the latest schema).
 > For the **pre-adoption** drill (run before the one-time adoption
 > gate), the restored snapshot predates the `schema_migrations` ledger
-> and migration `0010`, so `migrate:verify` **cannot** pass and its
+> and migrations `0010` and `0011`, so `migrate:verify` **cannot** pass and its
 > failure is NOT a drill failure. Use the pre-adoption acceptance
 > criteria in [Pre-adoption PITR gate](#pre-adoption-pitr-gate-mandatory-before-any-production-ddl)
 > instead: successful restore polling, restored-state fidelity checks,
 > and `migrate:preflight` PASS. Reserve latest-schema `migrate:verify`
-> for after the protected workflow applies `0010`.
+> for after the protected workflow applies `0010` and `0011`.
 
 > **Why the snapshot-restore API and not `neonctl branches create
 > --parent production`:** `--parent production` creates a child branch
@@ -2231,11 +2236,11 @@ authoritative; leave N/A for subsequent deploys.
 | Pre-adoption PITR gate (fresh drill on the Neon production branch, within 2 hours of step A) | [ ] PASS |
 | Adoption point (`MIGRATION_ADOPTION_POINT`) | `____________________________` (expected `0009`) |
 | Migrations stamped (`0000`–`0009`) | [ ] confirmed via `migrate:status` |
-| `0010` confirmed as the only pending migration (step D) | [ ] confirmed |
+| `0010` and `0011` confirmed as the pending migrations (step D) | [ ] confirmed |
 | 0001 schema gap reconciled (if the dry-run refused) | [ ] N/A (no gap) [ ] reconciled via guarded psql |
 | Ledger REVOKE re-applied AFTER adoption created `schema_migrations` (step F, before workflow) | [ ] confirmed |
 | Runtime-role verification PASS with `ledgerExists=true` (corrected `pg_catalog` detection, step G) | [ ] confirmed |
-| Production hand-off: `0010` applied by the protected GitHub workflow (not manually) | [ ] confirmed via workflow artifact |
+| Production hand-off: `0010` and `0011` applied by the protected GitHub workflow (not manually) | [ ] confirmed via workflow artifact |
 | `migrate:seed` — 54 `tier_feature_flags` rows (via workflow) | [ ] Verified: YES |
 | `migrate:verify` — PASS (via workflow) | [ ] confirmed |
 | `PRODUCTION_AUTO_DEPLOY_ENABLED` left unset until adoption + first canary PASS | [ ] confirmed |

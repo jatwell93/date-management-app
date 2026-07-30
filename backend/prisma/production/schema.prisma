@@ -80,6 +80,8 @@ model SubscriptionTier {
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
   stripeCustomerId     String?      @map("stripe_customer_id")
+  cancelAtPeriodEnd    Boolean      @default(false) @map("cancel_at_period_end")
+  currentPeriodEnd     DateTime?    @map("current_period_end")
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])

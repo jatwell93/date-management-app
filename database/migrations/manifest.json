@@ -154,6 +154,20 @@
         "dataLoss": "destructive",
         "completeness": "partial"
       }
+    },
+    {
+      "id": "0011",
+      "forward": "0011_add_subscription_period_fields.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0011_add_subscription_period_fields.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      }
     }
   ]
 }
