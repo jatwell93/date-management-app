@@ -52,10 +52,14 @@ test('production migration prep threads NEON_API_KEY into the reusable workflow'
     path.resolve(__dirname, '..', '.github', 'workflows', 'migration-prep.yml'),
     'utf8',
   );
-  const callSecrets = reusable.match(/workflow_call:\r?\n([\s\S]*?)(?=\r?\npermissions:)/);
-  assert.ok(callSecrets, 'migration-prep.yml must define on.workflow_call');
+  // Scope to the `secrets:` sub-block specifically (4-space indent, the last
+  // section under workflow_call before the top-level `permissions:` key) so a
+  // key accidentally placed under `inputs:` at the same 6-space indent cannot
+  // satisfy this assertion.
+  const secretsBlock = reusable.match(/ {4}secrets:\r?\n([\s\S]*?)(?=\r?\npermissions:)/);
+  assert.ok(secretsBlock, 'migration-prep.yml must define on.workflow_call.secrets');
   assert.match(
-    callSecrets[1],
+    secretsBlock[1],
     /\n {6}NEON_API_KEY:\r?\n/,
     'migration-prep.yml must declare NEON_API_KEY under on.workflow_call.secrets',
   );
