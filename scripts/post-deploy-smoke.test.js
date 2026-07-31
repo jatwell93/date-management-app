@@ -269,6 +269,60 @@ test('probeEndpoint: does NOT attach Authorization header when authToken is abse
   );
 });
 
+test('probeEndpoint: attaches the WAF bypass header when a secret is provided', async () => {
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+  });
+  await probeEndpoint('https://api.example.com', '/health?deep=true', {
+    timeoutMs: 5000,
+    fetchImpl,
+    wafBypassSecret: 'shhh-canary',
+    wafBypassHeader: 'x-canary-secret',
+  });
+  assert.equal(fetchImpl.calls[0].opts.headers['x-canary-secret'], 'shhh-canary');
+});
+
+test('probeEndpoint: does NOT attach the WAF bypass header when the secret is absent', async () => {
+  const fetchImpl = makeFetch({
+    'https://api.example.com/health?deep=true': {
+      status: 200,
+      body: { status: 'healthy', checks: { database: { status: 'pass' } } },
+    },
+  });
+  await probeEndpoint('https://api.example.com', '/health?deep=true', {
+    timeoutMs: 5000,
+    fetchImpl,
+    wafBypassHeader: 'x-canary-secret',
+  });
+  assert.equal(
+    fetchImpl.calls[0].opts.headers['x-canary-secret'],
+    undefined,
+    'the bypass header must be omitted when no secret is configured',
+  );
+});
+
+test('main: sends the WAF bypass header on all probes when CANARY_WAF_SECRET is set', async () => {
+  const { code, fetchImpl } = await runMain(
+    {
+      [`${BASE_URL}/health?deep=true`]: HEALTHY_DEEP,
+      [`${BASE_URL}/api/subscription/current`]: OK_SUBSCRIPTION,
+    },
+    {
+      SMOKE_TARGET_URL: BASE_URL,
+      SMOKE_AUTH_TOKEN: 'prod-smoke-token',
+      CANARY_WAF_SECRET: 'edge-pass',
+    },
+  );
+  assert.equal(code, 0);
+  assert.equal(fetchImpl.calls.length, 2);
+  for (const call of fetchImpl.calls) {
+    assert.equal(call.opts.headers['x-canary-secret'], 'edge-pass');
+  }
+});
+
 test('main: sends Authorization header on all probes when SMOKE_AUTH_TOKEN is set', async () => {
   const { code, fetchImpl, evidence } = await runMain(
     {
