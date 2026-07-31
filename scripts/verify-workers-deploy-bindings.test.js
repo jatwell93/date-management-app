@@ -27,6 +27,40 @@ test('preview migration validation uses a separate least-privilege Doppler token
   );
 });
 
+test('production migration prep threads NEON_API_KEY into the reusable workflow', () => {
+  // Regression guard: the PITR readiness check in migration-prep.yml reads
+  // `secrets.NEON_API_KEY`. A reusable workflow only surfaces an environment
+  // secret into its `secrets` context for names DECLARED under
+  // `on.workflow_call.secrets` AND threaded by the caller. Omitting either made
+  // the key resolve empty at runtime ("NEON_API_KEY is required"), so both
+  // halves are asserted here.
+  const caller = fs.readFileSync(
+    path.resolve(__dirname, '..', '.github', 'workflows', 'workers-deploy.yml'),
+    'utf8',
+  );
+  const productionJob = caller.match(
+    / {2}migration-prep-production:\r?\n([\s\S]*?)(?=\r?\n {2}deploy-development:)/,
+  );
+  assert.ok(productionJob, 'migration-prep-production job must exist');
+  assert.match(
+    productionJob[1],
+    /NEON_API_KEY:\s*\$\{\{\s*secrets\.NEON_API_KEY\s*\}\}/,
+    'production call must thread NEON_API_KEY so the PITR readiness gate can authenticate',
+  );
+
+  const reusable = fs.readFileSync(
+    path.resolve(__dirname, '..', '.github', 'workflows', 'migration-prep.yml'),
+    'utf8',
+  );
+  const callSecrets = reusable.match(/workflow_call:\r?\n([\s\S]*?)(?=\r?\npermissions:)/);
+  assert.ok(callSecrets, 'migration-prep.yml must define on.workflow_call');
+  assert.match(
+    callSecrets[1],
+    /\n {6}NEON_API_KEY:\r?\n/,
+    'migration-prep.yml must declare NEON_API_KEY under on.workflow_call.secrets',
+  );
+});
+
 test('canary smoke rounds preserve the probe exit code while printing evidence', () => {
   const workflow = fs.readFileSync(
     path.resolve(__dirname, '..', '.github', 'workflows', 'workers-deploy.yml'),

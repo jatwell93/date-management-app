@@ -75,6 +75,10 @@ jobs:
       mode: full
     secrets:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # Declared+threaded so the reusable workflow's production-environment job
+      # surfaces the environment's NEON_API_KEY into its `secrets` context for
+      # the PITR readiness check. The environment secret supplies the value.
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
 
   deploy-development:
     needs: [migration-prep-preview]
