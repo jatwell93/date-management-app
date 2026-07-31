@@ -66,6 +66,16 @@ on:
       DOPPLER_TOKEN:
         description: 'Doppler CLI token for the target environment'
         required: true
+      NEON_API_KEY:
+        description: >-
+          Neon API key for the PITR readiness check (full mode only). Must be
+          DECLARED here and threaded from the caller: a reusable workflow only
+          surfaces environment secrets into its `secrets` context for names
+          declared under `on.workflow_call.secrets` (the production environment
+          then supplies the value, overriding the caller-passed expression).
+          Optional so validate-mode callers (which skip the PITR step) need not
+          pass it.
+        required: false
 
 permissions:
   contents: read
@@ -142,8 +152,10 @@ jobs:
         if: inputs.mode == 'full'
         env:
           # NEON_API_KEY is an environment secret scoped to the production
-          # (or preview) GitHub environment. It is NOT passed via workflow_call
-          # secrets because environment-level secrets are available directly.
+          # GitHub environment, but a reusable workflow only exposes it via the
+          # `secrets` context when the name is declared under
+          # `on.workflow_call.secrets` (see above) AND threaded by the caller
+          # (workers-deploy.yml). The environment secret then supplies the value.
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_PROJECT_ID: ${{ inputs.neon_project_id }}
           NEON_BRANCH: ${{ inputs.neon_branch }}
