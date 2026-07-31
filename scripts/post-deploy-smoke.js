@@ -23,6 +23,13 @@
  *                             valid token. Without this, the canary would either
  *                             fail spuriously on 401 or — if 401 were treated as
  *                             success — stop exercising the schema-dependent query.
+ *   CANARY_WAF_SECRET      — optional shared secret sent as a header so a
+ *                             Cloudflare "Skip" rule lets CI probes through the
+ *                             edge bot protection that 403s datacenter IPs.
+ *                             Omitted when unset (local/residential runs are
+ *                             unaffected). Must match the value in the CF rule.
+ *   CANARY_WAF_HEADER      — optional header name for the above (default
+ *                             "x-canary-secret"); must match the CF rule field.
  *
  * Exit codes:
  *   0 — all endpoints passed
@@ -61,6 +68,14 @@ async function probeEndpoint(baseUrl, path, opts) {
     const headers = { Accept: 'application/json' };
     if (opts.authToken) {
       headers.Authorization = `Bearer ${opts.authToken}`;
+    }
+    // Optional Cloudflare WAF bypass: CI runners probe from datacenter IPs that
+    // Cloudflare's bot protection 403s at the edge before the request reaches
+    // the Worker. When a shared secret is configured, send it as a header that a
+    // Cloudflare "Skip" rule matches so the canary (and only the canary) is let
+    // through. Omitted when unset, so residential/local runs are unaffected.
+    if (opts.wafBypassSecret) {
+      headers[opts.wafBypassHeader] = opts.wafBypassSecret;
     }
     const response = await fetchFn(url, {
       signal: controller.signal,
@@ -136,6 +151,10 @@ async function main(env, deps) {
   const latencyBudgetMs = Number(env.SMOKE_LATENCY_MS || DEFAULT_LATENCY_MS);
   const timeoutMs = Number(env.SMOKE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
   const authToken = env.SMOKE_AUTH_TOKEN || '';
+  // Cloudflare WAF bypass header for CI (see probeEndpoint). Header name is
+  // configurable but defaults to the value the Cloudflare Skip rule matches.
+  const wafBypassSecret = env.CANARY_WAF_SECRET || '';
+  const wafBypassHeader = (env.CANARY_WAF_HEADER || 'x-canary-secret').toLowerCase();
 
   const results = [];
   for (const path of endpoints) {
@@ -143,6 +162,8 @@ async function main(env, deps) {
       timeoutMs,
       fetchImpl,
       authToken: authToken || undefined,
+      wafBypassSecret: wafBypassSecret || undefined,
+      wafBypassHeader,
     });
     const evaluation = evaluateProbe(result, latencyBudgetMs);
     results.push({
