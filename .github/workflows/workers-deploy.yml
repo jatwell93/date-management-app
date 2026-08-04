@@ -343,7 +343,10 @@ jobs:
       # This still exercises the real production Worker + DB + authenticated
       # endpoint. To canary the custom domain instead (requires a Cloudflare Pro
       # "Skip" rule matching the CANARY_WAF_* header from post-deploy-smoke.js),
-      # set the repo/environment variable SMOKE_TARGET_URL to the custom domain.
+      # set the repo/environment variable SMOKE_TARGET_URL to the custom domain
+      # as a full absolute URL including scheme, e.g. https://api.expirymate.com.au
+      # (post-deploy-smoke.js concatenates the path onto this base, so a bare
+      # hostname without https:// makes fetch throw before any probe runs).
       SMOKE_TARGET_URL: ${{ vars.SMOKE_TARGET_URL || 'https://date-management-api-prod.date-management-app.workers.dev' }}
       CANARY_WAIT_MINUTES: ${{ vars.CANARY_WAIT_MINUTES || '15' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
