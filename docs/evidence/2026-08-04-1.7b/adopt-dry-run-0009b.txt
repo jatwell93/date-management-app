@@ -1,0 +1,31 @@
+
+> date-management-app@0.0.0 migrate:adopt
+> npm run compile && node build/src/database/migrations/adopt-cli.js --dry-run
+
+
+> date-management-app@0.0.0 compile
+> tsc
+
+(node:6428) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:6428) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+Target: ep-REDACTED.ap-southeast-2.aws.neon.tech/neondb (role: neondb_owner)
+
+=== Adoption Report ===
+Mode: dry-run
+
+STATUS: READY — catalog matches expected schema
+Adoption point: 0009
+Migrations to stamp: 0000, 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0008, 0009
+
+Catalog comparison: MATCH (no unexpected differences)
+
+To complete adoption, run with --apply and
+MIGRATION_ADOPT_CONFIRMATION="ADOPT <host>/<database> AT <migration-id>"

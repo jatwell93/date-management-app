@@ -244,7 +244,7 @@
             until this subtask is done.** Outstanding evidence from this session: the e2e suite compiles
             and fails-closed correctly but was not executed against a real Postgres locally (Docker daemon
             not running on the Windows dev machine); CI will exercise it on PR open.
-- [ ] 1.7 Integrate migrations into deployment: validate history; store dry-run/status output as an
+- [x] 1.7 Integrate migrations into deployment: validate history; store dry-run/status output as an
       artifact; verify Neon PITR/backup readiness; apply expand-compatible schema; verify postconditions;
       seed/verify prerequisites; deploy Worker; run real database readiness plus schema-dependent smoke
       tests; observe a canary window with explicit stop/rollback thresholds. Migration-only changes must
@@ -643,14 +643,24 @@
             `CLERK_SECRET_KEY` is used with blast-radius controlled by the
             protected GitHub `production` environment and the
             `team_member`-role provisioning of the smoke identity.
-      - [ ] **1.7.B-execute** Operator-driven production deploy execution.
-            The runbook must be exercised end-to-end on a real production
-            deploy and the sign-off section filled with evidence (CI run URL,
-            PITR drill output, migration artifacts, canary evidence, post-deploy
-            verify). **Task 1.7 is not complete until this subtask is done.**
-            Outstanding: the CI workflow and runbook are merged; the first
-            real production deploy with this workflow has not yet been
-            executed. Prerequisites before the first run: (1) complete
+      - [x] **1.7.B-execute** Operator-driven production deploy execution.
+            **DONE 2026-08-04.** The runbook was exercised end-to-end on the
+            first real production deploy: `workflow_dispatch` run
+            [30868236574](https://github.com/jatwell93/date-management-app/actions/runs/30868236574)
+            completed `success` (SHA `b240631a`) — Migration prep (full)
+            PITR ✓ → `migrate:apply ["0010","0011"]` (0000–0009 already
+            applied via the 2026-07-31 adoption stamp) → `migrate:seed` 54
+            rows → `migrate:verify` PASS; deploy-production ✓; post-deploy
+            canary ✓ BOTH rounds. Sign-off section of
+            `docs/migrations-deploy-runbook.md` filled with evidence
+            (adoption at 0009, runtime-role separation PASS, smoke-identity
+            record, CI/PITR/canary artifacts). Runtime-role cleanup complete
+            (2026-08-04): `migration-role-check` branch + malformed
+            `" migration_runner"` role deleted after the canary passed.
+            `PRODUCTION_AUTO_DEPLOY_ENABLED` set to `'true'` on 2026-08-04
+            (push-to-main auto-deploy enabled). Canary targets the
+            `*.workers.dev` URL to bypass free-plan Bot Fight Mode (PR #436).
+            Original prerequisites before the first run (all met): (1) complete
             task 1.6.B-execute (Neon dev-branch exercise); (2) merge the
             completed Phase 1 slice through 1.7.A into main; (3) configure
             the protected GitHub `production` environment (branch policy +

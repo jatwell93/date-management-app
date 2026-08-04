@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-07-30T23:50:17.094Z",
+  "projectId": "PROJECT-REDACTED",
+  "ok": true,
+  "deadlineMinutes": 15,
+  "intervalSeconds": 10,
+  "perRequestTimeoutMs": 30000,
+  "operationCount": 3,
+  "results": [
+    {
+      "opId": "92004b3c-1933-47af-a16a-9e1a6139022e",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    },
+    {
+      "opId": "5c4e6923-ac52-4ad9-85a5-eae6fe19eca5",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    },
+    {
+      "opId": "aa2a9b87-2cd6-4d62-a521-376dc605df64",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    }
+  ]
+}

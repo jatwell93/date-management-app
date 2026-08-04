@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "target": {
+    "host": "ep-REDACTED.ap-southeast-2.aws.neon.tech",
+    "database": "neondb"
+  },
+  "role": "app_runtime",
+  "mode": "read-only",
+  "checks": {
+    "roleMatches": {
+      "ok": true,
+      "connected": "app_runtime",
+      "expected": "app_runtime"
+    },
+    "notSuperuserMember": {
+      "ok": true,
+      "isMember": false
+    },
+    "cannotCreateTables": {
+      "ok": true,
+      "canCreate": false
+    },
+    "tableOwnership": {
+      "ok": true,
+      "violations": [],
+      "checked": 32
+    },
+    "tablePrivileges": {
+      "ok": true,
+      "missing": [],
+      "checked": 32
+    },
+    "ledgerAccessDenied": {
+      "ok": true,
+      "ledgerExists": true,
+      "grantedPrivileges": []
+    },
+    "sequencePrivileges": {
+      "ok": true,
+      "missing": [],
+      "checked": 27
+    },
+    "functionPrivileges": {
+      "ok": true,
+      "missing": [],
+      "checked": 1
+    },
+    "activeProbe": {
+      "enabled": false
+    }
+  },
+  "report": "Runtime role verification — ep-REDACTED.ap-southeast-2.aws.neon.tech/neondb\nOverall: PASS\nMode: read-only\n\nroleMatches: PASS (connected=app_runtime, expected=app_runtime)\nnotSuperuserMember: PASS (isMember=false)\ncannotCreateTables: PASS (canCreate=false)\ntableOwnership: PASS (checked=32, violations=none)\ntablePrivileges: PASS (checked=32, missing=none)\nledgerAccessDenied: PASS (ledgerExists=true, granted=none)\nsequencePrivileges: PASS (checked=27, missing=none)\nfunctionPrivileges: PASS (checked=1, missing=none)"
+}
