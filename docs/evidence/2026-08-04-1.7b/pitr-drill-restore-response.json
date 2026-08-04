@@ -1,0 +1,116 @@
+{
+  "branch": {
+    "id": "br-REDACTED",
+    "project_id": "PROJECT-REDACTED",
+    "parent_lsn": "0/40C4E6A8",
+    "name": "pitr-preadopt-202607310950",
+    "slug": "br-REDACTED",
+    "current_state": "init",
+    "pending_state": "ready",
+    "state_changed_at": "2026-07-30T23:50:14Z",
+    "creation_source": "console",
+    "primary": false,
+    "default": false,
+    "protected": false,
+    "cpu_used_sec": 0,
+    "compute_time_seconds": 0,
+    "active_time_seconds": 0,
+    "written_data_bytes": 0,
+    "data_transfer_bytes": 0,
+    "created_at": "2026-07-30T23:50:14Z",
+    "updated_at": "2026-07-30T23:50:14Z",
+    "init_source": "parent-data",
+    "restore_status": "restored",
+    "restored_from": "snap-REDACTED",
+    "restored_as": "br-REDACTED"
+  },
+  "endpoints": [
+    {
+      "host": "ep-REDACTED.ap-southeast-2.aws.neon.tech",
+      "hosts": {
+        "read_write_host": "ep-REDACTED.ap-southeast-2.aws.neon.tech",
+        "read_write_pooled_host": "ep-REDACTED-pooler.ap-southeast-2.aws.neon.tech"
+      },
+      "id": "ep-REDACTED",
+      "slug": "ep-REDACTED",
+      "branch_slug": "br-REDACTED",
+      "project_slug": "PROJECT-REDACTED",
+      "project_id": "PROJECT-REDACTED",
+      "branch_id": "br-REDACTED",
+      "autoscaling_limit_min_cu": 0.25,
+      "autoscaling_limit_max_cu": 2,
+      "region_id": "aws-ap-southeast-2",
+      "type": "read_write",
+      "current_state": "init",
+      "pending_state": "active",
+      "group": {
+        "size": {
+          "min": 1,
+          "max": 1
+        },
+        "allow_readable_secondaries": false,
+        "computes": [
+          {
+            "binding_id": "w1f",
+            "current_state": "init",
+            "pending_state": "active",
+            "role": "read_write",
+            "compute_host": "ep-REDACTED-w1f.ap-southeast-2.aws.neon.tech",
+            "compute_pooled_host": "ep-REDACTED-w1f-pooler.ap-southeast-2.aws.neon.tech",
+            "created_at": "2026-07-30T23:50:14Z",
+            "updated_at": "2026-07-30T23:50:14Z"
+          }
+        ]
+      },
+      "settings": {
+        "pg_settings": {}
+      },
+      "pooler_enabled": false,
+      "pooler_mode": "transaction",
+      "disabled": false,
+      "passwordless_access": true,
+      "creation_source": "console",
+      "created_at": "2026-07-30T23:50:14Z",
+      "updated_at": "2026-07-30T23:50:14Z",
+      "proxy_host": "ap-southeast-2.aws.neon.tech",
+      "suspend_timeout_seconds": 0,
+      "provisioner": "k8s-neonvm"
+    }
+  ],
+  "operations": [
+    {
+      "id": "92004b3c-1933-47af-a16a-9e1a6139022e",
+      "project_id": "PROJECT-REDACTED",
+      "branch_id": "br-REDACTED",
+      "action": "timeline_unarchive",
+      "status": "running",
+      "failures_count": 0,
+      "created_at": "2026-07-30T23:50:14Z",
+      "updated_at": "2026-07-30T23:50:14Z",
+      "total_duration_ms": 0
+    },
+    {
+      "id": "5c4e6923-ac52-4ad9-85a5-eae6fe19eca5",
+      "project_id": "PROJECT-REDACTED",
+      "branch_id": "br-REDACTED",
+      "action": "create_branch",
+      "status": "scheduling",
+      "failures_count": 0,
+      "created_at": "2026-07-30T23:50:14Z",
+      "updated_at": "2026-07-30T23:50:14Z",
+      "total_duration_ms": 0
+    },
+    {
+      "id": "aa2a9b87-2cd6-4d62-a521-376dc605df64",
+      "project_id": "PROJECT-REDACTED",
+      "branch_id": "br-REDACTED",
+      "endpoint_id": "ep-REDACTED",
+      "action": "start_compute",
+      "status": "scheduling",
+      "failures_count": 0,
+      "created_at": "2026-07-30T23:50:14Z",
+      "updated_at": "2026-07-30T23:50:14Z",
+      "total_duration_ms": 0
+    }
+  ]
+}

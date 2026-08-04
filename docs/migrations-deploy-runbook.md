@@ -2211,18 +2211,18 @@ session — its evidence document is the manual verification record.
 
 | Field | Value |
 |-------|-------|
-| Operator name | `____________________________` |
-| Date completed | `____________________________` |
-| Git SHA deployed | `____________________________` |
-| Workflow run URL | `____________________________` |
-| Runtime role separation (app_runtime provisioned, REVOKE on schema_migrations applied, verify-runtime-role.js PASS — active on branch, read-only on the Neon production branch) | [ ] PASS |
-| First-production adoption (one-time gate — see [First-production adoption procedure](#first-production-adoption-procedure-one-time-gate)) | [ ] N/A (already adopted) [ ] PASS |
-| Step 1 (PITR drill) | [ ] PASS |
-| Step 2 (CI deploy) | [ ] PASS |
-| Step 3 (canary) | [ ] PASS |
-| Step 4 (rollback) | [ ] N/A [ ] executed |
-| Step 5 (post-deploy verify) | [ ] PASS |
-| Runtime role cleanup (migration-role-check branch deleted, malformed " migration_runner" role deleted) | [ ] done |
+| Operator name | Josh Atwell (`jatwell93`) |
+| Date completed | 2026-08-04 |
+| Git SHA deployed | `b240631a` |
+| Workflow run URL | https://github.com/jatwell93/date-management-app/actions/runs/30868236574 |
+| Runtime role separation (app_runtime provisioned, REVOKE on schema_migrations applied, verify-runtime-role.js PASS — active on branch, read-only on the Neon production branch) | [x] PASS |
+| First-production adoption (one-time gate — see [First-production adoption procedure](#first-production-adoption-procedure-one-time-gate)) | [x] PASS (adopted at 0009 on 2026-07-31; see adoption sign-off below) |
+| Step 1 (PITR drill) | [x] PASS |
+| Step 2 (CI deploy) | [x] PASS |
+| Step 3 (canary) | [x] PASS |
+| Step 4 (rollback) | [x] N/A (not exercised — deploy healthy, no rollback needed) |
+| Step 5 (post-deploy verify) | [x] PASS |
+| Runtime role cleanup (migration-role-check branch deleted, malformed " migration_runner" role deleted) | [x] done (2026-08-04) |
 
 ### Adoption sign-off (one-time)
 
@@ -2232,32 +2232,32 @@ authoritative; leave N/A for subsequent deploys.
 
 | Field | Value |
 |-------|-------|
-| Branch proof track completed (`migration-role-check` branch — steps A–G including manual apply/seed/verify) | [ ] PASS |
-| Pre-adoption PITR gate (fresh drill on the Neon production branch, within 2 hours of step A) | [ ] PASS |
-| Adoption point (`MIGRATION_ADOPTION_POINT`) | `____________________________` (expected `0009`) |
-| Migrations stamped (`0000`–`0009`) | [ ] confirmed via `migrate:status` |
-| `0010` and `0011` confirmed as the pending migrations (step D) | [ ] confirmed |
-| 0001 schema gap reconciled (if the dry-run refused) | [ ] N/A (no gap) [ ] reconciled via guarded psql |
-| Ledger REVOKE re-applied AFTER adoption created `schema_migrations` (step F, before workflow) | [ ] confirmed |
-| Runtime-role verification PASS with `ledgerExists=true` (corrected `pg_catalog` detection, step G) | [ ] confirmed |
-| Production hand-off: `0010` and `0011` applied by the protected GitHub workflow (not manually) | [ ] confirmed via workflow artifact |
-| `migrate:seed` — 54 `tier_feature_flags` rows (via workflow) | [ ] Verified: YES |
-| `migrate:verify` — PASS (via workflow) | [ ] confirmed |
-| `PRODUCTION_AUTO_DEPLOY_ENABLED` left unset until adoption + first canary PASS | [ ] confirmed |
+| Branch proof track completed (`migration-role-check` branch — steps A–G including manual apply/seed/verify) | [x] PASS |
+| Pre-adoption PITR gate (fresh drill on the Neon production branch, within 2 hours of step A) | [x] PASS |
+| Adoption point (`MIGRATION_ADOPTION_POINT`) | `0009` |
+| Migrations stamped (`0000`–`0009`) | [x] confirmed via `migrate:status` |
+| `0010` and `0011` confirmed as the pending migrations (step D) | [x] confirmed |
+| 0001 schema gap reconciled (if the dry-run refused) | [x] reconciled via guarded psql (15 `uploads` columns + `uploads_one_active_catalogue_per_org` partial index applied idempotently as neondb_owner) |
+| Ledger REVOKE re-applied AFTER adoption created `schema_migrations` (step F, before workflow) | [x] confirmed (all 7 privileges denied) |
+| Runtime-role verification PASS with `ledgerExists=true` (corrected `pg_catalog` detection, step G) | [x] confirmed (via DIRECT endpoint — pooler gives false negative) |
+| Production hand-off: `0010` and `0011` applied by the protected GitHub workflow (not manually) | [x] confirmed via workflow artifact (run 30868236574 `migrate:apply` → `["0010","0011"]`) |
+| `migrate:seed` — 54 `tier_feature_flags` rows (via workflow) | [x] Verified: YES |
+| `migrate:verify` — PASS (via workflow) | [x] confirmed |
+| `PRODUCTION_AUTO_DEPLOY_ENABLED` left unset until adoption + first canary PASS | [x] confirmed — kept unset through adoption + first canary PASS, then set to `'true'` on 2026-08-04 (push-to-main auto-deploy now enabled) |
 
 ### Evidence attachments
 
 Paste links to CI runs, artifacts, or commit output files to the PR:
 
-- [ ] CI workflow run URL: `____________________________`
-- [ ] PITR drill output: `____________________________`
-- [ ] Runtime role verification evidence (`runtime-role-evidence.json`): `____________________________`
-- [ ] Adoption dry-run report (`migration-adopt-dry-run-role-check.txt`): `____________________________`
-- [ ] Adoption apply report (`migration-adopt-apply-role-check.txt`): `____________________________`
-- [ ] Ledger-privileges probe (`runtime-ledger-privileges-role-check.txt` — `ledger_exists=t`, all seven `granted=f`): `____________________________`
-- [ ] Migration artifacts (status/preflight/apply/seed/verify): `____________________________`
-- [ ] Canary evidence artifact: `____________________________`
-- [ ] Post-deploy verify output: `____________________________`
+- [x] CI workflow run URL: https://github.com/jatwell93/date-management-app/actions/runs/30868236574 (conclusion: success)
+- [x] PITR drill output: [`docs/evidence/2026-08-04-1.7b/pitr-drill-poll-evidence.json`](evidence/2026-08-04-1.7b/pitr-drill-poll-evidence.json) (`ok:true`, 3 ops `finished/success`), [`pitr-drill-restore-response.json`](evidence/2026-08-04-1.7b/pitr-drill-restore-response.json); plus the in-run "Check Neon PITR readiness" step + PITR evidence artifact on run 30868236574
+- [x] Runtime role verification evidence: [`docs/evidence/2026-08-04-1.7b/runtime-role-evidence-production.json`](evidence/2026-08-04-1.7b/runtime-role-evidence-production.json) (`role:app_runtime`, `mode:read-only`, `pass:true`; passwords redacted)
+- [x] Adoption dry-run report: [`adopt-dry-run-0009.txt`](evidence/2026-08-04-1.7b/adopt-dry-run-0009.txt), [`adopt-dry-run-0009b.txt`](evidence/2026-08-04-1.7b/adopt-dry-run-0009b.txt), [`adopt-dry-run-1.txt`](evidence/2026-08-04-1.7b/adopt-dry-run-1.txt)
+- [x] Adoption apply report: applied in-session as `neondb_owner` (adoption stamp 0000–0009); confirmed by run 30868236574 `migrate:apply` reporting 0000–0009 `alreadyApplied`
+- [x] Ledger-privileges probe: recorded in step F re-REVOKE (all 7 privileges denied); `ledgerExists=true` in runtime-role verify (step G, direct endpoint)
+- [x] Migration artifacts (status/preflight/apply/seed/verify): uploaded as artifacts on run 30868236574 (Migration prep job 91864588683)
+- [x] Canary evidence artifact: run 30868236574 Post-deploy canary job (91865534955) — both rounds PASS, evidence artifact uploaded
+- [x] Post-deploy verify output: `/health?deep=true` → 200 (database `pass`) on both `api.expirymate.com.au` and the workers.dev target; operator browser login verified
 
 ### Smoke-test identity record
 
@@ -2270,15 +2270,15 @@ stored as `SMOKE_USER_ID`.
 
 | Field | Value |
 |-------|-------|
-| Custodian — Clerk user ID | `____________________________` |
-| Custodian — application user ID | `____________________________` |
-| Smoke identity — Clerk user ID (`SMOKE_USER_ID`) | `____________________________` |
-| Smoke identity — application user ID | `____________________________` |
-| Smoke identity — application role (must be `team_member`) | `____________________________` |
-| Smoke-test organization ID | `____________________________` |
-| Verification query result (1 row, role=team_member, subscription present) | [ ] confirmed |
-| Provisioned by | `____________________________` |
-| Date provisioned | `____________________________` |
+| Custodian — Clerk user ID | `user_…` *(redacted — see operator notes)* |
+| Custodian — application user ID | 22 (role `admin`) |
+| Smoke identity — Clerk user ID (`SMOKE_USER_ID`) | *(redacted — authoritative value stored as Doppler production `SMOKE_USER_ID`)* |
+| Smoke identity — application user ID | 23 |
+| Smoke identity — application role (must be `team_member`) | `team_member` |
+| Smoke-test organization ID | *(redacted — Clerk `org_…` / application org UUID stored in operator notes)* |
+| Verification query result (1 row, role=team_member, subscription present) | [x] confirmed |
+| Provisioned by | Josh Atwell (`jatwell93`) |
+| Date provisioned | 2026-07-30 |
 | Purpose | Production canary smoke test (read-only) |
 
 ### Outstanding evidence
@@ -2286,7 +2286,15 @@ stored as `SMOKE_USER_ID`.
 If any step could not be completed in this session, record what is missing
 and why:
 
-- `____________________________`
+- **Runtime role cleanup — DONE (2026-08-04).** The `migration-role-check`
+  Neon branch and the malformed `" migration_runner"` role were deleted after
+  the canary passed (run 30868236574). No residual items remain.
+- **Canary edge note (not a gap):** the post-deploy canary targets the
+  worker's `*.workers.dev` URL rather than the `api.expirymate.com.au` custom
+  domain, to bypass free-plan Cloudflare Bot Fight Mode which 403s CI
+  datacenter IPs at the edge (PR #436). The custom-domain edge is verified
+  separately (`/health?deep=true` = 200). Retarget via `vars.SMOKE_TARGET_URL`
+  after a Pro upgrade + WAF Skip rule (PR #427 header).
 
 Once all steps are PASS and evidence is attached, update `tasks.md` to check
 off task 1.7.B-execute and the parent 1.7 checkbox.

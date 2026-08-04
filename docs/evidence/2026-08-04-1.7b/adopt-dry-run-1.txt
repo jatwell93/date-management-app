@@ -1,0 +1,57 @@
+
+> date-management-app@0.0.0 migrate:adopt
+> npm run compile && node build/src/database/migrations/adopt-cli.js --dry-run
+
+
+> date-management-app@0.0.0 compile
+> tsc
+
+(node:15580) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15580) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+Target: ep-REDACTED.ap-southeast-2.aws.neon.tech/neondb (role: neondb_owner)
+
+=== Adoption Report ===
+Mode: dry-run
+
+STATUS: REFUSED — catalog does not match expected schema
+Expected adoption point: 0011
+
+Catalog comparison: MISMATCH
+
+Columns only in expected (missing or different) (18):
+  - Only in expected: subscription_tiers|cancel_at_period_end|boolean|true|false
+  - Only in expected: subscription_tiers|current_period_end|timestamp(3) without time zone|false|null
+  - tier_feature_flags|limit_value: expected=bigint,false,null vs actual=integer,false,null
+  - Only in expected: uploads|completed_at|timestamp with time zone|false|null
+  - Only in expected: uploads|error_report_key|text|false|null
+  - Only in expected: uploads|failed_at|timestamp with time zone|false|null
+  - Only in expected: uploads|failure_category|text|false|null
+  - Only in expected: uploads|import_type|text|true|'product-catalog'::text
+  - Only in expected: uploads|max_active_expiries_snapshot|integer|false|null
+  - Only in expected: uploads|max_skus_snapshot|integer|false|null
+  - Only in expected: uploads|processing_offset|integer|true|0
+  - Only in expected: uploads|processing_started_at|timestamp with time zone|false|null
+  - Only in expected: uploads|queued_at|timestamp with time zone|false|null
+  - Only in expected: uploads|retry_count|integer|true|0
+  - Only in expected: uploads|row_errors|text|false|null
+  - Only in expected: uploads|rows_unchanged|integer|true|0
+  - Only in expected: uploads|tier_snapshot|text|false|null
+  - Only in expected: uploads|validation_started_at|timestamp with time zone|false|null
+
+Indexes only in expected (missing) (1):
+  - uploads|ON public.uploads USING btree (organization_id) WHERE ((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))|true|false|((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))
+
+
+The existing database catalog does not match the expected schema
+produced by the migration series. Review the differences above.
+If a difference is expected and accepted, add it as an exact
+adoption column exception. Otherwise, fix the production database
+or apply the missing migrations via the current production path.
