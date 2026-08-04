@@ -336,7 +336,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      SMOKE_TARGET_URL: https://api.expirymate.com.au
+      # Canary target. Defaults to the worker's *.workers.dev URL, which lives on
+      # Cloudflare's own domain and so bypasses this zone's Bot Fight Mode — the
+      # edge protection that 403s GitHub-runner datacenter IPs before they reach
+      # the Worker (a false-negative that has nothing to do with deploy health).
+      # This still exercises the real production Worker + DB + authenticated
+      # endpoint. To canary the custom domain instead (requires a Cloudflare Pro
+      # "Skip" rule matching the CANARY_WAF_* header from post-deploy-smoke.js),
+      # set the repo/environment variable SMOKE_TARGET_URL to the custom domain
+      # as a full absolute URL including scheme, e.g. https://api.expirymate.com.au
+      # (post-deploy-smoke.js concatenates the path onto this base, so a bare
+      # hostname without https:// makes fetch throw before any probe runs).
+      SMOKE_TARGET_URL: ${{ vars.SMOKE_TARGET_URL || 'https://date-management-api-prod.date-management-app.workers.dev' }}
       CANARY_WAIT_MINUTES: ${{ vars.CANARY_WAIT_MINUTES || '15' }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
