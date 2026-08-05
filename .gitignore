@@ -63,6 +63,7 @@ Thumbs.db
 .vscode/
 .windsurf/
 .codex/
+.devin/
 /specs/
 prompts/
 skills/

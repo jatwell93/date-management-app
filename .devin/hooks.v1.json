@@ -1,0 +1,14 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "^exec$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"${DEVIN_PROJECT_DIR}/.devin/hooks/dcg-wrapper.ps1\"",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}
