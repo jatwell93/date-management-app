@@ -27,6 +27,13 @@ try {
     $command = $hook.tool_input.command
     if ([string]::IsNullOrWhiteSpace($command)) { exit 0 }
 
+    # Fail open with a visible warning if dcg is not on PATH — silent fail-open
+    # gives a false sense that destructive commands are being guarded.
+    if (-not (Get-Command dcg -ErrorAction SilentlyContinue)) {
+        [Console]::Error.WriteLine("dcg-wrapper: dcg binary not found on PATH — command NOT guarded. Install dcg and ensure it is on PATH.")
+        exit 0
+    }
+
     # Evaluate via dcg test (--stdin avoids command-line injection;
     # 2>$null suppresses the .dcg.toml ACL warning on Windows)
     $json = $command | dcg test --stdin --format json 2>$null

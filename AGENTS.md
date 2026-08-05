@@ -115,7 +115,7 @@ npm run build:workers
 openspec validate --all
 
 # Use open-code-review as a final check before completion
-ocr review --from main --to feature-branch --format json --audience agent --audience agent --background <tex>
+ocr review --from main --to feature-branch --format json --audience agent --background <context about changes made>
 # --background is one of the highest-leverage flags for review quality — always pass the requirement / PR description when invoking
 ```
 
