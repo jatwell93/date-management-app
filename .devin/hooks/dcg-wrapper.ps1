@@ -30,7 +30,7 @@ try {
     # Fail open with a visible warning if dcg is not on PATH — silent fail-open
     # gives a false sense that destructive commands are being guarded.
     if (-not (Get-Command dcg -ErrorAction SilentlyContinue)) {
-        [Console]::Error.WriteLine("dcg-wrapper: dcg binary not found on PATH — command NOT guarded. Install dcg (see AGENTS.md §3).")
+        [Console]::Error.WriteLine("dcg-wrapper: dcg binary not found on PATH — command NOT guarded. Install dcg and ensure it is on PATH.")
         exit 0
     }
 
