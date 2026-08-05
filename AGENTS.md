@@ -58,6 +58,8 @@ For non-trivial changes, recall prior context: `node scripts/mem-recall.js "<key
 
 **Install `dcg`** — the repo's Destructive Command Guard. `.dcg.toml` (committed) defines the deny policy (Neon prod, Stripe, SQLite, Windows FS), and `.claude/settings.json` wires it as a `Bash` PreToolUse hook, so it only enforces if the `dcg` binary is on your `PATH`. Without it you'll see a non-blocking `command not found` on every Bash call and get **no** protection (it fails open). Install it so destructive commands (`rm -rf`, `DROP DATABASE`, …) are actually blocked.
 
+**Devin CLI hook** — `dcg` only matches Claude Code's `Bash` tool name, so Devin's `exec` tool bypasses it. `.devin/hooks.v1.json` bridges the gap; it needs `pwsh` + `dcg` on `PATH` and **fails open**. Mechanism is documented in `.devin/hooks/dcg-wrapper.ps1`.
+
 ---
 
 ## 4. Workflow
