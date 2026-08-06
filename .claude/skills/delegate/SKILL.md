@@ -144,6 +144,13 @@ git diff --name-only main...HEAD    # or: git status --porcelain for uncommitted
 | any | `npx eslint <changed files>` (must exit 0) — **not** `npm run lint`, see below |
 | `openspec/**` | `openspec validate <change-id> --strict` |
 
+**The local gate is not the whole gate.** Some suites only run in CI because they need a
+live service — `npm run test:migrations:e2e` needs a real Postgres and is *not* part of
+`test:migrations`. When a change tightens a shared schema or validator, grep for every
+in-repo construction site of that shape (fixtures and temp manifests included), not just
+the ones the local gate compiles. Task 1.8 shipped green locally and failed CI because
+`e2e.test.ts` builds a synthetic manifest entry that the new required fields invalidated.
+
 Doppler notes (both are real, previously-hit failure modes):
 
 - Backend tests run **without** Doppler bleed `.env.production` R2 config and produce a
