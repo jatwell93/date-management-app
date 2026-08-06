@@ -432,7 +432,10 @@ test('authoritative history never uses destructive down migrations as the defaul
 test('authoritative history declares backfill and contract metadata for every entry', async () => {
   const history = await loadMigrationHistory(path.resolve('database/migrations'));
 
-  assert.equal(history.length, 12);
+  // Deliberately not an exact count: this test asserts an invariant that must hold for
+  // every entry, so adding a migration should not require editing it. The non-empty
+  // check only guards against the loop vacuously passing on an empty history.
+  assert.ok(history.length > 0, 'authoritative history must not be empty');
   for (const migration of history) {
     assert.equal(
       typeof migration.backfill.required,

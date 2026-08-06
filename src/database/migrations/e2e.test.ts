@@ -418,6 +418,8 @@ async function buildTempHistoryWithFailingNonTxMigration(): Promise<{
       dataLoss: 'destructive',
       completeness: 'partial',
     },
+    backfill: { required: false, plan: 'none', resumable: false },
+    contract: { planned: false, id: 'none' },
   });
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 
