@@ -850,7 +850,7 @@ section is filled.**
 
 **1.6.B-execute completion (2026-08-05, SHA `f2255486`, operator jatwell93).**
 The operator Neon gate was exercised end-to-end on isolated dev branches of
-the `date-management-prod` project — all five steps PASS; redacted evidence is
+the production Neon project — all five steps PASS; redacted evidence is
 committed under `docs/evidence/2026-08-05-1.6b/` and the runbook sign-off is
 filled. Because production had already been cut over to 0011 (task 1.7.B) and
 free-tier Neon PITR retention is only 6h, the drill was **adapted** from the

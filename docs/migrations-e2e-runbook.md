@@ -25,8 +25,9 @@ recorded.
 - [ ] Neon CLI installed and authenticated (`neonctl auth login` or
       `npx neonctl auth login`)
 - [ ] `NEON_PROJECT_ID` known — the production project
-      `date-management-prod` (ID: `dawn-darkness-22587117`, region
-      `aws-ap-southeast-2`, PostgreSQL 17)
+      `<PROJECT-NAME-REDACTED>` (ID `<PROJECT-ID-REDACTED>` — real values live
+      in operator notes / the protected GitHub `production` environment), region
+      `aws-ap-southeast-2`, PostgreSQL 17
 - [ ] A DDL-capable role on the dev branches. On this project the schema
       owner is `neondb_owner` (there is no `postgres` role); the runbook uses
       `--role-name neondb_owner` and `MIGRATION_ROLE=neondb_owner` throughout
@@ -58,7 +59,7 @@ Use unique names tied to the SHA or date so they cannot collide with other
 operators' branches.
 
 ```bash
-export NEON_PROJECT_ID=dawn-darkness-22587117
+export NEON_PROJECT_ID=<your-neon-project-id>   # real ID in operator notes (redacted from repo)
 export RUN_ID=$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M)
 
 # --- 0a. FRESH branch (empty schema, for Step 1) ---------------------------
@@ -597,7 +598,7 @@ so there is no `wrangler delete` to run.
 
 | Field | Value |
 |-------|-------|
-| Operator name | `jatwell93 (atwellj93@gmail.com)` |
+| Operator name | `jatwell93` |
 | Date completed | `2026-08-05` |
 | Git SHA exercised | `f2255486` |
 | CI `Migrations E2E Gate` check URL | `pending — recorded on PR open (1.6.A gate runs on PR)` |

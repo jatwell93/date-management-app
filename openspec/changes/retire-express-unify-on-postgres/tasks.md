@@ -240,7 +240,7 @@
             widens the column and reseeds the declared values.
       - [x] **1.6.B-execute** Operator-driven Neon gate execution — **DONE 2026-08-05** (SHA
             `f2255486`, operator jatwell93). Runbook exercised end-to-end on isolated Neon dev
-            branches (project `date-management-prod`), all five steps PASS; sign-off + redacted
+            branches (the production Neon project), all five steps PASS; sign-off + redacted
             evidence under `docs/evidence/2026-08-05-1.6b/`. Because production was cut over to 0011
             in 1.7.B and free-tier PITR is only 6h, the drill was **adapted** (documented inline in
             the runbook): (a) ADOPTION branch built **synthetically** — replay 0000→0009 via psql
