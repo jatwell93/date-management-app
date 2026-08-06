@@ -28,16 +28,36 @@
  *   NEON_BRANCH      — optional branch name to filter by (defaults to the Neon
  *                      production branch, "production" — NOT the Git branch "main")
  *   PITR_MAX_AGE_HOURS — max acceptable age of the newest restore point (default 2)
+ *   PITR_MIN_RETENTION_HOURS — min acceptable PITR history-retention window (default 6)
+ *
+ * Retention (task 1.9): a fresh snapshot and an adequate retention window are
+ * independent properties. A snapshot taken minutes ago satisfies the age check
+ * even if the window behind it has been reduced — so the gate also reads the
+ * project's `history_retention_seconds` and fails closed when it is below the
+ * floor or unreadable. The floor is a regression guard against the window
+ * being silently reduced (e.g. by a plan change), not an aspirational target.
  *
  * Exit codes:
- *   0 — a restore point within the threshold exists for the target branch (PITR ready)
- *   1 — no restore point within the threshold, branch not found, or API error
+ *   0 — a restore point within the threshold exists for the target branch AND
+ *       the retention window meets the floor (PITR ready)
+ *   1 — no restore point within the threshold, retention below the floor,
+ *       branch not found, or API error
  *
  * Output: a JSON evidence document on stdout suitable for CI artifact upload.
  */
 
 const NEON_API_BASE = 'https://console.neon.tech/api/v2';
 const DEFAULT_MAX_AGE_HOURS = 2;
+/**
+ * Minimum acceptable PITR history-retention window, in hours.
+ *
+ * Set to the window this project actually operates on (verified against the
+ * Neon API for task 1.9 — see docs/neon-backup-restore.md). The floor is a
+ * REGRESSION guard, not an aspiration: it catches the retention window being
+ * reduced or a plan being downgraded, without blocking deploys on a window
+ * that has been consciously accepted. Raise it when the plan is upgraded.
+ */
+const DEFAULT_MIN_RETENTION_HOURS = 6;
 // The Neon production branch is named "production" in this project. This is
 // the Neon branch name, NOT the Git branch "main" that the deploy workflow
 // gates on — the two are distinct. Defaults here so a local invocation of
@@ -99,6 +119,36 @@ async function resolveBranch(projectId, branchName, apiKey, fetchImpl) {
     (b) => b && typeof b === 'object' && b.name === branchName && !b.deleted,
   );
   return match ? { id: match.id, name: match.name } : null;
+}
+
+/**
+ * Fetch the project so its configured PITR history-retention window can be
+ * read. `history_retention_seconds` is a project-level setting, so this is a
+ * separate call from the branch/snapshot endpoints above.
+ * @param {string} projectId
+ * @param {string} apiKey
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ historyRetentionSeconds: unknown; planId: string | null }>}
+ */
+async function fetchProjectRetention(projectId, apiKey, fetchImpl) {
+  const fetchFn = fetchImpl || fetch;
+  const url = `${NEON_API_BASE}/projects/${encodeURIComponent(projectId)}`;
+  const response = await fetchFn(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '<no body>');
+    throw new Error(`Neon API GET /projects/${projectId} returned ${response.status}: ${body}`);
+  }
+  const payload = (await response.json()) || {};
+  const project = payload && typeof payload === 'object' ? payload.project || {} : {};
+  return {
+    historyRetentionSeconds: project.history_retention_seconds,
+    planId: typeof project.platform_id === 'string' ? project.platform_id : null,
+  };
 }
 
 /**
@@ -166,6 +216,45 @@ function filterSnapshotsByBranch(snapshots, branchId) {
 }
 
 /**
+ * Evaluate the project's configured PITR history-retention window.
+ *
+ * Task 1.9 requires that "active Neon retention/PITR" be verified, not
+ * asserted. A recent snapshot proves a restore point exists TODAY; the
+ * retention window is what determines how far back recovery can reach, and it
+ * is a project-level setting that can be changed (or silently downgraded with
+ * a plan change) without any snapshot disappearing. Both properties are needed
+ * before a production migration.
+ *
+ * Fails closed on an unreadable value: a project whose retention cannot be
+ * determined must not satisfy the gate.
+ * @param {unknown} seconds retention window in seconds, as reported by the API
+ * @param {number} minHours minimum acceptable window
+ * @returns {{ ok: boolean; seconds: number | null; hours: number | null; minHours: number; reason?: string }}
+ */
+function evaluateRetention(seconds, minHours) {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) {
+    return {
+      ok: false,
+      seconds: null,
+      hours: null,
+      minHours,
+      reason: `Neon project history retention is missing or not a valid number (got ${JSON.stringify(seconds)}); cannot verify the recovery window.`,
+    };
+  }
+  const hours = Math.round((seconds / 3600) * 100) / 100;
+  if (hours < minHours) {
+    return {
+      ok: false,
+      seconds,
+      hours,
+      minHours,
+      reason: `Neon history retention is ${hours}h, below the required minimum of ${minHours}h. Recovery cannot reach far enough back.`,
+    };
+  }
+  return { ok: true, seconds, hours, minHours };
+}
+
+/**
  * Evaluate PITR readiness against the newest snapshot for the target branch.
  *
  * Future timestamps (negative age) are treated as NOT ready — an implausible
@@ -222,6 +311,12 @@ async function main(env, deps) {
       `PITR_MAX_AGE_HOURS must be a positive number (got "${env.PITR_MAX_AGE_HOURS}")`,
     );
   }
+  const minRetentionHours = Number(env.PITR_MIN_RETENTION_HOURS || DEFAULT_MIN_RETENTION_HOURS);
+  if (!Number.isFinite(minRetentionHours) || minRetentionHours <= 0) {
+    throw new Error(
+      `PITR_MIN_RETENTION_HOURS must be a positive number (got "${env.PITR_MIN_RETENTION_HOURS}")`,
+    );
+  }
   const branchName = env.NEON_BRANCH || DEFAULT_BRANCH;
 
   // Step 1: Resolve the target branch FIRST. Fail closed if it cannot be
@@ -261,6 +356,15 @@ async function main(env, deps) {
   // Step 4: Evaluate only the filtered collection.
   const verdict = evaluatePitrReadiness(branchSnapshots, maxAgeHours, now());
 
+  // Step 5: Verify the project's retention window (task 1.9). A fresh snapshot
+  // and an adequate retention window are independent properties: a snapshot
+  // taken minutes ago satisfies the age check even if the window behind it has
+  // been reduced to nothing. Both must hold.
+  const project = await fetchProjectRetention(projectId, apiKey, fetchImpl);
+  const retention = evaluateRetention(project.historyRetentionSeconds, minRetentionHours);
+
+  const ready = verdict.ready && retention.ok;
+
   const evidence = {
     checkedAt: now().toISOString(),
     projectId,
@@ -270,15 +374,29 @@ async function main(env, deps) {
     branchSnapshotCount: branchSnapshots.length,
     newestSnapshot: verdict.newest,
     newestAgeHours: verdict.newestAgeHours,
-    ready: verdict.ready,
-    reason: verdict.reason || null,
+    retention: {
+      seconds: retention.seconds,
+      hours: retention.hours,
+      minHours: retention.minHours,
+      planId: project.planId,
+      ok: retention.ok,
+      reason: retention.reason || null,
+    },
+    ready,
+    reason: verdict.reason || retention.reason || null,
     thresholds: {
       maxAgeHours,
-      description: `A restore point must exist within the last ${maxAgeHours} hour(s) for branch "${branchName}" (id: ${branch.id})`,
+      minRetentionHours,
+      description:
+        `A restore point must exist within the last ${maxAgeHours} hour(s) for branch "${branchName}" ` +
+        `(id: ${branch.id}), and the project's PITR history retention must be at least ${minRetentionHours} hour(s)`,
     },
   };
 
   stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
+  if (!retention.ok) {
+    stderr.write(`::error::${retention.reason} PITR readiness gate failed.\n`);
+  }
   if (!verdict.ready) {
     if (branchSnapshots.length === 0) {
       stderr.write(
@@ -293,20 +411,29 @@ async function main(env, deps) {
     }
     return 1;
   }
+  if (!ready) {
+    // Retention failed while the snapshot age passed — the specific error was
+    // already written above; return non-zero so the gate fails closed.
+    return 1;
+  }
   stderr.write(
-    `[OK] PITR ready: newest restore point for branch "${branchName}" is ${verdict.newestAgeHours}h old (threshold ${maxAgeHours}h).\n`,
+    `[OK] PITR ready: newest restore point for branch "${branchName}" is ${verdict.newestAgeHours}h old ` +
+      `(threshold ${maxAgeHours}h); history retention ${retention.hours}h (minimum ${minRetentionHours}h).\n`,
   );
   return 0;
 }
 
 module.exports = {
   fetchProjectSnapshots,
+  fetchProjectRetention,
   resolveBranch,
   extractSnapshots,
   filterSnapshotsByBranch,
   evaluatePitrReadiness,
+  evaluateRetention,
   main,
   DEFAULT_MAX_AGE_HOURS,
+  DEFAULT_MIN_RETENTION_HOURS,
   DEFAULT_BRANCH,
   NEON_API_BASE,
 };

@@ -5,19 +5,38 @@ const {
   extractSnapshots,
   filterSnapshotsByBranch,
   evaluatePitrReadiness,
+  evaluateRetention,
+  fetchProjectRetention,
   main,
   DEFAULT_MAX_AGE_HOURS,
+  DEFAULT_MIN_RETENTION_HOURS,
 } = require('./check-neon-pitr.js');
+
+const PROJECT_URL = (p) => `https://console.neon.tech/api/v2/projects/${p}`;
 
 const NOW = new Date('2026-07-25T12:00:00Z');
 const withinHours = (h) => new Date(NOW.getTime() - h * 60 * 60 * 1000);
 const aheadHours = (h) => new Date(NOW.getTime() + h * 60 * 60 * 1000);
 
+/**
+ * Default project payload. `main` now also reads the project's PITR retention
+ * window, so every main() test needs this endpoint stubbed. Supplying it as a
+ * default keeps each test focused on the property it is about; a test that
+ * cares about retention overrides PROJECT_URL explicitly.
+ */
+const HEALTHY_RETENTION_SECONDS = 6 * 60 * 60;
+
 function makeFetch(responses) {
   const calls = [];
+  const withDefaults = {
+    [PROJECT_URL('proj-123')]: {
+      project: { history_retention_seconds: HEALTHY_RETENTION_SECONDS, platform_id: 'aws' },
+    },
+    ...responses,
+  };
   const fn = async (url) => {
     calls.push(url);
-    const entry = responses[url];
+    const entry = withDefaults[url];
     if (!entry) {
       return { ok: false, status: 404, text: async () => 'not found', json: async () => ({}) };
     }
@@ -595,4 +614,212 @@ test('main: source_branch_id shape — cross-branch snapshot does NOT satisfy ga
   assert.equal(evidence.ready, false);
   assert.equal(evidence.branchSnapshotCount, 0);
   assert.match(errChunks.join(''), /No Neon restore points found for branch "production"/);
+});
+
+// ---------------------------------------------------------------------------
+// Retention gate (task 1.9). A fresh snapshot and an adequate retention window
+// are independent properties — these tests pin that both are required.
+// ---------------------------------------------------------------------------
+
+test('evaluateRetention: a window above the floor passes', () => {
+  const out = evaluateRetention(24 * 60 * 60, 6);
+  assert.equal(out.ok, true);
+  assert.equal(out.hours, 24);
+  assert.equal(out.minHours, 6);
+  assert.equal(out.reason, undefined);
+});
+
+test('evaluateRetention: a window exactly at the floor passes', () => {
+  const out = evaluateRetention(6 * 60 * 60, 6);
+  assert.equal(out.ok, true);
+  assert.equal(out.hours, 6);
+});
+
+test('evaluateRetention: a window below the floor fails closed', () => {
+  const out = evaluateRetention(60 * 60, 6);
+  assert.equal(out.ok, false);
+  assert.equal(out.hours, 1);
+  assert.match(out.reason, /below the required minimum of 6h/);
+});
+
+test('evaluateRetention: a missing or malformed value fails closed', () => {
+  for (const bad of [undefined, null, 'six hours', NaN, Infinity, -1, {}]) {
+    const out = evaluateRetention(bad, 6);
+    assert.equal(out.ok, false, `expected ${JSON.stringify(bad)} to fail closed`);
+    assert.equal(out.seconds, null);
+    assert.match(out.reason, /missing or not a valid number/);
+  }
+});
+
+test('evaluateRetention: zero retention fails closed', () => {
+  const out = evaluateRetention(0, 6);
+  assert.equal(out.ok, false);
+  assert.equal(out.hours, 0);
+});
+
+test('fetchProjectRetention: reads history_retention_seconds and plan', async () => {
+  const fetchImpl = makeFetch({
+    [PROJECT_URL('proj-123')]: {
+      project: { history_retention_seconds: 604800, platform_id: 'aws' },
+    },
+  });
+  const out = await fetchProjectRetention('proj-123', 'key', fetchImpl);
+  assert.equal(out.historyRetentionSeconds, 604800);
+  assert.equal(out.planId, 'aws');
+});
+
+test('fetchProjectRetention: a missing project object yields an undefined window', async () => {
+  const fetchImpl = makeFetch({ [PROJECT_URL('proj-123')]: {} });
+  const out = await fetchProjectRetention('proj-123', 'key', fetchImpl);
+  assert.equal(out.historyRetentionSeconds, undefined);
+  assert.equal(out.planId, null);
+});
+
+test('fetchProjectRetention: an API error throws rather than defaulting', async () => {
+  const fetchImpl = makeFetch({});
+  await assert.rejects(() => fetchProjectRetention('proj-999', 'key', fetchImpl), /returned 404/);
+});
+
+test('main: a fresh snapshot does NOT satisfy the gate when retention is below the floor', async () => {
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production' }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [{ id: 's1', created_at: withinHours(0.5).toISOString(), branch_id: 'br-prod' }],
+    },
+    [PROJECT_URL('proj-123')]: {
+      project: { history_retention_seconds: 3600, platform_id: 'aws' },
+    },
+  });
+  const code = await main(
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'production' },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 1, 'a recent snapshot must not mask an inadequate retention window');
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.ready, false);
+  assert.equal(evidence.retention.ok, false);
+  assert.equal(evidence.retention.hours, 1);
+  assert.match(errChunks.join(''), /below the required minimum/);
+});
+
+test('main: evidence records the retention block on the happy path', async () => {
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production' }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [{ id: 's1', created_at: withinHours(0.5).toISOString(), branch_id: 'br-prod' }],
+    },
+  });
+  const code = await main(
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'production' },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 0);
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.ready, true);
+  assert.equal(evidence.retention.ok, true);
+  assert.equal(evidence.retention.hours, 6);
+  assert.equal(evidence.retention.minHours, DEFAULT_MIN_RETENTION_HOURS);
+  assert.equal(evidence.thresholds.minRetentionHours, DEFAULT_MIN_RETENTION_HOURS);
+  assert.match(errChunks.join(''), /history retention 6h/);
+});
+
+test('main: PITR_MIN_RETENTION_HOURS overrides the default floor', async () => {
+  const outChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production' }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [{ id: 's1', created_at: withinHours(0.5).toISOString(), branch_id: 'br-prod' }],
+    },
+  });
+  const code = await main(
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'production',
+      PITR_MIN_RETENTION_HOURS: '168',
+    },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: () => {} },
+    },
+  );
+  assert.equal(code, 1, '6h retention must fail a 168h floor');
+  assert.equal(JSON.parse(outChunks.join('')).retention.ok, false);
+});
+
+test('main: a non-numeric PITR_MIN_RETENTION_HOURS throws rather than silently defaulting', async () => {
+  await assert.rejects(
+    () =>
+      main(
+        {
+          NEON_API_KEY: 'key',
+          NEON_PROJECT_ID: 'proj-123',
+          PITR_MIN_RETENTION_HOURS: 'lots',
+        },
+        {
+          fetch: makeFetch({}),
+          now: () => NOW,
+          stdout: { write: () => {} },
+          stderr: { write: () => {} },
+        },
+      ),
+    /PITR_MIN_RETENTION_HOURS must be a positive number/,
+  );
+});
+
+test('main: an empty PITR_MIN_RETENTION_HOURS falls back to the default floor', async () => {
+  // This is exactly what migration-prep.yml passes by default, so the empty
+  // string must not be read as 0 (which would disable the gate silently).
+  const outChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production' }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      snapshots: [{ id: 's1', created_at: withinHours(0.5).toISOString(), branch_id: 'br-prod' }],
+    },
+    [PROJECT_URL('proj-123')]: {
+      project: { history_retention_seconds: 1800, platform_id: 'aws' },
+    },
+  });
+  const code = await main(
+    {
+      NEON_API_KEY: 'key',
+      NEON_PROJECT_ID: 'proj-123',
+      NEON_BRANCH: 'production',
+      PITR_MIN_RETENTION_HOURS: '',
+    },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: () => {} },
+    },
+  );
+  assert.equal(code, 1, 'an empty override must not disable the retention gate');
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.retention.minHours, DEFAULT_MIN_RETENTION_HOURS);
+  assert.equal(evidence.retention.ok, false);
 });

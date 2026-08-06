@@ -62,6 +62,15 @@ on:
         required: false
         type: string
         default: '2'
+      pitr_min_retention_hours:
+        description: >-
+          Min acceptable Neon PITR history-retention window (hours). A fresh
+          snapshot does not imply an adequate recovery window — this is the
+          regression guard against the window being reduced or the plan being
+          downgraded. Empty uses the script default.
+        required: false
+        type: string
+        default: ''
     secrets:
       DOPPLER_TOKEN:
         description: 'Doppler CLI token for the target environment'
@@ -160,6 +169,11 @@ jobs:
           NEON_PROJECT_ID: ${{ inputs.neon_project_id }}
           NEON_BRANCH: ${{ inputs.neon_branch }}
           PITR_MAX_AGE_HOURS: ${{ inputs.pitr_max_age_hours }}
+          # Task 1.9: the gate also asserts the project's PITR retention
+          # window. Left empty by default so the floor lives in one place
+          # (DEFAULT_MIN_RETENTION_HOURS in the script, recorded in
+          # docs/neon-backup-restore.md) rather than being duplicated here.
+          PITR_MIN_RETENTION_HOURS: ${{ inputs.pitr_min_retention_hours }}
         run: node scripts/check-neon-pitr.js > pitr-evidence.json 2> pitr-check.stderr
 
       - name: Upload PITR evidence
