@@ -1,0 +1,49 @@
+Step 3 — Restore drill (Neon PITR, LSN-based restore-in-place)
+=============================================================
+Branch under test: migration-e2e-adopt-<RUN_ID>  (id br-REDACTED)
+Date: 2026-08-05
+
+METHOD NOTE — why this differs from the runbook's original Step 3:
+- Free-tier Neon PITR retention is 6h, so branching from a pre-cutover timestamp
+  (before the 2026-07-31 production cutover) is impossible.
+- This neonctl version's `branches create --parent` cannot do a point-in-time
+  branch off a NON-default branch: --parent takes a single value (branch, or a
+  bare LSN/timestamp that applies only to the DEFAULT branch). `id@lsn` inline
+  syntax is not parsed by this version.
+- Timestamp-based PITR proved unreliable at second precision (client/server clock
+  skew put the restore point AFTER the change). Switched to an LSN captured on the
+  server via pg_current_wal_lsn() — exact, skew-immune.
+- Gotcha: in Git Bash, `psql` is winpty-wrapped; capturing its output in $(...)
+  prints "stdout is not a tty" and yields empty. Use `psql.exe` in command
+  substitution to bypass winpty.
+- Solution: `neonctl branches restore <branch> ^self@<lsn>` (restore-in-place on
+  the branch's own history), with --preserve-under-name to keep the pre-restore
+  state as a backup branch.
+
+--- 3a capture pre-change LSN (post-forward-fix, pre-marker) -------------------
+PRE_LSN = 0/4123ABF8   (state at this LSN: limit_value=bigint, ledger 0000-0011,
+                        54 rows, no marker table)
+
+--- 3b introduce a verifiable change (stands in for a migration) --------------
+CREATE TABLE pitr_drill_marker (note text);  -- INSERT 0 1
+
+--- 3c restore-in-place to PRE_LSN --------------------------------------------
+neonctl branches restore <adopt-branch> ^self@0/4123ABF8 \
+  --preserve-under-name <adopt-branch>-with-marker-backup
+INFO: Restoring branch br-REDACTED to br-REDACTED LSN 0/4123ABF8
+Result: restore applied; backup branch <adopt-branch>-with-marker-backup created
+        (preserves the pre-restore, WITH-marker state; created without a compute).
+
+--- 3d verify recovery on the restored ADOPTION branch ------------------------
+marker_should_be_gone: (null)   <- the DDL change was rolled back by PITR
+limit_value data_type: bigint   <- rest of schema intact
+schema_migrations count: 12     <- ledger 0000-0011 intact
+
+RPO: exactly one change rolled back (the pitr_drill_marker DDL between PRE_LSN
+     and restore invocation).
+RTO: restore completed within a few seconds (single restore call, branch returned
+     to `ready`).
+
+VERDICT: PASS — Neon PITR recovered the branch to a precise pre-change point:
+restored branch sits BEFORE the marker (marker absent), preserved backup branch
+sits AFTER (marker present), schema otherwise identical.

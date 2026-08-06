@@ -192,7 +192,7 @@
       is updated (Phase 4). Tests: `commands.test.ts` covers all guards + commands (26 new tests,
       pglite-backed); existing `adopt.test.ts`/`runner.test.ts`/`baseline.fingerprint.test.ts`
       updated for 0010. Current `npm run test:migrations` → 68/68 pass.
-- [ ] 1.6 Prove the runner end-to-end against isolated PostgreSQL/Neon targets: fresh install,
+- [x] 1.6 Prove the runner end-to-end against isolated PostgreSQL/Neon targets: fresh install,
       existing-schema adoption, concurrent invocation refusal, interruption/recovery, checksum/catalog
       drift, safe down migration, forward fix, Worker rollback with expanded schema, and restore recovery.
       **Perform at least one real schema change with a working rollback on a Neon dev branch** — this is the
@@ -238,12 +238,24 @@
             so the guarded down first proves that PostgreSQL refuses the five out-of-int4 values, then
             succeeds only after an explicit lossy preparation on the isolated branch; the forward fix
             widens the column and reseeds the declared values.
-      - [ ] **1.6.B-execute** Operator-driven Neon gate execution. The runbook must be exercised
-            end-to-end on a real Neon dev branch and the sign-off section filled with evidence (CI run
-            URL, psql output, restore verification, old Worker smoke test). **Task 1.6 is not complete
-            until this subtask is done.** Outstanding evidence from this session: the e2e suite compiles
-            and fails-closed correctly but was not executed against a real Postgres locally (Docker daemon
-            not running on the Windows dev machine); CI will exercise it on PR open.
+      - [x] **1.6.B-execute** Operator-driven Neon gate execution — **DONE 2026-08-05** (SHA
+            `f2255486`, operator jatwell93). Runbook exercised end-to-end on isolated Neon dev
+            branches (the production Neon project), all five steps PASS; sign-off + redacted
+            evidence under `docs/evidence/2026-08-05-1.6b/`. Because production was cut over to 0011
+            in 1.7.B and free-tier PITR is only 6h, the drill was **adapted** (documented inline in
+            the runbook): (a) ADOPTION branch built **synthetically** — replay 0000→0009 via psql
+            (pure DDL, no ledger), then adopt at 0009, then apply 0010+0011; (b) forward-fix deletes
+            **both** 0010+0011 ledger rows because `validateLedger` enforces a contiguous prefix and
+            0011 sits on top of 0010 (0011 is idempotent `ADD COLUMN IF NOT EXISTS`); (c) restore
+            drill uses `neonctl branches restore <b> ^self@<LSN>` (LSN restore-in-place — this
+            neonctl can't PITR a non-default branch, and second-precision timestamps were skew-prone);
+            (d) old-Worker check is a lightweight driver-level compat proof (the Worker never reads
+            `limit_value`; ran the pre-0011 `/api/subscription/current` column list + an int8 read via
+            `@neondatabase/serverless` against the expanded schema — both OK) instead of a wrangler
+            preview deploy. Also fixed several runbook bugs found during execution: role is
+            `neondb_owner` not `postgres`, parent branch is `production` not `main`, `migrate:adopt`
+            needs `-- --dry-run`/`-- --apply`, and the CLI reads `MIGRATION_ADOPT_CONFIRMATION` (no
+            "ION"). CI `Migrations E2E Gate` ran green on PR #441 (run 31070788459); URL recorded in the runbook sign-off.
 - [x] 1.7 Integrate migrations into deployment: validate history; store dry-run/status output as an
       artifact; verify Neon PITR/backup readiness; apply expand-compatible schema; verify postconditions;
       seed/verify prerequisites; deploy Worker; run real database readiness plus schema-dependent smoke

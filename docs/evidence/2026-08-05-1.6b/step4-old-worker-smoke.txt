@@ -1,0 +1,41 @@
+Step 4 — Old-Worker-against-expanded-schema check (ADOPTION branch)
+==================================================================
+Approach: LIGHTWEIGHT COMPAT PROOF (no Cloudflare/wrangler deploy).
+Old Worker reference SHA: 4cef28f0 (parent of 1af28c75, which introduced 0010;
+predates both 0010 and 0011).
+Date: 2026-08-05
+
+WHY LIGHTWEIGHT: The Worker code never reads tier_feature_flags.limit_value
+(grep: 0 matches in workers/src), so the 0010 int4->int8 widening cannot affect
+Worker code paths. The real compat surface is the pre-0011 Worker's
+/api/subscription/current query, whose column list at 4cef28f0 already selects
+current_period_end + cancel_at_period_end (the columns 0011 adds). That exact
+query was run against the post-0010/0011 ADOPTION branch using the Worker's real
+driver (@neondatabase/serverless neon()), plus an int8 read of limit_value to
+document the widening claim.
+
+--- Old Worker subscription/current query (columns verbatim from 4cef28f0) -----
+SELECT status, tier_level, billing_cycle, trial_end_date,
+       current_period_end, cancel_at_period_end
+FROM subscription_tiers ORDER BY created_at DESC LIMIT 1
+Result: rows returned: 0  (no "column does not exist" error — all 6 columns,
+        including the 0011-added ones, RESOLVE against the expanded schema)
+
+--- int8 read-compat: tier_feature_flags.limit_value (0010-widened) ------------
+Read via @neondatabase/serverless neon() — 5 oversized (>int4) rows:
+  professional/storage_bytes = 107374182400 (pg=bigint, js typeof=string)
+  enterprise/storage_bytes   = 107374182400 (pg=bigint, js typeof=string)
+  premium/storage_bytes      = 107374182400 (pg=bigint, js typeof=string)
+  concierge/storage_bytes    = 107374182400 (pg=bigint, js typeof=string)
+  starter/storage_bytes       = 10737418240 (pg=bigint, js typeof=string)
+(The serverless driver returns int8 as a JS string; the Worker never does
+arithmetic on limit_value — it does not select the column at all.)
+
+VERDICT: old Worker COMPATIBLE with the expanded schema. The pre-0011 query is
+satisfied post-0011 (this is the forward-compatible fix 0011 delivered), and the
+widened int8 column is readable by the Worker's driver without error.
+
+NOTE: full wrangler preview deploy + curl of /health and /api/subscription/current
+was intentionally NOT performed (schema-compat is fully covered above; a deploy
+would only additionally exercise Worker runtime wiring, which 0010/0011 do not
+touch). Recorded as an accepted scope decision, not outstanding evidence.
