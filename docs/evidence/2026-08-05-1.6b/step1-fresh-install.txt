@@ -1,0 +1,45 @@
+Step 1 — Fresh install proof (FRESH branch)
+============================================
+Branch: migration-e2e-fresh-<RUN_ID>
+Target: REDACTED-fresh-host/neondb (role: neondb_owner)  [PG 17.10]
+Date:   2026-08-05
+
+--- migrate:preflight ---------------------------------------------------------
+Migration preflight
+  Connectivity: OK
+  PostgreSQL version: PostgreSQL 17.10 ... aarch64-unknown-linux-gnu
+  Connected role: neondb_owner
+  CREATE on public schema: OK
+  CREATE on database: OK
+  DDL write probe (temp table): OK
+  schema_migrations ledger: not initialized
+  Ready: YES
+
+--- migrate:apply -------------------------------------------------------------
+{"target":{"host":"REDACTED","database":"neondb","role":"neondb_owner"},
+ "applied":["0000","0001","0002","0003","0004","0005","0006","0007","0008","0009","0010","0011"],
+ "alreadyApplied":[]}
+
+--- migrate:seed --------------------------------------------------------------
+Reference-data seed (tier_feature_flags)
+  Upserted: 54 row(s)
+  Row count after seed: 54
+  Verified: YES
+
+--- migrate:verify ------------------------------------------------------------
+Migration verification
+  Tables: OK
+  Reference data (tier_feature_flags): OK (54 rows)
+  Catalog vs fingerprint: OK
+  Verdict: PASS
+
+--- migrate:status ------------------------------------------------------------
+Migration status
+  Ledger: present
+  Authoritative history: 12 migration(s)
+  Applied: 0000..0011
+  Pending: (none — up to date)
+  Health: OK
+
+VERDICT: PASS — empty branch taken to latest (0000→0011), 54-row seed, verify PASS,
+status clean. Reconciled count 12 confirmed (was 11 pre-0011).

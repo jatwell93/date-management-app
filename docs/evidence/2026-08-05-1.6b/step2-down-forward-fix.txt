@@ -1,0 +1,67 @@
+Step 2 — Real schema change + rollback + forward fix (ADOPTION branch)
+=====================================================================
+Branch: migration-e2e-adopt-<RUN_ID>
+Target: REDACTED-adopt-host/neondb (role: neondb_owner)
+Date:   2026-08-05
+
+NOTE — post-cutover synthetic adoption. Production is now at 0011 (task 1.7.B),
+and free-tier Neon PITR retention is 6h, so the ADOPTION branch could not be
+sourced pre-adoption. It was built synthetically: DROP SCHEMA + replay 0000→0009
+via raw psql (pure DDL, no ledger), yielding an unmanaged 0009-state schema.
+
+--- 2a.0 synthetic pre-adoption build -----------------------------------------
+Replay 0000→0009: OK (no FAILED lines)
+Sanity: schema_migrations ledger = null (none); limit_value = integer
+
+--- 2a.1 adopt --dry-run ------------------------------------------------------
+STATUS: READY — catalog matches expected schema
+Adoption point: 0009 ; Migrations to stamp: 0000..0009 ; Catalog: MATCH
+
+--- 2a.1 adopt --apply / 2a.2 apply / 2a.3 seed+verify ------------------------
+adopt --apply: READY, MATCH, stamped 0000..0009
+apply: {"applied":["0010","0011"],"alreadyApplied":["0000".."0009"]}
+seed: Upserted 54, count 54, Verified YES
+verify: Tables OK, ref data OK (54), catalog OK -> PASS
+
+--- 2b confirm bigint + 2c manifest + oversized rows --------------------------
+limit_value data_type = bigint
+manifest 0010: execution=manual-only, dataLoss=destructive, completeness=partial
+oversized rows (> int4) = 5:
+  professional/storage_bytes 107374182400
+  enterprise/storage_bytes   107374182400
+  premium/storage_bytes      107374182400
+  concierge/storage_bytes    107374182400
+  starter/storage_bytes       10737418240
+
+--- 2c guarded down, attempt 1 (must fail safely) ----------------------------
+psql ... 0010_...down.sql:6: ERROR:  integer out of range
+>>> EXPECTED refusal: oversized storage limits prevented int4 narrowing.
+(ALTER is atomic; limit_value stayed bigint)
+
+--- 2c explicit lossy prep + attempt 2 ---------------------------------------
+UPDATE 5   (nulled the 5 oversized rows — deliberate, isolated-branch-only)
+ALTER TABLE   (down succeeded)
+limit_value data_type = integer
+
+--- 2d verify after down (must FAIL) -----------------------------------------
+Reference data (tier_feature_flags): MISMATCH (5 storage rows now null)
+Catalog vs fingerprint: DRIFT
+  tier_feature_flags|limit_value: expected=bigint,false,null vs actual=integer,false,null
+Verdict: FAIL
+
+--- 2e forward fix -----------------------------------------------------------
+POST-0011 ADAPTATION: validateLedger requires a contiguous prefix. Deleting only
+0010 leaves a {0000-0009,0011} gap and the re-apply is refused. 0011 is orthogonal
++ idempotent (ADD COLUMN IF NOT EXISTS), so delete BOTH 0010 and 0011 from the tail
+and let the runner re-apply both (0010 re-widens; 0011 no-ops).
+
+DELETE FROM schema_migrations WHERE id IN ('0010','0011');
+apply: re-applied 0010, 0011
+seed: 54
+
+--- 2f confirm restored ------------------------------------------------------
+verify: Tables OK, ref data OK (54), catalog OK -> PASS
+limit_value data_type = bigint
+
+VERDICT: PASS — safe-down refusal proven, working rollback proven (after explicit
+lossy prep), verify correctly FAILs on drift, forward-fix restores bigint + 54 rows.

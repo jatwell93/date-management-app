@@ -848,13 +848,45 @@ for operator evidence. Connection strings are not echoed in full
 (passwords redacted). **Task 1.6 is not complete until the sign-off
 section is filled.**
 
-**Outstanding evidence from this session.** The e2e suite compiles clean
-and fails-closed correctly (verified: exit code 1, clear error message
-when `MIGRATION_E2E_DATABASE_URL` is unset). The pglite suite still passes
-(68/68). The e2e suite was **not** executed against a real Postgres locally
-because the Docker daemon was not running on the Windows dev machine. CI
-will exercise it on PR open. The operator Neon gate (1.6.B-execute) is
-deferred to the operator.
+**1.6.B-execute completion (2026-08-05, SHA `f2255486`, operator jatwell93).**
+The operator Neon gate was exercised end-to-end on isolated dev branches of
+the `date-management-prod` project — all five steps PASS; redacted evidence is
+committed under `docs/evidence/2026-08-05-1.6b/` and the runbook sign-off is
+filled. Because production had already been cut over to 0011 (task 1.7.B) and
+free-tier Neon PITR retention is only 6h, the drill was **adapted** from the
+runbook as originally written (each deviation is documented inline in
+`docs/migrations-e2e-runbook.md`):
+
+- **Synthetic pre-adoption source.** A branch off `production`'s tip now
+  inherits the fully-migrated (post-0011, ledger-present, `bigint`) schema, and
+  PITR cannot reach a pre-cutover point. The ADOPTION branch's pre-adoption
+  state was therefore reconstructed by replaying `0000→0009` via raw `psql`
+  (pure DDL — the `.up.sql` files never write `schema_migrations`; only the
+  runner's `ensureLedger` does), yielding an unmanaged 0009-state schema that
+  `adopt AT 0009` accepts.
+- **Forward-fix deletes 0010 *and* 0011.** `validateLedger` requires the applied
+  set to be a contiguous prefix, so deleting only 0010 (with 0011 on top) is
+  refused. 0011 is orthogonal and idempotent (`ADD COLUMN IF NOT EXISTS`), so
+  both are deleted from the tail and re-applied.
+- **LSN restore-in-place for the PITR drill.** This neonctl version cannot
+  point-in-time branch a *non-default* branch (`--parent` takes one value; the
+  `id@lsn` inline form is unparsed), and second-precision timestamp restores
+  were clock-skew-prone. Used `neonctl branches restore <b> ^self@<LSN>` with a
+  server-side `pg_current_wal_lsn()` — exact and skew-immune.
+- **Lightweight old-Worker compat proof.** The Worker never reads
+  `tier_feature_flags.limit_value` (0 matches in `workers/src`), so the 0010
+  widening cannot affect Worker code. The real surface — the pre-0011
+  `/api/subscription/current` column list — was run against the expanded schema
+  via the Worker's real `@neondatabase/serverless` driver (plus an int8 read of
+  `limit_value`); both succeeded. A full wrangler preview deploy was judged
+  unnecessary (no Worker runtime wiring is changed by 0010/0011).
+
+Runbook bugs found and fixed during execution: DDL role is `neondb_owner` (no
+`postgres` role on this project); parent branch is `production` (not `main`);
+`migrate:adopt` requires an explicit `-- --dry-run`/`-- --apply` flag; and the
+adopt CLI reads `MIGRATION_ADOPT_CONFIRMATION` (no "ION"). The automated e2e
+suite (1.6.A) remains the CI gate; its run URL is added to the PR on open.
+With 1.6.B-execute signed off, **task 1.6 is complete.**
 
 ### Phase 1.7 deployment integration
 
