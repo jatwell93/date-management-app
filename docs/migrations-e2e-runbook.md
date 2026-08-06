@@ -51,9 +51,14 @@ it is NOT empty. So:
 
 - **FRESH branch** — created from `production`, then its `public` schema is dropped
   to produce an empty starting point for the Step 1 fresh replay.
-- **ADOPTION branch** — created from `production` and left untouched, so it carries
-  the production-shaped schema (pre-0010, no `schema_migrations` ledger) for
-  Steps 2–4.
+- **ADOPTION branch** — created from `production` to carry the production-shaped
+  schema for Steps 2–4.
+  > **Post-cutover caveat:** this step assumes `production` is *pre-adoption*
+  > (no ledger, `limit_value` still `integer`). Since the 1.7.B cutover,
+  > `production` is at 0011 (ledger present, `bigint`), so a branch off it is
+  > **not** a clean pre-adoption starting point. In that case the pre-adoption
+  > state is **synthesized** on the ADOPTION branch in Step 2a (drop schema →
+  > replay `0000→0009` via psql → adopt at 0009). See the Step 2a note.
 
 Use unique names tied to the SHA or date so they cannot collide with other
 operators' branches.
@@ -419,55 +424,63 @@ npm run migrate:verify
 
 ---
 
-## Step 3 — Restore-to-new-branch drill
+## Step 3 — Restore drill (Neon PITR)
 
-Prove that Neon PITR / branch-from-timestamp can recover the database to a
-pre-migration state.
+Prove that Neon PITR can recover the database to a pre-change state.
 
-### 3a. Record the current timestamp (post-0010 state on the ADOPTION branch)
+> **Executed variant (2026-08-05): LSN restore-in-place.** The runbook was
+> originally written to `neonctl branches create --parent production --timestamp`
+> a pre-migration point. That does **not** work here: (a) free-tier Neon PITR
+> retention is only 6h, so a pre-cutover point is unreachable; (b) this neonctl
+> version cannot point-in-time branch a **non-default** branch (`--parent` takes
+> a single value; the `id@lsn` inline form is unparsed); and (c) second-precision
+> timestamp restores were clock-skew-prone (the restore landed *after* the
+> change). Instead, capture a server-side **LSN** and use
+> `neonctl branches restore <branch> ^self@<LSN>` (restore-in-place on the
+> branch's own history) — exact and skew-immune.
+
+### 3a. Capture a pre-change LSN on the ADOPTION branch
+
+Capture the LSN **after** the Step 2 forward-fix (healthy state: `bigint`, ledger
+`0000–0011`, 54 rows). Use `psql.exe` in the command substitution — in Git Bash a
+winpty-wrapped `psql` prints "stdout is not a tty" and yields an empty value.
 
 ```bash
-export POST_MIGRATION_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-echo "Post-migration timestamp: $POST_MIGRATION_TS"
+export PRE_LSN=$(psql.exe "$ADOPTION_URL" -tAc "SELECT pg_current_wal_lsn();" | tr -d '[:space:]')
+echo "PRE_LSN=[$PRE_LSN]"   # must be non-empty, e.g. [0/4123ABF8]
 ```
 
-### 3b. Create a restore branch from a pre-migration timestamp
+### 3b. Introduce a verifiable change, then restore to the pre-change LSN
 
-Use a timestamp BEFORE Step 2a.2 (the apply of 0010). If you don't have an
-exact pre-migration timestamp, use the ADOPTION branch creation time from
-Step 0b.
+Make a small DDL change (a marker table) standing in for "a migration", then
+restore the branch to `PRE_LSN`. `--preserve-under-name` keeps the pre-restore
+(with-marker) state as a backup branch.
 
 ```bash
-# Replace with your actual pre-migration timestamp (before 2a.2).
-export PRE_MIGRATION_TS="<record from Step 0b / before 2a.2>"
+psql "$ADOPTION_URL" -c "CREATE TABLE pitr_drill_marker (note text);"
 
-neonctl branches create \
-  --project-id "$NEON_PROJECT_ID" \
-  --name "${ADOPTION_BRANCH}-restore-drill" \
-  --parent production \
-  --timestamp "$PRE_MIGRATION_TS"
-
-export RESTORE_URL=$(neonctl connection-string "${ADOPTION_BRANCH}-restore-drill" \
-  --project-id "$NEON_PROJECT_ID" --role-name neondb_owner)
+neonctl branches restore "$ADOPTION_BRANCH" "^self@${PRE_LSN}" \
+  --preserve-under-name "${ADOPTION_BRANCH}-with-marker-backup" \
+  --project-id "$NEON_PROJECT_ID"
 ```
 
-### 3c. Verify the restored branch matches the pre-migration state
+Note: restore-in-place keeps the branch identity, so `$ADOPTION_URL` still
+connects; the preserved backup branch is created without a compute endpoint.
+
+### 3c. Verify the ADOPTION branch was recovered to the pre-change state
 
 ```bash
-psql "$RESTORE_URL" -c \
-  "SELECT column_name, data_type FROM information_schema.columns
+psql "$ADOPTION_URL" -c "SELECT to_regclass('public.pitr_drill_marker') AS marker_should_be_gone;"
+psql "$ADOPTION_URL" -c \
+  "SELECT data_type FROM information_schema.columns
    WHERE table_name = 'tier_feature_flags' AND column_name = 'limit_value';"
-
-# Check if the schema_migrations ledger exists and what state it's in.
-psql "$RESTORE_URL" -c \
-  "SELECT id, state FROM schema_migrations ORDER BY id;" 2>&1 || \
-  echo "No schema_migrations ledger (expected if restored to pre-adoption state)"
+psql "$ADOPTION_URL" -c "SELECT count(*) AS ledger_count FROM schema_migrations;"
 ```
 
-**Expected:** the restored branch reflects the pre-migration state. If the
-restore point is before adoption, no `schema_migrations` ledger exists and
-`limit_value` is `integer`. If after adoption but before 0010, the ledger
-shows 0000–0009 as applied and `limit_value` is `integer`.
+**Expected:** `marker_should_be_gone` is empty/`null` (the DDL change was rolled
+back by PITR), `limit_value` is `bigint`, and `ledger_count` is 12 — the branch
+is recovered to exactly the pre-change point, differing from "now" only by the
+marker. The preserved `-with-marker-backup` branch holds the after-change state.
 
 **Record (LSN restore-in-place variant — see Step 3 note):**
 - Restore method: `neonctl branches restore <adopt> ^self@<LSN>` (LSN 0/4123ABF8)
@@ -601,7 +614,7 @@ so there is no `wrangler delete` to run.
 | Operator name | `jatwell93` |
 | Date completed | `2026-08-05` |
 | Git SHA exercised | `f2255486` |
-| CI `Migrations E2E Gate` check URL | `pending — recorded on PR open (1.6.A gate runs on PR)` |
+| CI `Migrations E2E Gate` check URL | `https://github.com/jatwell93/date-management-app/actions/runs/31070788459` (PR #441, success) |
 | Step 1 (fresh install) | [x] PASS |
 | Step 2 (schema change + rollback + forward fix) | [x] PASS |
 | Step 3 (restore drill — LSN restore-in-place) | [x] PASS |
@@ -613,7 +626,7 @@ so there is no `wrangler delete` to run.
 Redacted operator output captures are committed under
 `docs/evidence/2026-08-05-1.6b/`:
 
-- [ ] CI e2e run URL: `pending — added to PR after the Migrations E2E Gate runs`
+- [x] CI e2e run URL: `https://github.com/jatwell93/date-management-app/actions/runs/31070788459` (Migrations E2E Gate, success)
 - [x] Step 1 fresh install: `docs/evidence/2026-08-05-1.6b/step1-fresh-install.txt`
 - [x] Step 2 psql output (down + forward fix): `docs/evidence/2026-08-05-1.6b/step2-down-forward-fix.txt`
 - [x] Step 3 restore verification output: `docs/evidence/2026-08-05-1.6b/step3-restore-drill.txt`
@@ -635,8 +648,8 @@ Redacted operator output captures are committed under
 
 ### Outstanding evidence
 
-- CI `Migrations E2E Gate` run URL — to be pasted into the PR once the gate runs
-  on PR open (the automated e2e suite from 1.6.A).
+- None. The CI `Migrations E2E Gate` (automated e2e suite from 1.6.A) ran green
+  on PR #441 (run `31070788459`) and its URL is recorded above.
 
 Once all steps are PASS and evidence is attached, update `tasks.md` to check
 off task 1.6 and record the completion date in `design.md`.

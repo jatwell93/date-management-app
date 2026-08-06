@@ -255,7 +255,7 @@
             preview deploy. Also fixed several runbook bugs found during execution: role is
             `neondb_owner` not `postgres`, parent branch is `production` not `main`, `migrate:adopt`
             needs `-- --dry-run`/`-- --apply`, and the CLI reads `MIGRATION_ADOPT_CONFIRMATION` (no
-            "ION"). CI `Migrations E2E Gate` run URL to be added to the PR on open.
+            "ION"). CI `Migrations E2E Gate` ran green on PR #441 (run 31070788459); URL recorded in the runbook sign-off.
 - [x] 1.7 Integrate migrations into deployment: validate history; store dry-run/status output as an
       artifact; verify Neon PITR/backup readiness; apply expand-compatible schema; verify postconditions;
       seed/verify prerequisites; deploy Worker; run real database readiness plus schema-dependent smoke

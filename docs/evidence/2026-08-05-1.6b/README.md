@@ -14,10 +14,10 @@ leaves both 0010 and 0011 pending; the rollback drill targets 0010 only.
 |------|---------------|
 | `step1-fresh-install.txt` | Step 1 — fresh install on the empty FRESH branch: preflight READY, apply 12 (0000→0011), seed 54, verify PASS, status clean. |
 | `step2-down-forward-fix.txt` | Step 2 — adopt at 0009, apply 0010+0011, guarded 0010 down (first attempt refused on out-of-int4 rows, succeeds after explicit lossy prep), verify FAIL, forward-fix re-apply, verify PASS. |
-| `step3-restore-drill.txt` | Step 3 — Neon PITR restore-to-new-branch: pre-migration `limit_value` type + ledger state on the restored branch, RPO/RTO. |
-| `step4-old-worker-smoke.txt` | Step 4 — pre-0010 Worker (`OLD_WORKER_SHA=4cef28f0`) against the post-0010 ADOPTION branch: `/health` + `/api/subscription/current` read without error. |
+| `step3-restore-drill.txt` | Step 3 — Neon PITR **LSN restore-in-place** (`neonctl branches restore ^self@<LSN>`): a DDL change is rolled back while `limit_value`/ledger stay intact; RPO/RTO. |
+| `step4-old-worker-smoke.txt` | Step 4 — lightweight compat proof: the pre-0011 Worker query (SHA `4cef28f0`) + an int8 `limit_value` read via `@neondatabase/serverless` against the post-0010/0011 ADOPTION branch, both without error. |
 
-CI `Migrations E2E Gate` run URL: `PENDING — recorded on PR open`
+CI `Migrations E2E Gate` run URL: `https://github.com/jatwell93/date-management-app/actions/runs/31070788459` (PR #441, success)
 
 > **Redaction note.** Dev-branch infrastructure identifiers — Neon endpoint
 > hostnames, project/branch/snapshot/endpoint IDs, and any preview Worker URLs —

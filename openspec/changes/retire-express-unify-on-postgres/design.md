@@ -885,8 +885,9 @@ Runbook bugs found and fixed during execution: DDL role is `neondb_owner` (no
 `postgres` role on this project); parent branch is `production` (not `main`);
 `migrate:adopt` requires an explicit `-- --dry-run`/`-- --apply` flag; and the
 adopt CLI reads `MIGRATION_ADOPT_CONFIRMATION` (no "ION"). The automated e2e
-suite (1.6.A) remains the CI gate; its run URL is added to the PR on open.
-With 1.6.B-execute signed off, **task 1.6 is complete.**
+suite (1.6.A) is the CI gate; it ran green on PR #441 (run `31070788459`), and
+its URL is recorded in the runbook sign-off. With 1.6.B-execute signed off and
+the CI gate green, **task 1.6 is complete.**
 
 ### Phase 1.7 deployment integration
 
