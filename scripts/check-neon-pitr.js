@@ -125,10 +125,14 @@ async function resolveBranch(projectId, branchName, apiKey, fetchImpl) {
  * Fetch the project so its configured PITR history-retention window can be
  * read. `history_retention_seconds` is a project-level setting, so this is a
  * separate call from the branch/snapshot endpoints above.
+ *
+ * `platform_id` is the CLOUD PLATFORM ("aws"), not the billing plan — Neon's
+ * project payload does not expose a plan/tier name here, so the retention
+ * window itself is the authoritative signal. Do not infer the plan from it.
  * @param {string} projectId
  * @param {string} apiKey
  * @param {typeof fetch} [fetchImpl]
- * @returns {Promise<{ historyRetentionSeconds: unknown; planId: string | null }>}
+ * @returns {Promise<{ historyRetentionSeconds: unknown; platformId: string | null }>}
  */
 async function fetchProjectRetention(projectId, apiKey, fetchImpl) {
   const fetchFn = fetchImpl || fetch;
@@ -147,7 +151,7 @@ async function fetchProjectRetention(projectId, apiKey, fetchImpl) {
   const project = payload && typeof payload === 'object' ? payload.project || {} : {};
   return {
     historyRetentionSeconds: project.history_retention_seconds,
-    planId: typeof project.platform_id === 'string' ? project.platform_id : null,
+    platformId: typeof project.platform_id === 'string' ? project.platform_id : null,
   };
 }
 
@@ -378,7 +382,7 @@ async function main(env, deps) {
       seconds: retention.seconds,
       hours: retention.hours,
       minHours: retention.minHours,
-      planId: project.planId,
+      platformId: project.platformId,
       ok: retention.ok,
       reason: retention.reason || null,
     },

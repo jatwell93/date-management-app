@@ -665,14 +665,14 @@ test('fetchProjectRetention: reads history_retention_seconds and plan', async ()
   });
   const out = await fetchProjectRetention('proj-123', 'key', fetchImpl);
   assert.equal(out.historyRetentionSeconds, 604800);
-  assert.equal(out.planId, 'aws');
+  assert.equal(out.platformId, 'aws');
 });
 
 test('fetchProjectRetention: a missing project object yields an undefined window', async () => {
   const fetchImpl = makeFetch({ [PROJECT_URL('proj-123')]: {} });
   const out = await fetchProjectRetention('proj-123', 'key', fetchImpl);
   assert.equal(out.historyRetentionSeconds, undefined);
-  assert.equal(out.planId, null);
+  assert.equal(out.platformId, null);
 });
 
 test('fetchProjectRetention: an API error throws rather than defaulting', async () => {
