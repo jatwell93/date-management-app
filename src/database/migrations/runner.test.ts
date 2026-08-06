@@ -47,6 +47,8 @@ function manifest(ids: string[]): MigrationManifest {
         dataLoss: 'destructive',
         completeness: 'complete',
       },
+      backfill: { required: false, plan: 'none', resumable: false },
+      contract: { planned: false, id: 'none' },
     })),
   };
 }
@@ -413,4 +415,212 @@ test('recursively reports and redacts nested migration and connection-close fail
   assert.match(formatted, /connection close failed/);
   assert.doesNotMatch(formatted, /user:secret/);
   assert.doesNotMatch(formatted, /password=secret/);
+});
+
+test('authoritative history never uses destructive down migrations as the default rollback', async () => {
+  const history = await loadMigrationHistory(path.resolve('database/migrations'));
+
+  // recovery.execution is typed as the literal 'manual-only', so a down migration
+  // can never be applied automatically by the runner. Lock that invariant against
+  // the real manifest so a future widening cannot silently reintroduce auto-rollback.
+  for (const migration of history) {
+    assert.equal(migration.recovery.execution, 'manual-only', `${migration.id} recovery.execution`);
+    assert.equal(migration.recovery.dataLoss, 'destructive', `${migration.id} recovery.dataLoss`);
+  }
+});
+
+test('authoritative history declares backfill and contract metadata for every entry', async () => {
+  const history = await loadMigrationHistory(path.resolve('database/migrations'));
+
+  assert.equal(history.length, 12);
+  for (const migration of history) {
+    assert.equal(
+      typeof migration.backfill.required,
+      'boolean',
+      `${migration.id} backfill.required`,
+    );
+    assert.equal(typeof migration.backfill.plan, 'string', `${migration.id} backfill.plan`);
+    assert.equal(
+      typeof migration.backfill.resumable,
+      'boolean',
+      `${migration.id} backfill.resumable`,
+    );
+    assert.equal(typeof migration.contract.planned, 'boolean', `${migration.id} contract.planned`);
+    assert.equal(typeof migration.contract.id, 'string', `${migration.id} contract.id`);
+  }
+});
+
+test('new backfill and contract metadata do not change the migration checksum', async () => {
+  // Two histories whose core fields (id/forward/transaction/compatibility/dataLoss/recovery)
+  // are identical but whose backfill and contract metadata differ. The checksum must be
+  // equal because calculateChecksum hashes only the original six fields.
+  const first = manifest(['0001', '0002']);
+  first.migrations[0].backfill = { required: true, plan: 'copy column A', resumable: true };
+  first.migrations[0].contract = { planned: true, id: '0002' };
+
+  const second = manifest(['0001', '0002']);
+  second.migrations[0].backfill = { required: true, plan: 'copy column B', resumable: false };
+  second.migrations[0].contract = { planned: false, id: 'none' };
+
+  const firstDir = await createHistory(first);
+  const secondDir = await createHistory(second);
+  const firstLoaded = await loadMigrationHistory(firstDir);
+  const secondLoaded = await loadMigrationHistory(secondDir);
+
+  assert.equal(firstLoaded[0].checksum, secondLoaded[0].checksum);
+  assert.notEqual(firstLoaded[0].backfill.plan, secondLoaded[0].backfill.plan);
+  assert.notEqual(firstLoaded[0].contract.planned, secondLoaded[0].contract.planned);
+});
+
+test('checksum of a known authoritative entry is unchanged after adding the new metadata', async () => {
+  // Regression guard: the production schema_migrations ledger stores checksums for
+  // 0000-0011. Adding backfill/contract metadata must not alter them. We verify by
+  // loading the real manifest and confirming the checksum matches the value computed
+  // from only the original six manifest fields plus the SQL files.
+  const history = await loadMigrationHistory(path.resolve('database/migrations'));
+  const baseline = history.find(({ id }) => id === '0000');
+  assert.ok(baseline, 'baseline migration 0000 exists');
+
+  // Recompute the checksum using only the six original fields, exactly as
+  // calculateChecksum does, to prove the new fields are not part of the hash.
+  const { createHash } = await import('node:crypto');
+  const expected = createHash('sha256')
+    .update(
+      JSON.stringify({
+        id: baseline.id,
+        forward: baseline.forward,
+        transaction: baseline.transaction,
+        compatibility: baseline.compatibility,
+        dataLoss: baseline.dataLoss,
+        recovery: baseline.recovery,
+      }),
+    )
+    .update('\0')
+    .update(baseline.sql)
+    .update('\0')
+    .update(baseline.recoverySql)
+    .digest('hex');
+
+  assert.equal(baseline.checksum, expected);
+});
+
+test('accepts expand, migrate, and contract compatibility phases', async () => {
+  const phases: Array<{ id: string; phase: 'expand' | 'migrate' | 'contract' }> = [
+    { id: '0001', phase: 'expand' },
+    { id: '0002', phase: 'migrate' },
+    { id: '0003', phase: 'contract' },
+  ];
+  const history = manifest(phases.map(({ id }) => id));
+  phases.forEach(({ phase }, index) => {
+    history.migrations[index].compatibility = phase;
+  });
+
+  const directory = await createHistory(history);
+  const loaded = await loadMigrationHistory(directory);
+
+  assert.deepEqual(
+    loaded.map(({ compatibility }) => compatibility),
+    ['expand', 'migrate', 'contract'],
+  );
+});
+
+test('rejects a backfill that is required but has no plan', async () => {
+  const history = manifest(['0001']);
+  history.migrations[0].backfill = { required: true, plan: 'none', resumable: true };
+  const directory = await createHistory(history);
+
+  await assert.rejects(loadMigrationHistory(directory), /backfill is required but has no plan/);
+});
+
+test('rejects a backfill that is not required but carries a plan or resumable flag', async () => {
+  const withPlan = manifest(['0001']);
+  withPlan.migrations[0].backfill = { required: false, plan: 'do something', resumable: false };
+  const planDir = await createHistory(withPlan);
+  await assert.rejects(loadMigrationHistory(planDir), /backfill must be 'none'/);
+
+  const withResumable = manifest(['0001']);
+  withResumable.migrations[0].backfill = { required: false, plan: 'none', resumable: true };
+  const resumableDir = await createHistory(withResumable);
+  await assert.rejects(loadMigrationHistory(resumableDir), /backfill must be 'none'/);
+});
+
+test('rejects a backfill with an unknown sub-field', async () => {
+  const directory = await createHistory(manifest(['0001']));
+  const malformed = manifest(['0001']) as unknown as {
+    version: number;
+    migrations: Array<Record<string, unknown>>;
+  };
+  (malformed.migrations[0].backfill as Record<string, unknown>).unexpected = true;
+  await writeFile(path.join(directory, 'manifest.json'), JSON.stringify(malformed));
+
+  await assert.rejects(loadMigrationHistory(directory), /backfill.*unknown field/);
+});
+
+test('rejects a backfill with a missing sub-field', async () => {
+  const directory = await createHistory(manifest(['0001']));
+  const malformed = JSON.parse(JSON.stringify(manifest(['0001']))) as {
+    version: number;
+    migrations: Array<Record<string, unknown>>;
+  };
+  delete (malformed.migrations[0].backfill as Record<string, unknown>).resumable;
+  await writeFile(path.join(directory, 'manifest.json'), JSON.stringify(malformed));
+
+  await assert.rejects(loadMigrationHistory(directory), /backfill.*missing field/);
+});
+
+test('accepts a planned contract that references a later migration', async () => {
+  const history = manifest(['0001', '0002']);
+  history.migrations[0].contract = { planned: true, id: '0002' };
+  const directory = await createHistory(history);
+
+  const loaded = await loadMigrationHistory(directory);
+  assert.deepEqual(loaded[0].contract, { planned: true, id: '0002' });
+});
+
+test('rejects a contract that is planned but references a missing migration', async () => {
+  const history = manifest(['0001']);
+  history.migrations[0].contract = { planned: true, id: '0009' };
+  const directory = await createHistory(history);
+
+  await assert.rejects(loadMigrationHistory(directory), /contract id 0009 is not in the manifest/);
+});
+
+test('rejects a contract that is planned but references an earlier or same migration', async () => {
+  const history = manifest(['0001', '0002']);
+  history.migrations[0].contract = { planned: true, id: '0001' };
+  const directory = await createHistory(history);
+
+  await assert.rejects(loadMigrationHistory(directory), /must be a later migration/);
+});
+
+test('rejects a contract that is not planned but carries an id', async () => {
+  const history = manifest(['0001']);
+  history.migrations[0].contract = { planned: false, id: '0002' };
+  const directory = await createHistory(history);
+
+  await assert.rejects(loadMigrationHistory(directory), /contract must be 'none' when not planned/);
+});
+
+test('rejects a contract with an unknown sub-field', async () => {
+  const directory = await createHistory(manifest(['0001']));
+  const malformed = manifest(['0001']) as unknown as {
+    version: number;
+    migrations: Array<Record<string, unknown>>;
+  };
+  (malformed.migrations[0].contract as Record<string, unknown>).unexpected = true;
+  await writeFile(path.join(directory, 'manifest.json'), JSON.stringify(malformed));
+
+  await assert.rejects(loadMigrationHistory(directory), /contract.*unknown field/);
+});
+
+test('rejects an entry missing the backfill or contract field', async () => {
+  const directory = await createHistory(manifest(['0001']));
+  const malformed = JSON.parse(JSON.stringify(manifest(['0001']))) as {
+    version: number;
+    migrations: Array<Record<string, unknown>>;
+  };
+  delete malformed.migrations[0].backfill;
+  await writeFile(path.join(directory, 'manifest.json'), JSON.stringify(malformed));
+
+  await assert.rejects(loadMigrationHistory(directory), /missing field.*backfill/);
 });
