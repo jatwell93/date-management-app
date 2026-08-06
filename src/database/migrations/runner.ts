@@ -5,12 +5,24 @@ import path from 'node:path';
 export type TransactionRule = 'required' | 'forbidden';
 export type DataLossClass = 'none' | 'possible' | 'destructive';
 export type RecoveryStrategy = 'rollback-sql' | 'forward-fix' | 'restore';
+export type CompatibilityPhase = 'expand' | 'migrate' | 'contract';
+
+export interface BackfillPlan {
+  required: boolean;
+  plan: string;
+  resumable: boolean;
+}
+
+export interface ContractPlan {
+  planned: boolean;
+  id: string;
+}
 
 export interface MigrationManifestEntry {
   id: string;
   forward: string;
   transaction: TransactionRule;
-  compatibility: 'expand';
+  compatibility: CompatibilityPhase;
   dataLoss: DataLossClass;
   recovery: {
     strategy: RecoveryStrategy;
@@ -19,6 +31,8 @@ export interface MigrationManifestEntry {
     dataLoss: 'destructive';
     completeness: 'complete' | 'partial';
   };
+  backfill: BackfillPlan;
+  contract: ContractPlan;
 }
 
 export interface MigrationManifest {
@@ -115,7 +129,16 @@ function assertManifest(value: unknown): asserts value is MigrationManifest {
     const migration = entry as Record<string, unknown>;
     assertExactKeys(
       migration,
-      ['id', 'forward', 'transaction', 'compatibility', 'dataLoss', 'recovery'],
+      [
+        'id',
+        'forward',
+        'transaction',
+        'compatibility',
+        'dataLoss',
+        'recovery',
+        'backfill',
+        'contract',
+      ],
       `Migration manifest entry ${index}`,
     );
     if (
@@ -125,7 +148,11 @@ function assertManifest(value: unknown): asserts value is MigrationManifest {
       typeof migration.compatibility !== 'string' ||
       typeof migration.dataLoss !== 'string' ||
       typeof migration.recovery !== 'object' ||
-      migration.recovery === null
+      migration.recovery === null ||
+      typeof migration.backfill !== 'object' ||
+      migration.backfill === null ||
+      typeof migration.contract !== 'object' ||
+      migration.contract === null
     ) {
       throw new Error(`Migration manifest entry ${index} has invalid field types`);
     }
@@ -137,6 +164,24 @@ function assertManifest(value: unknown): asserts value is MigrationManifest {
     );
     if (Object.values(recovery).some((item) => typeof item !== 'string' || item.length === 0)) {
       throw new Error(`Migration manifest entry ${index} recovery has invalid field types`);
+    }
+    const backfill = migration.backfill as Record<string, unknown>;
+    assertExactKeys(
+      backfill,
+      ['required', 'plan', 'resumable'],
+      `Migration manifest entry ${index} backfill`,
+    );
+    if (
+      typeof backfill.required !== 'boolean' ||
+      typeof backfill.plan !== 'string' ||
+      typeof backfill.resumable !== 'boolean'
+    ) {
+      throw new Error(`Migration manifest entry ${index} backfill has invalid field types`);
+    }
+    const contract = migration.contract as Record<string, unknown>;
+    assertExactKeys(contract, ['planned', 'id'], `Migration manifest entry ${index} contract`);
+    if (typeof contract.planned !== 'boolean' || typeof contract.id !== 'string') {
+      throw new Error(`Migration manifest entry ${index} contract has invalid field types`);
     }
   });
 }
@@ -191,6 +236,73 @@ async function readRequiredSql(
   }
 }
 
+/**
+ * Validate a single entry's enum domains and the internal consistency of its
+ * backfill/contract plans. Everything here is decidable from the entry alone;
+ * cross-entry rules live in `assertContractTargets`.
+ */
+function assertEntrySemantics(entry: MigrationManifestEntry): void {
+  if (!['required', 'forbidden'].includes(entry.transaction)) {
+    throw new Error(`Migration ${entry.id} has an invalid transaction rule`);
+  }
+  if (!['expand', 'migrate', 'contract'].includes(entry.compatibility)) {
+    throw new Error(`Migration ${entry.id} has an invalid compatibility phase`);
+  }
+  if (!['none', 'possible', 'destructive'].includes(entry.dataLoss)) {
+    throw new Error(`Migration ${entry.id} has an invalid data-loss class`);
+  }
+  if (!['rollback-sql', 'forward-fix', 'restore'].includes(entry.recovery.strategy)) {
+    throw new Error(`Migration ${entry.id} has an invalid recovery strategy`);
+  }
+  if (
+    entry.recovery.execution !== 'manual-only' ||
+    entry.recovery.dataLoss !== 'destructive' ||
+    !['complete', 'partial'].includes(entry.recovery.completeness)
+  ) {
+    throw new Error(`Migration ${entry.id} has invalid recovery safety metadata`);
+  }
+
+  const hasBackfillPlan = entry.backfill.plan.length > 0 && entry.backfill.plan !== 'none';
+  if (entry.backfill.required && !hasBackfillPlan) {
+    throw new Error(`Migration ${entry.id} backfill is required but has no plan`);
+  }
+  if (!entry.backfill.required && (entry.backfill.plan !== 'none' || entry.backfill.resumable)) {
+    throw new Error(
+      `Migration ${entry.id} backfill must be 'none' and non-resumable when not required`,
+    );
+  }
+
+  if (entry.contract.planned && !MIGRATION_ID_PATTERN.test(entry.contract.id)) {
+    throw new Error(`Migration ${entry.id} contract id must be a four-digit migration id`);
+  }
+  if (!entry.contract.planned && entry.contract.id !== 'none') {
+    throw new Error(`Migration ${entry.id} contract must be 'none' when not planned`);
+  }
+}
+
+/**
+ * A planned contract must name a migration that exists and runs later, so the
+ * expand phase is always deployed before the contract that removes it.
+ */
+function assertContractTargets(loaded: readonly LoadedMigration[]): void {
+  const knownIds = new Set(loaded.map(({ id }) => id));
+  for (const migration of loaded) {
+    if (!migration.contract.planned) {
+      continue;
+    }
+    if (!knownIds.has(migration.contract.id)) {
+      throw new Error(
+        `Migration ${migration.id} contract id ${migration.contract.id} is not in the manifest`,
+      );
+    }
+    if (migration.contract.id <= migration.id) {
+      throw new Error(
+        `Migration ${migration.id} contract id ${migration.contract.id} must be a later migration`,
+      );
+    }
+  }
+}
+
 export async function loadMigrationHistory(directory: string): Promise<LoadedMigration[]> {
   const manifestPath = path.join(directory, 'manifest.json');
   const parsed: unknown = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -218,25 +330,7 @@ export async function loadMigrationHistory(directory: string): Promise<LoadedMig
     assertSafeHistoryFile(entry.forward, entry.id, 'forward');
     assertSafeHistoryFile(entry.recovery.file, entry.id, 'recovery');
 
-    if (!['required', 'forbidden'].includes(entry.transaction)) {
-      throw new Error(`Migration ${entry.id} has an invalid transaction rule`);
-    }
-    if (entry.compatibility !== 'expand') {
-      throw new Error(`Migration ${entry.id} must declare expand compatibility`);
-    }
-    if (!['none', 'possible', 'destructive'].includes(entry.dataLoss)) {
-      throw new Error(`Migration ${entry.id} has an invalid data-loss class`);
-    }
-    if (!['rollback-sql', 'forward-fix', 'restore'].includes(entry.recovery.strategy)) {
-      throw new Error(`Migration ${entry.id} has an invalid recovery strategy`);
-    }
-    if (
-      entry.recovery.execution !== 'manual-only' ||
-      entry.recovery.dataLoss !== 'destructive' ||
-      !['complete', 'partial'].includes(entry.recovery.completeness)
-    ) {
-      throw new Error(`Migration ${entry.id} has invalid recovery safety metadata`);
-    }
+    assertEntrySemantics(entry);
 
     const sql = await readRequiredSql(directory, entry.forward, entry.id, 'forward');
     const recoverySql = await readRequiredSql(directory, entry.recovery.file, entry.id, 'recovery');
@@ -256,6 +350,8 @@ export async function loadMigrationHistory(directory: string): Promise<LoadedMig
   if (undeclaredFiles.length > 0) {
     throw new Error(`SQL files are missing from manifest: ${undeclaredFiles.join(', ')}`);
   }
+
+  assertContractTargets(loaded);
 
   return loaded;
 }

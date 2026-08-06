@@ -713,7 +713,7 @@
             Evidence is committed
             in a small follow-up PR after the run — do not pre-edit the
             runbook sign-off as though evidence existed before deployment.
-- [ ] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,
+- [x] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,
       reversibility/data-loss class, backfill/resume plan, and the later contract deployment. Do not use
       destructive down migrations as the default rollback.
 - [ ] 1.9 Verify production recovery before first migration: active Neon retention/PITR, named

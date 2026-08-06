@@ -13,6 +13,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -27,6 +36,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -41,6 +59,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -55,6 +82,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -69,6 +105,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "partial"
+      },
+      "backfill": {
+        "required": true,
+        "plan": "Promote existing bay rows to leaf nodes under new department parent rows derived from sub_department; INSERT distinct department parents guarded by NOT EXISTS, then UPDATE bay.parent_id to the matching department. Idempotent via IF NOT EXISTS / WHERE parent_id IS NULL guards.",
+        "resumable": true
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -83,6 +128,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -97,6 +151,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -111,6 +174,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": true,
+        "plan": "Copy suppliers.updated_at into the new policy_updated_at column for rows that already carry a credit_policy_note, so policy timestamps survive the column split. Idempotent via WHERE policy_updated_at IS NULL.",
+        "resumable": true
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -125,6 +197,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": true,
+        "plan": "Seed suppliers.credit_type and organization_markdown_config.credit_scope with their NOT NULL defaults ('NONE' / 'NO_CREDIT') for pre-existing rows before the CHECK and UNIQUE constraints are enforced. Idempotent via WHERE ... IS NULL.",
+        "resumable": true
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -139,6 +220,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -153,6 +243,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "partial"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     },
     {
@@ -167,6 +266,15 @@
         "execution": "manual-only",
         "dataLoss": "destructive",
         "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
       }
     }
   ]

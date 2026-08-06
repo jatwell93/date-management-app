@@ -67,6 +67,14 @@ Thumbs.db
 /specs/
 prompts/
 skills/
+# ...but first-party Claude Code skills are repo tooling and belong in version control.
+# (.claude/ itself is already tracked — settings.json, hooks/.) Git will not descend into
+# an excluded directory, so .claude/skills/ must be re-included before a child negation
+# can take effect. Installed/third-party skills stay ignored; add one negation per skill
+# we author ourselves.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/delegate/
 instructions/
 agents/
 go-to-market-docs/
