@@ -30,8 +30,11 @@
 #     point is for.
 #   * The restore uses `finalize_restore: false`, which materializes a SEPARATE
 #     preview branch. The production branch is never touched.
-#   * The drill branch is deleted on exit via a trap, including on failure, so a
-#     mid-drill abort cannot leak a branch holding production data.
+#   * The drill branch is deleted on exit via a trap — on failure, and on
+#     Ctrl-C/SIGTERM — so a mid-drill abort cannot leak a branch holding
+#     production data. The trap resolves the branch by NAME when its id has not
+#     been assigned yet, which is what makes an interrupt during the (up to
+#     15-minute) restore poll safe.
 #   * Connection strings are never printed. Evidence records a redacted host.
 #
 # Usage:
@@ -118,6 +121,9 @@ done
 
 DRILL_BRANCH="pitr-drill-${STAMP}"
 DRILL_BRANCH_ID=""
+# Set immediately BEFORE the restore call, so cleanup knows a branch may exist
+# even if the script is killed before its id was ever resolved.
+RESTORE_ISSUED=0
 
 # ---------------------------------------------------------------------------
 # Output helpers. Everything an operator needs to paste back lands in the
@@ -165,6 +171,35 @@ api_get() {
 # ---------------------------------------------------------------------------
 cleanup() {
   local exit_code=$?
+  # Disarm first: cleanup ends in `exit`, which would re-enter via the EXIT
+  # trap after an INT/TERM run.
+  trap - EXIT INT TERM
+
+  # Recover the branch id by NAME if it was never assigned. Without this, the
+  # trap is useless during the longest and most dangerous window in the script:
+  # the restore has been accepted and the branch exists, but DRILL_BRANCH_ID is
+  # only populated after polling returns — up to 15 minutes later
+  # (NEON_POLL_DEADLINE_MINUTES). A signal in that window aborts the poll and
+  # jumps straight here, so the id-based delete below would silently skip and
+  # leak a branch holding production data. The name is deterministic and known
+  # from the start, so resolving from it closes the window entirely.
+  #
+  # Guarded by RESTORE_ISSUED so the ordinary no-op paths (dry run, a failed
+  # precondition, a quota failure before any restore) make no API call at all.
+  if [ -z "$DRILL_BRANCH_ID" ] && [ "$RESTORE_ISSUED" -eq 1 ]; then
+    printf '\nResolving drill branch by name for cleanup...\n' | tee -a "$EVIDENCE_FILE"
+    DRILL_BRANCH_ID="$(api_get \
+      "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches?search=${DRILL_BRANCH}" 2>/dev/null \
+      | jq -r --arg n "$DRILL_BRANCH" 'first(.branches[] | select(.name==$n) | .id) // empty')" || true
+    if [ -z "$DRILL_BRANCH_ID" ]; then
+      # Either the restore never materialized a branch (fine), or the lookup
+      # itself failed (not fine, and unverifiable from here). Name it either way
+      # so the operator can confirm rather than assume.
+      printf '::error::Could not resolve drill branch "%s" for cleanup. If the restore was accepted, DELETE IT MANUALLY.\n' \
+        "$DRILL_BRANCH" | tee -a "$EVIDENCE_FILE"
+    fi
+  fi
+
   if [ -n "$DRILL_BRANCH_ID" ] && [ "$KEEP_BRANCH" -eq 0 ]; then
     printf '\n=== Cleanup: deleting drill branch ===\n' | tee -a "$EVIDENCE_FILE"
     if curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request DELETE \
@@ -191,6 +226,22 @@ cleanup() {
   exit "$exit_code"
 }
 trap cleanup EXIT
+
+# INT and TERM are trapped explicitly, not left to bash's default handling, so an
+# operator Ctrl-C or a CI cancellation runs cleanup deterministically rather than
+# depending on how the signal interacts with the foreground child.
+#
+# They exit rather than calling cleanup directly, so the EXIT trap does the
+# teardown with a FAILING status. Handling a signal in cleanup itself would make
+# it inherit `$?` from whatever the interrupted command left behind — typically
+# 0 — and the drill would print its own success verdict for a run the operator
+# just cancelled.
+on_signal() {
+  printf '\n::error::Interrupted by %s. Cleaning up before exit.\n' "$1" >&2
+  exit 1
+}
+trap 'on_signal SIGINT' INT
+trap 'on_signal SIGTERM' TERM
 
 # ---------------------------------------------------------------------------
 # Preconditions
@@ -394,30 +445,27 @@ step "1b. Restore the recovery point into a new branch"
 # `--parent production` would copy the LIVE tip and prove nothing about PITR.
 #
 # The exit code is captured rather than left to `set -e`. This is the one call
-# that can create a branch holding production data, and DRILL_BRANCH_ID — the
-# only thing the cleanup trap can act on — is not resolved until after the
-# polling step below. A bare abort here (a timeout after Neon already accepted
-# the restore, say) would therefore leak exactly the branch the script promises
-# never to leak. On failure, resolve the branch id first so the trap can still
-# tear it down, then report the API's own error body.
+# that can create a branch holding production data, so a bare abort here — a
+# timeout after Neon already accepted the restore, say — would discard the API's
+# error body and tell the operator nothing. RESTORE_ISSUED is set just above so
+# cleanup can find and delete the branch by name regardless of how this call
+# ends.
 #
 # The body is built with jq rather than interpolated into a string: DRILL_BRANCH
 # is timestamp-derived today, but a hand-built JSON literal is one --name-style
 # change away from emitting malformed JSON.
 RESTORE_RC=0
+RESTORE_ISSUED=1
 RESTORE_RESPONSE="$(curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request POST \
   -H "Authorization: Bearer ${NEON_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "$(jq -nc --arg name "$DRILL_BRANCH" '{name:$name,finalize_restore:false}')" \
   "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${SNAPSHOT_ID}/restore")" || RESTORE_RC=$?
 if [ "$RESTORE_RC" -ne 0 ]; then
-  DRILL_BRANCH_ID="$(api_get "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches?search=${DRILL_BRANCH}" \
-    | jq -r --arg n "$DRILL_BRANCH" 'first(.branches[] | select(.name==$n) | .id) // empty')" || true
   say "Restore call FAILED (curl exit ${RESTORE_RC}). Neon API said:"
   printf '%s\n' "$RESTORE_RESPONSE" | tee -a "$EVIDENCE_FILE"
-  if [ -n "$DRILL_BRANCH_ID" ]; then
-    say "A partial drill branch WAS created; the cleanup trap will remove it."
-  fi
+  # RESTORE_ISSUED is set, so cleanup resolves the branch by name and removes it
+  # if Neon accepted the restore before the response was lost.
   echo "::error::Restore call failed. Aborting." >&2
   exit 1
 fi
@@ -432,9 +480,7 @@ if ! printf '%s' "$RESTORE_RESPONSE" \
   | NEON_API_KEY="$NEON_API_KEY" NEON_PROJECT_ID="$NEON_PROJECT_ID" \
     node "${REPO_ROOT}/scripts/neon-poll-operations.js" >>"$EVIDENCE_FILE" 2>&1; then
   echo "::error::Restore operation polling failed. Aborting before connecting." >&2
-  # Resolve the id first so the trap can still clean up a partial branch.
-  DRILL_BRANCH_ID="$(api_get "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches?search=${DRILL_BRANCH}" \
-    | jq -r --arg n "$DRILL_BRANCH" 'first(.branches[] | select(.name==$n) | .id) // empty')" || true
+  # The trap resolves the branch by name and tears down the partial restore.
   exit 1
 fi
 say "All restore operations reached terminal success."
