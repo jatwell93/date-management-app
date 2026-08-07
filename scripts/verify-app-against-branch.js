@@ -298,6 +298,42 @@ async function runChecks(query) {
 }
 
 /**
+ * Adapt a `neon()` client to the `(text, params) => rows` shape the checks use.
+ *
+ * `neon()` returns a TAGGED-TEMPLATE function. Calling it as a plain function
+ * with placeholders is rejected at runtime by @neondatabase/serverless v1:
+ *
+ *   "This function can now be called only as a tagged-template function:
+ *    sql`SELECT ${value}` ... For a conventional function call with value
+ *    placeholders ($1, $2, etc.), use sql.query(...)"
+ *
+ * The checks build SQL as plain strings with `$1` placeholders (they must, to
+ * keep the Worker's query text verbatim), so the conventional entry point
+ * `sql.query(text, params)` is the correct adapter. Extracted and exported so
+ * this contract is pinned by a unit test rather than only discovered during a
+ * live production drill.
+ * @param {{ query?: (text: string, params: unknown[]) => Promise<unknown> }} sql
+ * @returns {(text: string, params?: unknown[]) => Promise<Array<Record<string, unknown>>>}
+ */
+function buildQuery(sql) {
+  if (typeof sql.query !== 'function') {
+    throw new Error(
+      'The Neon client does not expose .query(text, params). The driver API has changed; ' +
+        'update buildQuery in scripts/verify-app-against-branch.js.',
+    );
+  }
+  return async (text, params) => {
+    const result = await sql.query(text, params || []);
+    // `.query` resolves to a rows array by default (fullResults is off), but
+    // accept the { rows } envelope too so a driver default change surfaces as
+    // a check failure rather than a confusing "rows.map is not a function".
+    if (Array.isArray(result)) return result;
+    if (result && typeof result === 'object' && Array.isArray(result.rows)) return result.rows;
+    throw new Error(`Unexpected result shape from the Neon client: ${typeof result}`);
+  };
+}
+
+/**
  * @param {Record<string, string | undefined>} env
  * @param {{
  *   argv?: string[];
@@ -325,14 +361,7 @@ async function main(env, deps) {
   let query = deps?.query;
   if (!query) {
     const { neon } = (deps?.loadDriver || loadNeonDriver)();
-    const sql =
-      /** @type {(s: string, p?: unknown[]) => Promise<Array<Record<string, unknown>>>} */ (
-        /** @type {unknown} */ (neon(url))
-      );
-    // The serverless driver's tagged-template client also accepts
-    // (queryString, params) when called as a plain function, which is what the
-    // checks need in order to pass a parameterized statement.
-    query = (text, params) => sql(text, params || []);
+    query = buildQuery(neon(url));
   }
 
   const startedAt = now();
@@ -362,6 +391,7 @@ async function main(env, deps) {
 
 module.exports = {
   runChecks,
+  buildQuery,
   redactConnectionString,
   loadNeonDriver,
   main,

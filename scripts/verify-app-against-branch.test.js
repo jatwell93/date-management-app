@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 
 const {
   runChecks,
+  buildQuery,
+  loadNeonDriver,
   redactConnectionString,
   main,
   SUBSCRIPTION_CURRENT_SQL,
@@ -215,4 +217,64 @@ test('main falls back to VERIFY_DATABASE_URL and exits 1 when a check fails', as
   );
   assert.equal(code, 1);
   assert.equal(JSON.parse(stdout.join('')).pass, false);
+});
+
+// ---------------------------------------------------------------------------
+// Driver adapter. neon() returns a TAGGED-TEMPLATE function; calling it as a
+// plain function with $1 placeholders is rejected at runtime by
+// @neondatabase/serverless v1. The first live drill run failed all six checks
+// on exactly that, so the contract is pinned here rather than relying on a
+// production drill to catch it again.
+// ---------------------------------------------------------------------------
+
+test('buildQuery routes through sql.query, not the tagged-template callable', async () => {
+  const calls = [];
+  const sql = Object.assign(
+    () => {
+      throw new Error(
+        'This function can now be called only as a tagged-template function: sql`SELECT ${value}`',
+      );
+    },
+    {
+      query: async (text, params) => {
+        calls.push({ text, params });
+        return [{ ok: 1 }];
+      },
+    },
+  );
+  const query = buildQuery(sql);
+  const rows = await query('SELECT $1 AS ok', ['x']);
+  assert.deepEqual(rows, [{ ok: 1 }]);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { text: 'SELECT $1 AS ok', params: ['x'] });
+});
+
+test('buildQuery passes an empty params array when none are supplied', async () => {
+  const calls = [];
+  const sql = { query: async (text, params) => (calls.push(params), []) };
+  await buildQuery(sql)('SELECT 1');
+  assert.deepEqual(calls[0], []);
+});
+
+test('buildQuery unwraps a { rows } envelope if the driver default changes', async () => {
+  const sql = { query: async () => ({ rows: [{ n: 3 }], rowCount: 1 }) };
+  assert.deepEqual(await buildQuery(sql)('SELECT 1'), [{ n: 3 }]);
+});
+
+test('buildQuery fails loudly when the driver stops exposing .query', () => {
+  assert.throws(() => buildQuery(() => {}), /does not expose \.query/);
+});
+
+test('buildQuery rejects an unexpected result shape rather than crashing later', async () => {
+  const sql = { query: async () => 'surprise' };
+  await assert.rejects(() => buildQuery(sql)('SELECT 1'), /Unexpected result shape/);
+});
+
+test('the real driver client exposes the .query entry point buildQuery needs', () => {
+  // Guards against a @neondatabase/serverless upgrade silently removing the
+  // conventional entry point. Constructs a client but issues no query, so this
+  // needs no database.
+  const { neon } = loadNeonDriver();
+  const client = neon('postgres://u:p@ep-fake.aws.neon.tech/neondb');
+  assert.equal(typeof client.query, 'function');
 });
