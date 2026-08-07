@@ -81,6 +81,24 @@ export class MigrationExecutionError extends Error {
   }
 }
 
+export type MigrationErrorCode =
+  | 'lock-unavailable'
+  | 'checksum-mismatch'
+  | 'ledger-inconsistent'
+  | 'target-rejected'
+  | 'catalog-drift'
+  | 'execution-failure';
+
+export class MigrationCodedError extends Error {
+  constructor(
+    message: string,
+    readonly code: MigrationErrorCode,
+  ) {
+    super(message);
+    this.name = 'MigrationCodedError';
+  }
+}
+
 function redactErrorMessage(value: unknown): string {
   const message = value instanceof Error ? value.message : String(value);
   return message
@@ -93,6 +111,25 @@ export function formatMigrationError(error: unknown): string {
     return `${redactErrorMessage(error)}: ${error.errors.map(formatMigrationError).join('; ')}`;
   }
   return redactErrorMessage(error);
+}
+
+function findCodedErrorCode(error: unknown): MigrationErrorCode | undefined {
+  if (error instanceof MigrationCodedError) {
+    return error.code;
+  }
+  if (error instanceof MigrationExecutionError) {
+    for (const nested of error.errors) {
+      const code = findCodedErrorCode(nested);
+      if (code !== undefined) {
+        return code;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function classifyMigrationError(error: unknown): MigrationErrorCode {
+  return findCodedErrorCode(error) ?? 'execution-failure';
 }
 
 function assertExactKeys(
@@ -396,10 +433,16 @@ function validateLedger(history: LoadedMigration[], rows: LedgerRow[]): Set<stri
   for (const row of rows) {
     const migration = historyById.get(row.id);
     if (!migration) {
-      throw new Error(`Applied migration ${row.id} is absent from authoritative history`);
+      throw new MigrationCodedError(
+        `Applied migration ${row.id} is absent from authoritative history`,
+        'ledger-inconsistent',
+      );
     }
     if (row.checksum !== migration.checksum) {
-      throw new Error(`Applied migration ${row.id} checksum mismatch`);
+      throw new MigrationCodedError(
+        `Applied migration ${row.id} checksum mismatch`,
+        'checksum-mismatch',
+      );
     }
     if (row.state !== 'applied') {
       throw new Error(
@@ -411,7 +454,10 @@ function validateLedger(history: LoadedMigration[], rows: LedgerRow[]): Set<stri
 
   const expectedPrefix = history.slice(0, applied.size).map(({ id }) => id);
   if (expectedPrefix.some((id) => !applied.has(id))) {
-    throw new Error('Applied migrations are not a contiguous prefix of authoritative history');
+    throw new MigrationCodedError(
+      'Applied migrations are not a contiguous prefix of authoritative history',
+      'ledger-inconsistent',
+    );
   }
 
   return applied;
@@ -508,7 +554,10 @@ export async function applyPendingMigrations(
   ]);
   const lockRow = lockResult.rows[0] as { acquired?: boolean } | undefined;
   if (lockRow?.acquired !== true) {
-    throw new Error('Refusing to run because another migration process holds the advisory lock');
+    throw new MigrationCodedError(
+      'Refusing to run because another migration process holds the advisory lock',
+      'lock-unavailable',
+    );
   }
 
   let result: { applied: string[]; alreadyApplied: string[] } | undefined;
@@ -570,24 +619,37 @@ export function validateMigrationTarget(
   const host = target.hostname.toLowerCase();
   const database = decodeURIComponent(target.pathname.replace(/^\//, ''));
   if (host.includes('-pooler.')) {
-    throw new Error('Migrations require a direct, non-pooled PostgreSQL connection');
+    throw new MigrationCodedError(
+      'Migrations require a direct, non-pooled PostgreSQL connection',
+      'target-rejected',
+    );
   }
   if (!options.allowedHost || !options.allowedDatabase) {
-    throw new Error('Migration target host and database allowlist values are required');
+    throw new MigrationCodedError(
+      'Migration target host and database allowlist values are required',
+      'target-rejected',
+    );
   }
   if (!['development', 'test', 'staging', 'production'].includes(options.environment ?? '')) {
-    throw new Error(
+    throw new MigrationCodedError(
       'Migration environment must be one of development, test, staging, or production',
+      'target-rejected',
     );
   }
   if (host !== options.allowedHost.toLowerCase() || database !== options.allowedDatabase) {
-    throw new Error('Migration target does not match the allowlist');
+    throw new MigrationCodedError(
+      'Migration target does not match the allowlist',
+      'target-rejected',
+    );
   }
   if (
     options.environment === 'production' &&
     options.productionConfirmation !== `APPLY ${host}/${database}`
   ) {
-    throw new Error(`Explicit production confirmation is required: APPLY ${host}/${database}`);
+    throw new MigrationCodedError(
+      `Explicit production confirmation is required: APPLY ${host}/${database}`,
+      'target-rejected',
+    );
   }
   return { host, database };
 }
