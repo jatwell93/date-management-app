@@ -1549,9 +1549,36 @@ runtime-role verification PASS with `ledgerExists=true`).
 
 Before any production migration, verify that Neon PITR (point-in-time recovery)
 is functional by performing a restore-to-new-branch drill. This is separate
-from the CI PITR readiness check (which only verifies a restore point exists);
-this drill proves you can actually restore and the application works against
-the restored data.
+from the CI PITR readiness check (which only verifies a restore point exists
+and that the retention window meets its floor); this drill proves you can
+actually restore and the application works against the restored data.
+
+### Run it with the script (preferred)
+
+```bash
+export NEON_API_KEY=<key>
+bash scripts/pitr-drill.sh --dry-run   # resolve + report readiness, mutate nothing
+bash scripts/pitr-drill.sh             # the real drill
+```
+
+`scripts/pitr-drill.sh` performs steps 1a–1c below in order: it creates a
+**named** recovery point, restores it into a throwaway branch with
+`finalize_restore: false` (the production branch is never touched), polls every
+restore operation to a terminal state, runs `migrate:verify`, runs application
+verification, computes RPO/RTO, and deletes the drill branch from a `trap` so
+an abort at any point cannot leak a branch holding production data. It writes a
+redacted run log to `pitr-drill-evidence-<stamp>.txt` (gitignored — copy the
+reviewed parts into `docs/evidence/`).
+
+Prefer the script over pasting the manual commands. Long pasted blocks are how
+previous drills went wrong: terminal line-wrapping corrupts commands, and under
+Git Bash `psql` is winpty-wrapped so `$(psql ...)` silently yields an empty
+string (see `docs/evidence/2026-08-05-1.6b/step3-restore-drill.txt`). The
+script uses no `psql` at all — schema and application checks go through
+`scripts/verify-app-against-branch.js` using the Worker's own driver.
+
+The manual steps below remain the reference for what the script does, and the
+fallback if it cannot run.
 
 ### 1a. Verify a recent restore point exists
 
@@ -1730,11 +1757,23 @@ psql "$DRILL_URL" -c \
 # 6. Run the migration verify command against the restored branch.
 #    MIGRATION_ROLE matches DRILL_ROLE so the runner authenticates as
 #    the same identity the connection_uri was minted for.
+#
+#    MIGRATION_CONFIRM_PRODUCTION is REQUIRED whenever
+#    MIGRATION_ENVIRONMENT=production (runner.ts validateMigrationTarget). It
+#    must equal exactly "APPLY <host>/<database>" for the TARGET — so the value
+#    here names the DRILL branch and authorises only that branch; it could
+#    never satisfy the guard for the real production endpoint.
+#    Omitting it fails with:
+#      "Explicit production confirmation is required: APPLY <host>/<db>"
+#    (found during the task 1.9 drill — this block previously omitted it, which
+#    went unnoticed because the 1.7.B drill used pre-adoption criteria and ran
+#    migrate:preflight rather than migrate:verify.)
 DATABASE_URL_UNPOOLED="$DRILL_URL" \
 MIGRATION_ALLOWED_HOST=<drill-host> \
 MIGRATION_ALLOWED_DATABASE=<drill-db> \
 MIGRATION_ENVIRONMENT=production \
 MIGRATION_TARGET_KIND=restore-drill \
+MIGRATION_CONFIRM_PRODUCTION="APPLY <drill-host>/<drill-db>" \
 MIGRATION_ROLE="$DRILL_ROLE" \
 npm run migrate:verify
 ```
@@ -1775,15 +1814,22 @@ neonctl branches delete \
 ```
 
 **Record:**
+- Responsible operator: `____________________________`
+- Named recovery point: `____________________________`
 - Restore point timestamp: `____________________________`
+- PITR history retention window at drill time: `____________________________`
 - Drill branch table count: `____________________________`
 - Drill type: [ ] regular (post-adoption) [ ] pre-adoption
 - Restore polling: [ ] PASS (all operations terminal-success) [ ] FAIL
 - Restored-state fidelity checks: [ ] PASS [ ] FAIL
 - `migrate:preflight` (pre-adoption) / `migrate:verify` (regular): [ ] PASS [ ] FAIL
+- Application verification (`verify-app-against-branch.js`): [ ] PASS [ ] FAIL
 - Drill branch deleted: [ ] yes
 - RPO (restore point age): `____________________________`
 - RTO (time to restore + verify): `____________________________`
+
+`scripts/pitr-drill.sh` fills every one of these in its run log — the blanks
+are for a manual fallback run.
 
 ---
 
@@ -2223,6 +2269,56 @@ session — its evidence document is the manual verification record.
 | Step 4 (rollback) | [x] N/A (not exercised — deploy healthy, no rollback needed) |
 | Step 5 (post-deploy verify) | [x] PASS |
 | Runtime role cleanup (migration-role-check branch deleted, malformed " migration_runner" role deleted) | [x] done (2026-08-04) |
+
+### Recovery policy sign-off (task 1.9)
+
+**Task 1.9 is not complete until this section is filled.** One row per clause
+of the task: *active Neon retention/PITR, named pre-migration recovery point,
+restore-to-new-branch drill, application verification, RPO/RTO, and responsible
+operator.*
+
+Unlike the 1.7.B pre-adoption drill, this is a **regular post-adoption** drill:
+production is adopted and at the latest migration, so `migrate:verify` must
+genuinely PASS. A failure is a real drift signal on production, not a drill
+artefact.
+
+| Field | Value |
+|-------|-------|
+| Responsible operator | Josh Atwell (`jatwell93`) |
+| Date completed | 2026-08-07 |
+| Neon PITR retention window (verified via API) | `history_retention_seconds` = `21600` (**6 hours**) |
+| Retention decision | **accept, do not upgrade** — rationale in [`docs/neon-backup-restore.md`](neon-backup-restore.md#recovery-policy-the-6-hour-window-and-what-it-costs-us) |
+| Retention enforced in CI (`check-neon-pitr.js` floor) | [x] confirmed — `DEFAULT_MIN_RETENTION_HOURS = 6`, evidence `retention.ok: true` |
+| Named pre-migration recovery point | `pre-migration-20260807035216` (created 03:52:22Z) |
+| Restore-to-new-branch drill (all operations terminal-success) | [x] PASS — 5 operations `finished`/`success`; production branch untouched (`finalize_restore: false`) |
+| Restored-state fidelity (public table count) | 33 tables; ledger head `0011` (`state=applied`), no interrupted rows |
+| `migrate:verify` against the restored branch | [x] PASS — Tables OK, reference data OK (54 rows), catalog vs fingerprint OK |
+| Application verification (`verify-app-against-branch.js`) | [x] PASS — 6/6 checks via the Worker's own `@neondatabase/serverless` driver |
+| RPO (recovery point age at restore) | 3 s — **planned-migration case only**; see caveat below |
+| RTO (restore → verified serviceable) | 13 s (excludes human detection/decision time) |
+| Drill branch deleted | [x] yes (by the script's cleanup trap) |
+| Evidence | [`docs/evidence/2026-08-07-1.9/`](evidence/2026-08-07-1.9/README.md) |
+
+> **Read the RPO as a floor, not as the operating RPO.** 3 seconds is low
+> because the drill creates a recovery point immediately before restoring — it
+> demonstrates the *planned migration* case, where taking a named snapshot just
+> before DDL makes rollback data loss near zero. An **unplanned** incident has
+> no fresh snapshot waiting: recovery reaches back only to the newest available
+> restore point, bounded by the 6-hour retention window. Plan incident response
+> around the 6-hour figure.
+
+**Free-plan constraint (affects every future drill).** Neon's Free plan allows
+exactly **one** manual snapshot per project. Each drill creates one, so every
+drill after the first fails with HTTP 422 until the previous snapshot is
+removed. The steady-state invocation on this plan is:
+
+```bash
+bash scripts/pitr-drill.sh --replace-snapshot
+```
+
+The trade-off is explicit: the project keeps exactly one manual restore point,
+always the most recent. Continuous PITR history is a separate mechanism and is
+unaffected.
 
 ### Adoption sign-off (one-time)
 

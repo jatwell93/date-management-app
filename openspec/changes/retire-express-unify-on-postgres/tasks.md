@@ -716,9 +716,19 @@
 - [x] 1.8 Require expand/migrate/contract metadata for every schema change, including compatibility,
       reversibility/data-loss class, backfill/resume plan, and the later contract deployment. Do not use
       destructive down migrations as the default rollback.
-- [ ] 1.9 Verify production recovery before first migration: active Neon retention/PITR, named
+- [x] 1.9 Verify production recovery before first migration: active Neon retention/PITR, named
       pre-migration recovery point, restore-to-new-branch drill, application verification, RPO/RTO, and
       responsible operator.
+      Executed 2026-08-07 (operator `jatwell93`) as a **regular post-adoption**
+      drill — production was already cut over to `0011` (1.7.B), so
+      `migrate:verify` had to genuinely PASS rather than use the 1.7.B
+      pre-adoption criteria. All clauses met: retention 6h (`21600s`, now
+      enforced by the CI gate), named recovery point
+      `pre-migration-20260807035216`, restore + 5 operations terminal-success,
+      `migrate:verify` PASS (no production drift), application verification 6/6
+      via the Worker's own driver, RPO 3s / RTO 13s. Evidence:
+      `docs/evidence/2026-08-07-1.9/`; sign-off in
+      `docs/migrations-deploy-runbook.md` ("Recovery policy sign-off").
 - [ ] 1.10 Add structured migration logs/status and alerts for failure, advisory-lock timeout, checksum
       mismatch, drift, duration, target identity, migration ID, and deployment SHA. Make Worker health
       execute a real database readiness query and verify Cloudflare observability/Sentry are enabled.

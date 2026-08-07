@@ -1,0 +1,202 @@
+PITR drill — task 1.9 production recovery verification
+Started (UTC):    2026-08-07T03:52:16Z
+Neon branch:      production
+Connect as role:  neondb_owner
+Recovery point:   pre-migration-20260807035216
+Drill branch:     pitr-drill-20260807035216
+Mode:             LIVE
+
+=== 1a. Restore-point readiness (scripts/check-neon-pitr.js) ===
+{
+  "checkedAt": "2026-08-07T03:52:19.216Z",
+  "projectId": "PROJECT-REDACTED",
+  "branch": {
+    "name": "production",
+    "id": "BRANCH-REDACTED"
+  },
+  "maxAgeHours": 2,
+  "snapshotCount": 1,
+  "branchSnapshotCount": 1,
+  "newestSnapshot": {
+    "id": "SNAPSHOT-REDACTED",
+    "createdAt": "2026-08-07T00:45:24.000Z"
+  },
+  "newestAgeHours": 3.12,
+  "retention": {
+    "seconds": 21600,
+    "hours": 6,
+    "minHours": 6,
+    "platformId": "aws",
+    "ok": true,
+    "reason": null
+  },
+  "ready": false,
+  "reason": null,
+  "thresholds": {
+    "maxAgeHours": 2,
+    "minRetentionHours": 6,
+    "description": "A restore point must exist within the last 2 hour(s) for branch \"production\" (id: BRANCH-REDACTED), and the project's PITR history retention must be at least 6 hour(s)"
+  }
+}
+::error::Newest Neon restore point for branch "production" is 3.12h old (threshold 2h). PITR readiness gate failed.
+Existing restore point within threshold: no (a fresh one will be created)
+
+=== 1a. Resolve the Neon branch ===
+Branch resolved:  yes (id redacted)
+
+=== 1a. Create the named pre-migration recovery point ===
+Snapshot creation failed; --replace-snapshot given, freeing the oldest slot.
+Deleting oldest snapshot (created 2026-08-07T00:45:24Z)...
+Deleted. Retrying snapshot creation.
+Recovery point created: pre-migration-20260807035216
+Created at (UTC):       2026-08-07T03:52:22Z
+
+=== 1b. Restore the recovery point into a new branch ===
+Restore call accepted:  yes
+
+=== 1b. Poll restore operations to a terminal state ===
+Polling operation OP-UUID-REDACTED...
+  operation OP-UUID-REDACTED status: finished
+Polling operation OP-UUID-REDACTED...
+  operation OP-UUID-REDACTED status: finished
+Polling operation OP-UUID-REDACTED...
+  operation OP-UUID-REDACTED status: finished
+Polling operation OP-UUID-REDACTED...
+  operation OP-UUID-REDACTED status: finished
+Polling operation OP-UUID-REDACTED...
+  operation OP-UUID-REDACTED status: finished
+{
+  "checkedAt": "2026-08-07T03:52:29.004Z",
+  "projectId": "PROJECT-REDACTED",
+  "ok": true,
+  "deadlineMinutes": 15,
+  "intervalSeconds": 10,
+  "perRequestTimeoutMs": 30000,
+  "operationCount": 5,
+  "results": [
+    {
+      "opId": "OP-UUID-REDACTED",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    },
+    {
+      "opId": "OP-UUID-REDACTED",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    },
+    {
+      "opId": "OP-UUID-REDACTED",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    },
+    {
+      "opId": "OP-UUID-REDACTED",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    },
+    {
+      "opId": "OP-UUID-REDACTED",
+      "status": "finished",
+      "outcome": "success",
+      "polls": 1
+    }
+  ]
+}
+All restore operations complete.
+All restore operations reached terminal success.
+
+=== 1b. Resolve the drill branch connection ===
+Drill connection resolved: yes (URI not printed)
+
+=== 1b. migrate:verify against the restored branch ===
+
+> date-management-app@0.0.0 migrate:verify
+> npm run compile && node build/src/database/migrations/verify-cli.js
+
+
+> date-management-app@0.0.0 compile
+> tsc
+
+(node:24520) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:24520) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+Target: EP-REDACTED.aws.neon.tech/neondb (role: neondb_owner)
+
+Migration verification
+  Tables: OK
+  Reference data (tier_feature_flags): OK (54 rows)
+  Catalog vs fingerprint: OK
+  Verdict: PASS
+migrate:verify: PASS
+
+=== 1b. Application verification against the restored data ===
+{
+  "checkedAt": "2026-08-07T03:52:38.086Z",
+  "durationMs": 572,
+  "label": "pitr-drill 20260807035216",
+  "target": "ep-…REDACTED….ap-southeast-2.aws.neon.tech/neondb",
+  "driver": "@neondatabase/serverless (the driver the Worker runs)",
+  "checks": [
+    {
+      "name": "readiness",
+      "pass": true,
+      "detail": "SELECT 1 returned 1 row"
+    },
+    {
+      "name": "ledger_head",
+      "pass": true,
+      "detail": "head migration 0011 (state=applied)"
+    },
+    {
+      "name": "ledger_no_interrupted",
+      "pass": true,
+      "detail": "no interrupted rows"
+    },
+    {
+      "name": "subscription_current_columns",
+      "pass": true,
+      "detail": "all 6 columns resolved and present in catalog (status, tier_level, billing_cycle, trial_end_date, current_period_end, cancel_at_period_end); sentinel org matched 0 rows as expected"
+    },
+    {
+      "name": "public_table_count",
+      "pass": true,
+      "detail": "33 tables in public schema"
+    },
+    {
+      "name": "tier_feature_flags_int8",
+      "pass": true,
+      "detail": "5 oversized (>int4) row(s) read without error; js typeof: string"
+    }
+  ],
+  "pass": true
+}
+[OK] Application verification PASSED (6 checks).
+Application verification: PASS
+
+=== Recovery objectives ===
+RPO (recovery point age at restore): 3 seconds
+RTO (restore -> verified serviceable): 13 seconds
+Responsible operator: jatwell93
+
+=== VERDICT ===
+PITR DRILL PASS
+  named recovery point created ....... yes (pre-migration-20260807035216)
+  restored to a new branch ........... yes (production branch untouched)
+  all restore operations terminal .... yes
+  migrate:verify ..................... PASS
+  application verification ........... PASS
+Finished (UTC): 2026-08-07T03:52:40Z
+
+=== Cleanup: deleting drill branch ===
+Drill branch deleted: yes

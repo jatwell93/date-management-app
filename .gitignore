@@ -114,3 +114,8 @@ graphify-out/
 # agentlens (tool retired from the workflow, but the CLI may still be
 # installed locally and regenerate this; never commit generated docs)
 .agentlens/
+
+# scripts/pitr-drill.sh writes its run log to the repo root. Reviewed, redacted
+# copies belong in docs/evidence/<date>-<task>/ — the raw run log must never be
+# committed by accident.
+pitr-drill-evidence-*.txt

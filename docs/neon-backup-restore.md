@@ -4,11 +4,19 @@
 
 Neon PostgreSQL includes automatic backups at no additional cost. This procedure documents how to understand Neon's backup system and perform restore operations when needed.
 
-**Automatic Backups Included**: Yes (every backup plan)  
-**Backup Frequency**: Automatic snapshots (frequency depends on plan)  
-**Backup Retention**: 7 days (Starter), 30 days (Pro), Unlimited (Enterprise)  
-**Recovery Point Objective (RPO)**: < 1 hour (depends on plan)  
-**Recovery Time Objective (RTO)**: 5-30 minutes (from console or CLI)
+> **Verified against the Neon API on 2026-08-07 (task 1.9).** The figures below
+> are this project's measured configuration, not Neon's marketing tiers. An
+> earlier revision of this document claimed a 7-day Starter retention window;
+> that was aspirational and wrong by a factor of 28. Re-measure with
+> `node scripts/check-neon-pitr.js` (its evidence output carries a `retention`
+> block) rather than trusting any number written here.
+
+**Automatic Backups Included**: Yes  
+**PITR history retention**: **6 hours** (`history_retention_seconds: 21600`)  
+**Recovery Point Objective (RPO)**: bounded by the 6-hour window — see the
+consequence below  
+**Recovery Time Objective (RTO)**: measured per drill; see
+`docs/migrations-deploy-runbook.md` Step 1 and the recorded drill evidence
 
 ---
 
@@ -23,17 +31,51 @@ Neon automatically creates point-in-time snapshots:
 3. **Branch Snapshots**: Each branch creates independent backups
 4. **No Cost**: Included in all Neon plans (no separate backup fees)
 
-### Backup Retention by Plan
+### This project's measured configuration
 
-| Plan           | Retention | Snapshot Frequency | Notes               |
-| -------------- | --------- | ------------------ | ------------------- |
-| **Free**       | 3 days    | 6 hours            | Limited retention   |
-| **Starter**    | 7 days    | 1 hour             | Production-ready    |
-| **Pro**        | 30 days   | Continuous         | Enterprise standard |
-| **Enterprise** | Custom    | Continuous         | Negotiate with Neon |
+Read from `GET /projects/{id}` on 2026-08-07:
 
-**Current Plan**: Starter (7-day retention)  
-**Upgrade to Pro**: If longer retention or more frequent backups needed
+| Field                       | Value   | Meaning                                        |
+| --------------------------- | ------- | ---------------------------------------------- |
+| `history_retention_seconds` | `21600` | **6 hours** of point-in-time recovery reach     |
+| `platform_id`               | `aws`   | Cloud platform — **not** the billing plan       |
+| `pg_version`                | `17`    | PostgreSQL major version                        |
+| `branch_logical_size_limit` | `512`   | MB per branch                                   |
+
+Neon's project payload does not expose a plan/tier name, so the retention
+window itself is the authoritative signal — do not infer the plan from
+`platform_id`.
+
+### Recovery policy: the 6-hour window, and what it costs us
+
+**A recovery point older than 6 hours is unreachable.** Not "degraded" or
+"slower" — gone. This has three concrete consequences that anyone planning a
+migration or responding to an incident needs to hold:
+
+1. **Data corruption discovered after 6 hours cannot be rolled back by PITR.**
+   Recovery for that case is forward-fix, not restore. This is why the
+   migration runner treats destructive down-migrations as a last resort and
+   requires a `recovery_strategy` on every migration (task 1.8).
+2. **A pre-migration recovery point is only useful within its window.** The
+   drill in `docs/migrations-deploy-runbook.md` Step 1 creates a *named*
+   snapshot immediately before production DDL for exactly this reason — the
+   rollback window opens when the snapshot is taken, not when the problem is
+   found.
+3. **It bounds the practical RPO.** Worst case, recovery loses everything
+   written since the newest reachable restore point.
+
+**Decision (2026-08-07, task 1.9): accept the 6-hour window; do not upgrade.**
+The window is adequate for the failure mode it actually guards — a migration
+that goes wrong is detected within minutes by the deploy gate's
+apply → seed → verify sequence and the post-deploy canary, not hours later.
+Upgrading buys reach against a slow-discovery scenario that the existing gates
+are designed to prevent. Revisit if a real incident is ever discovered outside
+the window, or when the project moves to a paid plan for other reasons.
+
+**This decision is enforced, not just recorded.** `scripts/check-neon-pitr.js`
+fails the deploy gate if retention drops below `DEFAULT_MIN_RETENTION_HOURS`
+(6), so the window silently shrinking is a build failure rather than a
+discovery made during an incident. Raise that floor if the plan is upgraded.
 
 ---
 
@@ -56,7 +98,7 @@ Before performing restores, ensure:
 **Using Neon Dashboard:**
 
 1. Navigate to https://console.neon.tech/
-2. Select your project: `date-management-prod`
+2. Select the project (id `dawn-darkness-22587117`; the display name is recorded in operator notes)
 3. Go to **Branches** tab in left sidebar
 4. Select **main** branch
 5. Scroll to **Current Branch** → **Compute Snapshots** section
@@ -109,7 +151,7 @@ psql "your-connection-string" -c "SELECT pg_size_pretty(pg_database_size(current
 
 1. **Open Neon Dashboard**
    - Go to https://console.neon.tech/
-   - Select project: `date-management-prod`
+   - Select the project (id `dawn-darkness-22587117`)
    - Click **Branches** tab
 
 2. **Create Restore Branch**
@@ -149,16 +191,23 @@ psql "your-connection-string" -c "SELECT pg_size_pretty(pg_database_size(current
    # Should be 0 (no orphans)
    ```
 
-6. **Run Application Against Restored Database**
-   - Update application .env to point to restore branch connection string
-   - Start Express server pointing to restore branch
+6. **Verify the Application Against the Restored Database**
 
    ```bash
-   DATABASE_URL="postgresql://user:pass@restore-branch.neon.tech/..." npm run dev
+   node scripts/verify-app-against-branch.js --url "<restore-branch-connection-string>"
    ```
 
-   - Test API endpoints: GET /api/products, POST /api/csv-upload, etc.
-   - Verify all endpoints work without errors
+   This runs the Worker's real queries through the Worker's own
+   `@neondatabase/serverless` driver: a readiness probe, migration-ledger
+   checks, the live `/api/subscription/current` column list, and a table-count
+   fidelity check. It is read-only and tenant-safe, and exits non-zero on any
+   failure.
+
+   > Do **not** substitute a `curl` of `/health?deep=true` here. That endpoint
+   > does not execute a database query — `workers/src/health.ts` reports
+   > `database: pass` whenever a connection string is merely present, so a 200
+   > proves nothing about the restored data. (Task 1.10 makes it a real
+   > readiness query.)
 
 7. **Promote Restored Branch to Main (if data is good)**
    - Once confident data is correct:

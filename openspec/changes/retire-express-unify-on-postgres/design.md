@@ -985,6 +985,53 @@ catches a missing/stale backup automatically; the runbook drill proves the
 restore actually works and the application is functional against restored
 data.
 
+**1.9 completion (2026-08-07, operator jatwell93).** The operator recovery gate
+was executed against the Neon production branch and passed; redacted evidence is
+in `docs/evidence/2026-08-07-1.9/` and the runbook carries a "Recovery policy
+sign-off (task 1.9)" section.
+
+The task is worded "before first migration", but production was adopted at
+`0009` and cut over to `0011` on 2026-07-31 (1.7.B), so that trigger had passed.
+The drill was therefore run under **regular post-adoption acceptance criteria**
+— `migrate:verify` had to genuinely PASS, unlike the 1.7.B pre-adoption drill
+which used `migrate:preflight`. It did: Tables OK, reference data OK (54 rows),
+catalog vs fingerprint OK, confirming **production carries no schema drift**.
+Application verification passed 6/6 against the restored data. RPO 3 s / RTO
+13 s, with the RPO explicitly recorded as the *planned-migration* floor rather
+than the operating RPO (an unplanned incident is bounded by the 6-hour window).
+
+Three durable outcomes beyond the sign-off:
+
+- **Retention is now gated, not asserted.** `scripts/check-neon-pitr.js` gained
+  a `history_retention_seconds` check (floor `DEFAULT_MIN_RETENTION_HOURS = 6`,
+  overridable via the new `pitr_min_retention_hours` workflow input) and a
+  `retention` block in its evidence JSON. Snapshot freshness and recovery reach
+  are independent properties: a snapshot taken minutes ago satisfies the age
+  check even if the window behind it has shrunk. Measured value: `21600s` (6h).
+  `docs/neon-backup-restore.md` previously claimed "Starter, 7-day retention" —
+  wrong by 28×, and in the dangerous direction; it now records the measured
+  configuration and the accept-no-upgrade decision.
+- **Step 1 is a script.** `scripts/pitr-drill.sh` replaces ~230 lines of pasted
+  shell and uses **no psql** (schema/app checks go through
+  `scripts/verify-app-against-branch.js` on the Worker's own driver), removing
+  the winpty command-substitution failure recorded in the 1.6.B evidence.
+- **`/health?deep=true` is not evidence of database health.**
+  `workers/src/health.ts` reports `database: pass` whenever
+  `NEON_CONNECTION_STRING` is merely non-empty — it runs no query. This is why
+  1.9's application verification queries directly, and it is a live caveat on
+  the 1.7.B sign-off, which cites that endpoint. Task **1.10** fixes it.
+
+Runbook/tooling bugs found and fixed during execution (same pattern as 1.6.B):
+(1) the manual Step 1b block omitted `MIGRATION_CONFIRM_PRODUCTION`, which
+`validateMigrationTarget` requires whenever `MIGRATION_ENVIRONMENT=production` —
+a hand-run drill would have failed, undetected because 1.7.B ran
+`migrate:preflight` and never exercised this path; (2) the Neon **Free plan
+allows exactly one manual snapshot per project**, so every drill after the first
+returns HTTP 422 — `--replace-snapshot` is the steady-state invocation and the
+project consequently keeps exactly one manual restore point, always the newest;
+(3) `neon()` is a tagged-template function and rejects plain calls with `$1`
+placeholders, so the adapter must use `sql.query(text, params)`.
+
 **Credential-level enforcement.** Production deployment credentials
 (`DOPPLER_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`,
 `SENTRY_AUTH_TOKEN`) are scoped to the protected `production` GitHub
