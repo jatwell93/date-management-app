@@ -21,10 +21,18 @@ import path from 'node:path';
 import { Client } from 'pg';
 
 import { formatMigrationError, MigrationExecutionError, validateMigrationTarget } from './runner';
+import {
+  createEventContext,
+  emitFailure,
+  emitStart,
+  emitSuccess,
+  setEventTarget,
+  type MigrationEventContext,
+} from './log';
 import { assertTargetKind, verifyMigrationRole } from './target';
 import { getMigrationStatus } from './status';
 
-async function main(): Promise<void> {
+async function run(events: MigrationEventContext): Promise<void> {
   const connectionString = process.env.DATABASE_URL_UNPOOLED;
   if (!connectionString) {
     throw new Error('DATABASE_URL_UNPOOLED is required');
@@ -36,6 +44,8 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  setEventTarget(events, target);
+  emitStart(events);
   assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: false });
 
   const historyDirectory = path.resolve(process.cwd(), 'database/migrations');
@@ -75,6 +85,17 @@ async function main(): Promise<void> {
   process.stdout.write(
     `Target: ${target.host}/${target.database} (role: ${role})\n\n${report.report}\n`,
   );
+  emitSuccess(events);
+}
+
+async function main(): Promise<void> {
+  const events = createEventContext('status');
+  try {
+    await run(events);
+  } catch (error) {
+    emitFailure(events, error);
+    throw error;
+  }
 }
 
 void main().catch((error: unknown) => {

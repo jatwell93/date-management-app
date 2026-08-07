@@ -75,3 +75,78 @@ export function emitMigrationEvent(event: MigrationEvent): void {
     }),
   );
 }
+
+/**
+ * Per-invocation context shared by a command's start/success/failure events.
+ *
+ * Created before the target is validated so that a `validateMigrationTarget`
+ * rejection still produces a `failure` event — with `host`/`database` left as
+ * `unknown`, since at that point there is no *validated* identity to report and
+ * echoing the unvalidated connection string is exactly what must not happen.
+ */
+export interface MigrationEventContext {
+  command: MigrationCommand;
+  host: string;
+  database: string;
+  environment: string;
+  deploymentSha: string;
+  startedAt: number;
+}
+
+export function createEventContext(command: MigrationCommand): MigrationEventContext {
+  return {
+    command,
+    host: 'unknown',
+    database: 'unknown',
+    environment: process.env.MIGRATION_ENVIRONMENT ?? 'unknown',
+    deploymentSha: resolveDeploymentSha(),
+    startedAt: Date.now(),
+  };
+}
+
+/** Record the validated target identity on the context. */
+export function setEventTarget(
+  context: MigrationEventContext,
+  target: { host: string; database: string },
+): void {
+  context.host = target.host;
+  context.database = target.database;
+}
+
+function emitPhase(
+  context: MigrationEventContext,
+  phase: MigrationPhase,
+  migrationId: string | null,
+  error?: unknown,
+): void {
+  emitMigrationEvent({
+    command: context.command,
+    phase,
+    migrationId,
+    host: context.host,
+    database: context.database,
+    environment: context.environment,
+    deploymentSha: context.deploymentSha,
+    durationMs: Date.now() - context.startedAt,
+    error,
+  });
+}
+
+export function emitStart(context: MigrationEventContext, migrationId: string | null = null): void {
+  emitPhase(context, 'start', migrationId);
+}
+
+export function emitSuccess(
+  context: MigrationEventContext,
+  migrationId: string | null = null,
+): void {
+  emitPhase(context, 'success', migrationId);
+}
+
+export function emitFailure(
+  context: MigrationEventContext,
+  error: unknown,
+  migrationId: string | null = null,
+): void {
+  emitPhase(context, 'failure', migrationId, error);
+}
