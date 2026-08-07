@@ -2284,20 +2284,41 @@ artefact.
 
 | Field | Value |
 |-------|-------|
-| Responsible operator | |
-| Date completed | |
-| Neon PITR retention window (verified via API) | `history_retention_seconds` = |
-| Retention decision | accept / upgrade — see [`docs/neon-backup-restore.md`](neon-backup-restore.md) |
-| Retention enforced in CI (`check-neon-pitr.js` floor) | [ ] confirmed |
-| Named pre-migration recovery point | |
-| Restore-to-new-branch drill (all operations terminal-success) | [ ] PASS [ ] FAIL |
-| Restored-state fidelity (public table count) | |
-| `migrate:verify` against the restored branch | [ ] PASS [ ] FAIL |
-| Application verification (`verify-app-against-branch.js`) | [ ] PASS [ ] FAIL |
-| RPO (recovery point age at restore) | |
-| RTO (restore → verified serviceable) | |
-| Drill branch deleted | [ ] yes |
-| Evidence | `docs/evidence/…` |
+| Responsible operator | Josh Atwell (`jatwell93`) |
+| Date completed | 2026-08-07 |
+| Neon PITR retention window (verified via API) | `history_retention_seconds` = `21600` (**6 hours**) |
+| Retention decision | **accept, do not upgrade** — rationale in [`docs/neon-backup-restore.md`](neon-backup-restore.md#recovery-policy-the-6-hour-window-and-what-it-costs-us) |
+| Retention enforced in CI (`check-neon-pitr.js` floor) | [x] confirmed — `DEFAULT_MIN_RETENTION_HOURS = 6`, evidence `retention.ok: true` |
+| Named pre-migration recovery point | `pre-migration-20260807035216` (created 03:52:22Z) |
+| Restore-to-new-branch drill (all operations terminal-success) | [x] PASS — 5 operations `finished`/`success`; production branch untouched (`finalize_restore: false`) |
+| Restored-state fidelity (public table count) | 33 tables; ledger head `0011` (`state=applied`), no interrupted rows |
+| `migrate:verify` against the restored branch | [x] PASS — Tables OK, reference data OK (54 rows), catalog vs fingerprint OK |
+| Application verification (`verify-app-against-branch.js`) | [x] PASS — 6/6 checks via the Worker's own `@neondatabase/serverless` driver |
+| RPO (recovery point age at restore) | 3 s — **planned-migration case only**; see caveat below |
+| RTO (restore → verified serviceable) | 13 s (excludes human detection/decision time) |
+| Drill branch deleted | [x] yes (by the script's cleanup trap) |
+| Evidence | [`docs/evidence/2026-08-07-1.9/`](evidence/2026-08-07-1.9/README.md) |
+
+> **Read the RPO as a floor, not as the operating RPO.** 3 seconds is low
+> because the drill creates a recovery point immediately before restoring — it
+> demonstrates the *planned migration* case, where taking a named snapshot just
+> before DDL makes rollback data loss near zero. An **unplanned** incident has
+> no fresh snapshot waiting: recovery reaches back only to the newest available
+> restore point, bounded by the 6-hour retention window. Plan incident response
+> around the 6-hour figure.
+
+**Free-plan constraint (affects every future drill).** Neon's Free plan allows
+exactly **one** manual snapshot per project. Each drill creates one, so every
+drill after the first fails with HTTP 422 until the previous snapshot is
+removed. The steady-state invocation on this plan is:
+
+```bash
+bash scripts/pitr-drill.sh --replace-snapshot
+```
+
+The trade-off is explicit: the project keeps exactly one manual restore point,
+always the most recent. Continuous PITR history is a separate mechanism and is
+unaffected.
 
 ### Adoption sign-off (one-time)
 
