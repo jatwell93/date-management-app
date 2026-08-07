@@ -42,9 +42,31 @@
 # Options:
 #   --dry-run          Resolve the branch and report readiness; create nothing.
 #   --keep             Do not delete the drill branch (for investigation).
+#   --replace-snapshot If snapshot creation fails on quota, DELETE the oldest
+#                      snapshot for this branch and retry once. Required on the
+#                      Neon Free plan for every drill after the first — see the
+#                      note below. No-op when creation succeeds.
+#   --use-existing-snapshot
+#                      Restore the newest EXISTING snapshot instead of creating
+#                      a new one. Fallback for plans that do not allow
+#                      on-demand snapshot creation. Still proves restore works,
+#                      but NOT the "named pre-migration recovery point" clause
+#                      of task 1.9 — record that limitation in the sign-off.
+#                      Also note migrate:verify will FAIL if that snapshot
+#                      predates the current schema; that is staleness, not drift.
+#
 #   --name <label>     Recovery point name (default: pre-migration-<UTC stamp>).
 #   --evidence <path>  Where to write the evidence file
 #                      (default: pitr-drill-evidence-<UTC stamp>.txt).
+#
+# FREE-PLAN SNAPSHOT QUOTA: Neon's Free plan allows exactly ONE manual snapshot
+# per project (paid plans allow 100). Each drill creates one, so every drill
+# after the first fails with HTTP 422 until the previous snapshot is removed.
+# On the free plan the steady-state invocation is therefore:
+#     bash scripts/pitr-drill.sh --replace-snapshot
+# The trade-off is explicit: the project keeps exactly one manual restore point,
+# always the most recent. Continuous PITR history (see
+# docs/neon-backup-restore.md) is a separate mechanism and is unaffected.
 #
 # Environment:
 #   NEON_API_KEY       (required) Neon API key.
@@ -68,6 +90,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAMP="$(date -u +%Y%m%d%H%M%S)"
 DRY_RUN=0
 KEEP_BRANCH=0
+USE_EXISTING=0
+REPLACE_SNAPSHOT=0
 SNAPSHOT_NAME="pre-migration-${STAMP}"
 EVIDENCE_FILE="${REPO_ROOT}/pitr-drill-evidence-${STAMP}.txt"
 
@@ -75,9 +99,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --keep) KEEP_BRANCH=1; shift ;;
+    --use-existing-snapshot) USE_EXISTING=1; shift ;;
+    --replace-snapshot) REPLACE_SNAPSHOT=1; shift ;;
     --name) SNAPSHOT_NAME="$2"; shift 2 ;;
     --evidence) EVIDENCE_FILE="$2"; shift 2 ;;
-    -h|--help) sed -n '2,60p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,78p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "::error::Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -189,7 +215,11 @@ say "Branch resolved:  yes (id redacted)"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   step "DRY RUN — stopping before any mutation"
-  say "Would create snapshot:  ${SNAPSHOT_NAME}"
+  if [ "$USE_EXISTING" -eq 1 ]; then
+    say "Would reuse:            the newest existing snapshot (none created)"
+  else
+    say "Would create snapshot:  ${SNAPSHOT_NAME}"
+  fi
   say "Would restore it into:  ${DRILL_BRANCH} (finalize_restore=false)"
   say "Would run:              migrate:verify + verify-app-against-branch.js"
   say "Would then delete:      ${DRILL_BRANCH}"
@@ -198,14 +228,96 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
+if [ "$USE_EXISTING" -eq 1 ]; then
+  # Fallback for plans that do not allow creating snapshots on demand. The
+  # drill still proves the property that matters most — that a saved restore
+  # point can be MATERIALIZED and the application works against it. What it
+  # cannot prove is the "named pre-migration recovery point" clause of task
+  # 1.9; record that honestly in the sign-off rather than implying otherwise.
+  step "1a. Using the newest EXISTING snapshot (no new recovery point created)"
+  SNAPSHOT_JSON="$(api_get "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots")"
+  SNAPSHOT_ID="$(printf '%s' "$SNAPSHOT_JSON" | jq -r --arg b "$BRANCH_ID" \
+    '[.snapshots[]? | select((.branch_id // .source_branch_id) == $b)]
+     | sort_by(.created_at) | reverse | first | .id // empty')"
+  SNAPSHOT_CREATED_AT="$(printf '%s' "$SNAPSHOT_JSON" | jq -r --arg b "$BRANCH_ID" \
+    '[.snapshots[]? | select((.branch_id // .source_branch_id) == $b)]
+     | sort_by(.created_at) | reverse | first | .created_at // empty')"
+  if [ -z "$SNAPSHOT_ID" ]; then
+    echo "::error::No existing snapshot found for branch \"${NEON_BRANCH}\". Aborting." >&2
+    exit 1
+  fi
+  SNAPSHOT_NAME="(existing snapshot, created ${SNAPSHOT_CREATED_AT:-unknown})"
+  say "Using existing recovery point created: ${SNAPSHOT_CREATED_AT:-unknown}"
+  say "NOTE: no NEW named recovery point was created — record this in the sign-off."
+else
+
 step "1a. Create the named pre-migration recovery point"
 # `name` is a QUERY parameter on the create-snapshot endpoint, not a body field
 # (https://api-docs.neon.tech/reference/createsnapshot). --get with
 # --data-urlencode keeps it in the query string while still issuing POST.
+# `|| SNAPSHOT_RC=$?` rather than letting `set -e` abort: --fail-with-body puts
+# the API's error body on stdout, and that body is the only thing that explains
+# a 4xx. Aborting on the non-zero exit would discard it and leave the operator
+# with a bare "curl: (22)".
+SNAPSHOT_RC=0
 SNAPSHOT_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
   -H "Authorization: Bearer ${NEON_API_KEY}" \
   --get --data-urlencode "name=${SNAPSHOT_NAME}" \
-  "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}/snapshot")"
+  "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}/snapshot")" || SNAPSHOT_RC=$?
+if [ "$SNAPSHOT_RC" -ne 0 ] && [ "$REPLACE_SNAPSHOT" -eq 1 ]; then
+  # Quota recovery. The Neon Free plan allows exactly ONE manual snapshot per
+  # project (paid plans allow 100), so on the free tier every drill after the
+  # first hits the quota — the previous drill's own snapshot occupies the slot.
+  # With --replace-snapshot, delete the OLDEST snapshot for this branch and
+  # retry once, which keeps the recurring pre-migration drill self-service.
+  #
+  # Deleting is only attempted AFTER a creation failure, never pre-emptively,
+  # so this is a no-op on a paid plan with slots free.
+  say "Snapshot creation failed; --replace-snapshot given, freeing the oldest slot."
+  OLDEST_JSON="$(api_get "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots")"
+  OLDEST_ID="$(printf '%s' "$OLDEST_JSON" | jq -r --arg b "$BRANCH_ID" \
+    '[.snapshots[]? | select((.branch_id // .source_branch_id) == $b)]
+     | sort_by(.created_at) | first | .id // empty')"
+  OLDEST_AT="$(printf '%s' "$OLDEST_JSON" | jq -r --arg b "$BRANCH_ID" \
+    '[.snapshots[]? | select((.branch_id // .source_branch_id) == $b)]
+     | sort_by(.created_at) | first | .created_at // empty')"
+  if [ -z "$OLDEST_ID" ]; then
+    say "No existing snapshot found to replace."
+  else
+    say "Deleting oldest snapshot (created ${OLDEST_AT:-unknown})..."
+    if curl --fail-with-body --silent --show-error --request DELETE \
+      -H "Authorization: Bearer ${NEON_API_KEY}" \
+      "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${OLDEST_ID}" >/dev/null; then
+      say "Deleted. Retrying snapshot creation."
+      SNAPSHOT_RC=0
+      SNAPSHOT_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
+        -H "Authorization: Bearer ${NEON_API_KEY}" \
+        --get --data-urlencode "name=${SNAPSHOT_NAME}" \
+        "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}/snapshot")" || SNAPSHOT_RC=$?
+    else
+      say "Deletion failed."
+    fi
+  fi
+fi
+if [ "$SNAPSHOT_RC" -ne 0 ]; then
+  say "Snapshot creation FAILED (curl exit ${SNAPSHOT_RC}). Neon API said:"
+  printf '%s\n' "$SNAPSHOT_RESPONSE" | tee -a "$EVIDENCE_FILE"
+  say ""
+  say "Most likely cause: the manual-snapshot quota is full. The Neon Free plan"
+  say "allows ONE manual snapshot per project (paid plans allow 100), so the"
+  say "previous drill's snapshot occupies the only slot."
+  say ""
+  say "  Re-run with --replace-snapshot to delete the oldest snapshot for this"
+  say "  branch and retry:   bash scripts/pitr-drill.sh --replace-snapshot"
+  say ""
+  say "  Or drill against the existing snapshot without creating one:"
+  say "                      bash scripts/pitr-drill.sh --use-existing-snapshot"
+  say "  (proves restore works, but NOT the named-recovery-point clause of 1.9,"
+  say "   and migrate:verify will fail if that snapshot predates the current"
+  say "   schema — record which variant was run in the sign-off.)"
+  echo "::error::Could not create the named recovery point. Aborting." >&2
+  exit 1
+fi
 
 SNAPSHOT_ID="$(printf '%s' "$SNAPSHOT_RESPONSE" | jq -r '.snapshot.id // .id // empty')"
 SNAPSHOT_CREATED_AT="$(printf '%s' "$SNAPSHOT_RESPONSE" | jq -r '.snapshot.created_at // .created_at // empty')"
@@ -216,6 +328,8 @@ if [ -z "$SNAPSHOT_ID" ]; then
 fi
 say "Recovery point created: ${SNAPSHOT_NAME}"
 say "Created at (UTC):       ${SNAPSHOT_CREATED_AT:-unknown}"
+
+fi  # end: create-vs-use-existing recovery point
 
 # ---------------------------------------------------------------------------
 # Step 1b — restore into a NEW branch and verify. RTO measurement starts here:
