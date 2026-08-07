@@ -1,6 +1,7 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect, vi } from 'vitest';
 import { verifyToken } from '@clerk/backend';
+import { neon } from '@neondatabase/serverless';
 import { healthCheck } from './health';
 import {
   default as worker,
@@ -28,6 +29,10 @@ vi.mock('@clerk/backend', () => ({
       getUser: vi.fn(),
     },
   })),
+}));
+
+vi.mock('@neondatabase/serverless', () => ({
+  neon: vi.fn(() => vi.fn()),
 }));
 
 describe('Health Check API', () => {
@@ -139,6 +144,61 @@ describe('healthCheck', () => {
     expect(result.status).toBe('degraded');
     expect(result.checks.r2?.status).toBe('fail');
     expect(result.checks.r2?.error).toBe('R2 down');
+  });
+
+  it('passes the database check when the readiness query returns a row', async () => {
+    const sqlMock = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('healthy');
+    expect(result.checks.database?.status).toBe('pass');
+    expect(result.checks.database?.responseTime).toBeGreaterThanOrEqual(0);
+  });
+
+  it('marks degraded when the database query throws', async () => {
+    const sqlMock = vi.fn().mockRejectedValue(new Error('connection refused'));
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('degraded');
+    expect(result.checks.database?.status).toBe('fail');
+    expect(result.checks.database?.error).toBe('connection refused');
+  });
+
+  it('fails by timeout when the database query never resolves', async () => {
+    const sqlMock = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('degraded');
+    expect(result.checks.database?.status).toBe('fail');
+    expect(result.checks.database?.error).toContain('timed out');
+  });
+
+  it('redacts credentials from a database error containing a connection URL', async () => {
+    const sqlMock = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'connect failed: postgres://user:supersecret@db.example.com/app?sslmode=require',
+        ),
+      );
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('degraded');
+    expect(result.checks.database?.status).toBe('fail');
+    expect(result.checks.database?.error).not.toContain('supersecret');
+    expect(result.checks.database?.error).toContain('[redacted]');
+  });
+
+  it('omits the database check when no connection string is configured', async () => {
+    const result = await healthCheck(
+      createEnv({ NEON_CONNECTION_STRING: '', DATABASE_URL: undefined }),
+      true,
+    );
+    expect(result.checks.database).toBeUndefined();
   });
 });
 
