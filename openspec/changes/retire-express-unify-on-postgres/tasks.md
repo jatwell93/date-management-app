@@ -732,8 +732,37 @@
 - [ ] 1.10 Add structured migration logs/status and alerts for failure, advisory-lock timeout, checksum
       mismatch, drift, duration, target identity, migration ID, and deployment SHA. Make Worker health
       execute a real database readiness query and verify Cloudflare observability/Sentry are enabled.
+      **Located during 1.9 (2026-08-07):** the readiness defect is
+      `workers/src/health.ts` — the `?deep=true` database check reports
+      `status: 'pass'` whenever `NEON_CONNECTION_STRING` is a non-empty string
+      and **executes no query**, so it cannot detect an unreachable or
+      unauthorised database. This is why 1.9's application verification queries
+      through the driver directly (`scripts/verify-app-against-branch.js`)
+      rather than calling the endpoint. It is also a **live caveat on two
+      existing sign-offs** that cite `/health?deep=true → database pass` as
+      database evidence: the 1.7.B production sign-off, and the runbook's
+      "Canary edge note" (`docs/migrations-deploy-runbook.md:2388-2393`), which
+      uses it to verify the custom-domain edge that the canary skips. Both
+      claims are weaker than they read until this task lands; re-qualify them in
+      the runbook when it does.
 - [ ] 1.11 Document the new authoritative path and its recovery policies (the golden-rule rewrite itself lands in
       Phase 5).
+      **Partially delivered by 1.9 — do not redo.** The *recovery policy* half
+      now exists: `docs/neon-backup-restore.md` records the **measured** Neon
+      configuration (free tier, `history_retention_seconds = 21600` = 6h) and
+      the accept-no-upgrade decision, replacing the previous "Starter plan,
+      7-day retention" claim that was wrong by 28× in the dangerous direction;
+      `docs/migrations-deploy-runbook.md` carries the "Recovery policy sign-off
+      (task 1.9)" section and points Step 1 at `scripts/pitr-drill.sh`; and the
+      retention floor is **CI-enforced** by `scripts/check-neon-pitr.js` rather
+      than asserted in prose. What remains for 1.11 is the *authoritative path*
+      half — one document describing the runner, the ordered commands (1.5), and
+      the deploy workflow as the single migration mechanism — plus cross-links
+      from the general docs to the recovery material above. State the operating
+      RPO as the **6-hour retention window**, not the 3 s figure in the 1.9
+      sign-off: that 3 s is the planned-migration floor (the drill takes its
+      recovery point immediately before restoring) and an unplanned incident has
+      no fresh snapshot waiting.
 
 > **Integration checkpoint — end PR 360 here.** PR 360 contains only the approved proposal and Phase 1
 > migration foundation. Once Phase 1 is complete and its focused verification passes, update the PR
@@ -772,12 +801,43 @@ equivalent, a relocated home, or an explicit retirement decision.
       decide the backup capability's home:** `backup.sh` + `backend/src/routes/database.backup.routes.ts`
       together implement operator-triggered backup — pick a Worker route, Neon-native backups, or a
       scheduled R2 export via a Cron Trigger, and put the backup route on the rehoming checklist.
+      **Two corrections from Phase 1 execution (2026-08-05/07):**
+      (a) The seed inventory is incomplete and its decision is already made.
+      `backend/scripts/` holds **two** seeders — `seed-tier-feature-flags.js`
+      (listed above) and `seed-tier-flags.js` (not listed) — and **both are
+      superseded**, not open decisions. The authoritative 54-row
+      `tier_feature_flags` reference set now lives in
+      `src/database/migrations/seed.ts:34`, is applied by `migrate:seed`, and is
+      enforced by `migrate:verify`; 1.9's production drill verified it against
+      restored data. Record both as **retire with the backend** rather than
+      re-deciding. Note this when auditing: it was `seed-tier-flags.js` (not the
+      similarly named `seed-tier-feature-flags.js`, which contains no
+      `limit_value` at all) that historically owned the oversized `storage_bytes`
+      values — a review comment during 1.9 cited the wrong file on exactly this
+      confusion.
+      (b) The backup-capability decision now has a **measured constraint**:
+      Neon free-tier PITR reach is **6 hours**, and the Free plan allows exactly
+      **one manual snapshot per project**. "Neon-native backups" alone therefore
+      buys a 6-hour recovery window and a single retained restore point — weigh
+      that against the scheduled-R2-export option rather than treating
+      Neon-native as unbounded durability.
 - [ ] 2.5 Produce a single **rehoming checklist** mapping every endpoint, test, job, script, and the
       migration path to a target or a recorded retirement decision. Include middleware/runtime concerns
       (CORS, auth, tenant/role gates, rate limiting, error shape, Sentry, health/readiness, environment
       validation, shutdown), frontend network call sites, docs/runbooks, configuration, env templates,
       assets/generated files, package commands, workflows, and root tooling. This checklist gates all
       deletion in Phase 4.
+      **Pre-recorded "keep" entries (Phase 1 output).** Phase 1 added operational
+      tooling in **root `scripts/`**, outside `backend/` and therefore outside
+      2.4's inventory. It must be entered on this checklist as **keep** so it is
+      not swept up as unaudited root tooling in Phase 4:
+      `check-neon-pitr.js` (CI PITR + retention gate), `pitr-drill.sh` (runbook
+      Step 1), `neon-poll-operations.js`, `verify-runtime-role.js`,
+      `verify-app-against-branch.js`, and `run-authenticated-smoke.js` (canary
+      session minting) — each with unit tests beside it. Their docs
+      (`docs/migrations-deploy-runbook.md`, `docs/migrations-e2e-runbook.md`,
+      `docs/neon-backup-restore.md`) and the `docs/evidence/` sign-off
+      directories are likewise keep, not dual-backend material.
 
 > **Integration checkpoint — audit PR.** Keep the Phase 2 inventory and rehoming decisions in their own
 > reviewable PR. Merge that PR to `main` before starting dependent Phase 3 implementation so every later
