@@ -38,7 +38,7 @@
     "jose": "^6.2.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
     "@electric-sql/pglite": "^0.5.4",
     "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.13",
