@@ -399,6 +399,13 @@ step "1b. migrate:verify against the restored branch"
 # latest migration, so verify MUST pass. A failure here is a real drift signal
 # on production, not a drill artefact — stop and investigate before any DDL.
 # MIGRATION_TARGET_KIND=restore-drill marks the target as a read-only drill.
+#
+# MIGRATION_CONFIRM_PRODUCTION is required because MIGRATION_ENVIRONMENT is
+# production (src/database/migrations/runner.ts:586-591). The runner demands the
+# token equal "APPLY <host>/<database>" for the TARGET — so the value below
+# authorises only this throwaway drill branch and could never satisfy the guard
+# for the real production endpoint. Computing it from the resolved drill URL is
+# therefore not a weakening of the guard; it is the guard working as designed.
 VERIFY_STATUS=0
 (
   cd "$REPO_ROOT" &&
@@ -407,6 +414,7 @@ VERIFY_STATUS=0
   MIGRATION_ALLOWED_DATABASE="$DRILL_DB" \
   MIGRATION_ENVIRONMENT=production \
   MIGRATION_TARGET_KIND=restore-drill \
+  MIGRATION_CONFIRM_PRODUCTION="APPLY ${DRILL_HOST}/${DRILL_DB}" \
   MIGRATION_ROLE="$DRILL_ROLE" \
   npm run migrate:verify
 ) >>"$EVIDENCE_FILE" 2>&1 || VERIFY_STATUS=$?

@@ -1757,11 +1757,23 @@ psql "$DRILL_URL" -c \
 # 6. Run the migration verify command against the restored branch.
 #    MIGRATION_ROLE matches DRILL_ROLE so the runner authenticates as
 #    the same identity the connection_uri was minted for.
+#
+#    MIGRATION_CONFIRM_PRODUCTION is REQUIRED whenever
+#    MIGRATION_ENVIRONMENT=production (runner.ts validateMigrationTarget). It
+#    must equal exactly "APPLY <host>/<database>" for the TARGET — so the value
+#    here names the DRILL branch and authorises only that branch; it could
+#    never satisfy the guard for the real production endpoint.
+#    Omitting it fails with:
+#      "Explicit production confirmation is required: APPLY <host>/<db>"
+#    (found during the task 1.9 drill — this block previously omitted it, which
+#    went unnoticed because the 1.7.B drill used pre-adoption criteria and ran
+#    migrate:preflight rather than migrate:verify.)
 DATABASE_URL_UNPOOLED="$DRILL_URL" \
 MIGRATION_ALLOWED_HOST=<drill-host> \
 MIGRATION_ALLOWED_DATABASE=<drill-db> \
 MIGRATION_ENVIRONMENT=production \
 MIGRATION_TARGET_KIND=restore-drill \
+MIGRATION_CONFIRM_PRODUCTION="APPLY <drill-host>/<drill-db>" \
 MIGRATION_ROLE="$DRILL_ROLE" \
 npm run migrate:verify
 ```
