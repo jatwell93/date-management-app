@@ -23,13 +23,13 @@ function band3Price(percentage: number, basis: MarkdownBasis): number | null {
 
 const forwardPath = fileURLToPath(
   new URL(
-    '../../backend/prisma/neon-sql/0008_add_credit_scoped_markdown_matrix.sql',
+    '../../database/migrations/0008_add_credit_scoped_markdown_matrix.up.sql',
     import.meta.url,
   ),
 );
 const rollbackPath = fileURLToPath(
   new URL(
-    '../../backend/prisma/neon-sql/0008_add_credit_scoped_markdown_matrix_rollback.sql',
+    '../../database/migrations/0008_add_credit_scoped_markdown_matrix.down.sql',
     import.meta.url,
   ),
 );

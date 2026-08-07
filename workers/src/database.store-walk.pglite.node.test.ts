@@ -73,7 +73,7 @@ describe('Workers store walk tracking (real SQL)', () => {
 
   it('keeps the Neon store-walk migration safe to run from SQL editors', () => {
     const migrationSql = readFileSync(
-      path.resolve(__dirname, '../../backend/prisma/neon-sql/0004_add_store_walk_bay_tracking.sql'),
+      path.resolve(__dirname, '../../database/migrations/0004_add_store_walk_bay_tracking.up.sql'),
       'utf8',
     );
 
