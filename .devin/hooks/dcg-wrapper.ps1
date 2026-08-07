@@ -34,9 +34,24 @@ try {
         exit 0
     }
 
-    # Evaluate via dcg test (--stdin avoids command-line injection;
-    # 2>$null suppresses the .dcg.toml ACL warning on Windows)
-    $json = $command | dcg test --stdin --format json 2>$null
+    # Evaluate against the strict Devin-only config (.devin/dcg-devin.toml), NOT the
+    # user's own dcg config. The user config deliberately permits `doppler run`, `gh`
+    # and `git push` because the orchestrator needs them; Devin must never run any of
+    # them. Explicit `-c` also sidesteps automatic project-config discovery, which dcg
+    # refuses on Windows ("native ACL and reparse-point validation is unavailable").
+    #
+    # Fail CLOSED if the config is missing: without it every prohibition silently
+    # disappears, which is worse than refusing to run.
+    $devinConfig = Join-Path $env:DEVIN_PROJECT_DIR ".devin/dcg-devin.toml"
+    if (-not (Test-Path $devinConfig)) {
+        $reason = "dcg-wrapper: .devin/dcg-devin.toml is missing — refusing to run unguarded."
+        [Console]::Error.WriteLine($reason)
+        Write-Output (@{ decision = "block"; reason = $reason } | ConvertTo-Json -Compress)
+        exit 2
+    }
+
+    # --stdin avoids command-line injection; 2>$null suppresses config discovery noise.
+    $json = $command | dcg test -c "$devinConfig" --stdin --format json 2>$null
 
     if ([string]::IsNullOrWhiteSpace($json)) { exit 0 }
 
