@@ -711,6 +711,45 @@ test('main: a fresh snapshot does NOT satisfy the gate when retention is below t
   assert.match(errChunks.join(''), /below the required minimum/);
 });
 
+// Regression: the retention fetch must not be able to suppress the evidence
+// artifact. CI uploads that JSON as `pitr-evidence-<sha>`, so a transient error
+// on the /projects endpoint previously threw out of main() and hid an
+// already-known stale-snapshot failure from the operator investigating it.
+test('main: a failing retention fetch still emits evidence and fails closed', async () => {
+  const outChunks = [];
+  const errChunks = [];
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL('proj-123', 'production')]: {
+      branches: [{ id: 'br-prod', name: 'production' }],
+    },
+    [SNAPSHOTS_URL('proj-123')]: {
+      // Deliberately STALE: the snapshot-age failure is the finding that must
+      // survive into the artifact despite the second endpoint erroring.
+      snapshots: [{ id: 's1', created_at: withinHours(99).toISOString(), branch_id: 'br-prod' }],
+    },
+    // Omitting PROJECT_URL makes the stub return 404, which fetchProjectRetention
+    // turns into a throw.
+    [PROJECT_URL('proj-123')]: undefined,
+  });
+  const code = await main(
+    { NEON_API_KEY: 'key', NEON_PROJECT_ID: 'proj-123', NEON_BRANCH: 'production' },
+    {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => outChunks.push(s) },
+      stderr: { write: (s) => errChunks.push(s) },
+    },
+  );
+  assert.equal(code, 1, 'an unreadable retention window must fail closed');
+  assert.ok(outChunks.length > 0, 'evidence must still be written');
+  const evidence = JSON.parse(outChunks.join(''));
+  assert.equal(evidence.ready, false);
+  assert.equal(evidence.retention.ok, false);
+  assert.match(evidence.retention.reason, /Could not read the Neon project history retention/);
+  // The pre-existing snapshot-age finding is still visible.
+  assert.equal(evidence.newestAgeHours, 99);
+});
+
 test('main: evidence records the retention block on the happy path', async () => {
   const outChunks = [];
   const errChunks = [];

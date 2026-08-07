@@ -158,6 +158,15 @@ test('int8 read records the driver-reported JS type', async () => {
   assert.match(check.detail, /js typeof: string/);
 });
 
+// Without this, the check would report success on a branch where the query
+// matched nothing — asserting int8 compatibility it never actually exercised.
+test('int8 check FAILS when no row exceeds int4 (read path never exercised)', async () => {
+  const checks = await runChecks(makeQuery({ 'FROM tier_feature_flags': () => [] }));
+  const check = byName(checks).tier_feature_flags_int8;
+  assert.equal(check.pass, false);
+  assert.match(check.detail, /never exercised/);
+});
+
 test('redactConnectionString never leaks the password, user, or full host', () => {
   const out = redactConnectionString(
     'postgres://neondb_owner:sup3rs3cret@ep-cool-name-12345.eu-central-1.aws.neon.tech/neondb',

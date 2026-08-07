@@ -43,9 +43,11 @@
 #   --dry-run          Resolve the branch and report readiness; create nothing.
 #   --keep             Do not delete the drill branch (for investigation).
 #   --replace-snapshot If snapshot creation fails on quota, DELETE the oldest
-#                      snapshot for this branch and retry once. Required on the
-#                      Neon Free plan for every drill after the first — see the
-#                      note below. No-op when creation succeeds.
+#                      snapshot and retry once. Prefers a snapshot on this
+#                      branch; falls back (loudly) to the oldest in the PROJECT,
+#                      because the quota is per-project. Required on the Neon
+#                      Free plan for every drill after the first — see the note
+#                      below. No-op when creation succeeds.
 #   --use-existing-snapshot
 #                      Restore the newest EXISTING snapshot instead of creating
 #                      a new one. Fallback for plans that do not allow
@@ -76,6 +78,9 @@
 #   DRILL_ROLE         Role to connect as (default: neondb_owner — the schema
 #                      owner, the same identity migrate:verify asserts).
 #   PITR_MAX_AGE_HOURS Max age of an existing snapshot before one is created.
+#   DRILL_OPERATOR     Name recorded as "Responsible operator" in the evidence
+#                      file — the accountability clause of task 1.9. Defaults to
+#                      `git config user.name`, then "unrecorded".
 #
 # Exit codes: 0 — drill passed. 1 — any step failed (drill branch cleaned up).
 
@@ -103,7 +108,10 @@ while [ $# -gt 0 ]; do
     --replace-snapshot) REPLACE_SNAPSHOT=1; shift ;;
     --name) SNAPSHOT_NAME="$2"; shift 2 ;;
     --evidence) EVIDENCE_FILE="$2"; shift 2 ;;
-    -h|--help) sed -n '2,78p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    # Print the header comment block up to the "Exit codes" line that ends it.
+    # A hardcoded line range silently truncates (or spills into code) the moment
+    # a header line is added.
+    -h|--help) sed -n '2,/^# Exit codes/p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "::error::Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -126,8 +134,17 @@ require_tool() {
   }
 }
 
+# Every Neon call is bounded. Without these, a DNS hang or a stalled TCP
+# connection blocks the drill indefinitely: `set -e` never fires, the EXIT trap
+# never runs, and the operator is left with a script that appears to be working
+# while holding a branch full of production data. Ctrl-C is not a safe answer
+# either — it interrupts before the branch id is known. Neon's control-plane
+# calls here are all fast (the slow part, materializing the restore, is polled
+# separately by neon-poll-operations.js), so a 120s ceiling is generous.
+CURL_TIMEOUTS=(--connect-timeout 10 --max-time 120)
+
 api_get() {
-  curl --fail-with-body --silent --show-error \
+  curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" \
     -H "Authorization: Bearer ${NEON_API_KEY}" \
     -H "Accept: application/json" "$@"
 }
@@ -136,12 +153,21 @@ api_get() {
 # Cleanup. Registered before the branch exists so an abort at ANY point after
 # the restore call still removes the branch. Deleting a branch that was never
 # created is a no-op because DRILL_BRANCH_ID stays empty.
+#
+# The BRANCH is cleaned up; the SNAPSHOT is deliberately NOT. That asymmetry is
+# the point of the drill: the branch is a throwaway copy of production data and
+# must not outlive the run, whereas the snapshot IS the named pre-migration
+# recovery point (task 1.9). Deleting it on failure would destroy the recovery
+# point at the exact moment something has just gone wrong — the one time it is
+# most likely to be needed. It costs a quota slot on the free plan, and
+# --replace-snapshot reclaims that slot on the next run; that is the cheaper
+# trade by a wide margin.
 # ---------------------------------------------------------------------------
 cleanup() {
   local exit_code=$?
   if [ -n "$DRILL_BRANCH_ID" ] && [ "$KEEP_BRANCH" -eq 0 ]; then
     printf '\n=== Cleanup: deleting drill branch ===\n' | tee -a "$EVIDENCE_FILE"
-    if curl --fail-with-body --silent --show-error --request DELETE \
+    if curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request DELETE \
       -H "Authorization: Bearer ${NEON_API_KEY}" \
       "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches/${DRILL_BRANCH_ID}" \
       >/dev/null 2>&1; then
@@ -260,7 +286,7 @@ step "1a. Create the named pre-migration recovery point"
 # a 4xx. Aborting on the non-zero exit would discard it and leave the operator
 # with a bare "curl: (22)".
 SNAPSHOT_RC=0
-SNAPSHOT_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
+SNAPSHOT_RESPONSE="$(curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request POST \
   -H "Authorization: Bearer ${NEON_API_KEY}" \
   --get --data-urlencode "name=${SNAPSHOT_NAME}" \
   "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}/snapshot")" || SNAPSHOT_RC=$?
@@ -275,22 +301,47 @@ if [ "$SNAPSHOT_RC" -ne 0 ] && [ "$REPLACE_SNAPSHOT" -eq 1 ]; then
   # so this is a no-op on a paid plan with slots free.
   say "Snapshot creation failed; --replace-snapshot given, freeing the oldest slot."
   OLDEST_JSON="$(api_get "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots")"
+  # Prefer the oldest snapshot for THIS branch, so the routine case reclaims the
+  # previous drill's own slot and touches nothing else.
   OLDEST_ID="$(printf '%s' "$OLDEST_JSON" | jq -r --arg b "$BRANCH_ID" \
     '[.snapshots[]? | select((.branch_id // .source_branch_id) == $b)]
      | sort_by(.created_at) | first | .id // empty')"
   OLDEST_AT="$(printf '%s' "$OLDEST_JSON" | jq -r --arg b "$BRANCH_ID" \
     '[.snapshots[]? | select((.branch_id // .source_branch_id) == $b)]
      | sort_by(.created_at) | first | .created_at // empty')"
+  OLDEST_SCOPE="this branch"
   if [ -z "$OLDEST_ID" ]; then
-    say "No existing snapshot found to replace."
+    # The quota is per-PROJECT, not per-branch, so a snapshot on a DIFFERENT
+    # branch can be the one occupying the only free-plan slot. Without this
+    # fallback the branch-scoped search finds nothing, the retry hits the same
+    # 422, and the operator is told there was nothing to replace while the quota
+    # is visibly full. Widen to the project and say plainly what is being
+    # deleted — this deletes another branch's restore point, which the operator
+    # must see in the evidence file.
+    OLDEST_ID="$(printf '%s' "$OLDEST_JSON" | jq -r \
+      '[.snapshots[]?] | sort_by(.created_at) | first | .id // empty')"
+    OLDEST_AT="$(printf '%s' "$OLDEST_JSON" | jq -r \
+      '[.snapshots[]?] | sort_by(.created_at) | first | .created_at // empty')"
+    OLDEST_BRANCH="$(printf '%s' "$OLDEST_JSON" | jq -r \
+      '[.snapshots[]?] | sort_by(.created_at) | first
+       | (.branch_id // .source_branch_id) // "unknown"')"
+    OLDEST_SCOPE="ANOTHER branch (quota is per-project)"
+    if [ -n "$OLDEST_ID" ] && [ "$OLDEST_BRANCH" != "$BRANCH_ID" ]; then
+      say "WARNING: no snapshot for this branch, but the project quota is full."
+      say "         The oldest snapshot belongs to a different branch and will be"
+      say "         DELETED to free the slot. Re-create it if it was still needed."
+    fi
+  fi
+  if [ -z "$OLDEST_ID" ]; then
+    say "No existing snapshot found to replace (the quota failure has another cause)."
   else
-    say "Deleting oldest snapshot (created ${OLDEST_AT:-unknown})..."
-    if curl --fail-with-body --silent --show-error --request DELETE \
+    say "Deleting oldest snapshot from ${OLDEST_SCOPE} (created ${OLDEST_AT:-unknown})..."
+    if curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request DELETE \
       -H "Authorization: Bearer ${NEON_API_KEY}" \
       "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${OLDEST_ID}" >/dev/null; then
       say "Deleted. Retrying snapshot creation."
       SNAPSHOT_RC=0
-      SNAPSHOT_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
+      SNAPSHOT_RESPONSE="$(curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request POST \
         -H "Authorization: Bearer ${NEON_API_KEY}" \
         --get --data-urlencode "name=${SNAPSHOT_NAME}" \
         "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches/${BRANCH_ID}/snapshot")" || SNAPSHOT_RC=$?
@@ -341,11 +392,35 @@ step "1b. Restore the recovery point into a new branch"
 # finalize_restore:false materializes a separate preview branch and leaves the
 # production branch untouched. Creating an ordinary child branch with
 # `--parent production` would copy the LIVE tip and prove nothing about PITR.
-RESTORE_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
+#
+# The exit code is captured rather than left to `set -e`. This is the one call
+# that can create a branch holding production data, and DRILL_BRANCH_ID — the
+# only thing the cleanup trap can act on — is not resolved until after the
+# polling step below. A bare abort here (a timeout after Neon already accepted
+# the restore, say) would therefore leak exactly the branch the script promises
+# never to leak. On failure, resolve the branch id first so the trap can still
+# tear it down, then report the API's own error body.
+#
+# The body is built with jq rather than interpolated into a string: DRILL_BRANCH
+# is timestamp-derived today, but a hand-built JSON literal is one --name-style
+# change away from emitting malformed JSON.
+RESTORE_RC=0
+RESTORE_RESPONSE="$(curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request POST \
   -H "Authorization: Bearer ${NEON_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"${DRILL_BRANCH}\",\"finalize_restore\":false}" \
-  "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${SNAPSHOT_ID}/restore")"
+  -d "$(jq -nc --arg name "$DRILL_BRANCH" '{name:$name,finalize_restore:false}')" \
+  "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${SNAPSHOT_ID}/restore")" || RESTORE_RC=$?
+if [ "$RESTORE_RC" -ne 0 ]; then
+  DRILL_BRANCH_ID="$(api_get "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/branches?search=${DRILL_BRANCH}" \
+    | jq -r --arg n "$DRILL_BRANCH" 'first(.branches[] | select(.name==$n) | .id) // empty')" || true
+  say "Restore call FAILED (curl exit ${RESTORE_RC}). Neon API said:"
+  printf '%s\n' "$RESTORE_RESPONSE" | tee -a "$EVIDENCE_FILE"
+  if [ -n "$DRILL_BRANCH_ID" ]; then
+    say "A partial drill branch WAS created; the cleanup trap will remove it."
+  fi
+  echo "::error::Restore call failed. Aborting." >&2
+  exit 1
+fi
 say "Restore call accepted:  yes"
 
 step "1b. Poll restore operations to a terminal state"

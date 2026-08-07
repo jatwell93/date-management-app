@@ -364,8 +364,28 @@ async function main(env, deps) {
   // and an adequate retention window are independent properties: a snapshot
   // taken minutes ago satisfies the age check even if the window behind it has
   // been reduced to nothing. Both must hold.
-  const project = await fetchProjectRetention(projectId, apiKey, fetchImpl);
-  const retention = evaluateRetention(project.historyRetentionSeconds, minRetentionHours);
+  //
+  // The fetch is caught rather than allowed to propagate: a throw out of main()
+  // would suppress the evidence document below, so a transient 500 on the
+  // /projects endpoint could hide an ALREADY-KNOWN snapshot-age failure from the
+  // uploaded CI artifact. Catching keeps the artifact complete and still fails
+  // closed — an unreadable retention window is treated as a failed one.
+  let project = { historyRetentionSeconds: null, platformId: null };
+  let retention = evaluateRetention(null, minRetentionHours);
+  try {
+    project = await fetchProjectRetention(projectId, apiKey, fetchImpl);
+    retention = evaluateRetention(project.historyRetentionSeconds, minRetentionHours);
+  } catch (error) {
+    retention = {
+      ok: false,
+      seconds: null,
+      hours: null,
+      minHours: minRetentionHours,
+      reason: `Could not read the Neon project history retention window: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
 
   const ready = verdict.ready && retention.ok;
 
@@ -415,9 +435,10 @@ async function main(env, deps) {
     }
     return 1;
   }
-  if (!ready) {
-    // Retention failed while the snapshot age passed — the specific error was
-    // already written above; return non-zero so the gate fails closed.
+  // `verdict.ready` is already known true here (the branch above returns), so
+  // this is the retention half of `ready` and says so directly. The specific
+  // error was written to stderr above; return non-zero so the gate fails closed.
+  if (!retention.ok) {
     return 1;
   }
   stderr.write(
@@ -443,7 +464,16 @@ module.exports = {
 };
 
 if (require.main === module) {
-  void main(process.env).then((code) => {
-    process.exitCode = code;
-  });
+  // The snapshot/branch fetches can still reject (network, auth). Report the
+  // message rather than letting Node print a raw stack, and fail closed.
+  void main(process.env)
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((error) => {
+      process.stderr.write(
+        `::error::PITR readiness gate could not run: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      process.exitCode = 1;
+    });
 }

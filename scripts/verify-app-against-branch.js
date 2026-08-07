@@ -278,19 +278,36 @@ async function runChecks(query) {
   });
 
   // 6. int8 read compatibility for the 0010 widening. Reference data only.
-  //    Documents that the driver reads the widened column without error and
-  //    surfaces it as a JS string (the serverless driver's int8 behaviour).
+  //    Proves the driver reads the widened column without error and records the
+  //    JS type it surfaces (the serverless driver returns int8 as a string).
+  //
+  //    Zero rows is a FAILURE, not a pass. The check only exercises the int8
+  //    read path if a row actually exceeds int4 — reporting success on an empty
+  //    result would assert compatibility the query never tested. Rows above the
+  //    int4 range are guaranteed by the canonical reference data: migration 0010
+  //    exists precisely because `storage_bytes` carries values up to 100 GB, and
+  //    `backend/scripts/seed-tier-flags.js:26,38` seeds the professional and
+  //    premium tiers with 10 GB / 1000 GB. An empty result therefore means the
+  //    restore is missing reference data or landed on a pre-0010 schema — both
+  //    worth failing on.
   await record('tier_feature_flags_int8', async () => {
     const rows = await query(
       'SELECT tier_level, feature_key, limit_value FROM tier_feature_flags ' +
         'WHERE limit_value > 2147483647 ORDER BY tier_level LIMIT 5',
     );
+    if (rows.length === 0) {
+      return {
+        pass: false,
+        detail:
+          'no tier_feature_flags row exceeds int4, so the int8 read path was never ' +
+          'exercised — expected the seeded storage_bytes limits (>= 10 GB). The branch ' +
+          'may be missing reference data or predate migration 0010.',
+      };
+    }
     const types = [...new Set(rows.map((r) => typeof r.limit_value))];
     return {
       pass: true,
-      detail:
-        `${rows.length} oversized (>int4) row(s) read without error` +
-        (types.length ? `; js typeof: ${types.join(',')}` : ''),
+      detail: `${rows.length} oversized (>int4) row(s) read without error; js typeof: ${types.join(',')}`,
     };
   });
 
@@ -402,7 +419,19 @@ module.exports = {
 };
 
 if (require.main === module) {
-  void main(process.env).then((code) => {
-    process.exitCode = code;
-  });
+  // `main` can reject before it ever returns an exit code — loadNeonDriver and
+  // buildQuery both throw, and neon(url) rejects a malformed connection string.
+  // Without this catch Node prints a raw stack trace, which is both unreadable
+  // for the operator and a place a connection string could surface in a frame.
+  // Report the message only, and still fail closed.
+  void main(process.env)
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((error) => {
+      process.stderr.write(
+        `::error::Application verification could not run: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      process.exitCode = 1;
+    });
 }
