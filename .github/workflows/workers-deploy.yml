@@ -128,6 +128,13 @@ jobs:
         working-directory: .
         run: node --test scripts/verify-workers-deploy-bindings.test.js
 
+      # Task 1.10: wrangler.toml is what `wrangler deploy` pushes, so a `false`
+      # observability master switch can silently disable Workers Logs no matter
+      # what the dashboard shows. Fails before any deploy runs.
+      - name: Validate observability configuration
+        working-directory: .
+        run: node --test scripts/verify-observability-config.test.js
+
       - name: Validate required Doppler secrets
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -214,6 +221,13 @@ jobs:
       - name: Validate workflow binding order
         working-directory: .
         run: node --test scripts/verify-workers-deploy-bindings.test.js
+
+      # Task 1.10: wrangler.toml is what `wrangler deploy` pushes, so a `false`
+      # observability master switch can silently disable Workers Logs no matter
+      # what the dashboard shows. Fails before any deploy runs.
+      - name: Validate observability configuration
+        working-directory: .
+        run: node --test scripts/verify-observability-config.test.js
 
       - name: Validate required Doppler secrets
         env:
@@ -421,9 +435,37 @@ jobs:
           fi
           echo "No new fatal/critical Sentry issues in the canary window."
 
-      - name: Canary round 2 — Sentry check skipped (no token)
+      # Task 1.10: the Sentry configuration is now REQUIRED on production. It was
+      # previously a warn-and-continue, which meant a production canary could go
+      # green having checked nothing at all — indistinguishable from a clean run.
+      # The API call itself still fails open (a Sentry outage must not block a
+      # deploy); it is the *absence of configuration* that is now fatal, because
+      # that is a repo misconfiguration rather than a third-party problem.
+      - name: Canary round 2 — Sentry configuration required
         if: ${{ env.SENTRY_AUTH_TOKEN == '' || env.SENTRY_ORG == '' || env.SENTRY_PROJECT == '' }}
-        run: echo "::warning::SENTRY_AUTH_TOKEN/SENTRY_ORG/SENTRY_PROJECT not set; Sentry canary check skipped (fail open)."
+        run: |
+          echo "::error::SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT are required for a production canary."
+          echo "Without them the Sentry gate is skipped and the canary proves nothing about error rates."
+          echo "SENTRY_AUTH_TOKEN: production environment secret (org auth token, scopes event:read + project:read)"
+          echo "SENTRY_ORG / SENTRY_PROJECT: repository variables; SENTRY_PROJECT must name the project the"
+          echo "Worker's WORKERS_SENTRY_DSN points at, not the legacy Express project."
+          exit 1
+
+      # Task 1.10: proves the observability pipeline is actually connected, rather
+      # than trusting that an absent DSN would have been noticed. index-minimal.ts
+      # sets tracesSampleRate 1.0, so a correctly-wired Worker produces a
+      # transaction per request — a project with zero received events is a broken
+      # pipeline, not a quiet service.
+      - name: Canary round 2 — observability pipeline check
+        env:
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx wrangler secret list --env production --format json \
+            | node scripts/check-observability.js \
+            | tee observability-evidence.json
 
       - name: Upload canary evidence
         if: always()
@@ -434,5 +476,6 @@ jobs:
             canary-round-1.json
             canary-round-1.stderr
             canary-round-2.json
+            observability-evidence.json
             canary-round-2.stderr
           retention-days: 30
