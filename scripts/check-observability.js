@@ -30,17 +30,25 @@
  * proof of a broken pipeline, not proof of a healthy service — which is exactly
  * how a DSN pointing at the wrong project presents.
  *
+ * The two halves need different credentials, so they run as separate CI steps:
+ * the secret list needs Cloudflare auth (via `doppler run`) and the `workers/`
+ * working directory, while the ingest query needs only a Sentry token. Each half
+ * requires only the configuration it actually uses, and refusing to skip both
+ * keeps a "verified nothing" run impossible.
+ *
  * Usage:
- *   npx wrangler secret list --env production --format json | \
- *     node scripts/check-observability.js
+ *   # secret-binding half — from workers/, where wrangler.toml lives
+ *   doppler run -- npx wrangler secret list --env production --format json \
+ *     | node ../scripts/check-observability.js --no-ingest-check
  *
- *   node scripts/check-observability.js --no-secret-check   # ingest check only
+ *   # ingest half — from the repo root, needs only SENTRY_*
+ *   node scripts/check-observability.js --no-secret-check
  *
- * Environment variables:
- *   SENTRY_ORG                    — Sentry organization slug (required)
- *   SENTRY_PROJECT                — Sentry project slug (required); must be the
- *                                   project the Worker's DSN points at, not the
- *                                   legacy Express project
+ * Environment variables (required only when the ingest half runs):
+ *   SENTRY_ORG                    — Sentry organization slug
+ *   SENTRY_PROJECT                — Sentry project slug; must be the project the
+ *                                   Worker's DSN points at, not the legacy
+ *                                   Express project
  *   SENTRY_AUTH_TOKEN             — org auth token with event:read + project:read
  *   OBSERVABILITY_MAX_QUIET_HOURS — max acceptable window with zero received
  *                                   events (default 24)
@@ -179,51 +187,67 @@ function parsePositiveNumber(value, fallback, name) {
   return parsed;
 }
 
+const VALID_FLAGS = new Set(['--no-secret-check', '--no-ingest-check']);
+
 async function main(env, deps) {
   const { fetchImpl, readStdin, argv = [] } = deps;
-  const skipSecretCheck = argv.includes('--no-secret-check');
 
-  const unknown = argv.filter((arg) => arg !== '--no-secret-check');
+  const unknown = argv.filter((arg) => !VALID_FLAGS.has(arg));
   if (unknown.length > 0) {
     throw new Error(`Unknown argument(s): ${unknown.join(', ')}`);
   }
 
-  const org = readRequired(env, 'SENTRY_ORG');
-  const project = readRequired(env, 'SENTRY_PROJECT');
-  const token = readRequired(env, 'SENTRY_AUTH_TOKEN');
-  const quietHours = parsePositiveNumber(
-    env.OBSERVABILITY_MAX_QUIET_HOURS,
-    DEFAULT_MAX_QUIET_HOURS,
-    'OBSERVABILITY_MAX_QUIET_HOURS',
-  );
+  const skipSecretCheck = argv.includes('--no-secret-check');
+  const skipIngestCheck = argv.includes('--no-ingest-check');
+
+  // Skipping both would exit 0 having verified nothing — the exact shape of
+  // defect this script exists to prevent.
+  if (skipSecretCheck && skipIngestCheck) {
+    throw new Error('Refusing to run with both checks skipped: that would verify nothing');
+  }
 
   const evidence = {
     checkedAt: new Date().toISOString(),
-    sentry: { org, project },
     secretBinding: skipSecretCheck ? { ok: null, skipped: true } : undefined,
-    ingest: undefined,
+    ingest: skipIngestCheck ? { ok: null, skipped: true } : undefined,
   };
+  const failures = [];
 
+  // The two halves run in different CI jobs, because their credentials live in
+  // different places: the secret list needs Cloudflare auth and the workers/
+  // working directory, while the ingest query needs only a Sentry token. So each
+  // half validates only the configuration it actually uses.
   if (!skipSecretCheck) {
     const names = parseSecretList(await readStdin());
     evidence.secretBinding = { ...evaluateSecretBinding(names), skipped: false };
+    if (!evidence.secretBinding.ok) {
+      failures.push(
+        `Worker is missing required secret(s): ${evidence.secretBinding.missing.join(', ')}`,
+      );
+    }
   }
 
-  const series = await fetchReceivedStats(org, project, token, quietHours, fetchImpl);
-  evidence.ingest = evaluateIngest(series, quietHours);
+  if (!skipIngestCheck) {
+    const org = readRequired(env, 'SENTRY_ORG');
+    const project = readRequired(env, 'SENTRY_PROJECT');
+    const token = readRequired(env, 'SENTRY_AUTH_TOKEN');
+    const quietHours = parsePositiveNumber(
+      env.OBSERVABILITY_MAX_QUIET_HOURS,
+      DEFAULT_MAX_QUIET_HOURS,
+      'OBSERVABILITY_MAX_QUIET_HOURS',
+    );
 
-  const failures = [];
-  if (evidence.secretBinding && evidence.secretBinding.ok === false) {
-    failures.push(
-      `Worker is missing required secret(s): ${evidence.secretBinding.missing.join(', ')}`,
-    );
-  }
-  if (!evidence.ingest.ok) {
-    failures.push(
-      `Sentry project ${org}/${project} received 0 events in the last ${quietHours}h. ` +
-        'With tracesSampleRate 1.0 every request produces a transaction, so this means ' +
-        'the Worker is not reporting to this project (wrong or unset DSN), not that it is idle.',
-    );
+    evidence.sentry = { org, project };
+    const series = await fetchReceivedStats(org, project, token, quietHours, fetchImpl);
+    evidence.ingest = { ...evaluateIngest(series, quietHours), skipped: false };
+
+    if (!evidence.ingest.ok) {
+      failures.push(
+        `Sentry project ${org}/${project} received 0 events in the last ${quietHours}h. ` +
+          'With tracesSampleRate 1.0 every request produces a transaction, so this means ' +
+          'the Worker is not reporting to this project (wrong or unset DSN), not that it is idle.',
+      );
+    }
   }
 
   evidence.ok = failures.length === 0;

@@ -211,6 +211,52 @@ test('main rejects unknown arguments so a typo cannot silently skip a check', as
   );
 });
 
+test('--no-ingest-check verifies only the secret binding', async () => {
+  const evidence = await main(
+    {},
+    deps({
+      argv: ['--no-ingest-check'],
+      fetchImpl: async () => {
+        throw new Error('Sentry must not be queried when the ingest check is skipped');
+      },
+    }),
+  );
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.secretBinding.ok, true);
+  assert.equal(evidence.ingest.skipped, true);
+});
+
+test('--no-ingest-check does not require SENTRY_* — its credentials live elsewhere', async () => {
+  const evidence = await main({}, deps({ argv: ['--no-ingest-check'] }));
+  assert.equal(evidence.ok, true);
+});
+
+test('--no-ingest-check still fails on a missing DSN', async () => {
+  const evidence = await main(
+    {},
+    deps({
+      argv: ['--no-ingest-check'],
+      readStdin: async () => JSON.stringify([{ name: 'JWT_SECRET' }]),
+    }),
+  );
+  assert.equal(evidence.ok, false);
+  assert.match(evidence.failures.join('\n'), /WORKERS_SENTRY_DSN/);
+});
+
+test('--no-secret-check does not require a secret list on stdin', async () => {
+  const evidence = await main(baseEnv, deps({ argv: ['--no-secret-check'] }));
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.secretBinding.skipped, true);
+  assert.equal(evidence.ingest.ok, true);
+});
+
+test('refuses to run with BOTH checks skipped — that would verify nothing', async () => {
+  await assert.rejects(
+    () => main(baseEnv, deps({ argv: ['--no-secret-check', '--no-ingest-check'] })),
+    /would verify nothing/,
+  );
+});
+
 test('main rejects a non-positive quiet-hours override', async () => {
   await assert.rejects(
     () => main({ ...baseEnv, OBSERVABILITY_MAX_QUIET_HOURS: '0' }, deps()),

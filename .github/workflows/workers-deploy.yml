@@ -322,6 +322,23 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- bash -lc 'printf "%s" "$NEON_CONNECTION_STRING" | npx wrangler secret put NEON_CONNECTION_STRING --env production'
 
+      # Task 1.10: Sentry.withSentry initialises with `dsn: undefined` when
+      # WORKERS_SENTRY_DSN is absent — capturing nothing and raising nothing, so
+      # the Worker looks instrumented while reporting to no one. Unlike
+      # NEON_CONNECTION_STRING and FRONTEND_URL above, the DSN is not re-bound on
+      # every deploy, so nothing else would notice it going missing.
+      #
+      # Secret-binding half only: this job has Cloudflare auth (via doppler) and
+      # runs in ./workers, hence the ../scripts path. The ingest half runs in the
+      # canary, which holds the Sentry token.
+      - name: Verify Worker observability secrets are bound
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set -euo pipefail
+          doppler run -- npx wrangler secret list --env production --format json \
+            | node ../scripts/check-observability.js --no-ingest-check
+
       - name: Deploy production worker
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -451,20 +468,23 @@ jobs:
           echo "Worker's WORKERS_SENTRY_DSN points at, not the legacy Express project."
           exit 1
 
-      # Task 1.10: proves the observability pipeline is actually connected, rather
-      # than trusting that an absent DSN would have been noticed. index-minimal.ts
-      # sets tracesSampleRate 1.0, so a correctly-wired Worker produces a
-      # transaction per request — a project with zero received events is a broken
-      # pipeline, not a quiet service.
-      - name: Canary round 2 — observability pipeline check
+      # Task 1.10: proves the Sentry pipeline is actually connected, rather than
+      # trusting that an absent or misdirected DSN would have been noticed.
+      # index-minimal.ts sets tracesSampleRate 1.0, so a correctly-wired Worker
+      # produces a transaction per request — a project with zero received events
+      # is a broken pipeline, not a quiet service.
+      #
+      # Ingest half only: this job runs at the repo root and has no Cloudflare
+      # credentials. The secret-binding half runs in deploy-production, which has
+      # both. Skipping BOTH halves is refused by the script.
+      - name: Canary round 2 — Sentry ingest check
         env:
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
-          npx wrangler secret list --env production --format json \
-            | node scripts/check-observability.js \
+          node scripts/check-observability.js --no-secret-check \
             | tee observability-evidence.json
 
       - name: Upload canary evidence
