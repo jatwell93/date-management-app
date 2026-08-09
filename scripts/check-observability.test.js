@@ -41,14 +41,43 @@ test('parseSecretList tolerates a banner before the JSON array', () => {
   assert.deepEqual(parseSecretList(raw), ['WORKERS_SENTRY_DSN']);
 });
 
+test('parseSecretList survives a bracketed banner token before the payload', () => {
+  // Real failure: `indexOf('[')` matched the dotenv banner, so JSON.parse ran on
+  // "[dotenv@17.2.3] injecting env ... [ {...} ]" and threw at position 16.
+  const raw =
+    '[dotenv@17.2.3] injecting env (0) from .env\n' +
+    '[{"name":"NEON_CONNECTION_STRING"},{"name":"WORKERS_SENTRY_DSN"}]\n';
+  assert.deepEqual(parseSecretList(raw), ['NEON_CONNECTION_STRING', 'WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList survives multiple bracketed banner tokens', () => {
+  const raw =
+    '[dotenv@17.2.3] injecting env\n' +
+    '[custom build] running npm run build\n' +
+    '[{"name":"WORKERS_SENTRY_DSN"}]\n' +
+    'Done [ok]\n';
+  assert.deepEqual(parseSecretList(raw), ['WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList is not fooled by a bracket inside a secret name', () => {
+  const raw = 'banner\n[{"name":"WEIRD]NAME"},{"name":"WORKERS_SENTRY_DSN"}]\n';
+  assert.deepEqual(parseSecretList(raw), ['WEIRD]NAME', 'WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList accepts a Worker with no secrets at all', () => {
+  assert.deepEqual(parseSecretList('[]'), []);
+});
+
 test('parseSecretList fails closed on empty stdin', () => {
   assert.throws(() => parseSecretList(''), /No secret list on stdin/);
   assert.throws(() => parseSecretList('   '), /No secret list on stdin/);
 });
 
 test('parseSecretList fails closed on non-array or invalid JSON', () => {
-  assert.throws(() => parseSecretList('not json at all'), /not a JSON array/);
+  assert.throws(() => parseSecretList('not json at all'), /not valid JSON/);
   assert.throws(() => parseSecretList('[{"name": broken]'), /not valid JSON/);
+  // An object payload is well-formed JSON but not a secret list.
+  assert.throws(() => parseSecretList('{"secrets": 3}'), /not valid JSON|not a JSON array/);
 });
 
 // ── evaluateSecretBinding ──────────────────────────────────────────────────

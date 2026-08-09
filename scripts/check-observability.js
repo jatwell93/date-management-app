@@ -72,34 +72,89 @@ const REQUIRED_WORKER_SECRETS = ['WORKERS_SENTRY_DSN'];
  * Fails closed on anything unparseable: an unreadable secret list must not be
  * mistaken for a satisfied binding requirement.
  */
+/**
+ * Find every balanced `[...]` span in `text`, outermost first.
+ *
+ * A naive indexOf('[') / lastIndexOf(']') slice is not enough: both wrangler and
+ * doppler print banners, and a banner like `[dotenv@17.2.3] injecting env` or
+ * `[custom build]` contains brackets that are not JSON. Bracket depth is tracked
+ * with string- and escape-awareness so a `]` inside a secret name cannot end a
+ * span early.
+ */
+function findBracketSpans(text) {
+  const spans = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '[') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (char === ']') {
+      if (depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start !== -1) {
+          spans.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+
+  return spans;
+}
+
 function parseSecretList(raw) {
   if (typeof raw !== 'string' || raw.trim() === '') {
     throw new Error(
       'No secret list on stdin. Pipe `wrangler secret list --env production --format json`, ' +
-        'or pass --no-secret-check to skip this half explicitly.',
+        'or pass --no-ingest-check to run only the ingest half.',
     );
   }
 
-  // wrangler may prepend human-readable banner lines before the JSON payload.
-  const start = raw.indexOf('[');
-  const end = raw.lastIndexOf(']');
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('Secret list is not a JSON array; cannot verify secret bindings');
+  const candidates = [raw.trim(), ...findBracketSpans(raw)];
+  let lastError;
+
+  for (const candidate of candidates) {
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+    if (!Array.isArray(parsed)) continue;
+
+    const names = parsed
+      .map((entry) => (entry && typeof entry === 'object' ? entry.name : entry))
+      .filter((name) => typeof name === 'string' && name !== '');
+
+    // An empty array is a legitimate answer (a Worker with no secrets), but a
+    // bracket span from a banner would also parse to something array-shaped —
+    // so only accept a span that actually yielded secret names, unless it is the
+    // whole payload.
+    if (names.length > 0 || candidate === raw.trim()) return names;
   }
 
-  let parsed;
-  try {
-    parsed = JSON.parse(raw.slice(start, end + 1));
-  } catch (error) {
-    throw new Error(`Secret list is not valid JSON: ${error.message}`);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error('Secret list is not a JSON array; cannot verify secret bindings');
-  }
-
-  return parsed
-    .map((entry) => (entry && typeof entry === 'object' ? entry.name : entry))
-    .filter((name) => typeof name === 'string' && name !== '');
+  throw new Error(
+    lastError
+      ? `Secret list is not valid JSON: ${lastError.message}. ` +
+          'Expected `wrangler secret list --env production --format json` output on stdin.'
+      : 'Secret list is not a JSON array; cannot verify secret bindings',
+  );
 }
 
 /** Which of the required secrets are absent from the deployed Worker. */
