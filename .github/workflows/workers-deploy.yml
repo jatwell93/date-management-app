@@ -463,7 +463,10 @@ jobs:
         run: |
           echo "::error::SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT are required for a production canary."
           echo "Without them the Sentry gate is skipped and the canary proves nothing about error rates."
-          echo "SENTRY_AUTH_TOKEN: production environment secret (org auth token, scopes event:read + project:read)"
+          echo "SENTRY_AUTH_TOKEN: production environment secret. Needs event:read + project:read."
+          echo "  NOT an Organization Auth Token — those carry org:ci (source maps/releases) and cannot"
+          echo "  read project or event data. Use an Internal Integration token (Settings > Developer"
+          echo "  Settings), which is org-owned rather than tied to a person, or a User Auth Token."
           echo "SENTRY_ORG / SENTRY_PROJECT: repository variables; SENTRY_PROJECT must name the project the"
           echo "Worker's WORKERS_SENTRY_DSN points at, not the legacy Express project."
           exit 1

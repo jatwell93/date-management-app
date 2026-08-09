@@ -49,7 +49,15 @@
  *   SENTRY_PROJECT                — Sentry project slug; must be the project the
  *                                   Worker's DSN points at, not the legacy
  *                                   Express project
- *   SENTRY_AUTH_TOKEN             — org auth token with event:read + project:read
+ *   SENTRY_AUTH_TOKEN             — token with BOTH event:read and project:read.
+ *                                   NOT an Organization Auth Token: those carry
+ *                                   org:ci, which covers source-map upload and
+ *                                   releases but grants no read access to
+ *                                   project or event data (verified: HTTP 403).
+ *                                   Use an Internal Integration token
+ *                                   (Settings > Developer Settings), which is
+ *                                   org-owned rather than tied to a person, or a
+ *                                   User Auth Token.
  *   OBSERVABILITY_MAX_QUIET_HOURS — max acceptable window with zero received
  *                                   events (default 24)
  *
@@ -185,10 +193,20 @@ async function fetchReceivedStats(org, project, token, sinceHours, fetchImpl, no
     // Deliberately fail closed. The canary step tolerates a Sentry outage so a
     // deploy is never blocked by a third party; this check is a configuration
     // gate, where "cannot tell" must not read as "fine".
+    const hint =
+      response.status === 403
+        ? ' A 403 usually means the token lacks scopes rather than that the project is wrong. ' +
+          'An Organization Auth Token carries org:ci, which covers source-map upload and releases ' +
+          'but grants NO read access to project or event data. Use an Internal Integration ' +
+          '(Settings > Developer Settings) or a User Auth Token, granted event:read + project:read.'
+        : '';
+    // Deliberately fail closed. The canary step tolerates a Sentry outage so a
+    // deploy is never blocked by a third party; this check is a configuration
+    // gate, where "cannot tell" must not read as "fine".
     throw new Error(
-      `Sentry stats request failed with HTTP ${response.status}. ` +
-        'Check SENTRY_AUTH_TOKEN scopes (event:read, project:read) and that ' +
-        'SENTRY_PROJECT names the project the Worker DSN points at.',
+      `Sentry stats request failed with HTTP ${response.status}.` +
+        hint +
+        ` Verify SENTRY_PROJECT ("${project}") names the project the Worker DSN points at.`,
     );
   }
 
