@@ -2354,6 +2354,18 @@ Paste links to CI runs, artifacts, or commit output files to the PR:
 - [x] Migration artifacts (status/preflight/apply/seed/verify): uploaded as artifacts on run 30868236574 (Migration prep job 91864588683)
 - [x] Canary evidence artifact: run 30868236574 Post-deploy canary job (91865534955) — both rounds PASS, evidence artifact uploaded
 - [x] Post-deploy verify output: `/health?deep=true` → 200 (database `pass`) on both `api.expirymate.com.au` and the workers.dev target; operator browser login verified
+      **Re-qualified (task 1.10, 2026-08-08):** the `database: pass` in this
+      evidence was **vacuous at the time it was recorded**. `workers/src/health.ts`
+      returned `pass` whenever `NEON_CONNECTION_STRING` was a non-empty string and
+      executed no query, so it could not have detected an unreachable or
+      unauthorised database. What this line genuinely evidences for the 1.7.B run
+      is that the Worker was reachable and returned 200 on both hosts, and that
+      the operator browser login worked — the login is the real database evidence
+      here, since it exercises live queries end to end. Independent database proof
+      for that cutover comes from `migrate:verify` PASS and the 54-row seed
+      verification in the migration-prep artifacts, not from this endpoint. Task
+      1.10 replaced the check with a bounded `SELECT 1` that fails closed, so the
+      same line recorded after that commit does carry database meaning.
 
 ### Smoke-test identity record
 
@@ -2391,6 +2403,15 @@ and why:
   datacenter IPs at the edge (PR #436). The custom-domain edge is verified
   separately (`/health?deep=true` = 200). Retarget via `vars.SMOKE_TARGET_URL`
   after a Pro upgrade + WAF Skip rule (PR #427 header).
+  **Re-qualified (task 1.10, 2026-08-08):** at the time this note was written,
+  `/health?deep=true` proved only that the Worker was reachable and that
+  `NEON_CONNECTION_STRING` was a non-empty string — `workers/src/health.ts`
+  executed **no database query** and reported `database: pass` regardless. The
+  edge check was therefore valid as an *edge reachability* check and carried no
+  database meaning. Task 1.10 replaced that branch with a bounded `SELECT 1`
+  that fails closed, so from that commit onward `/health?deep=true = 200` does
+  additionally evidence database readiness. Reads of this note against runs
+  before 1.10 must not treat it as database proof.
 
 Once all steps are PASS and evidence is attached, update `tasks.md` to check
 off task 1.7.B-execute and the parent 1.7 checkbox.

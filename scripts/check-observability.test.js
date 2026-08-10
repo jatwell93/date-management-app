@@ -152,6 +152,25 @@ test('evaluateIngest sums across categories and reports them separately', () => 
   assert.deepEqual(result.byCategory, { error: 3, transaction: 40 });
 });
 
+test('evaluateIngest does not double-count the *_indexed mirror categories', () => {
+  // Observed live: Sentry reports transaction/transaction_indexed and
+  // span/span_indexed as separate categories for the SAME events, so a naive
+  // sum reported 296 for what was really 148.
+  const result = evaluateIngest(
+    statsPayload([
+      group('transaction', 66),
+      group('transaction_indexed', 66),
+      group('span', 82),
+      group('span_indexed', 82),
+    ]),
+    24,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.acceptedEvents, 148, 'distinct events exclude the _indexed mirrors');
+  assert.equal(result.acceptedIncludingIndexed, 296, 'raw total retained for traceability');
+  assert.equal(result.byCategory.transaction_indexed, 66, 'full breakdown still reported');
+});
+
 test('evaluateIngest FAILS when nothing was accepted — silent means broken, not idle', () => {
   const result = evaluateIngest(statsPayload([group('error', 0), group('transaction', 0)]), 24);
   assert.equal(result.ok, false);

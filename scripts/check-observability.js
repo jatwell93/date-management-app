@@ -279,6 +279,7 @@ function evaluateIngest(payload, sinceHours) {
 
   const byCategory = {};
   let total = 0;
+  let distinct = 0;
 
   for (const group of payload.groups) {
     if (!group || typeof group !== 'object') continue;
@@ -288,11 +289,18 @@ function evaluateIngest(payload, sinceHours) {
     if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) continue;
     byCategory[category] = (byCategory[category] || 0) + count;
     total += count;
+    // Sentry bills/reports `transaction` and `transaction_indexed` (likewise
+    // `span`/`span_indexed`) as separate categories covering the SAME events, so
+    // summing every category double-counts. The gate only needs > 0, but this
+    // number lands in a sign-off — and this task exists because a sign-off once
+    // carried a figure wrong by 28x.
+    if (!category.endsWith('_indexed')) distinct += count;
   }
 
   return {
     ok: total > 0,
-    acceptedEvents: total,
+    acceptedEvents: distinct,
+    acceptedIncludingIndexed: total,
     byCategory,
     windowHours: sinceHours,
   };
