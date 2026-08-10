@@ -134,34 +134,49 @@ function parseSecretList(raw) {
   }
 
   const candidates = [raw.trim(), ...findBracketSpans(raw)];
-  let lastError;
+  let sawArray = false;
 
   for (const candidate of candidates) {
     let parsed;
     try {
       parsed = JSON.parse(candidate);
-    } catch (error) {
-      lastError = error;
+    } catch {
       continue;
     }
     if (!Array.isArray(parsed)) continue;
+    sawArray = true;
 
-    const names = parsed
-      .map((entry) => (entry && typeof entry === 'object' ? entry.name : entry))
-      .filter((name) => typeof name === 'string' && name !== '');
+    // Match the shape wrangler actually emits — [{ name, type }, ...] — rather
+    // than accepting anything array-shaped. wrangler's own telemetry line embeds
+    // VALID JSON arrays of bare strings (e.g. "argsUsed":["env"]) ahead of the
+    // payload, so a lenient reader returns ["env"] as the secret list and then
+    // reports every real secret as missing. Requiring object entries with a
+    // string `name` makes the payload unambiguous.
+    if (parsed.length > 0) {
+      const isSecretList = parsed.every(
+        (entry) =>
+          entry !== null &&
+          typeof entry === 'object' &&
+          !Array.isArray(entry) &&
+          typeof entry.name === 'string' &&
+          entry.name !== '',
+      );
+      if (!isSecretList) continue;
+      return parsed.map((entry) => entry.name);
+    }
 
-    // An empty array is a legitimate answer (a Worker with no secrets), but a
-    // bracket span from a banner would also parse to something array-shaped —
-    // so only accept a span that actually yielded secret names, unless it is the
-    // whole payload.
-    if (names.length > 0 || candidate === raw.trim()) return names;
+    // An empty array is a legitimate answer (a Worker with no secrets) only when
+    // it is the entire payload; an empty span from a log line proves nothing.
+    if (candidate === raw.trim()) return [];
   }
 
   throw new Error(
-    lastError
-      ? `Secret list is not valid JSON: ${lastError.message}. ` +
-          'Expected `wrangler secret list --env production --format json` output on stdin.'
-      : 'Secret list is not a JSON array; cannot verify secret bindings',
+    sawArray
+      ? 'No `wrangler secret list` payload found on stdin. Expected a JSON array of ' +
+          '{ name, type } objects — check that --format json was passed and that the ' +
+          'command succeeded.'
+      : 'Secret list is not valid JSON. Expected `wrangler secret list --env production ' +
+          '--format json` output on stdin.',
   );
 }
 

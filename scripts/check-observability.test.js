@@ -59,6 +59,37 @@ test('parseSecretList survives multiple bracketed banner tokens', () => {
   assert.deepEqual(parseSecretList(raw), ['WORKERS_SENTRY_DSN']);
 });
 
+test('parseSecretList ignores wrangler telemetry containing a VALID JSON array', () => {
+  // Real failure, reported from a live run: wrangler's metrics line embeds
+  // "argsUsed":["env"], a well-formed JSON array of bare strings, BEFORE the
+  // payload. The lenient reader returned ["env"] as the secret list and then
+  // reported the genuinely-present WORKERS_SENTRY_DSN as missing.
+  const raw = [
+    '🪵  Writing logs to "C:\\Users\\josha\\AppData\\Roaming\\.wrangler\\logs\\wrangler.log"',
+    '.env file not found at "C:\\repo\\workers\\.env". Continuing...',
+    'Metrics dispatcher: Posting data {"deviceId":"abc","event":"wrangler command started",' +
+      '"properties":{"osPlatform":"Windows","argsUsed":["env"],"argsCombination":"env",' +
+      '"sanitizedCommand":"secret list","sanitizedArgs":{}}}',
+    '-- START CF API REQUEST: GET https://api.cloudflare.com/client/v4/accounts/x/secrets',
+    '-- END CF API RESPONSE',
+    '[',
+    '  { "name": "NEON_CONNECTION_STRING", "type": "secret_text" },',
+    '  { "name": "SENTRY_DSN", "type": "secret_text" },',
+    '  { "name": "WORKER_SENTRY_DSN", "type": "secret_text" },',
+    '  { "name": "WORKERS_SENTRY_DSN", "type": "secret_text" }',
+    ']',
+  ].join('\n');
+
+  const names = parseSecretList(raw);
+  assert.ok(names.includes('WORKERS_SENTRY_DSN'), 'must find the real secret, not ["env"]');
+  assert.ok(!names.includes('env'), 'must not treat telemetry argsUsed as secret names');
+  assert.equal(evaluateSecretBinding(names).ok, true);
+});
+
+test('parseSecretList rejects an array of bare strings as a secret list', () => {
+  assert.throws(() => parseSecretList('["env"]'), /Expected a JSON array of/);
+});
+
 test('parseSecretList is not fooled by a bracket inside a secret name', () => {
   const raw = 'banner\n[{"name":"WEIRD]NAME"},{"name":"WORKERS_SENTRY_DSN"}]\n';
   assert.deepEqual(parseSecretList(raw), ['WEIRD]NAME', 'WORKERS_SENTRY_DSN']);
