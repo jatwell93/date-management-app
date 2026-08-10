@@ -75,12 +75,6 @@ const DEFAULT_MAX_QUIET_HOURS = 24;
 const REQUIRED_WORKER_SECRETS = ['WORKERS_SENTRY_DSN'];
 
 /**
- * Parse `wrangler secret list --format json` output into a list of secret names.
- *
- * Fails closed on anything unparseable: an unreadable secret list must not be
- * mistaken for a satisfied binding requirement.
- */
-/**
  * Find every balanced `[...]` span in `text`, outermost first.
  *
  * A naive indexOf('[') / lastIndexOf(']') slice is not enough: both wrangler and
@@ -125,6 +119,12 @@ function findBracketSpans(text) {
   return spans;
 }
 
+/**
+ * Parse `wrangler secret list --format json` output into a list of secret names.
+ *
+ * Fails closed on anything unparseable: an unreadable secret list must not be
+ * mistaken for a satisfied binding requirement.
+ */
 function parseSecretList(raw) {
   if (typeof raw !== 'string' || raw.trim() === '') {
     throw new Error(
@@ -260,6 +260,24 @@ async function fetchAcceptedStats(org, projectId, token, sinceHours, fetchImpl) 
 }
 
 /**
+ * Sentry reports some payloads twice under paired categories covering the SAME
+ * events — `transaction`/`transaction_indexed`, `span`/`span_indexed`. The mirror
+ * always carries the `_indexed` suffix today, and that suffix is the whole rule.
+ *
+ * If Sentry ever adds a mirror pair under a different convention, this rule will
+ * not catch it and `acceptedEvents` will silently inflate. That is why the applied
+ * rule and the categories it matched are both emitted into the evidence document:
+ * an unrecognised mirror is then visible as an implausible pair in `byCategory`
+ * rather than buried inside a single number. Extend MIRROR_CATEGORY_SUFFIXES if a
+ * new convention appears.
+ */
+const MIRROR_CATEGORY_SUFFIXES = ['_indexed'];
+
+function isMirrorCategory(category) {
+  return MIRROR_CATEGORY_SUFFIXES.some((suffix) => category.endsWith(suffix));
+}
+
+/**
  * Evaluate a stats_v2 payload:
  *
  *   { intervals: [...], groups: [ { by: { category }, totals: { 'sum(quantity)': n } } ] }
@@ -268,6 +286,11 @@ async function fetchAcceptedStats(org, projectId, token, sinceHours, fetchImpl) 
  * what this gate asserts. Counts are reported per category so the evidence
  * distinguishes "errors are flowing" from "only transactions are flowing" — a
  * clean service should show transactions and no errors, and that is a pass.
+ *
+ * `acceptedEvents` is a SUM ACROSS CATEGORIES with known mirror categories
+ * removed — it is not a count of unique events. Distinct categories such as
+ * `error`, `default` and `attachment` are genuinely different payloads and are
+ * summed as-is; only the mirror pairs above are deduplicated.
  */
 function evaluateIngest(payload, sinceHours) {
   if (!payload || typeof payload !== 'object' || !Array.isArray(payload.groups)) {
@@ -278,6 +301,7 @@ function evaluateIngest(payload, sinceHours) {
   }
 
   const byCategory = {};
+  const mirrorCategories = [];
   let total = 0;
   let distinct = 0;
 
@@ -289,12 +313,10 @@ function evaluateIngest(payload, sinceHours) {
     if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) continue;
     byCategory[category] = (byCategory[category] || 0) + count;
     total += count;
-    // Sentry bills/reports `transaction` and `transaction_indexed` (likewise
-    // `span`/`span_indexed`) as separate categories covering the SAME events, so
-    // summing every category double-counts. The gate only needs > 0, but this
-    // number lands in a sign-off — and this task exists because a sign-off once
-    // carried a figure wrong by 28x.
-    if (!category.endsWith('_indexed')) distinct += count;
+    // The gate only needs > 0, but this number lands in a sign-off — and this task
+    // exists because a sign-off once carried a figure wrong by 28x.
+    if (isMirrorCategory(category)) mirrorCategories.push(category);
+    else distinct += count;
   }
 
   return {
@@ -302,6 +324,14 @@ function evaluateIngest(payload, sinceHours) {
     acceptedEvents: distinct,
     acceptedIncludingIndexed: total,
     byCategory,
+    // Self-describing evidence: what the two totals mean and which categories the
+    // dedup rule actually removed, so a reader need not consult this source file.
+    countingRule: {
+      acceptedEvents: `sum across categories, excluding categories ending in ${MIRROR_CATEGORY_SUFFIXES.join(', ')}; not a unique-event count`,
+      acceptedIncludingIndexed: 'raw sum across every reported category',
+      mirrorSuffixes: [...MIRROR_CATEGORY_SUFFIXES],
+      mirrorCategoriesExcluded: mirrorCategories,
+    },
     windowHours: sinceHours,
   };
 }

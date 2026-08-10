@@ -81,6 +81,11 @@ export async function healthCheck(
     try {
       const sql = neon(connectionString);
       const queryPromise = sql`SELECT 1`;
+      // If the timeout wins the race the query is abandoned mid-flight. Without a
+      // terminal handler its later rejection is unhandled, which the Workers runtime
+      // surfaces as an isolate-level error unrelated to the request that caused it.
+      // The rejection is already accounted for by the timeout branch below.
+      queryPromise.catch(() => {});
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(

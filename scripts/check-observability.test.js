@@ -169,6 +169,27 @@ test('evaluateIngest does not double-count the *_indexed mirror categories', () 
   assert.equal(result.acceptedEvents, 148, 'distinct events exclude the _indexed mirrors');
   assert.equal(result.acceptedIncludingIndexed, 296, 'raw total retained for traceability');
   assert.equal(result.byCategory.transaction_indexed, 66, 'full breakdown still reported');
+  assert.deepEqual(
+    result.countingRule.mirrorCategoriesExcluded.sort(),
+    ['span_indexed', 'transaction_indexed'],
+    'the evidence document names exactly which categories the dedup rule removed',
+  );
+});
+
+test('evaluateIngest sums genuinely distinct categories without deduplication', () => {
+  // `error`, `default` and `attachment` are different payloads, not mirrors of
+  // one another, so summing them is correct. Guards against an over-broad dedup.
+  const result = evaluateIngest(
+    statsPayload([group('error', 3), group('default', 5), group('attachment', 2)]),
+    24,
+  );
+  assert.equal(result.acceptedEvents, 10);
+  assert.deepEqual(result.countingRule.mirrorCategoriesExcluded, []);
+  assert.match(
+    result.countingRule.acceptedEvents,
+    /not a unique-event count/,
+    'the artifact states what the number is, so a reader need not infer it',
+  );
 });
 
 test('evaluateIngest FAILS when nothing was accepted — silent means broken, not idle', () => {

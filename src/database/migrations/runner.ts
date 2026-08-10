@@ -445,8 +445,9 @@ function validateLedger(history: LoadedMigration[], rows: LedgerRow[]): Set<stri
       );
     }
     if (row.state !== 'applied') {
-      throw new Error(
+      throw new MigrationCodedError(
         `Migration ${row.id} was interrupted outside a transaction; repair it explicitly before resuming`,
+        'ledger-inconsistent',
       );
     }
     applied.add(row.id);
