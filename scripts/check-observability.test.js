@@ -10,7 +10,8 @@ const assert = require('node:assert/strict');
 const {
   parseSecretList,
   evaluateSecretBinding,
-  fetchReceivedStats,
+  resolveProjectId,
+  fetchAcceptedStats,
   evaluateIngest,
   main,
 } = require('./check-observability');
@@ -23,8 +24,6 @@ const baseEnv = {
   SENTRY_PROJECT: 'node-cloudflare-workers',
   SENTRY_AUTH_TOKEN: 'sntrys_token',
 };
-
-const hoursAgo = (h) => Math.floor(Date.now() / 1000) - h * 3600;
 
 // ── parseSecretList ────────────────────────────────────────────────────────
 
@@ -127,81 +126,140 @@ test('evaluateSecretBinding reports a missing DSN — the silent no-op case', ()
 
 // ── evaluateIngest ─────────────────────────────────────────────────────────
 
-test('evaluateIngest passes when the project received events', () => {
+const statsPayload = (groups) => ({ intervals: [], groups });
+const group = (category, quantity) => ({
+  by: { category },
+  totals: { 'sum(quantity)': quantity },
+});
+
+test('evaluateIngest passes on transactions alone — a clean service has no errors', () => {
+  // The whole reason for moving off the legacy stat=received endpoint: a
+  // correctly-wired Worker serving clean traffic emits transactions and zero
+  // errors, and that must read as a PASS.
+  const result = evaluateIngest(statsPayload([group('transaction', 128)]), 24);
+  assert.equal(result.ok, true);
+  assert.equal(result.acceptedEvents, 128);
+  assert.deepEqual(result.byCategory, { transaction: 128 });
+});
+
+test('evaluateIngest sums across categories and reports them separately', () => {
   const result = evaluateIngest(
-    [
-      [hoursAgo(3), 0],
-      [hoursAgo(2), 41],
-      [hoursAgo(1), 7],
-    ],
+    statsPayload([group('error', 3), group('transaction', 40), group('attachment', 0)]),
     24,
   );
   assert.equal(result.ok, true);
-  assert.equal(result.receivedEvents, 48);
-  assert.ok(result.lastEventAt);
+  assert.equal(result.acceptedEvents, 43);
+  assert.deepEqual(result.byCategory, { error: 3, transaction: 40 });
 });
 
-test('evaluateIngest FAILS on an all-zero series — a silent project is broken, not idle', () => {
+test('evaluateIngest FAILS when nothing was accepted — silent means broken, not idle', () => {
+  const result = evaluateIngest(statsPayload([group('error', 0), group('transaction', 0)]), 24);
+  assert.equal(result.ok, false);
+  assert.equal(result.acceptedEvents, 0);
+  assert.deepEqual(result.byCategory, {});
+});
+
+test('evaluateIngest fails on an empty groups array rather than passing vacuously', () => {
+  assert.equal(evaluateIngest(statsPayload([]), 24).ok, false);
+});
+
+test('evaluateIngest ignores malformed groups instead of counting them', () => {
   const result = evaluateIngest(
-    [
-      [hoursAgo(2), 0],
-      [hoursAgo(1), 0],
-    ],
+    statsPayload([null, { by: {} }, { by: { category: 'error' }, totals: {} }, group('error', 5)]),
     24,
   );
-  assert.equal(result.ok, false);
-  assert.equal(result.receivedEvents, 0);
-  assert.equal(result.lastEventAt, null);
+  assert.equal(result.acceptedEvents, 5);
 });
 
-test('evaluateIngest fails on an empty series rather than passing vacuously', () => {
-  assert.equal(evaluateIngest([], 24).ok, false);
+test('evaluateIngest rejects a response with no groups array', () => {
+  assert.throws(() => evaluateIngest({ detail: 'nope' }, 24), /no `groups` array/);
+  assert.throws(() => evaluateIngest([], 24), /no `groups` array/);
 });
 
-test('evaluateIngest ignores malformed points instead of counting them', () => {
-  const result = evaluateIngest([['bad'], [hoursAgo(1), 'x'], [hoursAgo(1), 5]], 24);
-  assert.equal(result.receivedEvents, 5);
+// ── resolveProjectId ───────────────────────────────────────────────────────
+
+test('resolveProjectId returns the numeric id stats_v2 filters on', async () => {
+  let seenUrl;
+  const fetchImpl = async (url) => {
+    seenUrl = url;
+    return okResponse({ id: '4509', slug: 'node-cloudflare-workers' });
+  };
+  const id = await resolveProjectId('acme', 'node-cloudflare-workers', 'tok', fetchImpl);
+  assert.equal(id, '4509');
+  assert.match(seenUrl, /\/projects\/acme\/node-cloudflare-workers\//);
 });
 
-test('evaluateIngest rejects a non-array response', () => {
-  assert.throws(() => evaluateIngest({ detail: 'nope' }, 24), /not an array/);
+test('resolveProjectId fails closed when the slug does not exist', async () => {
+  await assert.rejects(
+    () => resolveProjectId('acme', 'ghost', 'tok', async () => errResponse(404)),
+    /Could not resolve Sentry project/,
+  );
 });
 
-// ── fetchReceivedStats ─────────────────────────────────────────────────────
+test('resolveProjectId fails when the project has no id', async () => {
+  await assert.rejects(
+    () => resolveProjectId('acme', 'p', 'tok', async () => okResponse({ slug: 'p' })),
+    /returned no id/,
+  );
+});
 
-test('fetchReceivedStats requests stat=received for the configured project', async () => {
+// ── fetchAcceptedStats ─────────────────────────────────────────────────────
+
+test('fetchAcceptedStats queries stats_v2 scoped to the resolved project id', async () => {
   let seenUrl;
   let seenAuth;
   const fetchImpl = async (url, init) => {
     seenUrl = url;
     seenAuth = init.headers.Authorization;
-    return okResponse([[hoursAgo(1), 3]]);
+    return okResponse(statsPayload([group('transaction', 3)]));
   };
-  await fetchReceivedStats('acme', 'node-cloudflare-workers', 'tok', 24, fetchImpl);
-  assert.match(seenUrl, /\/projects\/acme\/node-cloudflare-workers\/stats\//);
-  assert.match(seenUrl, /stat=received/);
+  await fetchAcceptedStats('acme', '4509', 'tok', 24, fetchImpl);
+  assert.match(seenUrl, /\/organizations\/acme\/stats_v2\//);
+  assert.match(seenUrl, /field=sum\(quantity\)/);
+  assert.match(seenUrl, /groupBy=category/);
+  assert.match(seenUrl, /outcome=accepted/);
+  assert.match(seenUrl, /statsPeriod=24h/);
+  assert.match(seenUrl, /project=4509/);
   assert.equal(seenAuth, 'Bearer tok');
 });
 
-test('fetchReceivedStats fails closed on non-200 — a bad token is not a pass', async () => {
-  const fetchImpl = async () => errResponse(403);
-  await assert.rejects(() => fetchReceivedStats('acme', 'proj', 'tok', 24, fetchImpl), /HTTP 403/);
+test('fetchAcceptedStats scopes to one project — org-wide would pass on Express traffic', async () => {
+  let seenUrl;
+  await fetchAcceptedStats('acme', '4509', 'tok', 24, async (url) => {
+    seenUrl = url;
+    return okResponse(statsPayload([]));
+  });
+  assert.ok(!seenUrl.includes('project=-1'), 'must never query all projects');
 });
 
-test('fetchReceivedStats URL-encodes org and project slugs', async () => {
-  let seenUrl;
-  const fetchImpl = async (url) => {
-    seenUrl = url;
-    return okResponse([]);
-  };
-  await fetchReceivedStats('a c', 'p/j', 'tok', 24, fetchImpl);
-  assert.match(seenUrl, /projects\/a%20c\/p%2Fj\//);
+test('fetchAcceptedStats fails closed on non-200 — a bad token is not a pass', async () => {
+  await assert.rejects(
+    () => fetchAcceptedStats('acme', '1', 'tok', 24, async () => errResponse(403)),
+    /HTTP 403/,
+  );
+});
+
+test('a 403 explains that stats_v2 needs org:read, not just project:read', async () => {
+  await assert.rejects(
+    () => fetchAcceptedStats('acme', '1', 'tok', 24, async () => errResponse(403)),
+    /org:read/,
+  );
 });
 
 // ── main ───────────────────────────────────────────────────────────────────
 
+/**
+ * main() makes two calls: resolve the project slug to an id, then query
+ * stats_v2. The double answers on URL so a test can vary the stats result
+ * without having to restate the project lookup.
+ */
+const routedFetch = (statsBody) => async (url) =>
+  url.includes('/stats_v2/')
+    ? okResponse(statsBody)
+    : okResponse({ id: '4509', slug: 'node-cloudflare-workers' });
+
 const deps = (overrides = {}) => ({
-  fetchImpl: async () => okResponse([[hoursAgo(1), 12]]),
+  fetchImpl: routedFetch(statsPayload([group('transaction', 12)])),
   readStdin: async () => JSON.stringify([{ name: 'WORKERS_SENTRY_DSN' }]),
   argv: [],
   ...overrides,
@@ -225,9 +283,9 @@ test('main fails when the Worker has no Sentry DSN bound', async () => {
 });
 
 test('main fails on a silent Sentry project and explains why it is not idleness', async () => {
-  const evidence = await main(baseEnv, deps({ fetchImpl: async () => okResponse([]) }));
+  const evidence = await main(baseEnv, deps({ fetchImpl: routedFetch(statsPayload([])) }));
   assert.equal(evidence.ok, false);
-  assert.match(evidence.failures.join('\n'), /received 0 events/);
+  assert.match(evidence.failures.join('\n'), /accepted 0 events/);
   assert.match(evidence.failures.join('\n'), /tracesSampleRate 1\.0/);
 });
 
@@ -236,7 +294,7 @@ test('main reports both failures at once rather than stopping at the first', asy
     baseEnv,
     deps({
       readStdin: async () => JSON.stringify([{ name: 'JWT_SECRET' }]),
-      fetchImpl: async () => okResponse([]),
+      fetchImpl: routedFetch(statsPayload([])),
     }),
   );
   assert.equal(evidence.failures.length, 2);

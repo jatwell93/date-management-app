@@ -188,17 +188,49 @@ function evaluateSecretBinding(names, required = REQUIRED_WORKER_SECRETS) {
 }
 
 /**
- * Fetch the Sentry "received" event-count series for a project.
+ * Resolve a project slug to the numeric ID that stats_v2 filters on.
  *
- * `stat=received` counts everything the project ingested — errors AND
- * transactions — so it stays meaningful for a healthy service with no errors,
- * which an issues-based query would not.
+ * stats_v2 is an ORGANIZATION endpoint and its `project` filter takes numeric
+ * IDs, not slugs. Resolving explicitly keeps the check scoped to the intended
+ * project — querying all projects would happily pass on traffic from the legacy
+ * Express project, which is the exact confusion this check exists to resolve.
  */
-async function fetchReceivedStats(org, project, token, sinceHours, fetchImpl, now = Date.now()) {
-  const since = Math.floor(now / 1000) - Math.round(sinceHours * 3600);
+async function resolveProjectId(org, project, token, fetchImpl) {
+  const url = `${SENTRY_API_BASE}/projects/${encodeURIComponent(org)}/${encodeURIComponent(project)}/`;
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` } });
+
+  if (!response.ok) {
+    throw new Error(
+      `Could not resolve Sentry project "${org}/${project}" (HTTP ${response.status}). ` +
+        'Needs project:read. Check the slug matches the project the Worker DSN points at.',
+    );
+  }
+
+  const body = await response.json();
+  const id = body && (body.id ?? body.projectId);
+  if (id === undefined || id === null || `${id}`.trim() === '') {
+    throw new Error(
+      `Sentry project "${org}/${project}" returned no id; cannot scope the stats query`,
+    );
+  }
+  return `${id}`;
+}
+
+/**
+ * Fetch accepted event counts per data category for a project.
+ *
+ * Uses stats_v2 with an explicit `category` grouping rather than the legacy
+ * project `stat=received` series, which is error-oriented: a correctly-wired
+ * Worker serving clean traffic produces TRANSACTIONS and no errors, so the
+ * legacy endpoint reports 0 and a healthy pipeline is indistinguishable from an
+ * unwired one. `outcome=accepted` counts what Sentry actually stored.
+ */
+async function fetchAcceptedStats(org, projectId, token, sinceHours, fetchImpl) {
+  const statsPeriod = `${Math.max(1, Math.ceil(sinceHours))}h`;
   const url =
-    `${SENTRY_API_BASE}/projects/${encodeURIComponent(org)}/${encodeURIComponent(project)}` +
-    `/stats/?stat=received&resolution=1h&since=${since}`;
+    `${SENTRY_API_BASE}/organizations/${encodeURIComponent(org)}/stats_v2/` +
+    `?field=sum(quantity)&groupBy=category&outcome=accepted` +
+    `&statsPeriod=${statsPeriod}&project=${encodeURIComponent(projectId)}`;
 
   const response = await fetchImpl(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -210,18 +242,17 @@ async function fetchReceivedStats(org, project, token, sinceHours, fetchImpl, no
     // gate, where "cannot tell" must not read as "fine".
     const hint =
       response.status === 403
-        ? ' A 403 usually means the token lacks scopes rather than that the project is wrong. ' +
-          'An Organization Auth Token carries org:ci, which covers source-map upload and releases ' +
-          'but grants NO read access to project or event data. Use an Internal Integration ' +
-          '(Settings > Developer Settings) or a User Auth Token, granted event:read + project:read.'
+        ? ' A 403 here means the token lacks scopes rather than that the project is wrong. ' +
+          'stats_v2 is an ORGANIZATION endpoint and needs org:read — separate from the ' +
+          'project:read used to resolve the project. An Organization Auth Token carries only ' +
+          'org:ci (source maps, releases) and cannot read any of this: use an Internal ' +
+          'Integration (Settings > Developer Settings) granted Organization: Read plus ' +
+          'Project: Read, or a User Auth Token with org:read + project:read.'
         : '';
-    // Deliberately fail closed. The canary step tolerates a Sentry outage so a
-    // deploy is never blocked by a third party; this check is a configuration
-    // gate, where "cannot tell" must not read as "fine".
     throw new Error(
       `Sentry stats request failed with HTTP ${response.status}.` +
         hint +
-        ` Verify SENTRY_PROJECT ("${project}") names the project the Worker DSN points at.`,
+        ` Queried project id ${projectId}.`,
     );
   }
 
@@ -229,32 +260,41 @@ async function fetchReceivedStats(org, project, token, sinceHours, fetchImpl, no
 }
 
 /**
- * A Sentry stats series is [[unixSeconds, count], ...]. Zero total received
- * events across the window means the ingest pipeline is broken, not that the
- * service is quiet — see the tracesSampleRate note in the file header.
+ * Evaluate a stats_v2 payload:
+ *
+ *   { intervals: [...], groups: [ { by: { category }, totals: { 'sum(quantity)': n } } ] }
+ *
+ * Any accepted event in ANY category proves the pipeline is connected, which is
+ * what this gate asserts. Counts are reported per category so the evidence
+ * distinguishes "errors are flowing" from "only transactions are flowing" — a
+ * clean service should show transactions and no errors, and that is a pass.
  */
-function evaluateIngest(series, sinceHours) {
-  if (!Array.isArray(series)) {
-    throw new Error('Sentry stats response was not an array; cannot evaluate ingest');
+function evaluateIngest(payload, sinceHours) {
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.groups)) {
+    throw new Error(
+      'Sentry stats_v2 response had no `groups` array; cannot evaluate ingest. ' +
+        'Check that field=sum(quantity) and groupBy=category were accepted.',
+    );
   }
 
+  const byCategory = {};
   let total = 0;
-  let lastEventAt = null;
-  for (const point of series) {
-    if (!Array.isArray(point) || point.length < 2) continue;
-    const [timestamp, count] = point;
+
+  for (const group of payload.groups) {
+    if (!group || typeof group !== 'object') continue;
+    const category = (group.by && group.by.category) || 'unknown';
+    const totals = group.totals || {};
+    const count = totals['sum(quantity)'];
     if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) continue;
+    byCategory[category] = (byCategory[category] || 0) + count;
     total += count;
-    if (typeof timestamp === 'number' && (lastEventAt === null || timestamp > lastEventAt)) {
-      lastEventAt = timestamp;
-    }
   }
 
   return {
     ok: total > 0,
-    receivedEvents: total,
+    acceptedEvents: total,
+    byCategory,
     windowHours: sinceHours,
-    lastEventAt: lastEventAt === null ? null : new Date(lastEventAt * 1000).toISOString(),
   };
 }
 
@@ -326,14 +366,17 @@ async function main(env, deps) {
     );
 
     evidence.sentry = { org, project };
-    const series = await fetchReceivedStats(org, project, token, quietHours, fetchImpl);
+    const projectId = await resolveProjectId(org, project, token, fetchImpl);
+    evidence.sentry.projectId = projectId;
+    const series = await fetchAcceptedStats(org, projectId, token, quietHours, fetchImpl);
     evidence.ingest = { ...evaluateIngest(series, quietHours), skipped: false };
 
     if (!evidence.ingest.ok) {
       failures.push(
-        `Sentry project ${org}/${project} received 0 events in the last ${quietHours}h. ` +
-          'With tracesSampleRate 1.0 every request produces a transaction, so this means ' +
-          'the Worker is not reporting to this project (wrong or unset DSN), not that it is idle.',
+        `Sentry project ${org}/${project} accepted 0 events of any category in the last ` +
+          `${quietHours}h. With tracesSampleRate 1.0 every request produces a transaction, so ` +
+          'this means the Worker is not reporting to this project (wrong or unset DSN), not ' +
+          'that it is idle. Note stats can lag a few minutes behind live traffic.',
       );
     }
   }
@@ -346,7 +389,8 @@ async function main(env, deps) {
 module.exports = {
   parseSecretList,
   evaluateSecretBinding,
-  fetchReceivedStats,
+  resolveProjectId,
+  fetchAcceptedStats,
   evaluateIngest,
   main,
   DEFAULT_MAX_QUIET_HOURS,
