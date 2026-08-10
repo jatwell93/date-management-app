@@ -1,0 +1,423 @@
+#!/usr/bin/env node
+/**
+ * Unit tests for scripts/check-observability.js (task 1.10).
+ *
+ * Mocked fetch and stdin throughout — no network, no wrangler, no secrets.
+ */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  parseSecretList,
+  evaluateSecretBinding,
+  resolveProjectId,
+  fetchAcceptedStats,
+  evaluateIngest,
+  main,
+} = require('./check-observability');
+
+const okResponse = (body) => ({ ok: true, status: 200, json: async () => body });
+const errResponse = (status) => ({ ok: false, status, json: async () => ({}) });
+
+const baseEnv = {
+  SENTRY_ORG: 'acme',
+  SENTRY_PROJECT: 'node-cloudflare-workers',
+  SENTRY_AUTH_TOKEN: 'sntrys_token',
+};
+
+// ── parseSecretList ────────────────────────────────────────────────────────
+
+test('parseSecretList reads names from wrangler JSON output', () => {
+  const raw = JSON.stringify([
+    { name: 'NEON_CONNECTION_STRING', type: 'secret_text' },
+    { name: 'WORKERS_SENTRY_DSN', type: 'secret_text' },
+  ]);
+  assert.deepEqual(parseSecretList(raw), ['NEON_CONNECTION_STRING', 'WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList tolerates a banner before the JSON array', () => {
+  const raw = `Using vars defined in .env\n[{"name":"WORKERS_SENTRY_DSN"}]\n`;
+  assert.deepEqual(parseSecretList(raw), ['WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList survives a bracketed banner token before the payload', () => {
+  // Real failure: `indexOf('[')` matched the dotenv banner, so JSON.parse ran on
+  // "[dotenv@17.2.3] injecting env ... [ {...} ]" and threw at position 16.
+  const raw =
+    '[dotenv@17.2.3] injecting env (0) from .env\n' +
+    '[{"name":"NEON_CONNECTION_STRING"},{"name":"WORKERS_SENTRY_DSN"}]\n';
+  assert.deepEqual(parseSecretList(raw), ['NEON_CONNECTION_STRING', 'WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList survives multiple bracketed banner tokens', () => {
+  const raw =
+    '[dotenv@17.2.3] injecting env\n' +
+    '[custom build] running npm run build\n' +
+    '[{"name":"WORKERS_SENTRY_DSN"}]\n' +
+    'Done [ok]\n';
+  assert.deepEqual(parseSecretList(raw), ['WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList ignores wrangler telemetry containing a VALID JSON array', () => {
+  // Real failure, reported from a live run: wrangler's metrics line embeds
+  // "argsUsed":["env"], a well-formed JSON array of bare strings, BEFORE the
+  // payload. The lenient reader returned ["env"] as the secret list and then
+  // reported the genuinely-present WORKERS_SENTRY_DSN as missing.
+  const raw = [
+    '🪵  Writing logs to "C:\\Users\\josha\\AppData\\Roaming\\.wrangler\\logs\\wrangler.log"',
+    '.env file not found at "C:\\repo\\workers\\.env". Continuing...',
+    'Metrics dispatcher: Posting data {"deviceId":"abc","event":"wrangler command started",' +
+      '"properties":{"osPlatform":"Windows","argsUsed":["env"],"argsCombination":"env",' +
+      '"sanitizedCommand":"secret list","sanitizedArgs":{}}}',
+    '-- START CF API REQUEST: GET https://api.cloudflare.com/client/v4/accounts/x/secrets',
+    '-- END CF API RESPONSE',
+    '[',
+    '  { "name": "NEON_CONNECTION_STRING", "type": "secret_text" },',
+    '  { "name": "SENTRY_DSN", "type": "secret_text" },',
+    '  { "name": "WORKER_SENTRY_DSN", "type": "secret_text" },',
+    '  { "name": "WORKERS_SENTRY_DSN", "type": "secret_text" }',
+    ']',
+  ].join('\n');
+
+  const names = parseSecretList(raw);
+  assert.ok(names.includes('WORKERS_SENTRY_DSN'), 'must find the real secret, not ["env"]');
+  assert.ok(!names.includes('env'), 'must not treat telemetry argsUsed as secret names');
+  assert.equal(evaluateSecretBinding(names).ok, true);
+});
+
+test('parseSecretList rejects an array of bare strings as a secret list', () => {
+  assert.throws(() => parseSecretList('["env"]'), /Expected a JSON array of/);
+});
+
+test('parseSecretList is not fooled by a bracket inside a secret name', () => {
+  const raw = 'banner\n[{"name":"WEIRD]NAME"},{"name":"WORKERS_SENTRY_DSN"}]\n';
+  assert.deepEqual(parseSecretList(raw), ['WEIRD]NAME', 'WORKERS_SENTRY_DSN']);
+});
+
+test('parseSecretList accepts a Worker with no secrets at all', () => {
+  assert.deepEqual(parseSecretList('[]'), []);
+});
+
+test('parseSecretList fails closed on empty stdin', () => {
+  assert.throws(() => parseSecretList(''), /No secret list on stdin/);
+  assert.throws(() => parseSecretList('   '), /No secret list on stdin/);
+});
+
+test('parseSecretList fails closed on non-array or invalid JSON', () => {
+  assert.throws(() => parseSecretList('not json at all'), /not valid JSON/);
+  assert.throws(() => parseSecretList('[{"name": broken]'), /not valid JSON/);
+  // An object payload is well-formed JSON but not a secret list.
+  assert.throws(() => parseSecretList('{"secrets": 3}'), /not valid JSON|not a JSON array/);
+});
+
+// ── evaluateSecretBinding ──────────────────────────────────────────────────
+
+test('evaluateSecretBinding passes when the DSN is bound', () => {
+  const result = evaluateSecretBinding(['NEON_CONNECTION_STRING', 'WORKERS_SENTRY_DSN']);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.missing, []);
+});
+
+test('evaluateSecretBinding reports a missing DSN — the silent no-op case', () => {
+  const result = evaluateSecretBinding(['NEON_CONNECTION_STRING']);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.missing, ['WORKERS_SENTRY_DSN']);
+});
+
+// ── evaluateIngest ─────────────────────────────────────────────────────────
+
+const statsPayload = (groups) => ({ intervals: [], groups });
+const group = (category, quantity) => ({
+  by: { category },
+  totals: { 'sum(quantity)': quantity },
+});
+
+test('evaluateIngest passes on transactions alone — a clean service has no errors', () => {
+  // The whole reason for moving off the legacy stat=received endpoint: a
+  // correctly-wired Worker serving clean traffic emits transactions and zero
+  // errors, and that must read as a PASS.
+  const result = evaluateIngest(statsPayload([group('transaction', 128)]), 24);
+  assert.equal(result.ok, true);
+  assert.equal(result.acceptedEvents, 128);
+  assert.deepEqual(result.byCategory, { transaction: 128 });
+});
+
+test('evaluateIngest sums across categories and reports them separately', () => {
+  const result = evaluateIngest(
+    statsPayload([group('error', 3), group('transaction', 40), group('attachment', 0)]),
+    24,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.acceptedEvents, 43);
+  assert.deepEqual(result.byCategory, { error: 3, transaction: 40 });
+});
+
+test('evaluateIngest does not double-count the *_indexed mirror categories', () => {
+  // Observed live: Sentry reports transaction/transaction_indexed and
+  // span/span_indexed as separate categories for the SAME events, so a naive
+  // sum reported 296 for what was really 148.
+  const result = evaluateIngest(
+    statsPayload([
+      group('transaction', 66),
+      group('transaction_indexed', 66),
+      group('span', 82),
+      group('span_indexed', 82),
+    ]),
+    24,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.acceptedEvents, 148, 'distinct events exclude the _indexed mirrors');
+  assert.equal(result.acceptedIncludingIndexed, 296, 'raw total retained for traceability');
+  assert.equal(result.byCategory.transaction_indexed, 66, 'full breakdown still reported');
+  assert.deepEqual(
+    result.countingRule.mirrorCategoriesExcluded.sort(),
+    ['span_indexed', 'transaction_indexed'],
+    'the evidence document names exactly which categories the dedup rule removed',
+  );
+});
+
+test('evaluateIngest sums genuinely distinct categories without deduplication', () => {
+  // `error`, `default` and `attachment` are different payloads, not mirrors of
+  // one another, so summing them is correct. Guards against an over-broad dedup.
+  const result = evaluateIngest(
+    statsPayload([group('error', 3), group('default', 5), group('attachment', 2)]),
+    24,
+  );
+  assert.equal(result.acceptedEvents, 10);
+  assert.deepEqual(result.countingRule.mirrorCategoriesExcluded, []);
+  assert.match(
+    result.countingRule.acceptedEvents,
+    /not a unique-event count/,
+    'the artifact states what the number is, so a reader need not infer it',
+  );
+});
+
+test('evaluateIngest FAILS when nothing was accepted — silent means broken, not idle', () => {
+  const result = evaluateIngest(statsPayload([group('error', 0), group('transaction', 0)]), 24);
+  assert.equal(result.ok, false);
+  assert.equal(result.acceptedEvents, 0);
+  assert.deepEqual(result.byCategory, {});
+});
+
+test('evaluateIngest fails on an empty groups array rather than passing vacuously', () => {
+  assert.equal(evaluateIngest(statsPayload([]), 24).ok, false);
+});
+
+test('evaluateIngest ignores malformed groups instead of counting them', () => {
+  const result = evaluateIngest(
+    statsPayload([null, { by: {} }, { by: { category: 'error' }, totals: {} }, group('error', 5)]),
+    24,
+  );
+  assert.equal(result.acceptedEvents, 5);
+});
+
+test('evaluateIngest rejects a response with no groups array', () => {
+  assert.throws(() => evaluateIngest({ detail: 'nope' }, 24), /no `groups` array/);
+  assert.throws(() => evaluateIngest([], 24), /no `groups` array/);
+});
+
+// ── resolveProjectId ───────────────────────────────────────────────────────
+
+test('resolveProjectId returns the numeric id stats_v2 filters on', async () => {
+  let seenUrl;
+  const fetchImpl = async (url) => {
+    seenUrl = url;
+    return okResponse({ id: '4509', slug: 'node-cloudflare-workers' });
+  };
+  const id = await resolveProjectId('acme', 'node-cloudflare-workers', 'tok', fetchImpl);
+  assert.equal(id, '4509');
+  assert.match(seenUrl, /\/projects\/acme\/node-cloudflare-workers\//);
+});
+
+test('resolveProjectId fails closed when the slug does not exist', async () => {
+  await assert.rejects(
+    () => resolveProjectId('acme', 'ghost', 'tok', async () => errResponse(404)),
+    /Could not resolve Sentry project/,
+  );
+});
+
+test('resolveProjectId fails when the project has no id', async () => {
+  await assert.rejects(
+    () => resolveProjectId('acme', 'p', 'tok', async () => okResponse({ slug: 'p' })),
+    /returned no id/,
+  );
+});
+
+// ── fetchAcceptedStats ─────────────────────────────────────────────────────
+
+test('fetchAcceptedStats queries stats_v2 scoped to the resolved project id', async () => {
+  let seenUrl;
+  let seenAuth;
+  const fetchImpl = async (url, init) => {
+    seenUrl = url;
+    seenAuth = init.headers.Authorization;
+    return okResponse(statsPayload([group('transaction', 3)]));
+  };
+  await fetchAcceptedStats('acme', '4509', 'tok', 24, fetchImpl);
+  assert.match(seenUrl, /\/organizations\/acme\/stats_v2\//);
+  assert.match(seenUrl, /field=sum\(quantity\)/);
+  assert.match(seenUrl, /groupBy=category/);
+  assert.match(seenUrl, /outcome=accepted/);
+  assert.match(seenUrl, /statsPeriod=24h/);
+  assert.match(seenUrl, /project=4509/);
+  assert.equal(seenAuth, 'Bearer tok');
+});
+
+test('fetchAcceptedStats scopes to one project — org-wide would pass on Express traffic', async () => {
+  let seenUrl;
+  await fetchAcceptedStats('acme', '4509', 'tok', 24, async (url) => {
+    seenUrl = url;
+    return okResponse(statsPayload([]));
+  });
+  assert.ok(!seenUrl.includes('project=-1'), 'must never query all projects');
+});
+
+test('fetchAcceptedStats fails closed on non-200 — a bad token is not a pass', async () => {
+  await assert.rejects(
+    () => fetchAcceptedStats('acme', '1', 'tok', 24, async () => errResponse(403)),
+    /HTTP 403/,
+  );
+});
+
+test('a 403 explains that stats_v2 needs org:read, not just project:read', async () => {
+  await assert.rejects(
+    () => fetchAcceptedStats('acme', '1', 'tok', 24, async () => errResponse(403)),
+    /org:read/,
+  );
+});
+
+// ── main ───────────────────────────────────────────────────────────────────
+
+/**
+ * main() makes two calls: resolve the project slug to an id, then query
+ * stats_v2. The double answers on URL so a test can vary the stats result
+ * without having to restate the project lookup.
+ */
+const routedFetch = (statsBody) => async (url) =>
+  url.includes('/stats_v2/')
+    ? okResponse(statsBody)
+    : okResponse({ id: '4509', slug: 'node-cloudflare-workers' });
+
+const deps = (overrides = {}) => ({
+  fetchImpl: routedFetch(statsPayload([group('transaction', 12)])),
+  readStdin: async () => JSON.stringify([{ name: 'WORKERS_SENTRY_DSN' }]),
+  argv: [],
+  ...overrides,
+});
+
+test('main passes when the DSN is bound and the project is ingesting', async () => {
+  const evidence = await main(baseEnv, deps());
+  assert.equal(evidence.ok, true);
+  assert.deepEqual(evidence.failures, []);
+  assert.equal(evidence.secretBinding.ok, true);
+  assert.equal(evidence.ingest.ok, true);
+});
+
+test('main fails when the Worker has no Sentry DSN bound', async () => {
+  const evidence = await main(
+    baseEnv,
+    deps({ readStdin: async () => JSON.stringify([{ name: 'NEON_CONNECTION_STRING' }]) }),
+  );
+  assert.equal(evidence.ok, false);
+  assert.match(evidence.failures.join('\n'), /missing required secret\(s\): WORKERS_SENTRY_DSN/);
+});
+
+test('main fails on a silent Sentry project and explains why it is not idleness', async () => {
+  const evidence = await main(baseEnv, deps({ fetchImpl: routedFetch(statsPayload([])) }));
+  assert.equal(evidence.ok, false);
+  assert.match(evidence.failures.join('\n'), /accepted 0 events/);
+  assert.match(evidence.failures.join('\n'), /tracesSampleRate 1\.0/);
+});
+
+test('main reports both failures at once rather than stopping at the first', async () => {
+  const evidence = await main(
+    baseEnv,
+    deps({
+      readStdin: async () => JSON.stringify([{ name: 'JWT_SECRET' }]),
+      fetchImpl: routedFetch(statsPayload([])),
+    }),
+  );
+  assert.equal(evidence.failures.length, 2);
+});
+
+test('main requires each Sentry configuration value', async () => {
+  for (const key of ['SENTRY_ORG', 'SENTRY_PROJECT', 'SENTRY_AUTH_TOKEN']) {
+    const env = { ...baseEnv, [key]: '' };
+    await assert.rejects(() => main(env, deps()), new RegExp(`${key} is required`));
+  }
+});
+
+test('--no-secret-check skips only the secret half, and records the skip', async () => {
+  const evidence = await main(
+    baseEnv,
+    deps({
+      argv: ['--no-secret-check'],
+      readStdin: async () => {
+        throw new Error('stdin must not be read when the secret check is skipped');
+      },
+    }),
+  );
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.secretBinding.skipped, true);
+  assert.equal(evidence.ingest.ok, true);
+});
+
+test('main rejects unknown arguments so a typo cannot silently skip a check', async () => {
+  await assert.rejects(
+    () => main(baseEnv, deps({ argv: ['--no-secret-checks'] })),
+    /Unknown argument\(s\): --no-secret-checks/,
+  );
+});
+
+test('--no-ingest-check verifies only the secret binding', async () => {
+  const evidence = await main(
+    {},
+    deps({
+      argv: ['--no-ingest-check'],
+      fetchImpl: async () => {
+        throw new Error('Sentry must not be queried when the ingest check is skipped');
+      },
+    }),
+  );
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.secretBinding.ok, true);
+  assert.equal(evidence.ingest.skipped, true);
+});
+
+test('--no-ingest-check does not require SENTRY_* — its credentials live elsewhere', async () => {
+  const evidence = await main({}, deps({ argv: ['--no-ingest-check'] }));
+  assert.equal(evidence.ok, true);
+});
+
+test('--no-ingest-check still fails on a missing DSN', async () => {
+  const evidence = await main(
+    {},
+    deps({
+      argv: ['--no-ingest-check'],
+      readStdin: async () => JSON.stringify([{ name: 'JWT_SECRET' }]),
+    }),
+  );
+  assert.equal(evidence.ok, false);
+  assert.match(evidence.failures.join('\n'), /WORKERS_SENTRY_DSN/);
+});
+
+test('--no-secret-check does not require a secret list on stdin', async () => {
+  const evidence = await main(baseEnv, deps({ argv: ['--no-secret-check'] }));
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.secretBinding.skipped, true);
+  assert.equal(evidence.ingest.ok, true);
+});
+
+test('refuses to run with BOTH checks skipped — that would verify nothing', async () => {
+  await assert.rejects(
+    () => main(baseEnv, deps({ argv: ['--no-secret-check', '--no-ingest-check'] })),
+    /would verify nothing/,
+  );
+});
+
+test('main rejects a non-positive quiet-hours override', async () => {
+  await assert.rejects(
+    () => main({ ...baseEnv, OBSERVABILITY_MAX_QUIET_HOURS: '0' }, deps()),
+    /must be a positive number/,
+  );
+});

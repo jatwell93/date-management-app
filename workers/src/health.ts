@@ -7,6 +7,7 @@
  * - Neon database connectivity (optional)
  */
 
+import { neon } from '@neondatabase/serverless';
 import { Env } from './types/env';
 
 export interface HealthCheckResult {
@@ -74,20 +75,50 @@ export async function healthCheck(
   }
 
   // Optional: Check database connectivity
-  if (includeConnectivity && env.NEON_CONNECTION_STRING) {
+  const connectionString = env.NEON_CONNECTION_STRING || env.DATABASE_URL;
+  if (includeConnectivity && connectionString) {
     const dbStart = Date.now();
     try {
-      // Import Prisma client and test connection
-      // Note: Actual implementation would use Prisma client
-      // For now, just mark as pass (connection string exists)
+      const sql = neon(connectionString);
+      const queryPromise = sql`SELECT 1`;
+      // If the timeout wins the race the query is abandoned mid-flight. Without a
+      // terminal handler its later rejection is unhandled, which the Workers runtime
+      // surfaces as an isolate-level error unrelated to the request that caused it.
+      // The rejection is already accounted for by the timeout branch below.
+      queryPromise.catch(() => {});
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('Database connectivity check timed out after 2000ms')),
+          2000,
+        );
+      });
+      let rows: unknown[];
+      try {
+        rows = (await Promise.race([queryPromise, timeoutPromise])) as unknown[];
+      } finally {
+        // Release the timer on the success path so a healthy deep check does not
+        // hold a pending 2s timeout open in the isolate.
+        if (timeoutId !== undefined) {
+          clearTimeout(timeoutId);
+        }
+      }
+      if (!rows || rows.length === 0) {
+        throw new Error('Database readiness query returned no rows');
+      }
       result.checks.database = {
         status: 'pass',
         responseTime: Date.now() - dbStart,
       };
     } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+      const redactedMessage = rawMessage
+        .replace(/postgres(?:ql)?:\/\/[^@\s]+@/gi, 'postgresql://[redacted]@')
+        .replace(/password=[^\s]+/gi, 'password=[redacted]');
       result.checks.database = {
         status: 'fail',
-        error: error instanceof Error ? error.message : 'Unknown error',
+        responseTime: Date.now() - dbStart,
+        error: redactedMessage,
       };
       result.status = 'degraded';
     }

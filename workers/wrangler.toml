@@ -170,7 +170,14 @@ command = "npm run build"
 # 2. Click "Enable Analytics Engine"
 # 3. Redeploy this worker with `wrangler deploy --env production`
 [observability]
-enabled = false
+# Master switch for Workers Logs/Traces. Kept in sync with the nested blocks
+# below: this previously read `false` while [observability.logs] and
+# [observability.traces] both read `true`, so the file contradicted the live
+# dashboard state (logging was observably on). Cloudflare does not document the
+# precedence when the two disagree, and wrangler.toml is what `wrangler deploy`
+# pushes — so a deploy could have silently disabled logging. Enforced by
+# scripts/verify-observability-config.test.js.
+enabled = true
 head_sampling_rate = 1
 
 [observability.logs]

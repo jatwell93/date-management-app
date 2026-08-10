@@ -6,11 +6,13 @@ import test from 'node:test';
 
 import {
   applyPendingMigrations,
+  classifyMigrationError,
   formatMigrationError,
   loadMigrationHistory,
   MigrationExecutionError,
   validateMigrationTarget,
   type MigrationClient,
+  type MigrationErrorCode,
   type MigrationManifest,
 } from './runner';
 
@@ -286,20 +288,37 @@ test('rejects unknown, interrupted, and non-contiguous ledger histories', async 
   const directory = await createHistory(manifest(['0001', '0002']));
   const migrations = await loadMigrationHistory(directory);
 
-  for (const [rows, expected] of [
-    [[{ id: '9999', checksum: 'x', state: 'applied' }], /absent from authoritative history/],
-    [[{ id: '0001', checksum: migrations[0].checksum, state: 'applying' }], /repair it explicitly/],
+  // The expected code is asserted alongside the message: a throw site left as a
+  // plain Error still matches its message but silently degrades to the
+  // 'execution-failure' fallback, which is how one of these regressed once.
+  for (const [rows, expected, code] of [
+    [
+      [{ id: '9999', checksum: 'x', state: 'applied' }],
+      /absent from authoritative history/,
+      'ledger-inconsistent',
+    ],
+    [
+      [{ id: '0001', checksum: migrations[0].checksum, state: 'applying' }],
+      /repair it explicitly/,
+      'ledger-inconsistent',
+    ],
     [
       [{ id: '0002', checksum: migrations[1].checksum, state: 'applied' }],
       /not a contiguous prefix/,
+      'ledger-inconsistent',
     ],
-  ] as const) {
+  ] as ReadonlyArray<readonly [unknown[], RegExp, MigrationErrorCode]>) {
     const client = new RecordingClient();
-    client.appliedRows = [...rows];
+    client.appliedRows = [...rows] as typeof client.appliedRows;
     await assert.rejects(
       applyPendingMigrations(client, migrations, { deploymentSha: TEST_DEPLOYMENT_SHA }),
       expected,
     );
+
+    const error = await applyPendingMigrations(client, migrations, {
+      deploymentSha: TEST_DEPLOYMENT_SHA,
+    }).catch((thrown: unknown) => thrown);
+    assert.equal(classifyMigrationError(error), code, `expected ${code} for ${expected.source}`);
   }
 });
 

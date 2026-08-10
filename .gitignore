@@ -63,7 +63,12 @@ Thumbs.db
 .vscode/
 .windsurf/
 .codex/
-.devin/
+# Devin CLI: ignore machine-local state, but TRACK the safety guard. A guard that
+# exists on one machine is not a guard — the wrapper fails open when absent.
+.devin/*
+!.devin/hooks/
+!.devin/hooks.v1.json
+!.devin/dcg-devin.toml
 /specs/
 prompts/
 skills/

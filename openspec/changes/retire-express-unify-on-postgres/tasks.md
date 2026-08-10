@@ -729,9 +729,55 @@
       via the Worker's own driver, RPO 3s / RTO 13s. Evidence:
       `docs/evidence/2026-08-07-1.9/`; sign-off in
       `docs/migrations-deploy-runbook.md` ("Recovery policy sign-off").
-- [ ] 1.10 Add structured migration logs/status and alerts for failure, advisory-lock timeout, checksum
+- [x] 1.10 Add structured migration logs/status and alerts for failure, advisory-lock timeout, checksum
       mismatch, drift, duration, target identity, migration ID, and deployment SHA. Make Worker health
       execute a real database readiness query and verify Cloudflare observability/Sentry are enabled.
+      **DONE 2026-08-08.** Delivered in four parts:
+      (a) **Structured logs.** `src/database/migrations/log.ts` emits one JSON
+      line per command phase (`start`/`success`/`failure`) carrying command,
+      migrationId, redacted host/database, environment, deploymentSha,
+      durationMs, errorClass and a redacted message. Wired into all six CLIs.
+      Error classification is typed, not message-matched:
+      `MigrationCodedError` + `classifyMigrationError` in `runner.ts` cover
+      `lock-unavailable`, `checksum-mismatch`, `ledger-inconsistent`,
+      `target-rejected`, `catalog-drift` and an `execution-failure` fallback,
+      with every converted throw site keeping its message byte-identical.
+      `preflight`, `seed` and `verify` signal failure via `process.exitCode`
+      without throwing, so each emits an explicit failure event rather than a
+      false success; `verify` maps an unverified report to `catalog-drift`.
+      **Alerting is the structured line plus a failing CI job** — no Sentry SDK
+      or logging dependency was added to the migration path (decision recorded
+      2026-08-08).
+      (b) **Worker readiness.** `workers/src/health.ts` previously reported
+      `database: pass` whenever `NEON_CONNECTION_STRING` was a non-empty string
+      and executed no query. It now runs a bounded `SELECT 1` through
+      `@neondatabase/serverless`, fails closed on error or timeout, and redacts
+      credentials from the reported error. Failure-path tests (throw, timeout,
+      credential leak) are the point of the suite.
+      (c) **Observability enforced, not attested.** Three silent-no-op paths were
+      found and closed: `wrangler.toml` declared `[observability] enabled = false`
+      while the nested logs/traces blocks declared `true` (the file is what
+      `wrangler deploy` pushes, so a deploy could have disabled logging);
+      `Sentry.withSentry` initialises with `dsn: undefined` when the secret is
+      absent; and the canary skipped its Sentry step entirely when `SENTRY_*`
+      were unset. `scripts/verify-observability-config.test.js` (static, runs
+      pre-deploy in both deploy jobs) and `scripts/check-observability.js`
+      (+39 unit tests) now gate these, and missing Sentry configuration is a hard
+      canary failure on production. The Sentry API call itself still fails open —
+      an outage is a third-party problem, missing configuration is ours.
+      (d) **Live verification (2026-08-08, operator jatwell93).** Cloudflare
+      Workers Logs confirmed enabled on `date-management-api-prod` and the
+      wrangler master switch corrected to match. `WORKERS_SENTRY_DSN` was
+      **found not bound at all** — the cause of an empty `node-cloudflare-workers`
+      project — bound via `wrangler secret put`, and the two dead lookalikes
+      (`SENTRY_DSN`, `WORKER_SENTRY_DSN`, read by nothing) retired. Ingest then
+      verified: 66 transactions + 82 spans accepted into project
+      `4510844953493504` in 24h. Sentry token moved to an Internal Integration
+      with `org:read` + `project:read` + `event:read`; an Organization Auth Token
+      carries only `org:ci` and cannot read this data.
+      Two sign-offs citing `/health?deep=true` as database evidence are
+      re-qualified in `docs/migrations-deploy-runbook.md` (1.7.B post-deploy
+      verify line, and the Canary edge note).
       **Located during 1.9 (2026-08-07):** the readiness defect is
       `workers/src/health.ts` — the `?deep=true` database check reports
       `status: 'pass'` whenever `NEON_CONNECTION_STRING` is a non-empty string

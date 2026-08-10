@@ -1,6 +1,7 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect, vi } from 'vitest';
 import { verifyToken } from '@clerk/backend';
+import { neon } from '@neondatabase/serverless';
 import { healthCheck } from './health';
 import {
   default as worker,
@@ -29,6 +30,22 @@ vi.mock('@clerk/backend', () => ({
     },
   })),
 }));
+
+vi.mock('@neondatabase/serverless', () => ({
+  neon: vi.fn(() => vi.fn()),
+}));
+
+/**
+ * Stub the tagged-template function `neon()` returns.
+ *
+ * `NeonQueryFunction` is callable but also carries `query`, `unsafe` and
+ * `transaction`. The readiness check in `health.ts` only ever invokes the tag
+ * itself, so the stub implements just that and asserts the fuller shape — the
+ * alternative is stubbing three methods no code under test can reach.
+ */
+function stubNeonQuery(implementation: (...args: unknown[]) => unknown): ReturnType<typeof neon> {
+  return vi.fn(implementation) as unknown as ReturnType<typeof neon>;
+}
 
 describe('Health Check API', () => {
   it('should return API metadata for root path', async () => {
@@ -140,6 +157,59 @@ describe('healthCheck', () => {
     expect(result.checks.r2?.status).toBe('fail');
     expect(result.checks.r2?.error).toBe('R2 down');
   });
+
+  it('passes the database check when the readiness query returns a row', async () => {
+    const sqlMock = stubNeonQuery(() => Promise.resolve([{ '?column?': 1 }]));
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('healthy');
+    expect(result.checks.database?.status).toBe('pass');
+    expect(result.checks.database?.responseTime).toBeGreaterThanOrEqual(0);
+  });
+
+  it('marks degraded when the database query throws', async () => {
+    const sqlMock = stubNeonQuery(() => Promise.reject(new Error('connection refused')));
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('degraded');
+    expect(result.checks.database?.status).toBe('fail');
+    expect(result.checks.database?.error).toBe('connection refused');
+  });
+
+  it('fails by timeout when the database query never resolves', async () => {
+    const sqlMock = stubNeonQuery(() => new Promise(() => {}));
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('degraded');
+    expect(result.checks.database?.status).toBe('fail');
+    expect(result.checks.database?.error).toContain('timed out');
+  });
+
+  it('redacts credentials from a database error containing a connection URL', async () => {
+    const sqlMock = stubNeonQuery(() =>
+      Promise.reject(
+        new Error('connect failed: postgres://user:supersecret@db.example.com/app?sslmode=require'),
+      ),
+    );
+    vi.mocked(neon).mockReturnValueOnce(sqlMock);
+
+    const result = await healthCheck(createEnv(), true);
+    expect(result.status).toBe('degraded');
+    expect(result.checks.database?.status).toBe('fail');
+    expect(result.checks.database?.error).not.toContain('supersecret');
+    expect(result.checks.database?.error).toContain('[redacted]');
+  });
+
+  it('omits the database check when no connection string is configured', async () => {
+    const result = await healthCheck(
+      createEnv({ NEON_CONNECTION_STRING: '', DATABASE_URL: undefined }),
+      true,
+    );
+    expect(result.checks.database).toBeUndefined();
+  });
 });
 
 describe('API config guard', () => {
@@ -176,8 +246,7 @@ describe('API config guard', () => {
       NEON_CONNECTION_STRING:
         'postgresql://user:password@direct-neon.example.com/app?sslmode=require',
       HYPERDRIVE: {
-        connectionString:
-          'postgresql://user:password@hyperdrive.example.com/app?sslmode=require',
+        connectionString: 'postgresql://user:password@hyperdrive.example.com/app?sslmode=require',
       } as unknown as Hyperdrive,
     } as Env;
     const ctx = {
@@ -727,9 +796,11 @@ describe('Upload strategy parity', () => {
     expect(response.status).toBe(503);
     expect(deleteObject).toHaveBeenCalledWith(key);
     expect(
-      vi.mocked(db.sql).mock.calls.some(([strings]) =>
-        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
-      ),
+      vi
+        .mocked(db.sql)
+        .mock.calls.some(([strings]) =>
+          strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+        ),
     ).toBe(true);
   });
 
@@ -788,9 +859,11 @@ describe('Upload strategy parity', () => {
     expect(response.status).toBe(503);
     expect(deleteObject).not.toHaveBeenCalled();
     expect(
-      vi.mocked(db.sql).mock.calls.some(([strings]) =>
-        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
-      ),
+      vi
+        .mocked(db.sql)
+        .mock.calls.some(([strings]) =>
+          strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+        ),
     ).toBe(true);
   });
 
@@ -1304,28 +1377,29 @@ describe('Auth input validation', () => {
     expect(body.error || body.message).toBeTruthy();
   });
 
-  const createDb = (overrides: Partial<Database> = {}) => ({
-    sql: {} as any,
-    findUserByEmail: vi.fn().mockResolvedValue(null),
-    findUserById: vi.fn(),
-    createUser: vi.fn().mockResolvedValue({
-      id: 1,
-      email: 'user@example.com',
-      name: 'User',
-      passwordHash: 'hash',
-      role: 'user',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }),
-    findProducts: vi.fn(),
-    findProductById: vi.fn(),
-    countProducts: vi.fn(),
-    findInventoryItems: vi.fn(),
-    countInventoryItems: vi.fn(),
-    findStoreAreas: vi.fn(),
-    getDashboardStats: vi.fn(),
-    ...overrides,
-  }) as unknown as Database;
+  const createDb = (overrides: Partial<Database> = {}) =>
+    ({
+      sql: {} as any,
+      findUserByEmail: vi.fn().mockResolvedValue(null),
+      findUserById: vi.fn(),
+      createUser: vi.fn().mockResolvedValue({
+        id: 1,
+        email: 'user@example.com',
+        name: 'User',
+        passwordHash: 'hash',
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      findProducts: vi.fn(),
+      findProductById: vi.fn(),
+      countProducts: vi.fn(),
+      findInventoryItems: vi.fn(),
+      countInventoryItems: vi.fn(),
+      findStoreAreas: vi.fn(),
+      getDashboardStats: vi.fn(),
+      ...overrides,
+    }) as unknown as Database;
 
   it('returns 400 when login body is missing fields', async () => {
     const request = new Request('https://example.com/api/auth/login', {

@@ -22,10 +22,18 @@
 import { Client } from 'pg';
 
 import { formatMigrationError, MigrationExecutionError, validateMigrationTarget } from './runner';
+import {
+  createEventContext,
+  emitFailure,
+  emitStart,
+  emitSuccess,
+  setEventTarget,
+  type MigrationEventContext,
+} from './log';
 import { assertTargetKind, verifyMigrationRole } from './target';
 import { seedTierFeatureFlags, validateSeedConfirmation } from './seed';
 
-async function main(): Promise<void> {
+async function run(events: MigrationEventContext): Promise<void> {
   const connectionString = process.env.DATABASE_URL_UNPOOLED;
   if (!connectionString) {
     throw new Error('DATABASE_URL_UNPOOLED is required');
@@ -37,6 +45,8 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  setEventTarget(events, target);
+  emitStart(events);
   assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: true });
   validateSeedConfirmation(
     process.env.MIGRATION_SEED_CONFIRMATION,
@@ -81,7 +91,22 @@ async function main(): Promise<void> {
   process.stdout.write(
     `Target: ${target.host}/${target.database} (role: ${role})\n\n${report.report}\n`,
   );
-  if (!report.verified) process.exitCode = 1;
+  if (!report.verified) {
+    process.exitCode = 1;
+    emitFailure(events, new Error('Seed completed but post-seed verification failed'));
+    return;
+  }
+  emitSuccess(events);
+}
+
+async function main(): Promise<void> {
+  const events = createEventContext('seed');
+  try {
+    await run(events);
+  } catch (error) {
+    emitFailure(events, error);
+    throw error;
+  }
 }
 
 void main().catch((error: unknown) => {

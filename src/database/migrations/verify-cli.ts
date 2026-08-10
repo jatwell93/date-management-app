@@ -22,11 +22,24 @@ import path from 'node:path';
 
 import { Client } from 'pg';
 
-import { formatMigrationError, MigrationExecutionError, validateMigrationTarget } from './runner';
+import {
+  formatMigrationError,
+  MigrationCodedError,
+  MigrationExecutionError,
+  validateMigrationTarget,
+} from './runner';
+import {
+  createEventContext,
+  emitFailure,
+  emitStart,
+  emitSuccess,
+  setEventTarget,
+  type MigrationEventContext,
+} from './log';
 import { assertTargetKind, verifyMigrationRole } from './target';
 import { verifyMigration } from './verify';
 
-async function main(): Promise<void> {
+async function run(events: MigrationEventContext): Promise<void> {
   const connectionString = process.env.DATABASE_URL_UNPOOLED;
   if (!connectionString) {
     throw new Error('DATABASE_URL_UNPOOLED is required');
@@ -38,6 +51,8 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  setEventTarget(events, target);
+  emitStart(events);
   assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: false });
 
   const historyDirectory = path.resolve(process.cwd(), 'database/migrations');
@@ -86,7 +101,30 @@ async function main(): Promise<void> {
   process.stdout.write(
     `Target: ${target.host}/${target.database} (role: ${role})\n\n${report.report}\n`,
   );
-  if (!report.verified) process.exitCode = 1;
+  if (!report.verified) {
+    process.exitCode = 1;
+    // A failed verification is schema/data drift between the live catalog and the
+    // authoritative fingerprint — one of the conditions task 1.10 requires an alert for.
+    emitFailure(
+      events,
+      new MigrationCodedError(
+        'Verification failed: live catalog does not match the authoritative fingerprint',
+        'catalog-drift',
+      ),
+    );
+    return;
+  }
+  emitSuccess(events);
+}
+
+async function main(): Promise<void> {
+  const events = createEventContext('verify');
+  try {
+    await run(events);
+  } catch (error) {
+    emitFailure(events, error);
+    throw error;
+  }
 }
 
 void main().catch((error: unknown) => {

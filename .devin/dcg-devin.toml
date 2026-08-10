@@ -1,0 +1,103 @@
+# dcg-devin.toml — strict Destructive Command Guard config used ONLY for Devin CLI
+# exec-tool calls, via .devin/hooks/dcg-wrapper.ps1 (`dcg test -c <this file>`).
+#
+# Why a separate config:
+#   The user's own dcg config (AppData\Roaming\dcg\config.toml) guards Claude Code's
+#   Bash tool, where `doppler run -- npm test`, `gh`, and `git push` are legitimate
+#   everyday commands. Devin must never run any of them. Blocking them globally would
+#   break the orchestrator's own gate; blocking them here scopes the denial to Devin.
+#
+# Why the overrides are explicit rather than relying on packs:
+#   Measured 2026-08-07 on branch feature/*: plain `git push`, `gh`, `doppler run`,
+#   `wrangler deploy --env production`, `neonctl branches delete` and `psql` all
+#   evaluated to ALLOW under the user config. `git_awareness.relaxed_branches`
+#   downgrades feature branches to `critical`-only strictness — and Devin always
+#   works on a feature branch, so pack rules are at their weakest exactly where Devin
+#   runs. `[[overrides.block]]` rules fire regardless of branch strictness.
+
+[general]
+color = "never"
+verbose = false
+# Never rewrite the user's agent hook wiring from Devin's evaluation path.
+self_heal_hook = false
+
+[packs]
+enabled = [
+    "database.postgresql",
+    "database.sqlite",
+    "payment.stripe",
+    "system.disk",
+    "cicd.github_actions",
+    "cdn.cloudflare_workers",
+    "windows.filesystem",
+    "secrets.doppler",
+]
+disabled = []
+
+[policy]
+default_mode = "deny"
+
+# Devin always works on feature/*. Do NOT relax strictness there — that is precisely
+# where the guard has to hold.
+[git_awareness]
+enabled = true
+protected_branches = ["main", "production", "release/*"]
+protected_strictness = "all"
+relaxed_branches = []
+relaxed_strictness = "all"
+default_strictness = "all"
+show_branch_in_output = true
+
+#─────────────────────────────────────────────────────────────
+# DEVIN PROHIBITIONS — the delegate skill's non-negotiables, enforced
+#─────────────────────────────────────────────────────────────
+
+# Never reach the outside world with the repo.
+[[overrides.block]]
+pattern = '\bgit\b[^\n]*\bpush\b'
+reason = "Devin must never push. The orchestrator commits locally; the user owns push/PR/merge."
+
+[[overrides.block]]
+pattern = '(^|[;&|`(]\s*)gh\s'
+reason = "Devin must never use the GitHub CLI (PRs, issues, releases, API)."
+
+# Never let a third-party agent hold live secrets.
+[[overrides.block]]
+pattern = '\bdoppler\b'
+reason = "doppler injects live STRIPE_SECRET_KEY, prod R2 credentials and the prod database URL. Devin writes code; the orchestrator runs the secret-bearing gate."
+
+# Never deploy or touch managed infrastructure.
+[[overrides.block]]
+pattern = '\bwrangler\b'
+reason = "Devin must never deploy Workers or manage Worker secrets."
+
+[[overrides.block]]
+pattern = '\bneonctl\b'
+reason = "Devin must never create, delete, or restore Neon branches."
+
+[[overrides.block]]
+pattern = '\bpsql\b'
+reason = "Devin must never open a session against a real PostgreSQL target."
+
+[[overrides.block]]
+pattern = '\bprisma\b[^\n]*\b(migrate\s+deploy|db\s+push)\b'
+reason = "Devin must never apply schema changes to a real database."
+
+# The orchestrator owns commits and the OpenSpec checkboxes.
+[[overrides.block]]
+pattern = '\bgit\b[^\n]*\bcommit\b'
+reason = "The orchestrator commits, so each delegated group stays independently reviewable."
+
+# Inherit the user config's plaintext-secret protections.
+[[overrides.block]]
+pattern = '\b(cat|less|more|head|tail|bat)\b[^\n]*\.env\b'
+reason = "Reading .env files leaks plaintext secrets into agent transcripts"
+
+[heredoc]
+enabled = true
+timeout_ms = 50
+max_body_bytes = 1048576
+max_body_lines = 10000
+max_heredocs = 10
+fallback_on_parse_error = true
+fallback_on_timeout = true

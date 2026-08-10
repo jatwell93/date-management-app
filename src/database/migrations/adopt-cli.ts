@@ -48,11 +48,19 @@ import {
   selectAdoptionTarget,
 } from './adopt';
 import { loadMigrationHistory, MigrationExecutionError, validateMigrationTarget } from './runner';
+import {
+  createEventContext,
+  emitFailure,
+  emitStart,
+  emitSuccess,
+  setEventTarget,
+  type MigrationEventContext,
+} from './log';
 import { assertTargetKind, verifyMigrationRole } from './target';
 
 const VALID_ARGS = new Set(['--dry-run', '--apply']);
 
-async function main(): Promise<void> {
+async function run(events: MigrationEventContext): Promise<void> {
   const args = process.argv.slice(2);
 
   // Reject unknown arguments — a typo must not silently authorize stamping.
@@ -86,6 +94,8 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  setEventTarget(events, target);
+  emitStart(events);
   assertTargetKind({
     targetKind: process.env.MIGRATION_TARGET_KIND,
     mutating: isAdoptionModeMutating(mode),
@@ -168,7 +178,29 @@ async function main(): Promise<void> {
   // migration-role-check exercise surfaced this gap: a refused dry-run
   // (missing 0001_queued_catalogue_imports) previously exited 0 and did
   // not stop the sequence. See adoptExitCode in ./adopt.
-  process.exitCode = adoptExitCode(report);
+  const exitCode = adoptExitCode(report);
+  process.exitCode = exitCode;
+  // adoptExitCode is the single source of truth for READY-vs-REFUSED, so the
+  // event mirrors it rather than re-deriving the decision.
+  if (exitCode === 0) {
+    emitSuccess(events, process.env.MIGRATION_ADOPTION_POINT ?? null);
+  } else {
+    emitFailure(
+      events,
+      new Error('Adoption refused: catalog mismatch or populated ledger'),
+      process.env.MIGRATION_ADOPTION_POINT ?? null,
+    );
+  }
+}
+
+async function main(): Promise<void> {
+  const events = createEventContext('adopt');
+  try {
+    await run(events);
+  } catch (error) {
+    emitFailure(events, error);
+    throw error;
+  }
 }
 
 void main().catch((error: unknown) => {

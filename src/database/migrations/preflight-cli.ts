@@ -20,10 +20,18 @@
 import { Client } from 'pg';
 
 import { formatMigrationError, MigrationExecutionError, validateMigrationTarget } from './runner';
+import {
+  createEventContext,
+  emitFailure,
+  emitStart,
+  emitSuccess,
+  setEventTarget,
+  type MigrationEventContext,
+} from './log';
 import { assertTargetKind } from './target';
 import { runPreflight } from './preflight';
 
-async function main(): Promise<void> {
+async function run(events: MigrationEventContext): Promise<void> {
   const connectionString = process.env.DATABASE_URL_UNPOOLED;
   if (!connectionString) {
     throw new Error('DATABASE_URL_UNPOOLED is required');
@@ -35,6 +43,8 @@ async function main(): Promise<void> {
     environment: process.env.MIGRATION_ENVIRONMENT,
     productionConfirmation: process.env.MIGRATION_CONFIRM_PRODUCTION,
   });
+  setEventTarget(events, target);
+  emitStart(events);
   assertTargetKind({ targetKind: process.env.MIGRATION_TARGET_KIND, mutating: false });
 
   const role = process.env.MIGRATION_ROLE;
@@ -72,7 +82,24 @@ async function main(): Promise<void> {
   if (report === undefined) throw new Error('Preflight command finished without a report');
 
   process.stdout.write(`Target: ${target.host}/${target.database}\n\n${report.report}\n`);
-  if (!report.ready) process.exitCode = 1;
+  if (!report.ready) {
+    process.exitCode = 1;
+    // A not-ready preflight exits non-zero without throwing, so emitting success
+    // here would report a green event for a run that failed its gate.
+    emitFailure(events, new Error('Preflight reported the target is not ready'));
+    return;
+  }
+  emitSuccess(events);
+}
+
+async function main(): Promise<void> {
+  const events = createEventContext('preflight');
+  try {
+    await run(events);
+  } catch (error) {
+    emitFailure(events, error);
+    throw error;
+  }
 }
 
 void main().catch((error: unknown) => {
