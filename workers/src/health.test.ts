@@ -35,6 +35,18 @@ vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => vi.fn()),
 }));
 
+/**
+ * Stub the tagged-template function `neon()` returns.
+ *
+ * `NeonQueryFunction` is callable but also carries `query`, `unsafe` and
+ * `transaction`. The readiness check in `health.ts` only ever invokes the tag
+ * itself, so the stub implements just that and asserts the fuller shape — the
+ * alternative is stubbing three methods no code under test can reach.
+ */
+function stubNeonQuery(implementation: (...args: unknown[]) => unknown): ReturnType<typeof neon> {
+  return vi.fn(implementation) as unknown as ReturnType<typeof neon>;
+}
+
 describe('Health Check API', () => {
   it('should return API metadata for root path', async () => {
     const response = await SELF.fetch('https://example.com/');
@@ -147,7 +159,7 @@ describe('healthCheck', () => {
   });
 
   it('passes the database check when the readiness query returns a row', async () => {
-    const sqlMock = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
+    const sqlMock = stubNeonQuery(() => Promise.resolve([{ '?column?': 1 }]));
     vi.mocked(neon).mockReturnValueOnce(sqlMock);
 
     const result = await healthCheck(createEnv(), true);
@@ -157,7 +169,7 @@ describe('healthCheck', () => {
   });
 
   it('marks degraded when the database query throws', async () => {
-    const sqlMock = vi.fn().mockRejectedValue(new Error('connection refused'));
+    const sqlMock = stubNeonQuery(() => Promise.reject(new Error('connection refused')));
     vi.mocked(neon).mockReturnValueOnce(sqlMock);
 
     const result = await healthCheck(createEnv(), true);
@@ -167,7 +179,7 @@ describe('healthCheck', () => {
   });
 
   it('fails by timeout when the database query never resolves', async () => {
-    const sqlMock = vi.fn().mockReturnValue(new Promise(() => {}));
+    const sqlMock = stubNeonQuery(() => new Promise(() => {}));
     vi.mocked(neon).mockReturnValueOnce(sqlMock);
 
     const result = await healthCheck(createEnv(), true);
@@ -177,13 +189,11 @@ describe('healthCheck', () => {
   });
 
   it('redacts credentials from a database error containing a connection URL', async () => {
-    const sqlMock = vi
-      .fn()
-      .mockRejectedValue(
-        new Error(
-          'connect failed: postgres://user:supersecret@db.example.com/app?sslmode=require',
-        ),
-      );
+    const sqlMock = stubNeonQuery(() =>
+      Promise.reject(
+        new Error('connect failed: postgres://user:supersecret@db.example.com/app?sslmode=require'),
+      ),
+    );
     vi.mocked(neon).mockReturnValueOnce(sqlMock);
 
     const result = await healthCheck(createEnv(), true);
@@ -236,8 +246,7 @@ describe('API config guard', () => {
       NEON_CONNECTION_STRING:
         'postgresql://user:password@direct-neon.example.com/app?sslmode=require',
       HYPERDRIVE: {
-        connectionString:
-          'postgresql://user:password@hyperdrive.example.com/app?sslmode=require',
+        connectionString: 'postgresql://user:password@hyperdrive.example.com/app?sslmode=require',
       } as unknown as Hyperdrive,
     } as Env;
     const ctx = {
@@ -787,9 +796,11 @@ describe('Upload strategy parity', () => {
     expect(response.status).toBe(503);
     expect(deleteObject).toHaveBeenCalledWith(key);
     expect(
-      vi.mocked(db.sql).mock.calls.some(([strings]) =>
-        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
-      ),
+      vi
+        .mocked(db.sql)
+        .mock.calls.some(([strings]) =>
+          strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+        ),
     ).toBe(true);
   });
 
@@ -848,9 +859,11 @@ describe('Upload strategy parity', () => {
     expect(response.status).toBe(503);
     expect(deleteObject).not.toHaveBeenCalled();
     expect(
-      vi.mocked(db.sql).mock.calls.some(([strings]) =>
-        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
-      ),
+      vi
+        .mocked(db.sql)
+        .mock.calls.some(([strings]) =>
+          strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+        ),
     ).toBe(true);
   });
 
@@ -1364,28 +1377,29 @@ describe('Auth input validation', () => {
     expect(body.error || body.message).toBeTruthy();
   });
 
-  const createDb = (overrides: Partial<Database> = {}) => ({
-    sql: {} as any,
-    findUserByEmail: vi.fn().mockResolvedValue(null),
-    findUserById: vi.fn(),
-    createUser: vi.fn().mockResolvedValue({
-      id: 1,
-      email: 'user@example.com',
-      name: 'User',
-      passwordHash: 'hash',
-      role: 'user',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }),
-    findProducts: vi.fn(),
-    findProductById: vi.fn(),
-    countProducts: vi.fn(),
-    findInventoryItems: vi.fn(),
-    countInventoryItems: vi.fn(),
-    findStoreAreas: vi.fn(),
-    getDashboardStats: vi.fn(),
-    ...overrides,
-  }) as unknown as Database;
+  const createDb = (overrides: Partial<Database> = {}) =>
+    ({
+      sql: {} as any,
+      findUserByEmail: vi.fn().mockResolvedValue(null),
+      findUserById: vi.fn(),
+      createUser: vi.fn().mockResolvedValue({
+        id: 1,
+        email: 'user@example.com',
+        name: 'User',
+        passwordHash: 'hash',
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      findProducts: vi.fn(),
+      findProductById: vi.fn(),
+      countProducts: vi.fn(),
+      findInventoryItems: vi.fn(),
+      countInventoryItems: vi.fn(),
+      findStoreAreas: vi.fn(),
+      getDashboardStats: vi.fn(),
+      ...overrides,
+    }) as unknown as Database;
 
   it('returns 400 when login body is missing fields', async () => {
     const request = new Request('https://example.com/api/auth/login', {
