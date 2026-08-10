@@ -6,7 +6,9 @@ The platform is split into an API backend, an edge API layer, and managed storag
 
 - Backend API (`backend/src/`): Express + TypeScript, Prisma, domain services, webhooks, scheduling.
 - Edge API (`workers/src/`): Cloudflare Workers handlers for low-latency API access.
-- Database: Neon Postgres in production, SQLite for local/test workflows.
+- Database: Neon Postgres in production, SQLite for local/test workflows. Production schema
+  changes are applied only by the migration runner in `src/database/migrations/` — see
+  [`docs/migrations.md`](./migrations.md).
 - Object Storage: Cloudflare R2 for CSV uploads and processed artifacts.
 - Observability: Sentry, application monitoring services, Workers metrics middleware.
 
