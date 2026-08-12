@@ -19,6 +19,12 @@ Complete guide to the Neon PostgreSQL branching workflow used for schema changes
 
 Neon provides PostgreSQL database branching, enabling safe schema migrations without affecting production.
 
+> **Applying migrations to production is documented separately.** This guide covers Neon branching
+> and local workflows; the authoritative production migration path — the runner, the ordered
+> `migrate:*` commands, and the deploy workflow — is [`docs/migrations.md`](./migrations.md). The
+> `prisma migrate dev` steps below apply to feature branches and local development, not to
+> production.
+
 ### Benefits
 
 - **Testing:** Test migrations on a branch before production

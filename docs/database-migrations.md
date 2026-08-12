@@ -1,5 +1,19 @@
 # Database Migrations Guide
 
+> **⚠️ This is not the production migration path.**
+>
+> Production schema changes are applied **only** by the migration runner documented in
+> [`docs/migrations.md`](./migrations.md) — `src/database/migrations/` against the authoritative
+> history in `database/migrations/`, run by `.github/workflows/migration-prep.yml`.
+>
+> **`prisma db push` and `prisma migrate deploy` are not how production schema changes are
+> applied.** The production sections below are retained for historical reference and are wrong
+> as operator instructions.
+>
+> The rest of this document is scoped to the **Express/Prisma/SQLite backend** (`backend/`),
+> which is retained only as the rollback backend until it is removed. The SQLite/development
+> half remains accurate for local work.
+
 This guide covers database migrations for the Date Management App, supporting both local SQLite development and Neon PostgreSQL production.
 
 ## Table of Contents

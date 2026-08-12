@@ -7,7 +7,14 @@ This runbook documents recovery procedures for critical production failures invo
 ## Recovery Targets
 
 - RTO (Recovery Time Objective): 4 hours maximum
-- RPO (Recovery Point Objective): 1 hour maximum data loss
+- RPO (Recovery Point Objective): bounded by the **6-hour Neon PITR retention window**
+  (`history_retention_seconds = 21600`). A recovery point older than 6 hours is unreachable.
+
+> The previously documented "1 hour maximum data loss" was an aspiration, not a measured
+> capability, and overstated what the infrastructure can deliver. The measured configuration and
+> the accept-no-upgrade decision are in [`docs/neon-backup-restore.md`](./neon-backup-restore.md);
+> the floor is CI-enforced by `scripts/check-neon-pitr.js`. For how schema changes reach
+> production, see [`docs/migrations.md`](./migrations.md).
 
 ## Decision Matrix
 

@@ -791,8 +791,31 @@
       uses it to verify the custom-domain edge that the canary skips. Both
       claims are weaker than they read until this task lands; re-qualify them in
       the runbook when it does.
-- [ ] 1.11 Document the new authoritative path and its recovery policies (the golden-rule rewrite itself lands in
+- [x] 1.11 Document the new authoritative path and its recovery policies (the golden-rule rewrite itself lands in
       Phase 5).
+      **DONE 2026-08-11.** `docs/migrations.md` (new) is the authoritative-path
+      document: what owns migrations (runner + `database/migrations/` history +
+      the `schema_migrations` ledger and its four fail-closed invariants), the
+      ordered `migrate:*` commands and their environment contracts read from the
+      root `package.json` and each CLI header, the safety model, the reusable
+      `migration-prep.yml` → `workers-deploy.yml` deploy path, testing, and a
+      recovery section that **links** rather than restates. Operating RPO is
+      stated as the 6-hour retention window, with the 1.9 sign-off's 3 s figure
+      explicitly labelled the planned-migration floor.
+      Cross-links added: a scope banner on `docs/database-migrations.md` (its
+      `prisma db push` production instructions are now marked not-the-path),
+      plus pointers in `docs/neon-workflow.md` and `docs/architecture.md`.
+      **One correction beyond the brief:** `docs/disaster-recovery.md` declared
+      "RPO: 1 hour maximum data loss" — an aspiration, not a measured
+      capability, and wrong in the *dangerous* direction (same defect class as
+      the "7-day retention" claim 1.9 fixed). Restated as bounded by the 6-hour
+      PITR window, citing `docs/neon-backup-restore.md`.
+      Two brief inaccuracies were **not** carried into the doc: there is no
+      "expand-only enforcement" (contract migrations are permitted; what
+      `runner.ts:324` enforces is that a planned contract names a later,
+      existing migration), and `runner.ts:224` is `assertSafeHistoryFile`, not a
+      compatibility guard. Every cited path, npm script and environment variable
+      was mechanically verified against the repo before commit.
       **Partially delivered by 1.9 — do not redo.** The *recovery policy* half
       now exists: `docs/neon-backup-restore.md` records the **measured** Neon
       configuration (free tier, `history_retention_seconds = 21600` = 6h) and
