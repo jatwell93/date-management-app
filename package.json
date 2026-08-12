@@ -31,6 +31,7 @@
     "validate:stripe-config": "node scripts/validate-stripe-deployment-config.js",
     "test:stripe-config": "node --test scripts/validate-stripe-deployment-config.test.js",
     "test:audit-columns": "node --test scripts/check-audit-columns.test.js && node scripts/check-audit-columns.js",
+    "test:audit-manifest": "node --test scripts/check-audit-columns.test.js && node scripts/verify-audit-manifest.js",
     "mem:log": "node scripts/mem-log.js",
     "mem:recall": "node scripts/mem-recall.js",
     "mem:rebuild": "node scripts/mem-rebuild.js",

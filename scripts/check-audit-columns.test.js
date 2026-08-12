@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseTables, splitRow, analyseTables } = require('./check-audit-columns');
+const { parseTables, splitRow, analyseTables, checkFile } = require('./check-audit-columns');
 
 /** Build a markdown table with `count` rows, calling `cell(i, col)` per cell. */
 function table(headers, count, cell) {
@@ -120,6 +120,49 @@ test('a decision backed by cited evidence is accepted', () => {
       : 'PROPOSED: worker-shaped-rewrite - partial coverage only';
   });
   assert.deepEqual(findingsFor(md), []);
+});
+
+// A blank evidence cell is the purest form of the defect: a decision with
+// literally nothing behind it. Requiring NO_EVIDENCE to match a token would let
+// this row pass, so the empty match is deliberate and pinned here.
+test('blank evidence cannot support an asserted decision', () => {
+  const md = table(['Behaviour', 'Existing Worker equivalent?', 'Decision'], 30, (i, col) => {
+    if (col === 0) return `behaviour ${i}`;
+    if (col === 1) return '';
+    return 'PROPOSED: retire — no longer needed';
+  });
+  const inference = findingsFor(md).find((f) =>
+    /does not follow from its own premise/.test(f.message),
+  );
+  assert.ok(inference, 'a blank evidence cell must not support an asserted decision');
+});
+
+// `\b` is not enough to fence TODO: in `todo-list-spec.md` the word boundary
+// falls on the hyphen, so a plain \bTODO\b fires on a legitimate citation.
+test('a hyphenated path containing "todo" is not treated as an unmeasured cell', () => {
+  const md = table(['Behaviour', 'Evidence'], 30, (i, col) =>
+    col === 0 ? `behaviour ${i}` : `docs/todo-list-spec-${i}.md`,
+  );
+  assert.deepEqual(findingsFor(md), []);
+});
+
+test('a standalone TODO is still treated as an unmeasured cell', () => {
+  const md = table(['Behaviour', 'Evidence'], 30, (i, col) => {
+    if (col === 0) return `behaviour ${i}`;
+    return i < 5 ? 'TODO: resolve' : `workers/src/f${i}.test.ts:${i}`;
+  });
+  const fails = levels(findingsFor(md), 'fail');
+  assert.ok(fails.some((f) => /never determined/.test(f.message)));
+});
+
+// A CI gate must not exit on an unhandled stack trace: that reads identically
+// to a real audit failure and sends the reader hunting through the matrix.
+test('an unreadable file yields a failure finding rather than throwing', () => {
+  const { tables, findings } = checkFile('does/not/exist/anywhere.md');
+  assert.equal(tables, 0);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].level, 'fail');
+  assert.match(findings[0].message, /could not read file/);
 });
 
 // Guard against the guard: this check is about distribution, not truth. A

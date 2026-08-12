@@ -42,8 +42,16 @@ const MIN_ROWS = 20;
 /** Share of a single value above which a column is suspicious but not failed. */
 const DOMINANCE_WARN = 0.95;
 
-/** Cell values that admit the column was never actually filled in. */
-const UNMEASURED = /not yet searched|not checked|TODO|FIXME|<fill/i;
+/**
+ * Cell values that admit the column was never actually filled in.
+ *
+ * `TODO`/`FIXME` are fenced with `(?<![\w-])`/`(?![\w-])` rather than `\b` so
+ * they only match as standalone tokens. `\b` is not enough: in a legitimate
+ * citation like `todo-list-spec.md` the word boundary falls on the hyphen and
+ * the pattern would fire on real content.
+ */
+const UNMEASURED =
+  /not yet searched|not checked|(?<![\w-])TODO(?![\w-])|(?<![\w-])FIXME(?![\w-])|<fill/i;
 
 /** A decision cell that asserts something specific rather than deferring. */
 const ASSERTED_DECISION = /PROPOSED:\s*(?!unknown)[a-z-]+/i;
@@ -55,6 +63,14 @@ const ASSERTED_DECISION = /PROPOSED:\s*(?!unknown)[a-z-]+/i;
  * workers/src/upload/csv-parser.test.ts)" does not. An unqualified negative does
  * not say what was looked at, so it cannot support a decision; a negative that
  * names the search does.
+ *
+ * **An empty cell matches this pattern, and that is deliberate.** Every group is
+ * optional, so `''` is a member of the language. A blank evidence cell paired
+ * with an asserted decision is the purest form of the defect this gate exists to
+ * catch — a conclusion with literally nothing behind it. Tightening the pattern
+ * to require a token (making the first group non-optional) would let
+ * `| | PROPOSED: retire |` through. Do not "fix" that; `blank evidence cannot
+ * support an asserted decision` is pinned by a test.
  */
 const NO_EVIDENCE =
   /^(unknown|none found|n\/a|-|—)?\s*(unknown|not searched|not yet searched)?\s*$/i;
@@ -243,7 +259,21 @@ function defaultTargets() {
 }
 
 function checkFile(file) {
-  const markdown = fs.readFileSync(file, 'utf8');
+  let markdown;
+  try {
+    markdown = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    // A path that cannot be read is reported as an ordinary failure rather than
+    // thrown. This runs as a CI gate, where an unhandled stack trace reads
+    // identically to a real audit failure and sends the reader hunting through
+    // the matrix for a defect that is really a typo in the file list.
+    return {
+      tables: 0,
+      findings: [
+        { level: 'fail', file, column: '—', message: `could not read file: ${err.message}` },
+      ],
+    };
+  }
   const tables = parseTables(markdown);
   const findings = analyseTables(tables, file);
   return { tables: tables.length, findings };
