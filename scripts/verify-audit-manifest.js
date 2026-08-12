@@ -244,12 +244,18 @@ function verify(manifest, backendIndex) {
       continue;
     }
     if (paths.length > 1) {
+      // Hard failure, not a warning. Guessing picks a file with a different test
+      // count, so the coverage check below then reports a defect that does not
+      // exist (or, worse, misses one that does) — `storage-factory.test.ts` has
+      // 5 tests under `unit/` and 16 under `integration/`. The heading must say
+      // which, and the fix is to qualify it: `unit/storage-factory.test.ts`.
       findings.push({
-        level: 'warn',
+        level: 'fail',
         message:
           `[scope] "${section.heading}" is ambiguous — ${paths.length} files share that name ` +
-          `(${paths.join(', ')}); counted against the first`,
+          `(${paths.join(', ')}); qualify the heading with its directory`,
       });
+      continue;
     }
     const tests = countTestCases(paths[0]);
     covered += 1;
