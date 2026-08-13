@@ -54,6 +54,7 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
   let ownProductId: number;
   let foreignProductId: number;
   let ownAreaId: number;
+  let foreignAreaId: number;
 
   beforeAll(async () => {
     harness = await createPgliteHarness();
@@ -93,6 +94,7 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
     const foreignArea = await sql`
       INSERT INTO store_areas (organization_id, name) VALUES (${OTHER_ORG}, 'Alpha Foreign Aisle')
       RETURNING id`;
+    foreignAreaId = Number(foreignArea[0].id);
 
     await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
@@ -100,8 +102,7 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
     // Earlier expiry, so it sorts first under `ORDER BY i.expiry_date ASC`.
     await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${OTHER_ORG}, ${foreignProductId}, ${Number(foreignArea[0].id)},
-              CURRENT_DATE + 1, 'Active')`;
+      VALUES (${OTHER_ORG}, ${foreignProductId}, ${foreignAreaId}, CURRENT_DATE + 1, 'Active')`;
   });
 
   describe('products', () => {
@@ -160,6 +161,48 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
 
     it('countInventoryItems counts only the caller organization', async () => {
       expect(await makeDb().countInventoryItems(ORG)).toBe(1);
+    });
+
+    /**
+     * Defence in depth for the JOINs. `WHERE i.organization_id` decides which
+     * inventory rows come back, but not which product and store area get
+     * attached to them. An item in ORG whose `product_id` points at another
+     * tenant's product would splice that product's name and barcode into the
+     * response even though the row itself is correctly scoped.
+     *
+     * Creation validates that the references share an organization, so this
+     * state should not arise — but that is a single check at a single point,
+     * and bulk import, a future re-parent, or a manual fix could produce it.
+     * `inventory_items.product_id` carries no FK constraint, so the row below
+     * inserts cleanly.
+     */
+    it('does not splice in a product or area belonging to another organization', async () => {
+      await sql`
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+        VALUES (${ORG}, ${foreignProductId}, ${foreignAreaId}, CURRENT_DATE + 60, 'Active')`;
+
+      const items = await makeDb().findInventoryItems(ORG, {});
+      const crossRef = items.find((i) => i.productId === foreignProductId);
+
+      // The item itself belongs to ORG, so it is still returned...
+      expect(crossRef).toBeDefined();
+
+      // ...but no field of the foreign product may appear on it. Asserted field
+      // by field rather than `toBeNull()` on the whole object, because the two
+      // joined fields have different shapes when unmatched: `storeArea` is
+      // wrapped in `CASE WHEN s.id IS NOT NULL` and collapses to null, while
+      // `product` is an unguarded `json_build_object` and so comes back as
+      // `{id: null, name: null, ...}`. That inconsistency predates this change
+      // and is deliberately left alone — `product_id` is nullable, so callers
+      // already receive the all-null object for items with no product, and
+      // collapsing it to null here would change a response shape in a security
+      // patch. What matters for isolation is that every field is empty.
+      const product = crossRef?.product;
+      expect(product?.id ?? null).toBeNull();
+      expect(product?.name ?? null).toBeNull();
+      expect(product?.barcode ?? null).toBeNull();
+      expect(product?.sku ?? null).toBeNull();
+      expect(crossRef?.storeArea ?? null).toBeNull();
     });
   });
 

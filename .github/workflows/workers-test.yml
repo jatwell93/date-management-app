@@ -29,6 +29,14 @@ on:
 permissions:
   contents: read
 
+# Superseded PR runs are cancelled; runs on the default branch are not. Mirrors
+# workers-deploy.yml:31-33. Cancelling on `main` would leave a merged commit
+# without a completed check, which is exactly the signal this workflow exists to
+# provide — and the saved minutes are not worth that.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('workers-test-pr-{0}', github.ref) || format('workers-test-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Path detection with plain git rather than a third-party action, to avoid
   # adding a supply-chain dependency (see docs/security.md).
@@ -123,8 +131,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Bounded so a hung test fails in minutes rather than running to GitHub's
+      # 6-hour default. Generous against a ~45s local run, because a cold cache
+      # and a slower runner are normal; this is a runaway guard, not a budget.
       - name: Run Worker tests
         run: npm test -- --run
+        timeout-minutes: 15
 
   # The real-SQL suite. Runs Postgres in-process via pglite, so it needs no
   # service container and no credentials. This is where the Worker's genuine

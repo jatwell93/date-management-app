@@ -1047,8 +1047,18 @@ export function createWorkersDatabase(env: Env): Database {
             json_build_object('id', s.id, 'name', s.name, 'subDepartment', s.sub_department)
           ELSE NULL END as "storeArea"
         FROM inventory_items i
-        LEFT JOIN products p ON i.product_id = p.id
-        LEFT JOIN store_areas s ON i.location_id = s.id
+        -- Each JOIN is correlated to the item's own organization, matching the
+        -- pattern already used by findProductByBarcode (:2265-2267). The WHERE
+        -- clause alone scopes which inventory rows are returned, but not which
+        -- product or store area is attached to them: a row whose product_id
+        -- pointed at another tenant's product would still splice that product's
+        -- name and barcode into the response. Creation validates that the
+        -- references share an organization, but that is one check at one point,
+        -- and this query outlives it. Kept in ON rather than WHERE so LEFT JOIN
+        -- semantics hold — a mismatched reference yields NULL, it does not drop
+        -- the inventory row.
+        LEFT JOIN products p ON i.product_id = p.id AND p.organization_id = i.organization_id
+        LEFT JOIN store_areas s ON i.location_id = s.id AND s.organization_id = i.organization_id
         WHERE i.organization_id = ${organizationId}
         ORDER BY i.expiry_date ASC NULLS LAST
         LIMIT ${limit} OFFSET ${offset}
