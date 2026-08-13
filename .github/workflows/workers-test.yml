@@ -1,0 +1,247 @@
+name: Workers Test
+
+# The Worker's test suites ran in NO workflow until this file existed. Two
+# consequences were visible the day it was written:
+#
+#   * `src/health.test.ts` had two failing tests that had been red on `main`
+#     since 2026-06-09 (d11d1f97) — two months, unnoticed.
+#   * The Worker's only genuine cross-tenant isolation assertions live in the
+#     pglite suites (`database.dashboard.pglite.node.test.ts:110`, `:161`,
+#     `:213`, `database.report.pglite.node.test.ts:82-87`). Those are the
+#     coverage that must survive the Express deletion in
+#     `retire-express-unify-on-postgres`, and nothing enforced them on a PR.
+#
+# Structure deliberately mirrors backend-test.yml; see its header for why there
+# is no `paths:` filter, why detection is a separate job, and why the required
+# check must be the `gate` job rather than the test jobs themselves (a *skipped*
+# job counts as SUCCESS for a required check).
+#
+# `shared/` is in the trigger path as well as `workers/`: the Worker imports
+# from `shared/domain` (e.g. `isPlatformAdminUser`, the store-walk audit
+# rollup), so a shared-only change can break the Worker suite.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+# Superseded PR runs are cancelled; runs on the default branch are not. Mirrors
+# workers-deploy.yml:31-33. Cancelling on `main` would leave a merged commit
+# without a completed check, which is exactly the signal this workflow exists to
+# provide — and the saved minutes are not worth that.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('workers-test-pr-{0}', github.ref) || format('workers-test-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Path detection with plain git rather than a third-party action, to avoid
+  # adding a supply-chain dependency (see docs/security.md).
+  changes:
+    name: Detect workers changes
+    runs-on: ubuntu-latest
+    outputs:
+      workers: ${{ steps.filter.outputs.workers }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          # Deliberately NOT `set -e`. Every failure path here must fall back to
+          # RUNNING the tests. Aborting mid-script would fail this job, leaving
+          # the dependent jobs *skipped* -- which counts as success for a
+          # required check. The `gate` job is the real backstop.
+          set -u
+
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "::error::GITHUB_OUTPUT is unset; cannot publish detection result."
+            exit 1
+          fi
+
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_AFTER"
+          fi
+
+          run_tests() {
+            echo "$1"
+            echo "workers=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            run_tests "Base commit unavailable (force push or first commit); running workers tests."
+          fi
+
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            run_tests "Base commit ${base} not found; running workers tests."
+          fi
+
+          # Capture explicitly: piping straight into grep would mask a git
+          # failure as "no matches" (no pipefail), silently skipping the tests.
+          if ! changed=$(git diff --name-only "$base" "$head" 2>&1); then
+            run_tests "git diff failed (${changed}); running workers tests."
+          fi
+
+          if printf '%s\n' "$changed" | grep -qE '^(workers|shared)/'; then
+            echo "workers=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "workers=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The workerd-pool suite: handlers, middleware, auth, upload, health.
+  test:
+    name: Workers Tests
+    needs: changes
+    if: needs.changes.outputs.workers == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./workers
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: workers/package-lock.json
+
+      # Dependabot regenerates lockfiles with npm 11; Node 22 ships npm 10,
+      # which rejects those locks. Pin npm so `npm ci` validates the lockfile
+      # with the same major that wrote it.
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `health.test.ts` and `__tests__/auth-integration.test.ts` load the built
+      # bundle (`dist/index.js`) through the workerd pool, so it must exist
+      # before vitest starts. A local run passes without this step only because
+      # an earlier build left `dist/` behind — on a clean checkout the two files
+      # fail with "Cannot find module .../workers/dist/index.js".
+      - name: Build Worker bundle
+        run: npm run build
+
+      # Bounded so a hung test fails in minutes rather than running to GitHub's
+      # 6-hour default. Generous against a ~45s local run, because a cold cache
+      # and a slower runner are normal; this is a runaway guard, not a budget.
+      - name: Run Worker tests
+        run: npm test -- --run
+        timeout-minutes: 15
+
+  # The real-SQL suite. Runs Postgres in-process via pglite, so it needs no
+  # service container and no credentials. This is where the Worker's genuine
+  # cross-tenant isolation assertions live, which is why it is a separate,
+  # separately-required job rather than being folded into the one above.
+  test-db:
+    name: Workers Real-SQL Tests
+    needs: changes
+    if: needs.changes.outputs.workers == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./workers
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          # Both lockfiles, because this job installs both packages — see below.
+          cache-dependency-path: |
+            workers/package-lock.json
+            backend/package-lock.json
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The three `*.conformance.node.test.ts` suites import backend source
+      # directly, to assert the Worker's Postgres queries agree with the
+      # backend's SQLite implementation. That pulls backend's runtime
+      # dependencies (`reflect-metadata`, `better-sqlite3`) into the module
+      # graph, so installing only the Worker's leaves them unresolvable and
+      # three suites die on MODULE_NOT_FOUND.
+      #
+      # This coupling is temporary by design: those suites exist to compare the
+      # two implementations, and they go when the Express backend is deleted in
+      # `retire-express-unify-on-postgres` Phase 4. Until then the cross-package
+      # install is the honest cost of running them.
+      - name: Install backend dependencies (conformance suites import backend source)
+        working-directory: ./backend
+        run: npm ci
+
+      # These suites run real SQL against pglite and are slower than the
+      # workerd pool (~100s locally), so they get a generous ceiling but still
+      # a bounded one — a hang must fail rather than burn the job timeout.
+      - name: Run real-SQL (pglite) tests
+        run: npm run test:db
+        timeout-minutes: 15
+
+  # THE required status check.
+  #
+  # Runs unconditionally (`if: always()`) so it can never be skipped. GitHub
+  # counts a *skipped* job as SUCCESS for a required check, so if `changes`
+  # failed, the test jobs would be skipped and a required check placed on them
+  # would pass without any test having run. This job inspects the real results.
+  #
+  # Require THIS check ("Workers CI Gate"), not the individual test jobs.
+  gate:
+    name: Workers CI Gate
+    if: always()
+    needs: [changes, test, test-db]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate workers job results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WORKERS_CHANGED: ${{ needs.changes.outputs.workers }}
+          TEST_RESULT: ${{ needs.test.result }}
+          TEST_DB_RESULT: ${{ needs['test-db'].result }}
+        run: |
+          set -u
+          echo "changes=${CHANGES_RESULT} workers_changed=${WORKERS_CHANGED:-<unset>}"
+          echo "test=${TEST_RESULT} test-db=${TEST_DB_RESULT}"
+
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate rather than letting skipped test jobs pass as success."
+            exit 1
+          fi
+
+          if [ "${WORKERS_CHANGED:-}" != "true" ]; then
+            echo "No workers/shared changes detected - gate passes with test jobs skipped."
+            exit 0
+          fi
+
+          status=0
+          for pair in "Workers Tests:${TEST_RESULT}" "Workers Real-SQL Tests:${TEST_DB_RESULT}"; do
+            name=${pair%%:*}
+            result=${pair#*:}
+            if [ "$result" != "success" ]; then
+              echo "::error::${name} did not succeed (result: ${result})."
+              status=1
+            fi
+          done
+          exit $status

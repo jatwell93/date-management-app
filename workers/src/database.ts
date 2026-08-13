@@ -68,17 +68,32 @@ export interface Database {
   findUserById(id: number): Promise<User | null>;
   createUser(data: CreateUserData): Promise<User>;
 
-  // Product queries
-  findProducts(options?: { limit?: number; offset?: number; search?: string }): Promise<Product[]>;
-  findProductById(id: number): Promise<Product | null>;
-  countProducts(search?: string): Promise<number>;
+  // Product queries.
+  //
+  // `organizationId` is the FIRST parameter on every one of these, and is
+  // required rather than optional, so that a call site which forgets it fails
+  // to compile. These six methods previously took no organization at all and
+  // their queries had no `organization_id` predicate, which made four live
+  // authenticated routes return every tenant's rows to any signed-in user.
+  // Matching the shape of the already-scoped queries below (getDashboardStats,
+  // findProductByBarcode) keeps the convention uniform: if it reads tenant
+  // data, the organization comes first.
+  findProducts(
+    organizationId: string,
+    options?: { limit?: number; offset?: number; search?: string },
+  ): Promise<Product[]>;
+  findProductById(organizationId: string, id: number): Promise<Product | null>;
+  countProducts(organizationId: string, search?: string): Promise<number>;
 
   // Inventory queries
-  findInventoryItems(options?: { limit?: number; offset?: number }): Promise<InventoryItem[]>;
-  countInventoryItems(): Promise<number>;
+  findInventoryItems(
+    organizationId: string,
+    options?: { limit?: number; offset?: number },
+  ): Promise<InventoryItem[]>;
+  countInventoryItems(organizationId: string): Promise<number>;
 
   // Store area queries
-  findStoreAreas(): Promise<StoreArea[]>;
+  findStoreAreas(organizationId: string): Promise<StoreArea[]>;
 
   // Dashboard queries
   getDashboardStats(organizationId: string): Promise<DashboardStats>;
@@ -930,25 +945,34 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // Product queries
-    async findProducts(options?: {
-      limit?: number;
-      offset?: number;
-      search?: string;
-    }): Promise<Product[]> {
+    async findProducts(
+      organizationId: string,
+      options?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+      },
+    ): Promise<Product[]> {
       const limit = options?.limit || 50;
       const offset = options?.offset || 0;
       const search = options?.search;
 
       if (search) {
         const searchPattern = `%${search}%`;
+        // The organization predicate is applied BEFORE the search terms and the
+        // search group is parenthesised. Without the parentheses, SQL operator
+        // precedence binds `AND` tighter than `OR`, so the organization filter
+        // would apply only to the first `ILIKE` and the other two would match
+        // across every tenant.
         return (await sql`
           SELECT id, name, barcode, sku,
                  cost_price as "costPrice", notes,
                  created_at as "createdAt", updated_at as "updatedAt"
           FROM products
-          WHERE name ILIKE ${searchPattern}
-             OR barcode ILIKE ${searchPattern}
-             OR sku ILIKE ${searchPattern}
+          WHERE organization_id = ${organizationId}
+            AND (name ILIKE ${searchPattern}
+              OR barcode ILIKE ${searchPattern}
+              OR sku ILIKE ${searchPattern})
           ORDER BY name ASC
           LIMIT ${limit} OFFSET ${offset}
         `) as Product[];
@@ -959,43 +983,52 @@ export function createWorkersDatabase(env: Env): Database {
                cost_price as "costPrice", notes,
                created_at as "createdAt", updated_at as "updatedAt"
         FROM products
+        WHERE organization_id = ${organizationId}
         ORDER BY name ASC
         LIMIT ${limit} OFFSET ${offset}
       `) as Product[];
     },
 
-    async findProductById(id: number): Promise<Product | null> {
+    async findProductById(organizationId: string, id: number): Promise<Product | null> {
       const rows = await sql`
         SELECT id, name, barcode, sku,
                cost_price as "costPrice", notes,
                created_at as "createdAt", updated_at as "updatedAt"
         FROM products
-        WHERE id = ${id}
+        WHERE id = ${id} AND organization_id = ${organizationId}
         LIMIT 1
       `;
       return (rows[0] as Product) || null;
     },
 
-    async countProducts(search?: string): Promise<number> {
+    async countProducts(organizationId: string, search?: string): Promise<number> {
       if (search) {
         const searchPattern = `%${search}%`;
+        // Parenthesised for the same precedence reason as findProducts above.
         const rows = await sql`
           SELECT COUNT(*)::int as count FROM products
-          WHERE name ILIKE ${searchPattern}
-             OR barcode ILIKE ${searchPattern}
-             OR sku ILIKE ${searchPattern}
+          WHERE organization_id = ${organizationId}
+            AND (name ILIKE ${searchPattern}
+              OR barcode ILIKE ${searchPattern}
+              OR sku ILIKE ${searchPattern})
         `;
         return rows[0]?.count || 0;
       }
-      const rows = await sql`SELECT COUNT(*)::int as count FROM products`;
+      const rows = await sql`
+        SELECT COUNT(*)::int as count FROM products
+        WHERE organization_id = ${organizationId}
+      `;
       return rows[0]?.count || 0;
     },
 
     // Inventory queries
-    async findInventoryItems(options?: {
-      limit?: number;
-      offset?: number;
-    }): Promise<InventoryItem[]> {
+    async findInventoryItems(
+      organizationId: string,
+      options?: {
+        limit?: number;
+        offset?: number;
+      },
+    ): Promise<InventoryItem[]> {
       const limit = options?.limit || 50;
       const offset = options?.offset || 0;
 
@@ -1014,20 +1047,34 @@ export function createWorkersDatabase(env: Env): Database {
             json_build_object('id', s.id, 'name', s.name, 'subDepartment', s.sub_department)
           ELSE NULL END as "storeArea"
         FROM inventory_items i
-        LEFT JOIN products p ON i.product_id = p.id
-        LEFT JOIN store_areas s ON i.location_id = s.id
+        -- Each JOIN is correlated to the item's own organization, matching the
+        -- pattern already used by findProductByBarcode (:2265-2267). The WHERE
+        -- clause alone scopes which inventory rows are returned, but not which
+        -- product or store area is attached to them: a row whose product_id
+        -- pointed at another tenant's product would still splice that product's
+        -- name and barcode into the response. Creation validates that the
+        -- references share an organization, but that is one check at one point,
+        -- and this query outlives it. Kept in ON rather than WHERE so LEFT JOIN
+        -- semantics hold — a mismatched reference yields NULL, it does not drop
+        -- the inventory row.
+        LEFT JOIN products p ON i.product_id = p.id AND p.organization_id = i.organization_id
+        LEFT JOIN store_areas s ON i.location_id = s.id AND s.organization_id = i.organization_id
+        WHERE i.organization_id = ${organizationId}
         ORDER BY i.expiry_date ASC NULLS LAST
         LIMIT ${limit} OFFSET ${offset}
       `) as InventoryItem[];
     },
 
-    async countInventoryItems(): Promise<number> {
-      const rows = await sql`SELECT COUNT(*)::int as count FROM inventory_items`;
+    async countInventoryItems(organizationId: string): Promise<number> {
+      const rows = await sql`
+        SELECT COUNT(*)::int as count FROM inventory_items
+        WHERE organization_id = ${organizationId}
+      `;
       return rows[0]?.count || 0;
     },
 
     // Store area queries
-    async findStoreAreas(): Promise<StoreArea[]> {
+    async findStoreAreas(organizationId: string): Promise<StoreArea[]> {
       return (await sql`
         SELECT id, name,
                parent_id as "parentId",
@@ -1035,6 +1082,7 @@ export function createWorkersDatabase(env: Env): Database {
                last_checked as "lastChecked",
                created_at as "createdAt", updated_at as "updatedAt"
         FROM store_areas
+        WHERE organization_id = ${organizationId}
         ORDER BY name ASC
       `) as StoreArea[];
     },
