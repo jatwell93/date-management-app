@@ -131,6 +131,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `health.test.ts` and `__tests__/auth-integration.test.ts` load the built
+      # bundle (`dist/index.js`) through the workerd pool, so it must exist
+      # before vitest starts. A local run passes without this step only because
+      # an earlier build left `dist/` behind — on a clean checkout the two files
+      # fail with "Cannot find module .../workers/dist/index.js".
+      - name: Build Worker bundle
+        run: npm run build
+
       # Bounded so a hung test fails in minutes rather than running to GitHub's
       # 6-hour default. Generous against a ~45s local run, because a cold cache
       # and a slower runner are normal; this is a runaway guard, not a budget.
@@ -159,12 +167,30 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: workers/package-lock.json
+          # Both lockfiles, because this job installs both packages — see below.
+          cache-dependency-path: |
+            workers/package-lock.json
+            backend/package-lock.json
 
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
 
       - name: Install dependencies
+        run: npm ci
+
+      # The three `*.conformance.node.test.ts` suites import backend source
+      # directly, to assert the Worker's Postgres queries agree with the
+      # backend's SQLite implementation. That pulls backend's runtime
+      # dependencies (`reflect-metadata`, `better-sqlite3`) into the module
+      # graph, so installing only the Worker's leaves them unresolvable and
+      # three suites die on MODULE_NOT_FOUND.
+      #
+      # This coupling is temporary by design: those suites exist to compare the
+      # two implementations, and they go when the Express backend is deleted in
+      # `retire-express-unify-on-postgres` Phase 4. Until then the cross-package
+      # install is the honest cost of running them.
+      - name: Install backend dependencies (conformance suites import backend source)
+        working-directory: ./backend
         run: npm ci
 
       # These suites run real SQL against pglite and are slower than the
