@@ -1119,12 +1119,16 @@ describe('Upload strategy parity', () => {
     expect(body.rowsTotal).toBe(1);
   });
 
+  // Third column is the COST header. `Selling Price` and `Retail Price` are
+  // retail aliases (catalogue-parser.ts:26) and belong to the two dedicated
+  // tests below, not here: cost is required and retail is optional, so putting
+  // a retail alias in this slot asserts that a retail-only catalogue imports,
+  // which the parser deliberately rejects.
   it.each([
     ['Reorder Number', 'Item Name', 'Cost Price', 'Alias'],
     ['Product Code', 'Name', 'Item Cost', 'UPC'],
     ['Item Number', 'Name', 'Cost inc', 'Product Barcode'],
-    ['SKU', 'Name', 'Selling Price', 'Barcode Number'],
-    ['SKU', 'Name', 'Retail Price', 'Barcode'],
+    ['SKU', 'Name', 'Unit Cost', 'Barcode Number'],
   ])(
     'accepts normalized product headers %s, %s, %s, and %s',
     async (skuHeader, nameHeader, costHeader, barcodeHeader) => {
@@ -1172,6 +1176,92 @@ describe('Upload strategy parity', () => {
       expect(body.rowsTotal).toBe(1);
     },
   );
+
+  it.each([['Retail Price'], ['Selling Price'], ['RRP']])(
+    'accepts a catalogue carrying both Cost and the retail alias %s',
+    async (retailHeader) => {
+      mockedVerifyToken.mockResolvedValue({
+        sub: 'user_clerk_7',
+        email: 'uploader@example.com',
+        org_id: 'org_test',
+        org_role: 'org:admin',
+      });
+
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = createProductImportDb(7);
+      const key = `uploads/user-7/${retailHeader.replace(/\s/g, '-')}-products.csv`;
+      const formData = new FormData();
+      formData.append(
+        'file',
+        new File(
+          [`SKU,Name,Cost,${retailHeader},Barcode\n` + 'SKU-R,Retail Product,10.00,19.99,BAR-R\n'],
+          'retail-products.csv',
+          { type: 'text/csv' },
+        ),
+      );
+
+      const response = await handleUploadDirect(
+        new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer clerk-session-token' },
+          body: formData,
+        }),
+        envForUpload,
+        key,
+        db,
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as any;
+      expect(body.errors).toEqual([]);
+      expect(body.importedCount).toBe(1);
+    },
+  );
+
+  /**
+   * Cost is required and retail is optional (catalogue-parser.ts:24-26), so a
+   * catalogue priced only at retail has no cost basis and is rejected. Pinned
+   * because two earlier cases asserted the opposite by placing a retail alias
+   * in the cost slot of the parity table above; they failed for two months
+   * without being noticed, since no CI workflow ran this suite.
+   */
+  it('rejects a catalogue that carries a retail price but no cost column', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createProductImportDb(7);
+    const key = 'uploads/user-7/retail-only-products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(
+        ['SKU,Name,Selling Price,Barcode\n' + 'SKU-S,Sell Product,19.99,BAR-S\n'],
+        'retail-only.csv',
+        { type: 'text/csv' },
+      ),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer clerk-session-token' },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.errors).toEqual(['Missing required column header(s): cost']);
+    expect(body.importedCount).toBe(0);
+  });
 
   it('accepts direct CSV uploads when the browser omits the MIME type', async () => {
     mockedVerifyToken.mockResolvedValue({
