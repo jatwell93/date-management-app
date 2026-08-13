@@ -903,8 +903,8 @@ async function handleGetProducts(request: Request, db: Database, env: Env): Prom
   const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
   const [products, total] = await Promise.all([
-    db.findProducts({ search, limit, offset }),
-    db.countProducts(search),
+    db.findProducts(auth.organizationId, { search, limit, offset }),
+    db.countProducts(auth.organizationId, search),
   ]);
 
   return jsonResponse({ products, total, limit, offset }, 200, env);
@@ -930,8 +930,11 @@ async function handleGetProduct(
   }
 
   const id = parseInt(match[1], 10);
-  const product = await db.findProductById(id);
+  const product = await db.findProductById(auth.organizationId, id);
 
+  // A product belonging to another organization is reported as 404 rather than
+  // 403: a 403 would confirm the id exists, which is itself a cross-tenant leak
+  // when ids are sequential.
   if (!product) {
     return errorResponse('Product not found', 404, env);
   }
@@ -953,8 +956,8 @@ async function handleGetInventory(request: Request, db: Database, env: Env): Pro
   const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
   const [items, total] = await Promise.all([
-    db.findInventoryItems({ limit, offset }),
-    db.countInventoryItems(),
+    db.findInventoryItems(auth.organizationId, { limit, offset }),
+    db.countInventoryItems(auth.organizationId),
   ]);
 
   return jsonResponse({ items, total, limit, offset }, 200, env);
@@ -969,7 +972,7 @@ async function handleGetStoreAreas(request: Request, db: Database, env: Env): Pr
     return auth;
   }
 
-  const areas = await db.findStoreAreas();
+  const areas = await db.findStoreAreas(auth.organizationId);
 
   return jsonResponse(areas, 200, env);
 }
