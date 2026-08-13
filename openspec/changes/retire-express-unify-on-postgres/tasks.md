@@ -858,6 +858,20 @@ equivalent, a relocated home, or an explicit retirement decision.
       idempotency, authorization precedence, and negative/error cases; zero rows may remain unresolved at
       deletion. The Express test suite is **not ported to Postgres** — it keeps running on SQLite until
       deletion; this manifest is what its coverage maps onto in the Worker suite.
+      **Finding acted on mid-audit (PR #462).** Part 4 established that
+      `workers/src/__tests__/multi-tenant-isolation.test.ts` asserts nothing — all 8 tests are
+      `expect(true).toBe(true)` under names describing real tenant-isolation properties (90 such
+      tests across 8 Worker files). Following that to the code it claimed to cover found four live
+      authenticated routes returning **every** tenant's rows: `GET /api/products`,
+      `/api/products/:id`, `/api/inventory-items`, `/api/store-areas`. Six `Database` methods took
+      no organization parameter at all. Fixed rather than filed, because it was live on `main` —
+      `organizationId` is now a required first parameter (a forgetful call site fails to compile),
+      covered by 11 real-SQL assertions in `database.tenant-isolation.pglite.node.test.ts` and
+      proven by mutation. The same PR added `.github/workflows/workers-test.yml`: **the Worker
+      suites previously ran in no workflow at all**, which is why two `health.test.ts` tests sat
+      red on `main` from 2026-06-09 (`d11d1f97`) unnoticed. `Workers CI Gate` is now a required
+      check. This does not close 2.2 — it removes two rows from 3.2's rewrite scope (see below)
+      and leaves the rest of the manifest to finish.
 - [ ] 2.3 Produce an action-level schedule matrix from actual `SchedulerService` registrations and
       dormant job exports—not a six-file list. Include markdown recalculation, backup, trial expiration,
       dunning, Stripe sync, both credit-claim schedules, webhook monitoring, metrics, and report email.
@@ -924,6 +938,15 @@ equivalent, a relocated home, or an explicit retirement decision.
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
       scheduled-job idempotency, authorization precedence — and get it green before any deletion.
+      **Partly satisfied in advance (PR #462).** Cross-tenant **read** scoping — list, fetch-by-id,
+      search, count, inventory and store-area — is already written Worker-shaped against pglite in
+      `workers/src/database.tenant-isolation.pglite.node.test.ts`, and the corresponding Part 4 rows
+      moved from `worker-shaped-rewrite` to `worker-equivalent-exists`. Cross-tenant **write and
+      delete** protection remains uncovered and is now the highest-consequence outstanding item in
+      this task: a DELETE or UPDATE keyed on id alone would pass the entire current Worker suite.
+      Treat the read tests as the template — real SQL, foreign rows named to sort first under each
+      `ORDER BY`, assertions on row identity rather than count, and each one verified to fail with
+      the predicate removed.
 - [ ] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.

@@ -112,12 +112,46 @@ test('a test with no assertions at all is not flagged', () => {
   });
 });
 
-test('the real Worker placebo file is detected end to end', () => {
-  const file = path.join('workers', 'src', '__tests__', 'multi-tenant-isolation.test.ts');
-  if (!fs.existsSync(file)) return; // suite is meaningful without the fixture
+// End-to-end against real repo content, rather than a synthetic fixture: the six
+// tests above pin the detector's logic, this one proves it survives contact with
+// a genuine file (imports, nested describes, JSDoc, `it.each`).
+//
+// It used to point at `__tests__/multi-tenant-isolation.test.ts` and assert
+// `flagged.has(36)`. That file was the original 8/8 placebo, and chasing it is
+// what surfaced the cross-tenant leak fixed in #462 — which then rewrote it into
+// a skipped pointer, and the hardcoded line number broke. The lesson is not to
+// re-pin a different line: the expectation is now DERIVED from the file, so it
+// tracks edits instead of rotting on them.
+//
+// `handlers/handlers.test.ts` is the replacement subject (20/20 placebo, and
+// unchanged by #462). If it is ever legitimately fixed, this test reports that
+// as a skip rather than a failure — the fixture-based tests carry the real load.
+test('a real Worker placebo file is detected end to end', (t) => {
+  const file = path.join('workers', 'src', 'handlers', 'handlers.test.ts');
+  if (!fs.existsSync(file)) return t.skip(`${file} not present`);
+
+  // Located independently of the detector. This is not a reimplementation of it:
+  // the detector's actual work is stripping comments and deciding whether a whole
+  // block is pure placebo, neither of which this line-level scan attempts.
+  const placebo = fs
+    .readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .map((line, i) => (/^\s*expect\(expected\)\.toBe\(true\);?\s*$/.test(line) ? i + 1 : 0))
+    .filter(Boolean);
+
+  if (placebo.length === 0) return t.skip(`${file} no longer contains placebo assertions`);
+
   const flagged = tautologicalLines(file);
-  assert.ok(flagged.has(36), 'line 36 is `expect(expected).toBe(true)` in the first test');
-  assert.ok(flagged.size > 100, `expected most of the file to be flagged, got ${flagged.size}`);
+  for (const line of placebo) {
+    assert.ok(
+      flagged.has(line),
+      `line ${line} is \`expect(expected).toBe(true)\` but was not flagged`,
+    );
+  }
+  assert.ok(
+    flagged.size >= placebo.length,
+    `expected at least ${placebo.length} flagged lines, got ${flagged.size}`,
+  );
 });
 
 test('a real Worker test file yields no findings', () => {
