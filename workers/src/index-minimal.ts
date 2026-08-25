@@ -2455,7 +2455,15 @@ async function handleUpdateInventoryItem(
     return jsonResponse(updated, 200, env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message === 'Location does not exist') {
+    // Both references are validated against the caller's organization, so both
+    // rejections are client errors. This mirrors the create route at :2399 —
+    // only `Location` was listed here, matching the missing productId check in
+    // `updateInventoryItem`, so the new rejection would have surfaced as a 500.
+    //
+    // "does not exist" rather than "belongs to another organization" is
+    // deliberate: the latter confirms the id is real, which is the same
+    // disclosure the 404-not-403 choice avoids on GET /api/products/:id.
+    if (message === 'Product does not exist' || message === 'Location does not exist') {
       return errorResponse(message, 400, env);
     }
     console.error('handleUpdateInventoryItem error:', error);

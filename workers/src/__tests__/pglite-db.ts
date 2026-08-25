@@ -193,6 +193,26 @@ const SCHEMA_SQL = `
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
+  -- Mirrors the production table (see the Neon export: nullable user_id and
+  -- inventory_item_id, NOT NULL organization_id/action/change_description, and
+  -- deliberately NO foreign key on inventory_item_id). The absent FK matters:
+  -- deleteInventoryItem writes its audit row in the same CTE that deletes the
+  -- item, so a FK would have to be deferrable for that statement to work at all.
+  --
+  -- Added when the write/delete isolation tests were written: updateInventoryItem
+  -- and deleteInventoryItem both INSERT here as part of their CTE, so without
+  -- this table neither method could be exercised under pglite at all -- which is
+  -- one reason the write paths had no real-SQL coverage.
+  CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    user_id INTEGER,
+    inventory_item_id INTEGER,
+    action TEXT NOT NULL,
+    change_description TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
   CREATE TABLE expired_item_transactions (
     id SERIAL PRIMARY KEY,
     organization_id TEXT NOT NULL,

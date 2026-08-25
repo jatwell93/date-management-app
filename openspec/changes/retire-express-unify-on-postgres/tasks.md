@@ -938,15 +938,22 @@ equivalent, a relocated home, or an explicit retirement decision.
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
       scheduled-job idempotency, authorization precedence — and get it green before any deletion.
-      **Partly satisfied in advance (PR #462).** Cross-tenant **read** scoping — list, fetch-by-id,
-      search, count, inventory and store-area — is already written Worker-shaped against pglite in
-      `workers/src/database.tenant-isolation.pglite.node.test.ts`, and the corresponding Part 4 rows
-      moved from `worker-shaped-rewrite` to `worker-equivalent-exists`. Cross-tenant **write and
-      delete** protection remains uncovered and is now the highest-consequence outstanding item in
-      this task: a DELETE or UPDATE keyed on id alone would pass the entire current Worker suite.
-      Treat the read tests as the template — real SQL, foreign rows named to sort first under each
-      `ORDER BY`, assertions on row identity rather than count, and each one verified to fail with
-      the predicate removed.
+      **The `tenant-isolation` gate is satisfied in advance (PRs #462, #463).** Cross-tenant
+      **read** scoping is covered by `workers/src/database.tenant-isolation.pglite.node.test.ts`
+      (11 tests) and cross-tenant **write/delete** by
+      `workers/src/database.tenant-isolation-writes.pglite.node.test.ts` (19 tests), both against
+      real SQL on pglite. The corresponding Part 4 rows moved from `worker-shaped-rewrite` to
+      `worker-equivalent-exists`. Treat these as the template for the remaining gates: real SQL,
+      foreign rows seeded so they WOULD be returned if scoping regressed, names chosen to sort
+      first under each `ORDER BY`, assertions on row identity rather than count, both halves
+      asserted (the attacker's call had no effect AND the victim's row is untouched), and every
+      test verified to fail with its predicate removed.
+      **Method note, learned the hard way.** Both PRs found live vulnerabilities, and both were
+      found by *working* a row that claimed a property was untested — not by reading the Worker and
+      judging it equivalent. #463's leak (`updateInventoryItem` accepting another tenant's
+      `productId`, then uncorrelated report JOINs resolving it) has no Express analogue at all, so
+      no manifest row predicted it. Work the remaining gates by exercising the Worker against real
+      SQL; a row that says "no Worker test exists" is the most likely place to find a defect.
 - [ ] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
