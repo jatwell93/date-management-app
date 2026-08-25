@@ -58,6 +58,38 @@ import { createSupplierCreditDatabase } from './supplier-credit-database';
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
 /**
+ * Errors thrown when a write references a row that does not belong to the
+ * caller's organization.
+ *
+ * Defined here, where they are thrown, and matched by the route layer via
+ * `isReferentialError` — so the throw and the match share one definition
+ * instead of being two string lists kept in sync across modules. Adding a third
+ * reference check means adding it here, and both catch sites pick it up.
+ *
+ * That coupling is not hypothetical: `handleUpdateInventoryItem` matched only
+ * `Location` while `handleCreateInventoryItem` matched both, exactly mirroring
+ * the missing `productId` check in `updateInventoryItem`. The new rejection
+ * would have surfaced as a 500.
+ *
+ * The wording is deliberate. "does not exist" rather than "belongs to another
+ * organization": the latter confirms the id is real, which is the disclosure
+ * the 404-not-403 choice on `GET /api/products/:id` exists to avoid. From the
+ * caller's side of the tenant boundary, a row it may not reference genuinely
+ * does not exist.
+ */
+export const REFERENTIAL_ERRORS = {
+  product: 'Product does not exist',
+  location: 'Location does not exist',
+} as const;
+
+const REFERENTIAL_ERROR_MESSAGES: ReadonlySet<string> = new Set(Object.values(REFERENTIAL_ERRORS));
+
+/** True when `message` is a cross-organization reference rejection (a 400, not a 500). */
+export function isReferentialError(message: string): boolean {
+  return REFERENTIAL_ERROR_MESSAGES.has(message);
+}
+
+/**
  * Database wrapper providing typed query methods
  */
 export interface Database {
@@ -2425,7 +2457,7 @@ export function createWorkersDatabase(env: Env): Database {
         LIMIT 1
       `;
       if (!productRows[0]) {
-        throw new Error('Product does not exist');
+        throw new Error(REFERENTIAL_ERRORS.product);
       }
 
       const locationRows = await sql`
@@ -2434,7 +2466,7 @@ export function createWorkersDatabase(env: Env): Database {
         LIMIT 1
       `;
       if (!locationRows[0]) {
-        throw new Error('Location does not exist');
+        throw new Error(REFERENTIAL_ERRORS.location);
       }
 
       // Atomic insert + audit via CTE so we never end up with an inventory
@@ -2502,7 +2534,7 @@ export function createWorkersDatabase(env: Env): Database {
           LIMIT 1
         `;
         if (!productRows[0]) {
-          throw new Error('Product does not exist');
+          throw new Error(REFERENTIAL_ERRORS.product);
         }
       }
 
@@ -2514,7 +2546,7 @@ export function createWorkersDatabase(env: Env): Database {
           LIMIT 1
         `;
         if (!locationRows[0]) {
-          throw new Error('Location does not exist');
+          throw new Error(REFERENTIAL_ERRORS.location);
         }
       }
 

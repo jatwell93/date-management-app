@@ -521,6 +521,7 @@ export async function handleCatalogueImportQueue(
 
 import {
   Database,
+  isReferentialError,
   type BulkAttachResult,
   type BulkLinkResult,
   type Supplier,
@@ -2396,7 +2397,7 @@ async function handleCreateInventoryItem(
     return jsonResponse(item, 201, env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message === 'Product does not exist' || message === 'Location does not exist') {
+    if (isReferentialError(message)) {
       return errorResponse(message, 400, env);
     }
     console.error('handleCreateInventoryItem error:', error);
@@ -2455,15 +2456,12 @@ async function handleUpdateInventoryItem(
     return jsonResponse(updated, 200, env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    // Both references are validated against the caller's organization, so both
-    // rejections are client errors. This mirrors the create route at :2399 —
-    // only `Location` was listed here, matching the missing productId check in
-    // `updateInventoryItem`, so the new rejection would have surfaced as a 500.
-    //
-    // "does not exist" rather than "belongs to another organization" is
-    // deliberate: the latter confirms the id is real, which is the same
-    // disclosure the 404-not-403 choice avoids on GET /api/products/:id.
-    if (message === 'Product does not exist' || message === 'Location does not exist') {
+    // Both product and location references are validated against the caller's
+    // organization, so either rejection is a client error rather than a fault.
+    // Shared with `handleCreateInventoryItem` via `isReferentialError`, whose
+    // messages are defined next to the throws in database.ts — a third
+    // reference check added there is handled here without an edit.
+    if (isReferentialError(message)) {
       return errorResponse(message, 400, env);
     }
     console.error('handleUpdateInventoryItem error:', error);

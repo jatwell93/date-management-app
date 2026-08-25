@@ -45,7 +45,7 @@ vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => sqlHolder.current),
 }));
 
-import { createWorkersDatabase } from './database';
+import { createWorkersDatabase, isReferentialError } from './database';
 
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';
@@ -358,6 +358,62 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
           locationId: foreignAreaId,
         }),
       ).rejects.toThrow('Location does not exist');
+    });
+  });
+
+  describe('cross-org rejections are classified as client errors', () => {
+    /**
+     * The route layer turns these throws into a 400 via `isReferentialError`;
+     * anything it does not recognise becomes a 500. Before that helper existed,
+     * the two catch sites matched string literals independently, and
+     * `handleUpdateInventoryItem` listed only `Location` — so the productId
+     * rejection added alongside these tests would have surfaced as a 500.
+     *
+     * This catches the REAL thrown error rather than asserting over
+     * `REFERENTIAL_ERRORS` directly. Checking the constant against itself would
+     * pass no matter what the database layer throws; catching the throw means a
+     * new reference check written with a fresh string literal fails here
+     * instead of silently becoming a 500 in production.
+     */
+    const cases: Array<[string, () => Promise<unknown>]> = [
+      [
+        'createInventoryItem, foreign product',
+        () =>
+          makeDb().createInventoryItem(ORG, ownUserId, {
+            productId: foreignProductId,
+            expiryDate: '2099-01-01',
+            locationId: ownAreaId,
+          }),
+      ],
+      [
+        'createInventoryItem, foreign location',
+        () =>
+          makeDb().createInventoryItem(ORG, ownUserId, {
+            productId: ownProductId,
+            expiryDate: '2099-01-01',
+            locationId: foreignAreaId,
+          }),
+      ],
+      [
+        'updateInventoryItem, foreign product',
+        () =>
+          makeDb().updateInventoryItem(ORG, ownUserId, ownItemId, { productId: foreignProductId }),
+      ],
+      [
+        'updateInventoryItem, foreign location',
+        () =>
+          makeDb().updateInventoryItem(ORG, ownUserId, ownItemId, { locationId: foreignAreaId }),
+      ],
+    ];
+
+    it.each(cases)('%s throws an error the route maps to 400', async (_name, act) => {
+      const error = await act().then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect(isReferentialError((error as Error).message)).toBe(true);
     });
   });
 
