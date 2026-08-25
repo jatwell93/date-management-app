@@ -54,40 +54,9 @@ import {
   type RecoveryReport,
 } from '../../shared/domain/credit-claim';
 import { createSupplierCreditDatabase } from './supplier-credit-database';
+import { assertReferencesBelongToOrganization } from './tenant-references';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
-
-/**
- * Errors thrown when a write references a row that does not belong to the
- * caller's organization.
- *
- * Defined here, where they are thrown, and matched by the route layer via
- * `isReferentialError` — so the throw and the match share one definition
- * instead of being two string lists kept in sync across modules. Adding a third
- * reference check means adding it here, and both catch sites pick it up.
- *
- * That coupling is not hypothetical: `handleUpdateInventoryItem` matched only
- * `Location` while `handleCreateInventoryItem` matched both, exactly mirroring
- * the missing `productId` check in `updateInventoryItem`. The new rejection
- * would have surfaced as a 500.
- *
- * The wording is deliberate. "does not exist" rather than "belongs to another
- * organization": the latter confirms the id is real, which is the disclosure
- * the 404-not-403 choice on `GET /api/products/:id` exists to avoid. From the
- * caller's side of the tenant boundary, a row it may not reference genuinely
- * does not exist.
- */
-export const REFERENTIAL_ERRORS = {
-  product: 'Product does not exist',
-  location: 'Location does not exist',
-} as const;
-
-const REFERENTIAL_ERROR_MESSAGES: ReadonlySet<string> = new Set(Object.values(REFERENTIAL_ERRORS));
-
-/** True when `message` is a cross-organization reference rejection (a 400, not a 500). */
-export function isReferentialError(message: string): boolean {
-  return REFERENTIAL_ERROR_MESSAGES.has(message);
-}
 
 /**
  * Database wrapper providing typed query methods
@@ -772,52 +741,6 @@ function toBayCheck(row: Record<string, unknown>): BayCheck {
     createdAt: toIsoStringOrNull(row.createdAt) ?? '',
     updatedAt: toIsoStringOrNull(row.updatedAt) ?? '',
   };
-}
-
-/**
- * Verifies that the product and store area an inventory write references both
- * belong to the writing organization. Undefined references are skipped, so this
- * serves both the create path (both always supplied) and the update path (a
- * partial patch).
- *
- * Shared deliberately. `createInventoryItem` checked both references while
- * `updateInventoryItem` checked only the location, and that asymmetry was
- * exploitable: an authenticated user could PATCH their own item with another
- * tenant's product id (SERIAL, so enumerable), after which the report queries
- * joining `products` resolved it — leaking the foreign product's name, sku and
- * cost_price into the attacker's own loss-by-SKU report. A write became a read.
- *
- * With one helper, the two paths cannot disagree about what needs checking.
- * That is the actual root cause fixed here; the join correlation elsewhere in
- * this file is the defence-in-depth half.
- */
-async function assertReferencesBelongToOrganization(
-  sql: NeonQueryFunction<false, false>,
-  organizationId: string,
-  refs: { productId?: number; locationId?: number },
-): Promise<void> {
-  const checks: Array<{ id: number; table: 'products' | 'store_areas'; error: string }> = [];
-  if (refs.productId !== undefined) {
-    checks.push({ id: refs.productId, table: 'products', error: REFERENTIAL_ERRORS.product });
-  }
-  if (refs.locationId !== undefined) {
-    checks.push({ id: refs.locationId, table: 'store_areas', error: REFERENTIAL_ERRORS.location });
-  }
-
-  for (const check of checks) {
-    // The table name cannot be parameterized, so it is switched on rather than
-    // interpolated — `table` is a union of two literals, never caller input.
-    const rows =
-      check.table === 'products'
-        ? await sql`SELECT id FROM products
-                    WHERE id = ${check.id} AND organization_id = ${organizationId} LIMIT 1`
-        : await sql`SELECT id FROM store_areas
-                    WHERE id = ${check.id} AND organization_id = ${organizationId} LIMIT 1`;
-
-    if (!rows[0]) {
-      throw new Error(check.error);
-    }
-  }
 }
 
 async function getInventoryProcessContext(

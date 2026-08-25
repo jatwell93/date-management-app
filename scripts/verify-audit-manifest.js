@@ -320,23 +320,18 @@ function checkSectionCoverage(markdown, backendIndex) {
 function checkTautologicalCitations(markdown) {
   const findings = [];
   const tautCache = new Map();
-  let tautRows = 0;
+  const isTautological = (file, lineNo) => {
+    if (!fs.existsSync(file)) return false; // already reported by check 2
+    if (!tautCache.has(file)) tautCache.set(file, tautologicalLines(file));
+    return tautCache.get(file).has(lineNo);
+  };
 
-  for (const line of markdown.split(/\r?\n/)) {
-    const row = line.trim();
-    if (!row.startsWith('|')) continue;
-    const cells = row.split('|').map((c) => c.trim());
-    // Behaviour | file:line | gate | equivalent? | Target | Evidence | Decision
-    if (cells.length < 8 || cells[5] !== 'worker-equivalent-exists') continue;
-
+  for (const cells of equivalenceRows(markdown)) {
     for (const match of cells[4].matchAll(WORKER_CITE)) {
-      const [cite, lineNo] = [match[0], Number(match[1])];
+      const cite = match[0];
       const file = cite.slice(0, cite.lastIndexOf(':'));
-      if (!fs.existsSync(file)) continue; // already reported by check 2
-      if (!tautCache.has(file)) tautCache.set(file, tautologicalLines(file));
-      if (!tautCache.get(file).has(lineNo)) continue;
+      if (!isTautological(file, Number(match[1]))) continue;
 
-      tautRows += 1;
       findings.push({
         level: 'fail',
         message:
@@ -347,7 +342,24 @@ function checkTautologicalCitations(markdown) {
     }
   }
 
-  return { findings, tautRows };
+  return { findings, tautRows: findings.length };
+}
+
+/**
+ * Yields the split cells of every `worker-equivalent-exists` table row.
+ *
+ * Column order: Behaviour | file:line | gate | equivalent? | Target | Evidence |
+ * Decision — so `cells[5]` is the target and `cells[4]` the evidence cell that
+ * carries the citations.
+ */
+function* equivalenceRows(markdown) {
+  for (const line of markdown.split(/\r?\n/)) {
+    const row = line.trim();
+    if (!row.startsWith('|')) continue;
+    const cells = row.split('|').map((c) => c.trim());
+    if (cells.length < 8 || cells[5] !== 'worker-equivalent-exists') continue;
+    yield cells;
+  }
 }
 
 function defaultTargets() {

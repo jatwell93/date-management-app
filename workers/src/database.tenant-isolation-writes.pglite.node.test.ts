@@ -45,7 +45,8 @@ vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => sqlHolder.current),
 }));
 
-import { createWorkersDatabase, isReferentialError } from './database';
+import { createWorkersDatabase } from './database';
+import { isReferentialError } from './tenant-references';
 
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';

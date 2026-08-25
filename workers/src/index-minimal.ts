@@ -521,12 +521,12 @@ export async function handleCatalogueImportQueue(
 
 import {
   Database,
-  isReferentialError,
   type BulkAttachResult,
   type BulkLinkResult,
   type Supplier,
   type SupplierWriteData,
 } from './database';
+import { isReferentialError } from './tenant-references';
 import { SignJWT, jwtVerify } from 'jose';
 
 /**
