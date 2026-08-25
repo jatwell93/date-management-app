@@ -774,6 +774,52 @@ function toBayCheck(row: Record<string, unknown>): BayCheck {
   };
 }
 
+/**
+ * Verifies that the product and store area an inventory write references both
+ * belong to the writing organization. Undefined references are skipped, so this
+ * serves both the create path (both always supplied) and the update path (a
+ * partial patch).
+ *
+ * Shared deliberately. `createInventoryItem` checked both references while
+ * `updateInventoryItem` checked only the location, and that asymmetry was
+ * exploitable: an authenticated user could PATCH their own item with another
+ * tenant's product id (SERIAL, so enumerable), after which the report queries
+ * joining `products` resolved it — leaking the foreign product's name, sku and
+ * cost_price into the attacker's own loss-by-SKU report. A write became a read.
+ *
+ * With one helper, the two paths cannot disagree about what needs checking.
+ * That is the actual root cause fixed here; the join correlation elsewhere in
+ * this file is the defence-in-depth half.
+ */
+async function assertReferencesBelongToOrganization(
+  sql: NeonQueryFunction<false, false>,
+  organizationId: string,
+  refs: { productId?: number; locationId?: number },
+): Promise<void> {
+  const checks: Array<{ id: number; table: 'products' | 'store_areas'; error: string }> = [];
+  if (refs.productId !== undefined) {
+    checks.push({ id: refs.productId, table: 'products', error: REFERENTIAL_ERRORS.product });
+  }
+  if (refs.locationId !== undefined) {
+    checks.push({ id: refs.locationId, table: 'store_areas', error: REFERENTIAL_ERRORS.location });
+  }
+
+  for (const check of checks) {
+    // The table name cannot be parameterized, so it is switched on rather than
+    // interpolated — `table` is a union of two literals, never caller input.
+    const rows =
+      check.table === 'products'
+        ? await sql`SELECT id FROM products
+                    WHERE id = ${check.id} AND organization_id = ${organizationId} LIMIT 1`
+        : await sql`SELECT id FROM store_areas
+                    WHERE id = ${check.id} AND organization_id = ${organizationId} LIMIT 1`;
+
+    if (!rows[0]) {
+      throw new Error(check.error);
+    }
+  }
+}
+
 async function getInventoryProcessContext(
   sql: NeonQueryFunction<false, false>,
   inventoryItemId: number,
@@ -2451,23 +2497,10 @@ export function createWorkersDatabase(env: Env): Database {
       },
     ): Promise<InventoryItem> {
       // Validate product + location belong to the same org
-      const productRows = await sql`
-        SELECT id FROM products
-        WHERE id = ${data.productId} AND organization_id = ${organizationId}
-        LIMIT 1
-      `;
-      if (!productRows[0]) {
-        throw new Error(REFERENTIAL_ERRORS.product);
-      }
-
-      const locationRows = await sql`
-        SELECT id FROM store_areas
-        WHERE id = ${data.locationId} AND organization_id = ${organizationId}
-        LIMIT 1
-      `;
-      if (!locationRows[0]) {
-        throw new Error(REFERENTIAL_ERRORS.location);
-      }
+      await assertReferencesBelongToOrganization(sql, organizationId, {
+        productId: data.productId,
+        locationId: data.locationId,
+      });
 
       // Atomic insert + audit via CTE so we never end up with an inventory
       // item lacking an audit row (or vice versa) on partial failure.
@@ -2515,40 +2548,13 @@ export function createWorkersDatabase(env: Env): Database {
         return null;
       }
 
-      // If productId provided, verify it belongs to the org.
-      //
-      // This check was missing while the locationId one below was present, even
-      // though `createInventoryItem` validates BOTH. The asymmetry was
-      // exploitable: an authenticated user could PATCH their own inventory item
-      // with another tenant's product id (SERIAL, so enumerable), and the
-      // report queries that join `products` would then resolve it — leaking the
-      // foreign product's name, sku and cost_price into the attacker's own
-      // loss-by-SKU report and expired-items worklist. A write became a read.
-      //
-      // The joins are correlated separately (defence in depth), but this is the
-      // check that stops the bad reference being created in the first place.
-      if (data.productId !== undefined) {
-        const productRows = await sql`
-          SELECT id FROM products
-          WHERE id = ${data.productId} AND organization_id = ${organizationId}
-          LIMIT 1
-        `;
-        if (!productRows[0]) {
-          throw new Error(REFERENTIAL_ERRORS.product);
-        }
-      }
-
-      // If locationId provided, verify it belongs to the org
-      if (data.locationId !== undefined) {
-        const locationRows = await sql`
-          SELECT id FROM store_areas
-          WHERE id = ${data.locationId} AND organization_id = ${organizationId}
-          LIMIT 1
-        `;
-        if (!locationRows[0]) {
-          throw new Error(REFERENTIAL_ERRORS.location);
-        }
-      }
+      // Whichever references this patch supplies must belong to the caller's
+      // organization. Same helper as the create path, so the two cannot drift
+      // apart again — see its comment for what that drift cost.
+      await assertReferencesBelongToOrganization(sql, organizationId, {
+        productId: data.productId,
+        locationId: data.locationId,
+      });
 
       // Atomic update + audit via CTE.
       const rows = await sql`

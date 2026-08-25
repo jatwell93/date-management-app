@@ -222,42 +222,79 @@ function verify(manifest, backendIndex) {
   }
 
   // 4. No section may cover fewer behaviours than its file has tests.
+  const coverage = checkSectionCoverage(markdown, backendIndex);
+  findings.push(...coverage.findings);
+
+  // 5. No row may claim an equivalent EXISTS on the strength of a test that
+  //    asserts nothing.
+  const tautology = checkTautologicalCitations(markdown);
+  findings.push(...tautology.findings);
+
+  return {
+    findings,
+    stats: {
+      tautRows: tautology.tautRows,
+      sections: coverage.sections,
+      covered: coverage.covered,
+      rows: coverage.rows,
+      citations: cited.length,
+      tables: column.tables,
+    },
+  };
+}
+
+/**
+ * Resolves a section heading to the backend test file it describes.
+ *
+ * A heading may be a bare basename (`foo.test.ts`, as Parts 1-3 use, where every
+ * file lives in `unit/`) or a path relative to `backend/src/tests`
+ * (`integration/foo.test.ts`). Part 4 needs the second form because basenames
+ * genuinely collide across directories — `upload.controller.test.ts` and
+ * `storage-factory.test.ts` each exist in two places, and a bare name would
+ * silently count a section against the wrong file's test count.
+ *
+ * Returns `{ file }` on success or `{ error }` describing why not.
+ */
+function resolveSectionFile(heading, backendIndex) {
+  const paths = heading.includes('/')
+    ? [path.join(BACKEND_TESTS, heading)].filter(fs.existsSync)
+    : backendIndex.get(heading);
+
+  if (!paths || !paths.length) {
+    return { error: `[scope] section "${heading}" matches no file under ${BACKEND_TESTS}` };
+  }
+  if (paths.length > 1) {
+    // Hard failure, not a warning. Guessing picks a file with a different test
+    // count, so the coverage check then reports a defect that does not exist
+    // (or, worse, misses one that does) — `storage-factory.test.ts` has 5 tests
+    // under `unit/` and 16 under `integration/`. The heading must say which, and
+    // the fix is to qualify it: `unit/storage-factory.test.ts`.
+    return {
+      error:
+        `[scope] "${heading}" is ambiguous — ${paths.length} files share that name ` +
+        `(${paths.join(', ')}); qualify the heading with its directory`,
+    };
+  }
+  return { file: paths[0] };
+}
+
+/** Check 4: no section may cover fewer behaviours than its file has test cases. */
+function checkSectionCoverage(markdown, backendIndex) {
+  const findings = [];
   const sections = parseSections(markdown);
   let covered = 0;
-  let rowTotal = 0;
+  let rows = 0;
+
   for (const section of sections) {
-    rowTotal += section.rows;
-    // A heading may be a bare basename (`foo.test.ts`, as Parts 1-3 use, where
-    // every file lives in `unit/`) or a path relative to `backend/src/tests`
-    // (`integration/foo.test.ts`). Part 4 needs the second form because
-    // basenames genuinely collide across directories — `upload.controller.test.ts`
-    // and `storage-factory.test.ts` each exist in two places, and a bare name
-    // would silently count a section against the wrong file's test count.
-    const paths = section.heading.includes('/')
-      ? [path.join(BACKEND_TESTS, section.heading)].filter(fs.existsSync)
-      : backendIndex.get(section.heading);
-    if (!paths || !paths.length) {
-      findings.push({
-        level: 'fail',
-        message: `[scope] section "${section.heading}" matches no file under ${BACKEND_TESTS}`,
-      });
+    rows += section.rows;
+
+    const resolved = resolveSectionFile(section.heading, backendIndex);
+    if (resolved.error) {
+      findings.push({ level: 'fail', message: resolved.error });
       continue;
     }
-    if (paths.length > 1) {
-      // Hard failure, not a warning. Guessing picks a file with a different test
-      // count, so the coverage check below then reports a defect that does not
-      // exist (or, worse, misses one that does) — `storage-factory.test.ts` has
-      // 5 tests under `unit/` and 16 under `integration/`. The heading must say
-      // which, and the fix is to qualify it: `unit/storage-factory.test.ts`.
-      findings.push({
-        level: 'fail',
-        message:
-          `[scope] "${section.heading}" is ambiguous — ${paths.length} files share that name ` +
-          `(${paths.join(', ')}); qualify the heading with its directory`,
-      });
-      continue;
-    }
-    const tests = countTestCases(paths[0]);
+
+    const tests = countTestCases(resolved.file);
     covered += 1;
     if (section.rows < tests) {
       findings.push({
@@ -269,12 +306,22 @@ function verify(manifest, backendIndex) {
     }
   }
 
-  // 5. No row may claim an equivalent EXISTS on the strength of a test that
-  //    asserts nothing. Scoped to `worker-equivalent-exists` rows because that
-  //    is the only target where the citation is load-bearing: a `retire` or
-  //    `worker-shaped-rewrite` row cites these files to record what was searched.
+  return { findings, sections: sections.length, covered, rows };
+}
+
+/**
+ * Check 5: a `worker-equivalent-exists` row may not rest on a test that cannot
+ * fail.
+ *
+ * Scoped to that target because it is the only one where the citation is
+ * load-bearing: a `retire` or `worker-shaped-rewrite` row cites these files to
+ * record what was searched, which is correct use.
+ */
+function checkTautologicalCitations(markdown) {
+  const findings = [];
   const tautCache = new Map();
   let tautRows = 0;
+
   for (const line of markdown.split(/\r?\n/)) {
     const row = line.trim();
     if (!row.startsWith('|')) continue;
@@ -288,6 +335,7 @@ function verify(manifest, backendIndex) {
       if (!fs.existsSync(file)) continue; // already reported by check 2
       if (!tautCache.has(file)) tautCache.set(file, tautologicalLines(file));
       if (!tautCache.get(file).has(lineNo)) continue;
+
       tautRows += 1;
       findings.push({
         level: 'fail',
@@ -299,17 +347,7 @@ function verify(manifest, backendIndex) {
     }
   }
 
-  return {
-    findings,
-    stats: {
-      tautRows,
-      sections: sections.length,
-      covered,
-      rows: rowTotal,
-      citations: cited.length,
-      tables: column.tables,
-    },
-  };
+  return { findings, tautRows };
 }
 
 function defaultTargets() {
