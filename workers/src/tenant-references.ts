@@ -69,20 +69,35 @@ export async function assertReferencesBelongToOrganization(
   refs: { productId?: number; locationId?: number },
 ): Promise<void> {
   if (refs.productId !== undefined) {
-    const rows = await sql`
-      SELECT id FROM products
-      WHERE id = ${refs.productId} AND organization_id = ${organizationId} LIMIT 1`;
-    if (!rows[0]) {
-      throw new Error(REFERENTIAL_ERRORS.product);
-    }
+    await assertProductBelongsToOrganization(sql, organizationId, refs.productId);
   }
-
   if (refs.locationId !== undefined) {
-    const rows = await sql`
-      SELECT id FROM store_areas
-      WHERE id = ${refs.locationId} AND organization_id = ${organizationId} LIMIT 1`;
-    if (!rows[0]) {
-      throw new Error(REFERENTIAL_ERRORS.location);
-    }
+    await assertStoreAreaBelongsToOrganization(sql, organizationId, refs.locationId);
+  }
+}
+
+async function assertProductBelongsToOrganization(
+  sql: NeonQueryFunction<false, false>,
+  organizationId: string,
+  productId: number,
+): Promise<void> {
+  const rows = await sql`
+    SELECT id FROM products
+    WHERE id = ${productId} AND organization_id = ${organizationId} LIMIT 1`;
+  if (!rows[0]) {
+    throw new Error(REFERENTIAL_ERRORS.product);
+  }
+}
+
+async function assertStoreAreaBelongsToOrganization(
+  sql: NeonQueryFunction<false, false>,
+  organizationId: string,
+  locationId: number,
+): Promise<void> {
+  const rows = await sql`
+    SELECT id FROM store_areas
+    WHERE id = ${locationId} AND organization_id = ${organizationId} LIMIT 1`;
+  if (!rows[0]) {
+    throw new Error(REFERENTIAL_ERRORS.location);
   }
 }
