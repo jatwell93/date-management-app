@@ -1043,6 +1043,46 @@ equivalent, a relocated home, or an explicit retirement decision.
             Cheapest correct fix is to change the `||` to `&&` and let the missing-org case throw. No
             Worker counterpart exists or should be introduced: `index-minimal.ts:3352` is the sole
             assignment of `organizationId` and it reads the verified JWT with no fallback branch.
+      - [ ] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
+            (Finding 8). Express records authorization events through `OrgAuditService.emit`
+            (`backend/src/services/org-audit.service.ts:20`) into
+            `backend/src/repositories/org-audit.repository.ts:25`, writing the Prisma model
+            `OrgAuditLog` (`backend/prisma/schema.prisma:354`), which maps to `org_audit_log` at
+            `:376`. That table **does not exist in `database/migrations/`** — the baseline creates
+            `audit_log` (`0000_baseline.up.sql:205`) for inventory events, with none of `event_type`,
+            `actor_user_id`, `target_user_id`, `old_role`, `new_role`, `invite_id` or `ip_address` —
+            and `org_audit_log` appears nowhere in `workers/` or `shared/`. This is a **schema gap
+            before it is a code gap**: a Worker implementation has nowhere to write, so the migration
+            has to land first.
+            <br>Live scope is **one event type**, and the task should be sized on that rather than on
+            the model's full vocabulary: `AUDIT_EVENT_TYPES.ROLE_ASSIGNED` from
+            `org-bootstrap.service.ts:152` is reachable today. The four invite events
+            (`organization-invite.service.ts:102/150/184/270`) are gated behind
+            `ENABLE_CUSTOM_ORG_INVITES`, which `backend/src/index.ts:57-59` uses to require the router
+            conditionally and which is off — that is why
+            `contract/organization-invites-clerk-only.test.ts` asserts 404. So what Phase 4 deletes is
+            the record of **who was granted admin and by what path**, which is also the entry with the
+            clearest compliance argument. Decide explicitly whether to rebuild it, and whether the
+            invite events come with it if custom invites are ever re-enabled.
+            <br>Note the Express test does not prove the behaviour it names:
+            `services/org-bootstrap.service.test.ts:70-91` wraps its only assertion in `if (auditLog)`
+            with an `else` that merely `console.warn`s, because the write is swallowed by SQLite's
+            interactive transaction lock. A replacement must be tested against real SQL (pglite,
+            `npm run test:db`) or it will be equally unfalsifiable.
+      - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** Pre-existing in
+            **both** implementations, so not a regression and not a Worker defect — recorded because
+            Phase 3.2 will otherwise write a test that codifies it. The `isFirstAdmin` decision is
+            check-then-act on both sides: the Worker selects an active admin
+            (`clerk/bootstrap-handler.ts:302-309`) then assigns, and Express does the same before its
+            transaction, whose `$transaction` (`org-bootstrap.service.ts:116`) wraps only the user
+            *creation* at step 5, not the admin check preceding it. Two users bootstrapping one
+            brand-new organization concurrently can both be assigned `admin`. The unique indexes that
+            make the idempotency behaviour safe — `users_clerk_user_id_key`
+            (`0000_baseline.up.sql:400`) and `organizations_clerk_organization_id_key` (`:313`) — do
+            not constrain "at most one admin per organization". Bounded: an extra admin inside the
+            caller's own organization, no cross-tenant reach. Either accept it explicitly, or close it
+            with a partial unique index (`WHERE role = 'admin' AND deleted_at IS NULL`) or a
+            conditional single-statement insert, since Neon has no `$transaction`.
       **One product decision, not a defect.** No Worker route is gated on tier — every use of tier in
       `index-minimal.ts` is a quota or display value, and all twelve `/api/reports/*` handlers are
       reachable by any authenticated caller regardless of subscription, which is what
