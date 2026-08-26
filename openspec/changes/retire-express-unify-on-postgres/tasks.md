@@ -938,7 +938,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
       scheduled-job idempotency, authorization precedence — and get it green before any deletion.
-      **The `tenant-isolation` gate is satisfied in advance (PRs #462, #463).** Cross-tenant
+      **The `tenant-isolation` gate is satisfied in advance (PRs #462, #466).** Cross-tenant
       **read** scoping is covered by `workers/src/database.tenant-isolation.pglite.node.test.ts`
       (11 tests) and cross-tenant **write/delete** by
       `workers/src/database.tenant-isolation-writes.pglite.node.test.ts` (19 tests), both against
@@ -950,7 +950,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       test verified to fail with its predicate removed.
       **Method note, learned the hard way.** Both PRs found live vulnerabilities, and both were
       found by *working* a row that claimed a property was untested — not by reading the Worker and
-      judging it equivalent. #463's leak (`updateInventoryItem` accepting another tenant's
+      judging it equivalent. #466's leak (`updateInventoryItem` accepting another tenant's
       `productId`, then uncorrelated report JOINs resolving it) has no Express analogue at all, so
       no manifest row predicted it. Work the remaining gates by exercising the Worker against real
       SQL; a row that says "no Worker test exists" is the most likely place to find a defect.
