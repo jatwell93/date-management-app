@@ -939,7 +939,9 @@ equivalent, a relocated home, or an explicit retirement decision.
       reach another's data through any of them — which is why they are 3.1 work items and not
       immediate fixes in the shape of #462/#466. Each is evidenced in
       `audit/2.2-test-manifest-part4.md`; do not re-derive.
-      - [ ] 3.1.a **Usage limits are not enforced on any interactive path** (Finding 4).
+      - [ ] 3.1.a **Usage limits are not enforced on any interactive path** (Finding 4). **Tracked as #471** —
+            the defect exists in production now and is not gated on this change; that issue is the
+            authoritative record and survives this change being archived.
             `workers/src/utils/feature-gates.ts` has no production importer — its five exports are
             referenced only by test files — and its SQL targets `"Product"`/`"User"`/
             `"InventoryItem"`/`"Upload"` while the schema uses `products`/`users`/`inventory_items`/
@@ -955,7 +957,9 @@ equivalent, a relocated home, or an explicit retirement decision.
             currently at `:2673`. Also carry the **soft warning at 80%**, which Express emits via
             `res.locals.usageWarning` and the Worker's response envelope has no slot for. Source
             rows: `multi-tenant-usage-limits.test.ts:142/169/432/554`.
-      - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5).
+      - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5). **Tracked as
+            #472** — shipped Worker code, not gated on this change; see also task 3.8, whose Stripe
+            handler must be written against the fixed pattern rather than the current one.
             `handleClerkWebhook` runs `isNewClerkWebhookEvent` → `processClerkWebhookEvent` →
             `markClerkWebhookEventProcessed` as three statements with no transaction, so two
             concurrent Svix deliveries of one event both observe `isNew` and both perform the side
@@ -968,7 +972,9 @@ equivalent, a relocated home, or an explicit retirement decision.
             across `workers/src/**/*.test.ts` returns nothing. Fix the existing Clerk path **and**
             treat it as a constraint on the net-new Stripe handler: exactly-once must hold for the
             processing, not just the marker.
-      - [ ] 3.1.c **Restore the CSV formula-injection control lost at cutover.** Express sanitizes
+      - [ ] 3.1.c **Restore the CSV formula-injection control lost at cutover.** **Tracked as #473** — the
+            control is already gone from the production Workers path, so this is not gated on the
+            retirement. Express sanitizes
             spreadsheet-formula payloads at ingestion for `sku`, `name` and `barcode`
             (`validateProductRowStrictly`); the Worker's `upload/catalogue-parser.ts:93-95` applies
             `.trim()` to the same three fields and stores them raw, and no formula-escaping construct
