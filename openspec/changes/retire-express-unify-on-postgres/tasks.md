@@ -934,6 +934,57 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 3.1 Implement Worker handlers + routes for each Express-only endpoint from the audit. **Must
       include the Stripe webhook inbound handler** (`POST /api/webhooks/stripe`) — the Worker handles Clerk
       webhooks only today, so this is net-new, not a port.
+      **Three defects against shipped Worker code, found during 2.2 part 4 and deliberately deferred
+      here rather than fixed mid-audit.** None is a tenant-isolation defect — no organization can
+      reach another's data through any of them — which is why they are 3.1 work items and not
+      immediate fixes in the shape of #462/#466. Each is evidenced in
+      `audit/2.2-test-manifest-part4.md`; do not re-derive.
+      - [ ] 3.1.a **Usage limits are not enforced on any interactive path** (Finding 4).
+            `workers/src/utils/feature-gates.ts` has no production importer — its five exports are
+            referenced only by test files — and its SQL targets `"Product"`/`"User"`/
+            `"InventoryItem"`/`"Upload"` while the schema uses `products`/`users`/`inventory_items`/
+            `uploads`, so every branch throws `relation "Product" does not exist` and fails closed
+            (verified against pglite). `handleCreateProduct` (`index-minimal.ts:2266`) performs no
+            limit check. The one inline gate, `POST /api/users` (`index-minimal.ts:2673`), reads
+            `organization_usage.active_users`, which is written exactly once as a literal `0` by the
+            lazy upsert at `index-minimal.ts:3084` — no `UPDATE`, no trigger — so `0 >= 1` is false
+            and the gate never fires. Decide the module's fate (wire up vs delete), maintain the
+            counters, and make check-and-increment **atomic**: Neon has no `$transaction`
+            equivalent, so this needs a conditional `UPDATE ... WHERE active_users < max_users`, a
+            constraint, or an equivalent single-statement claim — not the read-then-insert shape
+            currently at `:2673`. Also carry the **soft warning at 80%**, which Express emits via
+            `res.locals.usageWarning` and the Worker's response envelope has no slot for. Source
+            rows: `multi-tenant-usage-limits.test.ts:142/169/432/554`.
+      - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5).
+            `handleClerkWebhook` runs `isNewClerkWebhookEvent` → `processClerkWebhookEvent` →
+            `markClerkWebhookEventProcessed` as three statements with no transaction, so two
+            concurrent Svix deliveries of one event both observe `isNew` and both perform the side
+            effects; the `ON CONFLICT (id) DO NOTHING` deduplicates the marker row, not the work.
+            Not benign: `ensureTrialSubscription` (`clerk/clerk-persistence.ts:97-102`) is itself
+            check-then-insert with no `ON CONFLICT`, so a doubled `organization.created` can write
+            two `trialing` rows for one organization. Svix delivers at-least-once and retries on
+            timeout/5xx, so concurrent redelivery is the expected case. A repo-wide search for
+            `isNewClerkWebhookEvent`, `markClerkWebhookEventProcessed` and `clerk_webhook_events`
+            across `workers/src/**/*.test.ts` returns nothing. Fix the existing Clerk path **and**
+            treat it as a constraint on the net-new Stripe handler: exactly-once must hold for the
+            processing, not just the marker.
+      - [ ] 3.1.c **Restore the CSV formula-injection control lost at cutover.** Express sanitizes
+            spreadsheet-formula payloads at ingestion for `sku`, `name` and `barcode`
+            (`validateProductRowStrictly`); the Worker's `upload/catalogue-parser.ts:93-95` applies
+            `.trim()` to the same three fields and stores them raw, and no formula-escaping construct
+            exists anywhere in `workers/src`. Note `.trim()` strips the leading tab and CR, collapsing
+            the two evasion variants into a bare formula the Worker stores unescaped. This is not a
+            live Worker exploit today — the Worker has no CSV export route — but sanitizing at
+            ingestion is the control, because the export that weaponizes the payload need not live in
+            the same service. Apply to all three fields in one change: per-field asymmetry (sanitize
+            `name`, forget `sku`) is the exact shape that produced #466. Source rows:
+            `services/csv-injection.test.ts:43/137`.
+      **One product decision, not a defect.** No Worker route is gated on tier — every use of tier in
+      `index-minimal.ts` is a quota or display value, and all twelve `/api/reports/*` handlers are
+      reachable by any authenticated caller regardless of subscription, which is what
+      `requireFeature('advanced_analytics')` prevents in Express. Decide explicitly rather than
+      inherit. If tier gating is adopted, note the vocabulary mismatch: the Express tests treat
+      `premium` as first-class, while the Worker's `LaunchTier` folds it into `professional`.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
