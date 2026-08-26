@@ -980,7 +980,14 @@ equivalent, a relocated home, or an explicit retirement decision.
             `name`, forget `sku`) is the exact shape that produced #466. Source rows:
             `services/csv-injection.test.ts:43/137`.
       - [ ] 3.1.d **Six of the eight credit-claim endpoints the frontend calls have no Worker route**
-            (Finding 6). The Worker implements `GET /api/supplier-credits/claims` and
+            (Finding 6). **This work is already specified — do not re-plan it here.** The change
+            `openspec/changes/add-workers-credit-claim-write-handlers` covers it in full, carried
+            forward from `add-supplier-credit-claims` task 4.2, which deferred the write side because
+            the Express router imports `multer` (no Workers bundle) and photo storage needs R2
+            bindings. That change is written and unstarted. This task is the **link**: Phase 4 cannot
+            delete Express until it lands.
+            <br>What the audit adds, having rediscovered the gap independently from the test side:
+            the Worker implements `GET /api/supplier-credits/claims` and
             `GET /api/supplier-credits/recovery-report` and nothing else under `claims`. Absent:
             `GET /claims/:id`, `POST /claims`, `POST /claims/:id/send`, `POST /claims/:id/follow-up`,
             `POST /claims/:id/outcome`, and `POST /claims/:id/lines/:lineId/photos` — all six called
@@ -989,15 +996,15 @@ equivalent, a relocated home, or an explicit retirement decision.
             `INSERT INTO credit_claim` appears nowhere in `workers/src` production code (only in
             `database.credit-claim.conformance.node.test.ts` seed data), so no claim, line, photo or
             event is ever created; and unmatched `/api/` paths 404 at `index-minimal.ts:431`. The
-            `credit_claim_photos` table is read at `database.ts:2075` and written nowhere. This is a
-            **feature gap, not a defect** — unlike 3.1.a–c there is nothing wrong with what the Worker
-            does, there are six routes that do not exist — and it is a hard Phase 4 blocker: deleting
-            Express removes the only way to create, send, chase or resolve a supplier credit claim.
-            **First establish which origin production's frontend resolves against**
+            `credit_claim_photos` table is read at `database.ts:2075` and written nowhere.
+            <br>**First establish which origin production's frontend resolves against**
             (`frontend/src/lib/api.service.ts:1-4` uses a single base URL for every call); that
-            determines whether this is a live outage or a latent one, and the audit deliberately does
-            not assert either. Two properties to build in, both recorded from the retiring Express
-            tests: the claim creator comes from the verified JWT and never the request body
+            determines whether the write side is a live outage or a latent one, and the audit
+            deliberately does not assert either. That question is not in the credit-claim change and
+            belongs here.
+            <br>Two test properties to carry into that change's task 4.2, recorded from the Express
+            tests this manifest retires and not currently named there: the claim creator comes from
+            the verified JWT and never the request body
             (`controllers/credit-claim.controller.test.ts:65`), and a photo upload with no file is
             rejected before the service is invoked (`:79`) — the same reject-before-work ordering
             `handleUploadDirect` already gets right at `index-minimal.ts:3600-3611`.
