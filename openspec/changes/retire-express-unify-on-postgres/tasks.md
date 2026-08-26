@@ -979,6 +979,57 @@ equivalent, a relocated home, or an explicit retirement decision.
             the same service. Apply to all three fields in one change: per-field asymmetry (sanitize
             `name`, forget `sku`) is the exact shape that produced #466. Source rows:
             `services/csv-injection.test.ts:43/137`.
+      - [ ] 3.1.d **Six of the eight credit-claim endpoints the frontend calls have no Worker route**
+            (Finding 6). The Worker implements `GET /api/supplier-credits/claims` and
+            `GET /api/supplier-credits/recovery-report` and nothing else under `claims`. Absent:
+            `GET /claims/:id`, `POST /claims`, `POST /claims/:id/send`, `POST /claims/:id/follow-up`,
+            `POST /claims/:id/outcome`, and `POST /claims/:id/lines/:lineId/photos` — all six called
+            from `frontend/src/services/supplierCreditService.ts:144-183`. Verified three ways: no
+            regex in `index-minimal.ts:186-190` matches a path under `/api/supplier-credits/claims/`;
+            `INSERT INTO credit_claim` appears nowhere in `workers/src` production code (only in
+            `database.credit-claim.conformance.node.test.ts` seed data), so no claim, line, photo or
+            event is ever created; and unmatched `/api/` paths 404 at `index-minimal.ts:431`. The
+            `credit_claim_photos` table is read at `database.ts:2075` and written nowhere. This is a
+            **feature gap, not a defect** — unlike 3.1.a–c there is nothing wrong with what the Worker
+            does, there are six routes that do not exist — and it is a hard Phase 4 blocker: deleting
+            Express removes the only way to create, send, chase or resolve a supplier credit claim.
+            **First establish which origin production's frontend resolves against**
+            (`frontend/src/lib/api.service.ts:1-4` uses a single base URL for every call); that
+            determines whether this is a live outage or a latent one, and the audit deliberately does
+            not assert either. Two properties to build in, both recorded from the retiring Express
+            tests: the claim creator comes from the verified JWT and never the request body
+            (`controllers/credit-claim.controller.test.ts:65`), and a photo upload with no file is
+            rejected before the service is invoked (`:79`) — the same reject-before-work ordering
+            `handleUploadDirect` already gets right at `index-minimal.ts:3600-3611`.
+      - [ ] 3.1.e **Hoist the credit-claim status partition into `shared/`.** `index-minimal.ts:192-193`
+            re-declares `OPEN_CREDIT_CLAIM_STATUSES` and `SETTLED_CREDIT_CLAIM_STATUSES` as local
+            literals, duplicating `SETTLED_CLAIM_STATUSES` in `shared/domain/credit-claim.ts:25` — a
+            module whose own header states it exists so "both backends must agree on the claim status
+            vocabulary" (golden rule 5). The lists match today and nothing enforces that they keep
+            matching. There is no `OPEN_*` export in shared at all; the nearest,
+            `CHASEABLE_CLAIM_STATUSES` (`:33`), is a *different* partition (`SENT`, `ACKNOWLEDGED`
+            only), so a future reader reaching for it would silently narrow the open view to two
+            statuses. Same shape and same remedy as the store-walk-audit rollup (#350): export both
+            partitions from shared and pin them with a conformance test. Small, and it unblocks the
+            `?view=settled` and no-`view` rows in Part 4 being written against the shared export
+            rather than a third copy of the strings.
+      - [ ] 3.1.f **Reconcile the two test-bypass predicates before deleting Express** (Finding 7).
+            `middleware/auth.middleware.ts:129` and `middleware/clerk-auth.middleware.ts:79` both gate
+            on `NODE_ENV === 'test'` **and** `TEST_AUTH_BYPASS === 'true'`; `utils/auth-bypass.ts:11`
+            uses **or**. That helper backs `getOrganizationId(organizationId?)` (`:18-28`), which
+            returns the literal `'default-org'` instead of throwing when no organization id is
+            supplied and the predicate holds — and eight services take their entire tenant scope from
+            it (`product.service.ts:101`, `inventory.service.ts:83`, `csv-parser.service.ts:226`,
+            `store-area.service.ts:29`, `credit-claim.service.ts:132`, `markdown-config.service.ts:62`,
+            `supplier-credit.service.ts:174`, `service-provider.ts:46`), with
+            `ServiceProvider.withClients(prisma)` (`:64`) reaching it undefined by design. Bounded:
+            it needs `TEST_AUTH_BYPASS=true` under a non-`test` `NODE_ENV`, which is a deployment
+            mistake rather than an attacker-reachable request, and Express is not the deployed system —
+            so this is **not** an emergency. It is listed because it is a silent cross-tenant fallback
+            where the two sibling guards fail closed, which is the shape that produced #462 and #466.
+            Cheapest correct fix is to change the `||` to `&&` and let the missing-org case throw. No
+            Worker counterpart exists or should be introduced: `index-minimal.ts:3352` is the sole
+            assignment of `organizationId` and it reads the verified JWT with no fallback branch.
       **One product decision, not a defect.** No Worker route is gated on tier — every use of tier in
       `index-minimal.ts` is a quota or display value, and all twelve `/api/reports/*` handlers are
       reachable by any authenticated caller regardless of subscription, which is what
