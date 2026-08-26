@@ -858,6 +858,20 @@ equivalent, a relocated home, or an explicit retirement decision.
       idempotency, authorization precedence, and negative/error cases; zero rows may remain unresolved at
       deletion. The Express test suite is **not ported to Postgres** — it keeps running on SQLite until
       deletion; this manifest is what its coverage maps onto in the Worker suite.
+      **Finding acted on mid-audit (PR #462).** Part 4 established that
+      `workers/src/__tests__/multi-tenant-isolation.test.ts` asserts nothing — all 8 tests are
+      `expect(true).toBe(true)` under names describing real tenant-isolation properties (90 such
+      tests across 8 Worker files). Following that to the code it claimed to cover found four live
+      authenticated routes returning **every** tenant's rows: `GET /api/products`,
+      `/api/products/:id`, `/api/inventory-items`, `/api/store-areas`. Six `Database` methods took
+      no organization parameter at all. Fixed rather than filed, because it was live on `main` —
+      `organizationId` is now a required first parameter (a forgetful call site fails to compile),
+      covered by 11 real-SQL assertions in `database.tenant-isolation.pglite.node.test.ts` and
+      proven by mutation. The same PR added `.github/workflows/workers-test.yml`: **the Worker
+      suites previously ran in no workflow at all**, which is why two `health.test.ts` tests sat
+      red on `main` from 2026-06-09 (`d11d1f97`) unnoticed. `Workers CI Gate` is now a required
+      check. This does not close 2.2 — it removes two rows from 3.2's rewrite scope (see below)
+      and leaves the rest of the manifest to finish.
 - [ ] 2.3 Produce an action-level schedule matrix from actual `SchedulerService` registrations and
       dormant job exports—not a six-file list. Include markdown recalculation, backup, trial expiration,
       dunning, Stripe sync, both credit-claim schedules, webhook monitoring, metrics, and report email.
@@ -924,6 +938,22 @@ equivalent, a relocated home, or an explicit retirement decision.
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
       scheduled-job idempotency, authorization precedence — and get it green before any deletion.
+      **The `tenant-isolation` gate is satisfied in advance (PRs #462, #463).** Cross-tenant
+      **read** scoping is covered by `workers/src/database.tenant-isolation.pglite.node.test.ts`
+      (11 tests) and cross-tenant **write/delete** by
+      `workers/src/database.tenant-isolation-writes.pglite.node.test.ts` (19 tests), both against
+      real SQL on pglite. The corresponding Part 4 rows moved from `worker-shaped-rewrite` to
+      `worker-equivalent-exists`. Treat these as the template for the remaining gates: real SQL,
+      foreign rows seeded so they WOULD be returned if scoping regressed, names chosen to sort
+      first under each `ORDER BY`, assertions on row identity rather than count, both halves
+      asserted (the attacker's call had no effect AND the victim's row is untouched), and every
+      test verified to fail with its predicate removed.
+      **Method note, learned the hard way.** Both PRs found live vulnerabilities, and both were
+      found by *working* a row that claimed a property was untested — not by reading the Worker and
+      judging it equivalent. #463's leak (`updateInventoryItem` accepting another tenant's
+      `productId`, then uncorrelated report JOINs resolving it) has no Express analogue at all, so
+      no manifest row predicted it. Work the remaining gates by exercising the Worker against real
+      SQL; a row that says "no Worker test exists" is the most likely place to find a defect.
 - [ ] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.

@@ -54,6 +54,7 @@ import {
   type RecoveryReport,
 } from '../../shared/domain/credit-claim';
 import { createSupplierCreditDatabase } from './supplier-credit-database';
+import { assertReferencesBelongToOrganization } from './tenant-references';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -756,7 +757,7 @@ async function getInventoryProcessContext(
       COALESCE(p.cost_price, 0) * ${unitsDiscarded ?? 0} as "financialLoss",
       (ii.expiry_date::date - CURRENT_DATE) as "daysToExpiry"
     FROM inventory_items ii
-    JOIN products p ON ii.product_id = p.id
+    JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
     WHERE ii.id = ${inventoryItemId} AND ii.organization_id = ${organizationId}
     LIMIT 1
   `;
@@ -784,7 +785,7 @@ async function getMatchingExpiredItemIds(
   const matchingRows = await sql`
     SELECT ii.id
     FROM inventory_items ii
-    JOIN products p ON ii.product_id = p.id
+    JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
     WHERE ii.organization_id = ${organizationId}
       AND ii.product_id = ${context.productId}
       AND ii.location_id IS NOT DISTINCT FROM ${context.locationId}
@@ -1113,7 +1114,7 @@ export function createWorkersDatabase(env: Env): Database {
         sql`SELECT COUNT(*)::int as count FROM (
               SELECT 1
               FROM inventory_items ii
-              JOIN products p ON ii.product_id = p.id
+              JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
               WHERE (ii.expiry_date < CURRENT_DATE
                   OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
                 AND ii.organization_id = ${organizationId}
@@ -1282,7 +1283,7 @@ export function createWorkersDatabase(env: Env): Database {
         LEFT JOIN suppliers ps ON ps.id = p.supplier_id AND ps.organization_id = p.organization_id
         LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
         LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
-        JOIN store_areas sa ON ii.location_id = sa.id
+        JOIN store_areas sa ON ii.location_id = sa.id AND sa.organization_id = ii.organization_id
         WHERE ii.expiry_date >= CURRENT_DATE
           AND ii.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
           AND ii.organization_id = ${organizationId}
@@ -1328,7 +1329,7 @@ export function createWorkersDatabase(env: Env): Database {
         LEFT JOIN suppliers ps ON ps.id = p.supplier_id AND ps.organization_id = p.organization_id
         LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
         LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
-        JOIN store_areas sa ON ii.location_id = sa.id
+        JOIN store_areas sa ON ii.location_id = sa.id AND sa.organization_id = ii.organization_id
         WHERE ii.expiry_date >= CURRENT_DATE
           AND ii.organization_id = ${organizationId}
           -- Exclude items already dispositioned via sold-through so they do not
@@ -1499,7 +1500,7 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(SUM(p.cost_price), 0) as "totalLoss",
           COUNT(*)::int as count
         FROM inventory_items ii
-        JOIN products p ON ii.product_id = p.id
+        JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
         WHERE (ii.expiry_date < CURRENT_DATE OR ii.status = ${EXPIRED_STATUS})
           AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
           AND ii.organization_id = ${organizationId}
@@ -1516,8 +1517,8 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(SUM(p.cost_price), 0) as "totalLoss",
           COUNT(*)::int as count
         FROM inventory_items ii
-        JOIN products p ON ii.product_id = p.id
-        JOIN store_areas sa ON ii.location_id = sa.id
+        JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
+        JOIN store_areas sa ON ii.location_id = sa.id AND sa.organization_id = ii.organization_id
         WHERE (ii.expiry_date < CURRENT_DATE OR ii.status = ${EXPIRED_STATUS})
           AND sa.sub_department IS NOT NULL
           AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
@@ -1539,8 +1540,8 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(SUM(eit.financial_loss), 0) as "totalLoss",
           COALESCE(SUM(eit.units_discarded), 0)::int as count
         FROM expired_item_transactions eit
-        JOIN inventory_items ii ON eit.inventory_item_id = ii.id
-        JOIN products p ON ii.product_id = p.id
+        JOIN inventory_items ii ON eit.inventory_item_id = ii.id AND ii.organization_id = eit.organization_id
+        JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
         WHERE eit.action = 'expired'
           AND eit.organization_id = ${organizationId}
         GROUP BY p.sku, p.name
@@ -1558,8 +1559,8 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(SUM(eit.financial_loss), 0) as "totalLoss",
           COALESCE(SUM(eit.units_discarded), 0)::int as count
         FROM expired_item_transactions eit
-        JOIN inventory_items ii ON eit.inventory_item_id = ii.id
-        JOIN store_areas sa ON ii.location_id = sa.id
+        JOIN inventory_items ii ON eit.inventory_item_id = ii.id AND ii.organization_id = eit.organization_id
+        JOIN store_areas sa ON ii.location_id = sa.id AND sa.organization_id = ii.organization_id
         WHERE eit.action = 'expired'
           AND eit.organization_id = ${organizationId}
         GROUP BY sa.id, sa.name
@@ -1887,6 +1888,20 @@ export function createWorkersDatabase(env: Env): Database {
       return buildCatalogueProvenanceResponse(rows);
     },
 
+    // DELIBERATELY NOT ORGANIZATION-SCOPED — do not "fix" this to match its
+    // neighbours without reading the route first.
+    //
+    // This is the one mutation in this file with no organization predicate, so
+    // it looks exactly like the defect fixed in #462. It is not. Catalogue
+    // corrections are reviewed by a PLATFORM admin across all tenants, and both
+    // this method and `listCatalogueCorrections` (which returns an
+    // `organization` field per row for precisely this reason) are gated by
+    // `isPlatformAdminUser` at index-minimal.ts, not by tenant membership.
+    // Adding an org predicate here would break platform review.
+    //
+    // Recorded because an audit sweep for "mutations missing organization_id"
+    // flags this first, and the guard that makes it correct lives in a
+    // different file.
     async reviewCatalogueCorrection(id, status) {
       const rows = (await sql`
         WITH updated AS (
@@ -1926,11 +1941,11 @@ export function createWorkersDatabase(env: Env): Database {
                COALESCE(eit.units_discarded, 0) AS "unitsDiscarded",
                COALESCE(p.cost_price, 0) AS "costPrice"
         FROM expired_item_transactions eit
-        JOIN inventory_items ii ON ii.id = eit.inventory_item_id
-        JOIN products p ON p.id = ii.product_id
-        LEFT JOIN suppliers s ON s.id = p.supplier_id
+        JOIN inventory_items ii ON ii.id = eit.inventory_item_id AND ii.organization_id = eit.organization_id
+        JOIN products p ON p.id = ii.product_id AND p.organization_id = ii.organization_id
+        LEFT JOIN suppliers s ON s.id = p.supplier_id AND s.organization_id = p.organization_id
         LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
-        LEFT JOIN suppliers bs ON bs.id = b.supplier_id
+        LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
         LEFT JOIN credit_claim_lines ccl ON ccl.expired_item_transaction_id = eit.id
         WHERE eit.organization_id = ${organizationId}
           AND eit.action = 'expired'
@@ -2183,8 +2198,8 @@ export function createWorkersDatabase(env: Env): Database {
           sa.name as "locationName",
           COUNT(*)::int as "quantityAvailable"
         FROM inventory_items ii
-        JOIN products p ON ii.product_id = p.id
-        JOIN store_areas sa ON ii.location_id = sa.id
+        JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
+        JOIN store_areas sa ON ii.location_id = sa.id AND sa.organization_id = ii.organization_id
         WHERE (ii.expiry_date < CURRENT_DATE
           OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
           AND ii.organization_id = ${organizationId}
@@ -2366,7 +2381,7 @@ export function createWorkersDatabase(env: Env): Database {
             json_build_object('id', s.id, 'name', s.name, 'subDepartment', s.sub_department)
           ELSE NULL END as "storeArea"
         FROM inventory_items i
-        LEFT JOIN store_areas s ON i.location_id = s.id
+        LEFT JOIN store_areas s ON i.location_id = s.id AND s.organization_id = i.organization_id
         WHERE i.organization_id = ${organizationId} AND i.product_id = ${productId}
         ORDER BY i.expiry_date ASC NULLS LAST
       `) as InventoryItem[];
@@ -2387,7 +2402,7 @@ export function createWorkersDatabase(env: Env): Database {
           i.status,
           i.created_at::text as "createdAt"
         FROM inventory_items i
-        LEFT JOIN store_areas s ON i.location_id = s.id
+        LEFT JOIN store_areas s ON i.location_id = s.id AND s.organization_id = i.organization_id
         WHERE i.organization_id = ${organizationId} AND i.product_id = ${productId}
         ORDER BY i.created_at DESC
         LIMIT ${limit}
@@ -2405,23 +2420,10 @@ export function createWorkersDatabase(env: Env): Database {
       },
     ): Promise<InventoryItem> {
       // Validate product + location belong to the same org
-      const productRows = await sql`
-        SELECT id FROM products
-        WHERE id = ${data.productId} AND organization_id = ${organizationId}
-        LIMIT 1
-      `;
-      if (!productRows[0]) {
-        throw new Error('Product does not exist');
-      }
-
-      const locationRows = await sql`
-        SELECT id FROM store_areas
-        WHERE id = ${data.locationId} AND organization_id = ${organizationId}
-        LIMIT 1
-      `;
-      if (!locationRows[0]) {
-        throw new Error('Location does not exist');
-      }
+      await assertReferencesBelongToOrganization(sql, organizationId, {
+        productId: data.productId,
+        locationId: data.locationId,
+      });
 
       // Atomic insert + audit via CTE so we never end up with an inventory
       // item lacking an audit row (or vice versa) on partial failure.
@@ -2469,17 +2471,13 @@ export function createWorkersDatabase(env: Env): Database {
         return null;
       }
 
-      // If locationId provided, verify it belongs to the org
-      if (data.locationId !== undefined) {
-        const locationRows = await sql`
-          SELECT id FROM store_areas
-          WHERE id = ${data.locationId} AND organization_id = ${organizationId}
-          LIMIT 1
-        `;
-        if (!locationRows[0]) {
-          throw new Error('Location does not exist');
-        }
-      }
+      // Whichever references this patch supplies must belong to the caller's
+      // organization. Same helper as the create path, so the two cannot drift
+      // apart again — see its comment for what that drift cost.
+      await assertReferencesBelongToOrganization(sql, organizationId, {
+        productId: data.productId,
+        locationId: data.locationId,
+      });
 
       // Atomic update + audit via CTE.
       const rows = await sql`

@@ -15,8 +15,12 @@
  *   3. **Silent under-coverage.** A section can pass every other check while
  *      simply omitting half its file's tests. Nothing downstream notices, because
  *      the rows that are present are all fine.
+ *   4. **Tautological equivalents.** Eight Worker test files contain 90 tests
+ *      whose body is a prose scenario followed by `expect(true).toBe(true)`.
+ *      Citing one as proof that a Worker equivalent *exists* would retire a real
+ *      backend gate against a test that cannot fail. See {@link tautologicalLines}.
  *
- * This script runs those three checks plus the column guard, so verifying a
+ * This script runs those four checks plus the column guard, so verifying a
  * batch is one command instead of a dozen shell pipelines.
  *
  * WHAT THIS STILL CANNOT CATCH — the same blind spot the column guard has, and
@@ -62,6 +66,71 @@ const BARE_NEGATIVE = /none found\s*(?=\||$)/gim;
  * and a single test may assert several. Only under-coverage is a defect.
  */
 const TEST_CASE = /^[ \t]*(?:it|test)(?:\.[a-zA-Z]+)?\s*(?:\(|`)/gm;
+
+/** A cited Worker test path *with* its line number, e.g. `...:129`. */
+const WORKER_CITE = /workers\/src\/[A-Za-z0-9._/-]+\.test\.ts:(\d+)/g;
+
+/** Line-anchored form of {@link TEST_CASE}, for locating block boundaries. */
+const TEST_CASE_LINE = /^[ \t]*(?:it|test)(?:\.[a-zA-Z]+)?\s*(?:\(|`)/;
+
+/** Any assertion at all. */
+const ANY_EXPECT = /expect\s*\(/g;
+
+/**
+ * A tautological assertion: `expect(true).toBe(true)`, or the `const expected =
+ * true; expect(expected).toBe(true)` variant that this repo's Worker suite uses.
+ * Both are true regardless of what the code under test does.
+ */
+const TAUTOLOGY = /expect\(\s*(?:true|expected)\s*\)\s*\.toBe\(\s*true\s*\)/g;
+
+/**
+ * Line numbers inside Worker test blocks that assert nothing.
+ *
+ * Eight files in `workers/src` contain 90 tests whose body is a prose comment
+ * describing a scenario followed by `expect(true).toBe(true)`. They pass, they
+ * are counted by the runner, and they constrain no behaviour. Two are entirely
+ * of this form — `__tests__/multi-tenant-isolation.test.ts` (8/8) and
+ * `handlers/handlers.test.ts` (20/20) — and the first is by far the most
+ * plausible thing to cite as the Worker equivalent of the backend's
+ * tenant-isolation gate.
+ *
+ * Citing one as a *negative* ("searched X, none found") is correct and common;
+ * every such citation in the merged manifests is of that kind. Citing one as
+ * positive proof that an equivalent **exists** would retire a real gate against
+ * a test that cannot fail. Only the latter is flagged, in {@link verify}.
+ *
+ * A block counts as tautological only if it has at least one assertion and
+ * *every* assertion in it is a tautology, so a file that is partly placebo
+ * (e.g. 4 of 13) yields findings only on its placebo lines.
+ */
+function tautologicalLines(file) {
+  // Comments must be stripped before assertions are counted. These blocks
+  // document the test they are standing in for, and that prose contains lines
+  // like `// - Assert: expect(productsA).toHaveLength(10)`. Counting those as
+  // real assertions makes a pure-placebo block look mixed, and the check
+  // silently misses it — which is precisely how the first test in
+  // `multi-tenant-isolation.test.ts` escaped the first version of this function.
+  const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  const starts = [];
+  lines.forEach((line, i) => {
+    if (TEST_CASE_LINE.test(line)) starts.push(i);
+  });
+
+  const flagged = new Set();
+  starts.forEach((start, n) => {
+    const end = n + 1 < starts.length ? starts[n + 1] : lines.length;
+    const body = stripComments(lines.slice(start, end).join('\n'));
+    const total = (body.match(ANY_EXPECT) || []).length;
+    const taut = (body.match(TAUTOLOGY) || []).length;
+    if (total === 0 || taut !== total) return;
+    // Line numbers are 1-based in citations; `end` is an exclusive 0-based
+    // index, so it is already the last 1-based line of this block.
+    for (let l = start + 1; l <= Math.min(end, lines.length); l += 1) flagged.add(l);
+  });
+  return flagged;
+}
 
 function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out;
@@ -153,28 +222,79 @@ function verify(manifest, backendIndex) {
   }
 
   // 4. No section may cover fewer behaviours than its file has tests.
+  const coverage = checkSectionCoverage(markdown, backendIndex);
+  findings.push(...coverage.findings);
+
+  // 5. No row may claim an equivalent EXISTS on the strength of a test that
+  //    asserts nothing.
+  const tautology = checkTautologicalCitations(markdown);
+  findings.push(...tautology.findings);
+
+  return {
+    findings,
+    stats: {
+      tautRows: tautology.tautRows,
+      sections: coverage.sections,
+      covered: coverage.covered,
+      rows: coverage.rows,
+      citations: cited.length,
+      tables: column.tables,
+    },
+  };
+}
+
+/**
+ * Resolves a section heading to the backend test file it describes.
+ *
+ * A heading may be a bare basename (`foo.test.ts`, as Parts 1-3 use, where every
+ * file lives in `unit/`) or a path relative to `backend/src/tests`
+ * (`integration/foo.test.ts`). Part 4 needs the second form because basenames
+ * genuinely collide across directories — `upload.controller.test.ts` and
+ * `storage-factory.test.ts` each exist in two places, and a bare name would
+ * silently count a section against the wrong file's test count.
+ *
+ * Returns `{ file }` on success or `{ error }` describing why not.
+ */
+function resolveSectionFile(heading, backendIndex) {
+  const paths = heading.includes('/')
+    ? [path.join(BACKEND_TESTS, heading)].filter(fs.existsSync)
+    : backendIndex.get(heading);
+
+  if (!paths || !paths.length) {
+    return { error: `[scope] section "${heading}" matches no file under ${BACKEND_TESTS}` };
+  }
+  if (paths.length > 1) {
+    // Hard failure, not a warning. Guessing picks a file with a different test
+    // count, so the coverage check then reports a defect that does not exist
+    // (or, worse, misses one that does) — `storage-factory.test.ts` has 5 tests
+    // under `unit/` and 16 under `integration/`. The heading must say which, and
+    // the fix is to qualify it: `unit/storage-factory.test.ts`.
+    return {
+      error:
+        `[scope] "${heading}" is ambiguous — ${paths.length} files share that name ` +
+        `(${paths.join(', ')}); qualify the heading with its directory`,
+    };
+  }
+  return { file: paths[0] };
+}
+
+/** Check 4: no section may cover fewer behaviours than its file has test cases. */
+function checkSectionCoverage(markdown, backendIndex) {
+  const findings = [];
   const sections = parseSections(markdown);
   let covered = 0;
-  let rowTotal = 0;
+  let rows = 0;
+
   for (const section of sections) {
-    rowTotal += section.rows;
-    const paths = backendIndex.get(section.heading);
-    if (!paths) {
-      findings.push({
-        level: 'fail',
-        message: `[scope] section "${section.heading}" matches no file under ${BACKEND_TESTS}`,
-      });
+    rows += section.rows;
+
+    const resolved = resolveSectionFile(section.heading, backendIndex);
+    if (resolved.error) {
+      findings.push({ level: 'fail', message: resolved.error });
       continue;
     }
-    if (paths.length > 1) {
-      findings.push({
-        level: 'warn',
-        message:
-          `[scope] "${section.heading}" is ambiguous — ${paths.length} files share that name ` +
-          `(${paths.join(', ')}); counted against the first`,
-      });
-    }
-    const tests = countTestCases(paths[0]);
+
+    const tests = countTestCases(resolved.file);
     covered += 1;
     if (section.rows < tests) {
       findings.push({
@@ -186,16 +306,60 @@ function verify(manifest, backendIndex) {
     }
   }
 
-  return {
-    findings,
-    stats: {
-      sections: sections.length,
-      covered,
-      rows: rowTotal,
-      citations: cited.length,
-      tables: column.tables,
-    },
+  return { findings, sections: sections.length, covered, rows };
+}
+
+/**
+ * Check 5: a `worker-equivalent-exists` row may not rest on a test that cannot
+ * fail.
+ *
+ * Scoped to that target because it is the only one where the citation is
+ * load-bearing: a `retire` or `worker-shaped-rewrite` row cites these files to
+ * record what was searched, which is correct use.
+ */
+function checkTautologicalCitations(markdown) {
+  const findings = [];
+  const tautCache = new Map();
+  const isTautological = (file, lineNo) => {
+    if (!fs.existsSync(file)) return false; // already reported by check 2
+    if (!tautCache.has(file)) tautCache.set(file, tautologicalLines(file));
+    return tautCache.get(file).has(lineNo);
   };
+
+  for (const cells of equivalenceRows(markdown)) {
+    for (const match of cells[4].matchAll(WORKER_CITE)) {
+      const cite = match[0];
+      const file = cite.slice(0, cite.lastIndexOf(':'));
+      if (!isTautological(file, Number(match[1]))) continue;
+
+      findings.push({
+        level: 'fail',
+        message:
+          `[tautology] a worker-equivalent-exists row cites ${cite}, which is inside a test ` +
+          'whose only assertion is `expect(true).toBe(true)` — it cannot fail, so it cannot ' +
+          `evidence an equivalent (behaviour: "${cells[1].slice(0, 70)}")`,
+      });
+    }
+  }
+
+  return { findings, tautRows: findings.length };
+}
+
+/**
+ * Yields the split cells of every `worker-equivalent-exists` table row.
+ *
+ * Column order: Behaviour | file:line | gate | equivalent? | Target | Evidence |
+ * Decision — so `cells[5]` is the target and `cells[4]` the evidence cell that
+ * carries the citations.
+ */
+function* equivalenceRows(markdown) {
+  for (const line of markdown.split(/\r?\n/)) {
+    const row = line.trim();
+    if (!row.startsWith('|')) continue;
+    const cells = row.split('|').map((c) => c.trim());
+    if (cells.length < 8 || cells[5] !== 'worker-equivalent-exists') continue;
+    yield cells;
+  }
 }
 
 function defaultTargets() {
@@ -245,9 +409,10 @@ function main(argv) {
   );
   if (!failures) {
     console.log(
-      'Note: this proves no citation is missing, no negative is unqualified, and no section\n' +
-        'under-covers its file. It does NOT prove a cited line supports the claim attached to\n' +
-        'it — that still takes reading the source.',
+      'Note: this proves no citation is missing, no negative is unqualified, no section\n' +
+        'under-covers its file, and no equivalence rests on a test that cannot fail. It does\n' +
+        'NOT prove a cited line supports the claim attached to it — that still takes reading\n' +
+        'the source.',
     );
   }
   return failures ? 1 : 0;
@@ -257,4 +422,11 @@ if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));
 }
 
-module.exports = { parseSections, countTestCases, indexBackendTests, verify, main };
+module.exports = {
+  parseSections,
+  countTestCases,
+  indexBackendTests,
+  tautologicalLines,
+  verify,
+  main,
+};
