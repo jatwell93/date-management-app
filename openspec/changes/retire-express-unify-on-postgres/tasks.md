@@ -872,7 +872,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       red on `main` from 2026-06-09 (`d11d1f97`) unnoticed. `Workers CI Gate` is now a required
       check. This does not close 2.2 — it removes two rows from 3.2's rewrite scope (see below)
       and leaves the rest of the manifest to finish.
-- [ ] 2.3 Produce an action-level schedule matrix from actual `SchedulerService` registrations and
+- [x] 2.3 Produce an action-level schedule matrix from actual `SchedulerService` registrations and
       dormant job exports—not a six-file list. Include markdown recalculation, backup, trial expiration,
       dunning, Stripe sync, both credit-claim schedules, webhook monitoring, metrics, and report email.
       Record active/dormant/test-only status, cron/timezone, inputs/secrets, retries, overlap prevention,
@@ -904,6 +904,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       buys a 6-hour recovery window and a single retained restore point — weigh
       that against the scheduled-R2-export option rather than treating
       Neon-native as unbounded durability.
+      (c) **2.3 measured what is being replaced** (schedule matrix row 3, Finding 12): the current
+      scheduled backup file-copies the SQLite database to `backup-<timestamp>.sqlite`
+      (`services/database.backup.service.ts:44`) and retains **30 days / 10 files** (`:11-15`).
+      Combined with (b), "Neon-native backups" alone is therefore **not** like-for-like — it is a
+      reduction from 30 days of restore points to a 6-hour window and one snapshot. Only the
+      scheduled-R2-export option preserves the current posture. Note also that the backup service
+      has no Postgres path whatsoever, so this is a reimplementation, not a relocation, and the
+      scheduled half of it (`scheduler.service.ts:56`) is recorded as retire-with-the-backend.
 - [ ] 2.5 Produce a single **rehoming checklist** mapping every endpoint, test, job, script, and the
       migration path to a target or a recorded retirement decision. Include middleware/runtime concerns
       (CORS, auth, tenant/role gates, rate limiting, error shape, Sentry, health/readiness, environment
@@ -1163,6 +1171,26 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
+      **Sequencing correction from 2.3 (Finding 9-R).** Finding 9 recorded that the Worker has "no
+      scheduled-job capability at all". Half of that is now refined: **Queues already exist and are
+      configured in both environments** — `workers/wrangler.toml:49`/`:115` (producers) and
+      `:53`/`:119` (consumers), carrying `max_retries = 5`, `retry_delay = 30`, `max_concurrency = 1`
+      and a `dead_letter_queue`. Only Cron Triggers are absent (no `[triggers]`, no `crons`, and zero
+      `scheduled` matches in `workers/src/index-minimal.ts`).
+      <br>So this task splits, and the halves are not equally blocked. The three per-recipient email
+      sends — matrix rows 5, 7 and 14 — target **existing** infrastructure and can move ahead of any
+      `scheduled()` work, gaining a retry and DLQ policy that no current job has. The eleven Cron
+      Trigger rows stay blocked on the dispatcher.
+      <br>Two defects should be resolved during the move rather than carried across: the dunning job
+      runs at `0 2 * * *` on top of the markdown recalculation while two of its four comments claim
+      01:00 (2.3 Finding 13), and **no** `cron.schedule` call passes a `timezone`, so every schedule
+      currently runs in server local time while every comment claims UTC (Finding 15). Cron Triggers
+      are always UTC, which fixes the second by construction — but rows 4 and 8 are date-boundary
+      computations, so check them before copying expressions across verbatim.
+      <br>Do not port `JobLockRepository` as the overlap-prevention mechanism: its `INSERT` names an
+      `appliedAt` column that exists in neither backend, so `acquire` always fails and the caller
+      reports it as "already running, skipping" (Finding 14). Neon has no `$transaction`, so the
+      replacement is a conditional single-statement insert or an advisory lock.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
 - [ ] 3.5 Initialize the pglite conformance harness from the **authoritative Phase 1 migrations/baseline**
