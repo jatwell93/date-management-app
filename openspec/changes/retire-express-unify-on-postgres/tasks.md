@@ -984,6 +984,37 @@ equivalent, a relocated home, or an explicit retirement decision.
       the call site is one piece of work. **Its test pins the defect** —
       `__tests__/StorageQuotaWarning.test.tsx:54-55` asserts the literal relative path, so the
       corrected code fails that test until it is updated to assert the built URL.
+      - [ ] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
+            `workers/build.js:11` bundles `workers/src/index-minimal.ts` and `workers/wrangler.toml:2`
+            deploys that bundle, so nothing reachable only from `workers/src/index.ts` runs in
+            production. That abandoned entry point is not two files. These nine modules have their
+            **only** production importer in `index.ts`: `middleware/cors.middleware.ts`,
+            `error-handler.middleware.ts`, `security-headers.middleware.ts`,
+            `rate-limit.middleware.ts`, `metrics.middleware.ts`,
+            `connection-limiter.middleware.ts`, `query-limiter.middleware.ts`,
+            `require-role.middleware.ts`, and `middleware/auth.ts`. `workers/src/utils/auth.ts` has
+            no production importer at all. Several carry passing test files, so the layer looks
+            maintained.
+            **Delete here rather than in 4.1, because this is a prerequisite for the rest of 3.1,
+            not cleanup.** Every rehoming decision in 3.1.a–3.1.k asks "where does this Express
+            concern go in the Worker?", and for CORS, error shape, security headers, rate limiting,
+            roles and metrics the well-named module is the wrong answer — rehoming into it produces
+            a second generation of code that passes its tests and never executes. Removing the
+            decoy costs one commit; leaving it costs a wrong answer on each of those rows.
+            **Scope:** `workers/src/index.ts`, `workers/src/express-adapter.ts`, the nine middleware
+            modules above with their test files, and `workers/src/utils/auth.ts` with its test.
+            **Two exclusions.** `workers/src/utils/feature-gates.ts` stays until **#471** resolves —
+            that fix may repair it rather than replace it (3.1.a). And confirm before deleting that
+            no test file imports a middleware module for a behaviour with no other coverage; where
+            one does, the 2.2 row for that behaviour governs whether it is rewritten Worker-shaped
+            or retired.
+            **Live targets to rehome into instead**, since several are inline rather than named
+            modules: CORS → `utils/worker-response.ts:12`; rate limiting →
+            `utils/minimal-rate-limit.ts`, called at `index-minimal.ts:342-364`; roles →
+            `constants/roles.ts`; error shape → `utils/worker-response.ts`; health → `health.ts`;
+            Sentry → `@sentry/cloudflare` `withSentry(...)` at `index-minimal.ts:274`.
+            Security headers, environment validation, business-rule integrity and a global body cap
+            have **no** live equivalent and are net-new (see the four §F gaps above).
       **Three defects against shipped Worker code, found during 2.2 part 4 and deliberately deferred
       here rather than fixed mid-audit.** None is a tenant-isolation defect — no organization can
       reach another's data through any of them — which is why they are 3.1 work items and not
@@ -1304,18 +1335,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       `src/migrations/` SQLite migration runner (`migrate.ts`, `migration.service.ts`, `migration.model.ts`,
       numbered `*-*.migration.ts`), and the Prisma **production** schema. Delete only the obsolete copies of
       Neon SQL after their history/checksums have been preserved in the authoritative Phase 1 location.
-      **Also delete** `workers/src/index.ts` and `workers/src/express-adapter.ts` (the abandoned
-      express-adapter entry point — `index-minimal.ts` is the real one).
-      **2.5 Finding 22 widens this and moves it earlier.** The abandoned entry point is not two
-      files: nine `workers/src/middleware/*` modules (`cors`, `error-handler`, `security-headers`,
-      `rate-limit`, `auth`, `metrics`, `connection-limiter`, `query-limiter`, `require-role`) have
-      their only production importer in `index.ts`, and `workers/src/utils/auth.ts` has no
-      production importer at all. Several carry passing test files, so the dead layer looks
-      maintained. Delete all of it **before Phase 3.1 begins**, not here — otherwise every
-      rehoming decision in 3.1 is made with a decoy in view, and the obvious target for, say, the
-      Express CORS middleware is a module that never runs. `utils/feature-gates.ts` is the one
-      exception: it stays until **#471** resolves, because that fix may repair it rather than
-      replace it.
+      **The abandoned Worker entry point is no longer deleted here.** `workers/src/index.ts`,
+      `workers/src/express-adapter.ts`, the nine dead `workers/src/middleware/*` modules and
+      `workers/src/utils/auth.ts` move to **3.1.0**, which deletes them before the rest of 3.1
+      begins (2.5 Finding 22) — they are a decoy for every rehoming decision in 3.1, so removing
+      them is a prerequisite for that work rather than cleanup after it. If 3.1.0 was skipped,
+      do it here; otherwise this line is already satisfied by the time Phase 4 opens. The one
+      module that legitimately survives into Phase 4 is `workers/src/utils/feature-gates.ts`,
+      held until **#471** resolves.
       **Ordering constraint (2.5 Finding 24, part 2).** `backend/scripts/run-tests.js` backs
       `npm run test:backend:diff`, the pre-commit gate. Delete it **in this same commit** and never
       before — deleting it earlier removes the ability to verify the surrounding removals.
