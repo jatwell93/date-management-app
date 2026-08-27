@@ -1043,6 +1043,97 @@ equivalent, a relocated home, or an explicit retirement decision.
             Cheapest correct fix is to change the `||` to `&&` and let the missing-org case throw. No
             Worker counterpart exists or should be introduced: `index-minimal.ts:3352` is the sole
             assignment of `organizationId` and it reads the verified JWT with no fallback branch.
+      - [ ] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
+            (Finding 8). Express records authorization events through `OrgAuditService.emit`
+            (`backend/src/services/org-audit.service.ts:20`) into
+            `backend/src/repositories/org-audit.repository.ts:25`, writing the Prisma model
+            `OrgAuditLog` (`backend/prisma/schema.prisma:354`), which maps to `org_audit_log` at
+            `:376`. That table **does not exist in `database/migrations/`** — the baseline creates
+            `audit_log` (`0000_baseline.up.sql:205`) for inventory events, with none of `event_type`,
+            `actor_user_id`, `target_user_id`, `old_role`, `new_role`, `invite_id` or `ip_address` —
+            and `org_audit_log` appears nowhere in `workers/` or `shared/`. This is a **schema gap
+            before it is a code gap**: a Worker implementation has nowhere to write, so the migration
+            has to land first.
+            <br>Live scope is **one event type**, and the task should be sized on that rather than on
+            the model's full vocabulary: `AUDIT_EVENT_TYPES.ROLE_ASSIGNED` from
+            `org-bootstrap.service.ts:152` is reachable today. The four invite events
+            (`organization-invite.service.ts:102/150/184/270`) are gated behind
+            `ENABLE_CUSTOM_ORG_INVITES`, which `backend/src/index.ts:57-59` uses to require the router
+            conditionally and which is off — that is why
+            `contract/organization-invites-clerk-only.test.ts` asserts 404. So what Phase 4 deletes is
+            the record of **who was granted admin and by what path**, which is also the entry with the
+            clearest compliance argument. Decide explicitly whether to rebuild it, and whether the
+            invite events come with it if custom invites are ever re-enabled.
+            <br>Note the Express test does not prove the behaviour it names:
+            `services/org-bootstrap.service.test.ts:70-91` wraps its only assertion in `if (auditLog)`
+            with an `else` that merely `console.warn`s, because the write is swallowed by SQLite's
+            interactive transaction lock. A replacement must be tested against real SQL (pglite,
+            `npm run test:db`) or it will be equally unfalsifiable.
+      - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
+            Pre-existing in
+            **both** implementations, so not a regression and not a Worker defect — recorded because
+            Phase 3.2 will otherwise write a test that codifies it. The `isFirstAdmin` decision is
+            check-then-act on both sides: the Worker selects an active admin
+            (`clerk/bootstrap-handler.ts:302-309`) then assigns, and Express does the same before its
+            transaction, whose `$transaction` (`org-bootstrap.service.ts:116`) wraps only the user
+            *creation* at step 5, not the admin check preceding it. Two users bootstrapping one
+            brand-new organization concurrently can both be assigned `admin`. The unique indexes that
+            make the idempotency behaviour safe — `users_clerk_user_id_key`
+            (`0000_baseline.up.sql:400`) and `organizations_clerk_organization_id_key` (`:313`) — do
+            not constrain "at most one admin per organization". Bounded: an extra admin inside the
+            caller's own organization, no cross-tenant reach. Either accept it explicitly, or close it
+            with a partial unique index (`WHERE role = 'admin' AND deleted_at IS NULL`) or a
+            conditional single-statement insert, since Neon has no `$transaction`.
+      - [ ] 3.1.i **The Worker has no scheduled-job capability at all** (Finding 9). Verified rather
+            than assumed: `workers/src/index-minimal.ts:274` exports
+            `Sentry.withSentry(…, { fetch, queue })` — a search for `async scheduled` or a
+            `scheduled(` handler in that file returns **zero** matches, and the only non-`fetch` entry
+            point is `queue` at `:467`. `workers/wrangler.toml` declares no `[triggers]` section and
+            no `crons` key. So **every** job in the backend's `SchedulerService` currently has nowhere
+            to run, not just the two that surfaced through the subscription audit
+            (`downgradeExpiredTrials`, `findTrialsNeedingReminders`).
+            <br>This is task **2.3**'s subject and it is recorded here because it arrived early,
+            through `services/subscription.service.test.ts`, and because it changes how those rows
+            read: they are blocked on a **runtime capability** the Worker does not have, which is a
+            different class of blocker from a missing handler. Sequence accordingly — 3.3 cannot
+            rehome a scheduled job until the Worker has a Cron Trigger and a `scheduled` export, and
+            2.3's schedule matrix should be produced knowing the destination is currently empty.
+            <br>One consequence worth stating plainly for the trial path: until `downgradeExpiredTrials`
+            has a home, **expired trials never lose their entitlements**. That is the mirror image of
+            #471 — one leaks capacity by never enforcing a limit, this one by never revoking a grant.
+      - [ ] 3.1.j **Two subscription rows must be sequenced against #471, not merely queued behind it.**
+            Both come out of `services/subscription.service.test.ts` and neither is safe to leave to
+            whoever implements enforcement.
+            <br>**(a) Trial organizations are seeded with free-tier limits, so #471 must not ship
+            without fixing this.** Express seeds a new trial with **Professional** limits
+            (`services/subscription.service.test.ts:321`, which drives
+            `createTrialSubscription` for real and asserts the `organizationUsage.create` call —
+            note that `integration/multi-tenant-trial-workflow.test.ts:304` looks like corroboration
+            and is not: it creates the usage row itself and asserts its own write). The Worker's only `organization_usage` write is the
+            lazy zero-seed at `index-minimal.ts:3084`, which writes `max_users` 1 and `max_skus` 500
+            regardless of tier, and does it on a usage *read* rather than at trial creation. Those
+            limits are invisible today only because the gate never fires (#471). Implementing usage
+            enforcement first would immediately block every trialling organization at a single seat.
+            <br>**(b) The Worker grants access on a subscription row with no Stripe subscription id**
+            (`subscription.service.test.ts:797`). `validateOrganizationStatus`
+            (`workers/src/utils/auth.ts:187-208`) denies only when the row is absent entirely or
+            `status === CANCELED`; a row with a null `stripe_subscription_id` and any other status
+            passes. Express treats a missing Stripe id as no entitlement. The Express rule **cannot be
+            ported as-is**, because `ensureTrialSubscription`
+            (`workers/src/clerk/clerk-persistence.ts:90-101`) legitimately creates rows with no Stripe
+            id for every trial — so the fix has to distinguish a trial from a paid signup that failed
+            partway, rather than requiring a Stripe id outright.
+      - [ ] 3.1.k **Decide the cancellation grace period explicitly.** Express's `isAccessActive`
+            consults Stripe and keeps a cancelled customer inside the period they have paid for
+            (`subscription.service.test.ts:745`, `:771`). The Worker's `validateOrganizationStatus`
+            (`workers/src/utils/auth.ts:199-203`) denies the moment `status` is `CANCELED`, with no
+            period-end check, while its comment at `:206` records that `past_due` is deliberately
+            allowed "for MVP phase". The Worker is therefore **stricter on cancellation and looser on
+            non-payment** than Express — a customer who cancels mid-month loses access they have
+            already paid for, and a customer who stops paying keeps it. Both may be intended; neither
+            is written down. `current_period_end` has existed in the schema since migration 0011 and
+            is read for display (`index-minimal.ts:3044`) but never for access, so the data needed to
+            implement a grace period is already there.
       **One product decision, not a defect.** No Worker route is gated on tier — every use of tier in
       `index-minimal.ts` is a quota or display value, and all twelve `/api/reports/*` handlers are
       reachable by any authenticated caller regardless of subscription, which is what
