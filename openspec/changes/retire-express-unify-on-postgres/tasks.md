@@ -940,7 +940,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       checklist is not authoritative until reviewed; (ii) Finding 18's read-only
       production query (operator work, discharges five 2.4 rows); (iii) the **#477**
       decision on webhook monitoring (unblocks three 2.3 rows); (iv) the four reserved legacy-auth
-      endpoint decisions from 2.1, plus the customer-facing export gap in Finding 26 — the count originally read "23 open endpoint decisions", which
+      endpoint decisions from 2.1, plus the customer-facing export gap in Finding 26 (filed as **#482**) — the count originally read "23 open endpoint decisions", which
       was wrong (a truncated tally; the real figure was 42). All 42 were worked through on
       2026-08-28: 16 rehome, 20 retire (one conditional), 2 keep, and 4 deliberately reserved.
       **Five capabilities have no owner in either backend** and are net-new build
