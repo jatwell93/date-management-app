@@ -939,8 +939,19 @@ equivalent, a relocated home, or an explicit retirement decision.
       summary: (i) Josh's review pass over every `PROPOSED:` row in 2.1–2.5 — this
       checklist is not authoritative until reviewed; (ii) Finding 18's read-only
       production query (operator work, discharges five 2.4 rows); (iii) the **#477**
-      decision on webhook monitoring (unblocks three 2.3 rows); (iv) the 23 open
-      endpoint decisions carried forward from 2.1.
+      decision on webhook monitoring (unblocks three 2.3 rows); (iv) the four reserved legacy-auth
+      endpoint decisions from 2.1, plus the customer-facing export gap in Finding 26 (filed as
+      **#482**). This clause read "23 open endpoint decisions", then 42; the real figure is **44**,
+      all worked through on 2026-08-28 with **40 settled and 4 reserved**. Both miscounts came from
+      ad-hoc extraction scripts rather than from the matrix, and are recorded as 2.5 Finding 27 —
+      read it before writing any tooling against these tables, because one of the two faults
+      (escaped pipes shifting the column index) will silently skip rows for anyone who repeats it.
+      **The per-decision split lives in §A of `audit/2.5-rehoming-checklist.md` and is deliberately
+      not restated here.** It was restated once and went stale within a day, when Finding 26
+      reversed two rows from retire to rehome. The checklist's own preamble gives the rule — a
+      second copy of a derived number drifts from the first — and a count in `tasks.md` is exactly
+      that second copy. Read §A for the numbers; this file records only that 40 are settled and 4
+      are reserved.
       **Five capabilities have no owner in either backend** and are net-new build
       work rather than relocation: business-rule integrity (`data-integrity.middleware.ts`,
       used by three mounted route groups), usage limits (already **#471**), security
@@ -960,6 +971,15 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 3.1 Implement Worker handlers + routes for each Express-only endpoint from the audit. **Must
       include the Stripe webhook inbound handler** (`POST /api/webhooks/stripe`) — the Worker handles Clerk
       webhooks only today, so this is net-new, not a port.
+      **Two routes are documented to customers and must be rehomed, not retired (2.5 Finding 26).**
+      `GET /api/products/export-excess` and `DELETE /api/products/{id}` are steps 2 and 4 of the
+      documented tier-downgrade remediation flow (`docs/tier-downgrade-guide.md:174-178` and
+      `:148-153`), and the export is repeated in `docs/trial-expiration-faq.md:218` and in
+      in-product copy at `frontend/src/components/TrialFAQ.tsx:67`. Neither has a code call site,
+      which is why 2.1 first classified them `mounted+unconsumed`; the consumer is a customer
+      following instructions. Retiring them would 404 a documented procedure at the moment a
+      locked-out customer is most likely to follow it. The `export-excess-products.ts` script is an
+      operator tool and is not a substitute for a customer-invoked endpoint.
       **From 2.5 §F — rehome into the live path, never into the dead one.** `workers/build.js:11`
       bundles `index-minimal.ts`; anything reachable only from `workers/src/index.ts` is not
       deployed (Finding 22). Where the live implementation is inline rather than a named module,
@@ -1306,7 +1326,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       and CORS.
       **2.5 §G did that inventory**: 14 call sites, 13 already routed through `buildApiUrl`. The one
       exception is `components/StorageQuotaWarning.tsx:61`, covered above at 3.1 (Finding 21).
-      **Offline-queue mitigation before the production base URL moves (2.5 Finding 25).**
+      **Offline-queue mitigation before the production base URL moves (2.5 Finding 25 —
+      DOWNGRADED 2026-08-28 from required to precautionary).** `offline-sync.ts` `addOperation:149`
+      has no production caller (all 25 call sites are tests), so the queue is always empty and the
+      cutover cannot jam it. The working offline path is `lib/sync-manager.ts`, which syncs with
+      `Promise.allSettled` and has no head-of-line blocking. The defect below is latent, in dormant
+      code, and is tracked as **#480**; step (i) is still worth doing on its own merits, and steps
+      (ii)-(iii) only matter if `OfflineSyncService` is adopted rather than retired.
+      Original text retained:
       `lib/offline-sync.ts` defers its requests, so it is the one call site that does not fail in
       front of a user who can retry. `processQueueOperations:239` breaks on the first failure
       **without** removing the failed operation, there is no per-operation attempt cap, no queue
