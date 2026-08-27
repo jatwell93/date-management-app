@@ -912,7 +912,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       scheduled-R2-export option preserves the current posture. Note also that the backup service
       has no Postgres path whatsoever, so this is a reimplementation, not a relocation, and the
       scheduled half of it (`scheduler.service.ts:56`) is recorded as retire-with-the-backend.
-- [ ] 2.5 Produce a single **rehoming checklist** mapping every endpoint, test, job, script, and the
+- [x] 2.5 Produce a single **rehoming checklist** mapping every endpoint, test, job, script, and the
       migration path to a target or a recorded retirement decision. Include middleware/runtime concerns
       (CORS, auth, tenant/role gates, rate limiting, error shape, Sentry, health/readiness, environment
       validation, shutdown), frontend network call sites, docs/runbooks, configuration, env templates,
@@ -929,6 +929,24 @@ equivalent, a relocated home, or an explicit retirement decision.
       (`docs/migrations-deploy-runbook.md`, `docs/migrations-e2e-runbook.md`,
       `docs/neon-backup-restore.md`) and the `docs/evidence/` sign-off
       directories are likewise keep, not dual-backend material.
+      **Delivered:** `audit/2.5-rehoming-checklist.md` — thirteen sections (§A–§M).
+      §A–§D roll up 2.1–2.4 by decision class rather than restating 1,977 test rows
+      and 135 route rows; §E–§M enumerate at row level the categories no prior task
+      covered (migration path, middleware/runtime, frontend call sites, docs,
+      config/env, assets/generated, package commands, workflows, root tooling).
+      Findings 21–24 recorded there.
+      **Four things must clear before Phase 4 opens**, all named in the deletion-gate
+      summary: (i) Josh's review pass over every `PROPOSED:` row in 2.1–2.5 — this
+      checklist is not authoritative until reviewed; (ii) Finding 18's read-only
+      production query (operator work, discharges five 2.4 rows); (iii) the **#477**
+      decision on webhook monitoring (unblocks three 2.3 rows); (iv) the 23 open
+      endpoint decisions carried forward from 2.1.
+      **Five capabilities have no owner in either backend** and are net-new build
+      work rather than relocation: business-rule integrity (`data-integrity.middleware.ts`,
+      used by three mounted route groups), usage limits (already **#471**), security
+      headers (`helmet` has no live Worker equivalent), environment validation
+      (`config/environment.ts` fail-fast has no live Worker equivalent), and the
+      backup capability (Finding 17).
 
 > **Integration checkpoint — audit PR.** Keep the Phase 2 inventory and rehoming decisions in their own
 > reviewable PR. Merge that PR to `main` before starting dependent Phase 3 implementation so every later
@@ -942,6 +960,30 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 3.1 Implement Worker handlers + routes for each Express-only endpoint from the audit. **Must
       include the Stripe webhook inbound handler** (`POST /api/webhooks/stripe`) — the Worker handles Clerk
       webhooks only today, so this is net-new, not a port.
+      **From 2.5 §F — rehome into the live path, never into the dead one.** `workers/build.js:11`
+      bundles `index-minimal.ts`; anything reachable only from `workers/src/index.ts` is not
+      deployed (Finding 22). Where the live implementation is inline rather than a named module,
+      2.5 §F names it: CORS → `utils/worker-response.ts:12`, rate limiting →
+      `utils/minimal-rate-limit.ts` (live at `index-minimal.ts:342-364`), roles →
+      `constants/roles.ts`, error shape → `utils/worker-response.ts`, health → `health.ts`.
+      **Four gaps in §F need a Worker home and are net-new build work**, separate from the three
+      deferred defects below: business-rule integrity (`data-integrity.middleware.ts`
+      `validateBusinessRules`, used by `inventory.routes.ts:9`, `product.routes.ts:7`,
+      `store-area.routes.ts:6` — no live Worker equivalent located); security headers (`helmet` at
+      `index.ts:73-74` — the live Worker sets no `X-Content-Type-Options`, HSTS or CSP);
+      environment validation (`config/environment.ts` fail-fast — the live Worker trusts 36
+      declared env keys with none, and the purpose-built `setWorkerConfig` export at `:230` has no
+      production importer); and body-size limits (Express caps JSON at 10 MB, the Worker caps only
+      uploads, at 25 MB — the intended value is a decision, not a copy).
+      **One frontend fix belongs to this task (2.5 Finding 21).**
+      `frontend/src/components/StorageQuotaWarning.tsx:61` fetches a **relative**
+      `/api/storage-quota/...`, not `buildApiUrl(...)`. The frontend is Vite with no dev proxy and
+      no Pages `_redirects`, so the request goes to the Pages origin and never reaches the API; the
+      `catch` swallows it, so a quota warning that never appears is indistinguishable from a user
+      under quota. The live Worker has no `/api/storage-quota` route, so building it and correcting
+      the call site is one piece of work. **Its test pins the defect** —
+      `__tests__/StorageQuotaWarning.test.tsx:54-55` asserts the literal relative path, so the
+      corrected code fails that test until it is updated to assert the built URL.
       **Three defects against shipped Worker code, found during 2.2 part 4 and deliberately deferred
       here rather than fixed mid-audit.** None is a tenant-isolation defect — no organization can
       reach another's data through any of them — which is why they are 3.1 work items and not
@@ -1264,12 +1306,47 @@ equivalent, a relocated home, or an explicit retirement decision.
       Neon SQL after their history/checksums have been preserved in the authoritative Phase 1 location.
       **Also delete** `workers/src/index.ts` and `workers/src/express-adapter.ts` (the abandoned
       express-adapter entry point — `index-minimal.ts` is the real one).
+      **2.5 Finding 22 widens this and moves it earlier.** The abandoned entry point is not two
+      files: nine `workers/src/middleware/*` modules (`cors`, `error-handler`, `security-headers`,
+      `rate-limit`, `auth`, `metrics`, `connection-limiter`, `query-limiter`, `require-role`) have
+      their only production importer in `index.ts`, and `workers/src/utils/auth.ts` has no
+      production importer at all. Several carry passing test files, so the dead layer looks
+      maintained. Delete all of it **before Phase 3.1 begins**, not here — otherwise every
+      rehoming decision in 3.1 is made with a decoy in view, and the obvious target for, say, the
+      Express CORS middleware is a module that never runs. `utils/feature-gates.ts` is the one
+      exception: it stays until **#471** resolves, because that fix may repair it rather than
+      replace it.
+      **Ordering constraint (2.5 Finding 24, part 2).** `backend/scripts/run-tests.js` backs
+      `npm run test:backend:diff`, the pre-commit gate. Delete it **in this same commit** and never
+      before — deleting it earlier removes the ability to verify the surrounding removals.
+      **Before deleting, resolve 2.5 Finding 23.** Six SQLite database files (largest:
+      `backend/database.sqlite`, 1.6 MB) and eight `backend/uploads/` blobs are tracked by git.
+      Deleting them from the tree does not remove them from history. This is not a Phase 4 blocker —
+      the exposure is unchanged by the deletion — but confirm whether they hold production or
+      customer data. If they do, that is a history-rewrite/rotation decision in its own issue, not
+      part of this change.
 - [ ] 4.2 Prune dependencies and scripts from the workspace: remove `express`, `@prisma/*`,
       `better-sqlite3`, and the backend Vitest project from `package.json` files (root, `backend/`, and any
       workspace-level). Remove the now-dead npm scripts (`migrate:prod`, `dev:backend`, `seed:*`, the
       superseded migration scripts from 1.1, etc.). Retire `.github/workflows/backend-test.yml` — its
       multi-tenant coverage (cross-tenant isolation, penetration, concurrency, feature-gate enforcement) is
       already rehomed onto the Worker suite in Phase 3.2, so removing it loses nothing.
+      **Ordering constraint (2.5 Finding 24, part 1).** `.github/workflows/workers-test.yml` runs
+      `npm ci` in `backend/` because Worker tests import backend source. **Sever that import in
+      Phase 3**, before `backend/` is deleted — otherwise deleting the backend breaks the very gate
+      that proves the Worker still works. The related trap: Worker `npm run typecheck` uses
+      `tsconfig.test.json`, which follows imports into backend source, so cross-package node tests
+      must be `exclude`d or CI fails on missing backend dependencies. The required check is the
+      `Workers CI Gate` job, not the test jobs — a skipped job counts as success.
+      **Workflow sweep from 2.5 §L.** Only `backend-test.yml` is retired. `workers-test.yml` (7
+      backend references) and `frontend-test.yml` (6) need revision, not deletion;
+      `workers-deploy.yml`, `pages-deploy.yml`, `migrations-e2e.yml` and
+      `workers-bundle-size-check.yml` carry 1–2 references each. `migration-prep.yml`,
+      `secrets-scan.yml`, `codeql.yml` and `dependabot-auto-merge.yml` are unaffected.
+      **Package-command sweep from 2.5 §K.** Root `seed:master-catalogue` must be **repointed**,
+      not deleted — its script is a 2.4 "reimplement on the Worker" row. Root `test` currently
+      errors by design telling the caller to pick frontend or backend; that message needs updating.
+      Root `eslint.ignores.js` needs its `backend/` paths removed.
 
 > **Integration checkpoint — dedicated retirement PR.** Phase 4 is a separate, controlled deletion PR
 > based on the latest `main`. Retain the full backend suite as its final regression gate, in addition to
@@ -1287,6 +1364,16 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 5.3a Update or explicitly retire all dual-environment/Express/SQLite guidance in root `README.md`,
       `AGENTS.md`, `docs/` developer, environment, QA, troubleshooting, security, deployment, backup and
       operational runbooks. Rehome still-valid material from `backend/docs/` before deleting the directory.
+      **2.5 §H measured the surface.** Of 49 files in `docs/`, 24 mention Express or SQLite and 25
+      do not. Eight are heavy (`dual-environment-guide.md` 21 references, `rollback-procedure.md`
+      14, `security.md` 12, `database-migrations.md` 12, `troubleshooting.md` 11,
+      `local-expect-qa.md` 11, `developer-guide.md` 7, `testing-both-environments.md` 5) and need
+      rewriting; 16 carry 1–4 incidental references and need a targeted edit each.
+      **Two should be retired outright rather than revised** — `dual-environment-guide.md` and
+      `testing-both-environments.md` exist *because* there are two backends, and the premise
+      disappears at Phase 4. **Two are dated records and must not be edited retroactively**:
+      `rollback-drill-2026-03-07.md` and `phase-3-csv-upload-timeout-analysis.md`. The three Phase 1
+      runbooks and `docs/evidence/` are pre-recorded keeps (2.5 §M).
 - [ ] 5.4 `npx openspec validate retire-express-unify-on-postgres --strict`.
 - [ ] 5.5 Archive this change once merged and live.
 
