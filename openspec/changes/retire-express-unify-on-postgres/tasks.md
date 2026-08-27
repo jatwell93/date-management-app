@@ -1106,7 +1106,10 @@ equivalent, a relocated home, or an explicit retirement decision.
             whoever implements enforcement.
             <br>**(a) Trial organizations are seeded with free-tier limits, so #471 must not ship
             without fixing this.** Express seeds a new trial with **Professional** limits
-            (`subscription.service.test.ts:321`). The Worker's only `organization_usage` write is the
+            (`services/subscription.service.test.ts:321`, which drives
+            `createTrialSubscription` for real and asserts the `organizationUsage.create` call —
+            note that `integration/multi-tenant-trial-workflow.test.ts:304` looks like corroboration
+            and is not: it creates the usage row itself and asserts its own write). The Worker's only `organization_usage` write is the
             lazy zero-seed at `index-minimal.ts:3084`, which writes `max_users` 1 and `max_skus` 500
             regardless of tier, and does it on a usage *read* rather than at trial creation. Those
             limits are invisible today only because the gate never fires (#471). Implementing usage
