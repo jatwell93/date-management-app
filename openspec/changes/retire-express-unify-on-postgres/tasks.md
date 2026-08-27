@@ -940,7 +940,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       checklist is not authoritative until reviewed; (ii) Finding 18's read-only
       production query (operator work, discharges five 2.4 rows); (iii) the **#477**
       decision on webhook monitoring (unblocks three 2.3 rows); (iv) the four reserved legacy-auth
-      endpoint decisions from 2.1 — the count originally read "23 open endpoint decisions", which
+      endpoint decisions from 2.1, plus the customer-facing export gap in Finding 26 — the count originally read "23 open endpoint decisions", which
       was wrong (a truncated tally; the real figure was 42). All 42 were worked through on
       2026-08-28: 16 rehome, 20 retire (one conditional), 2 keep, and 4 deliberately reserved.
       **Five capabilities have no owner in either backend** and are net-new build
@@ -962,6 +962,15 @@ equivalent, a relocated home, or an explicit retirement decision.
 - [ ] 3.1 Implement Worker handlers + routes for each Express-only endpoint from the audit. **Must
       include the Stripe webhook inbound handler** (`POST /api/webhooks/stripe`) — the Worker handles Clerk
       webhooks only today, so this is net-new, not a port.
+      **Two routes are documented to customers and must be rehomed, not retired (2.5 Finding 26).**
+      `GET /api/products/export-excess` and `DELETE /api/products/{id}` are steps 2 and 4 of the
+      documented tier-downgrade remediation flow (`docs/tier-downgrade-guide.md:174-178` and
+      `:148-153`), and the export is repeated in `docs/trial-expiration-faq.md:218` and in
+      in-product copy at `frontend/src/components/TrialFAQ.tsx:67`. Neither has a code call site,
+      which is why 2.1 first classified them `mounted+unconsumed`; the consumer is a customer
+      following instructions. Retiring them would 404 a documented procedure at the moment a
+      locked-out customer is most likely to follow it. The `export-excess-products.ts` script is an
+      operator tool and is not a substitute for a customer-invoked endpoint.
       **From 2.5 §F — rehome into the live path, never into the dead one.** `workers/build.js:11`
       bundles `index-minimal.ts`; anything reachable only from `workers/src/index.ts` is not
       deployed (Finding 22). Where the live implementation is inline rather than a named module,
