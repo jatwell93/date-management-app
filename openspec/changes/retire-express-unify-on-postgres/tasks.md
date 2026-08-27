@@ -940,9 +940,16 @@ equivalent, a relocated home, or an explicit retirement decision.
       checklist is not authoritative until reviewed; (ii) Finding 18's read-only
       production query (operator work, discharges five 2.4 rows); (iii) the **#477**
       decision on webhook monitoring (unblocks three 2.3 rows); (iv) the four reserved legacy-auth
-      endpoint decisions from 2.1, plus the customer-facing export gap in Finding 26 (filed as **#482**) — the count originally read "23 open endpoint decisions", which
-      was wrong (a truncated tally; the real figure was 42). All 42 were worked through on
-      2026-08-28: 16 rehome, 20 retire (one conditional), 2 keep, and 4 deliberately reserved.
+      endpoint decisions from 2.1, plus the customer-facing export gap in Finding 26 (filed as
+      **#482**). This clause originally read "23 open endpoint decisions", which was wrong — a
+      truncated tally; the real figure was 42, all worked through on 2026-08-28 with 38 settled and
+      4 reserved.
+      **The per-decision split lives in §A of `audit/2.5-rehoming-checklist.md` and is deliberately
+      not restated here.** It was restated once and went stale within a day, when Finding 26
+      reversed two rows from retire to rehome. The checklist's own preamble gives the rule — a
+      second copy of a derived number drifts from the first — and a count in `tasks.md` is exactly
+      that second copy. Read §A for the numbers; this file records only that 38 are settled and 4
+      are reserved.
       **Five capabilities have no owner in either backend** and are net-new build
       work rather than relocation: business-rule integrity (`data-integrity.middleware.ts`,
       used by three mounted route groups), usage limits (already **#471**), security
