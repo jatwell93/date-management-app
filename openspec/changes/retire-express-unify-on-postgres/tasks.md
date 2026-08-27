@@ -939,8 +939,10 @@ equivalent, a relocated home, or an explicit retirement decision.
       summary: (i) Josh's review pass over every `PROPOSED:` row in 2.1–2.5 — this
       checklist is not authoritative until reviewed; (ii) Finding 18's read-only
       production query (operator work, discharges five 2.4 rows); (iii) the **#477**
-      decision on webhook monitoring (unblocks three 2.3 rows); (iv) the 23 open
-      endpoint decisions carried forward from 2.1.
+      decision on webhook monitoring (unblocks three 2.3 rows); (iv) the four reserved legacy-auth
+      endpoint decisions from 2.1 — the count originally read "23 open endpoint decisions", which
+      was wrong (a truncated tally; the real figure was 42). All 42 were worked through on
+      2026-08-28: 16 rehome, 20 retire (one conditional), 2 keep, and 4 deliberately reserved.
       **Five capabilities have no owner in either backend** and are net-new build
       work rather than relocation: business-rule integrity (`data-integrity.middleware.ts`,
       used by three mounted route groups), usage limits (already **#471**), security
@@ -1306,7 +1308,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       and CORS.
       **2.5 §G did that inventory**: 14 call sites, 13 already routed through `buildApiUrl`. The one
       exception is `components/StorageQuotaWarning.tsx:61`, covered above at 3.1 (Finding 21).
-      **Offline-queue mitigation before the production base URL moves (2.5 Finding 25).**
+      **Offline-queue mitigation before the production base URL moves (2.5 Finding 25 —
+      DOWNGRADED 2026-08-28 from required to precautionary).** `offline-sync.ts` `addOperation:149`
+      has no production caller (all 25 call sites are tests), so the queue is always empty and the
+      cutover cannot jam it. The working offline path is `lib/sync-manager.ts`, which syncs with
+      `Promise.allSettled` and has no head-of-line blocking. The defect below is latent, in dormant
+      code, and is tracked as **#480**; step (i) is still worth doing on its own merits, and steps
+      (ii)-(iii) only matter if `OfflineSyncService` is adopted rather than retired.
+      Original text retained:
       `lib/offline-sync.ts` defers its requests, so it is the one call site that does not fail in
       front of a user who can retry. `processQueueOperations:239` breaks on the first failure
       **without** removing the failed operation, there is no per-operation attempt cap, no queue
