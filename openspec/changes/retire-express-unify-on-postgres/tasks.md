@@ -1084,6 +1084,53 @@ equivalent, a relocated home, or an explicit retirement decision.
             caller's own organization, no cross-tenant reach. Either accept it explicitly, or close it
             with a partial unique index (`WHERE role = 'admin' AND deleted_at IS NULL`) or a
             conditional single-statement insert, since Neon has no `$transaction`.
+      - [ ] 3.1.i **The Worker has no scheduled-job capability at all** (Finding 9). Verified rather
+            than assumed: `workers/src/index-minimal.ts:274` exports
+            `Sentry.withSentry(…, { fetch, queue })` — a search for `async scheduled` or a
+            `scheduled(` handler in that file returns **zero** matches, and the only non-`fetch` entry
+            point is `queue` at `:467`. `workers/wrangler.toml` declares no `[triggers]` section and
+            no `crons` key. So **every** job in the backend's `SchedulerService` currently has nowhere
+            to run, not just the two that surfaced through the subscription audit
+            (`downgradeExpiredTrials`, `findTrialsNeedingReminders`).
+            <br>This is task **2.3**'s subject and it is recorded here because it arrived early,
+            through `services/subscription.service.test.ts`, and because it changes how those rows
+            read: they are blocked on a **runtime capability** the Worker does not have, which is a
+            different class of blocker from a missing handler. Sequence accordingly — 3.3 cannot
+            rehome a scheduled job until the Worker has a Cron Trigger and a `scheduled` export, and
+            2.3's schedule matrix should be produced knowing the destination is currently empty.
+            <br>One consequence worth stating plainly for the trial path: until `downgradeExpiredTrials`
+            has a home, **expired trials never lose their entitlements**. That is the mirror image of
+            #471 — one leaks capacity by never enforcing a limit, this one by never revoking a grant.
+      - [ ] 3.1.j **Two subscription rows must be sequenced against #471, not merely queued behind it.**
+            Both come out of `services/subscription.service.test.ts` and neither is safe to leave to
+            whoever implements enforcement.
+            <br>**(a) Trial organizations are seeded with free-tier limits, so #471 must not ship
+            without fixing this.** Express seeds a new trial with **Professional** limits
+            (`subscription.service.test.ts:321`). The Worker's only `organization_usage` write is the
+            lazy zero-seed at `index-minimal.ts:3084`, which writes `max_users` 1 and `max_skus` 500
+            regardless of tier, and does it on a usage *read* rather than at trial creation. Those
+            limits are invisible today only because the gate never fires (#471). Implementing usage
+            enforcement first would immediately block every trialling organization at a single seat.
+            <br>**(b) The Worker grants access on a subscription row with no Stripe subscription id**
+            (`subscription.service.test.ts:797`). `validateOrganizationStatus`
+            (`workers/src/utils/auth.ts:187-208`) denies only when the row is absent entirely or
+            `status === CANCELED`; a row with a null `stripe_subscription_id` and any other status
+            passes. Express treats a missing Stripe id as no entitlement. The Express rule **cannot be
+            ported as-is**, because `ensureTrialSubscription`
+            (`workers/src/clerk/clerk-persistence.ts:90-101`) legitimately creates rows with no Stripe
+            id for every trial — so the fix has to distinguish a trial from a paid signup that failed
+            partway, rather than requiring a Stripe id outright.
+      - [ ] 3.1.k **Decide the cancellation grace period explicitly.** Express's `isAccessActive`
+            consults Stripe and keeps a cancelled customer inside the period they have paid for
+            (`subscription.service.test.ts:745`, `:771`). The Worker's `validateOrganizationStatus`
+            (`workers/src/utils/auth.ts:199-203`) denies the moment `status` is `CANCELED`, with no
+            period-end check, while its comment at `:206` records that `past_due` is deliberately
+            allowed "for MVP phase". The Worker is therefore **stricter on cancellation and looser on
+            non-payment** than Express — a customer who cancels mid-month loses access they have
+            already paid for, and a customer who stops paying keeps it. Both may be intended; neither
+            is written down. `current_period_end` has existed in the schema since migration 0011 and
+            is read for display (`index-minimal.ts:3044`) but never for access, so the data needed to
+            implement a grace period is already there.
       **One product decision, not a defect.** No Worker route is gated on tier — every use of tier in
       `index-minimal.ts` is a quota or display value, and all twelve `/api/reports/*` handlers are
       reachable by any authenticated caller regardless of subscription, which is what
