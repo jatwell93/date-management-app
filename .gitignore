@@ -124,3 +124,6 @@ graphify-out/
 # copies belong in docs/evidence/<date>-<task>/ — the raw run log must never be
 # committed by accident.
 pitr-drill-evidence-*.txt
+
+# Local agent scratch output (never committed)
+.tmp-agent-scratch/
