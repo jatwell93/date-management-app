@@ -1069,7 +1069,8 @@ equivalent, a relocated home, or an explicit retirement decision.
             with an `else` that merely `console.warn`s, because the write is swallowed by SQLite's
             interactive transaction lock. A replacement must be tested against real SQL (pglite,
             `npm run test:db`) or it will be equally unfalsifiable.
-      - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** Pre-existing in
+      - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
+            Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because
             Phase 3.2 will otherwise write a test that codifies it. The `isFirstAdmin` decision is
             check-then-act on both sides: the Worker selects an active admin
