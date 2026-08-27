@@ -877,7 +877,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       dunning, Stripe sync, both credit-claim schedules, webhook monitoring, metrics, and report email.
       Record active/dormant/test-only status, cron/timezone, inputs/secrets, retries, overlap prevention,
       idempotency, observability, failure recovery, and Cron Trigger/Queue/retire target.
-- [ ] 2.4 Operational scripts in `backend/scripts/` — seeds (`seed-users`, `seed-tier-feature-flags`),
+- [x] 2.4 Operational scripts in `backend/scripts/` — seeds (`seed-users`, `seed-tier-feature-flags`),
       audits/backfills (`audit-org-ids`, `backfill-*`, `check-*-org-ids`), data export
       (`neon-to-sqlite`, `export-excess-products`), diagnostics (`diagnose-webhook`, `verify-neon*`,
       `test-r2-connection`), and `backup.sh`. Decide relocate / reimplement / retire for each. **Also
@@ -1193,6 +1193,28 @@ equivalent, a relocated home, or an explicit retirement decision.
       replacement is a conditional single-statement insert or an advisory lock.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
+      **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in
+      `backend/scripts/`, 26 retire. Only `seed-master-catalogue.ts`, `diagnose-webhook.ts`, and
+      `export-excess-products.ts` carry capability that has to be rebuilt; everything else is either
+      superseded by the Phase 1 runner (10 scripts, each named in `preflight.ts`/`status.ts`/
+      `verify.ts`/`seed.ts`) or SQLite plumbing.
+      <br>**Ordering constraint (2.4 Finding 20).** `run-tests.js` is the backend test launcher behind
+      `npm run test:backend:diff` — the pre-commit gate. It must be deleted **with** the backend, last,
+      or the ability to verify the surrounding removals goes with it.
+      <br>**Blocked rows (2.4 Finding 18).** Five historical backfills cannot be shown retirable:
+      `design.md` conditions them on adoption *verifying* production tenant IDs and role values, and
+      `migrate:verify` asserts neither — it covers tables, the catalog fingerprint, and the 54-row
+      reference set only. One read-only production query discharges all five (NULL `organization_id`
+      across the four tenant tables, distinct `users.role` values, count of `uploads.status =
+      'complete'`). Run it before 2.5 rather than carrying the ambiguity.
+      <br>**One invariant should outlive its script:** the tenant-ID integrity check in
+      `audit-org-ids.ts` belongs in the Worker conformance suite as a test. Given #462 and #466, an
+      operator-run script is the wrong home for it.
+      <br>**Backup (2.4 Finding 17).** All three implementations are SQLite file-copies with no
+      Postgres path, so this is a reimplementation, not a relocation. What is being replaced is 30
+      days / 10 files of retention — so with (b)'s 6-hour PITR reach and single snapshot,
+      Neon-native alone is a reduction. The two current implementations also disagree on the backup
+      destination path; settle that once.
 - [ ] 3.5 Initialize the pglite conformance harness from the **authoritative Phase 1 migrations/baseline**
       instead of its embedded `SCHEMA_SQL`, and drop the SQLite comparison arm — conformance becomes "raw
       SQL vs shared TS on Postgres". The conformance tests already live in `workers/src/__tests__/`
