@@ -1304,6 +1304,29 @@ equivalent, a relocated home, or an explicit retirement decision.
       route it through the shared URL builder unless intentionally same-origin; browser-test frontend
       port 3002 → Worker port 8787 for storage quota, subscription checkout/cancel/portal, uploads, errors,
       and CORS.
+      **2.5 §G did that inventory**: 14 call sites, 13 already routed through `buildApiUrl`. The one
+      exception is `components/StorageQuotaWarning.tsx:61`, covered above at 3.1 (Finding 21).
+      **Offline-queue mitigation before the production base URL moves (2.5 Finding 25).**
+      `lib/offline-sync.ts` defers its requests, so it is the one call site that does not fail in
+      front of a user who can retry. `processQueueOperations:239` breaks on the first failure
+      **without** removing the failed operation, there is no per-operation attempt cap, no queue
+      size or age limit, and `performSyncWithRetry:294-295` stops retrying once anything else
+      succeeds. One write the Worker rejects therefore jams every write behind it for that user,
+      permanently. The only drain is `clearQueue():418`, which silently discards unsynced writes.
+      Required, in order:
+      (i) **Do not move production `REACT_APP_API_URL` until 3.1 is complete** — no consumed
+      Express route may lack a Worker equivalent at the moment the base URL changes. Task 3.1.d
+      already records six of eight credit-claim endpoints as having no Worker route; a queued write
+      to any of them jams that user's queue. This is the actual mitigation.
+      (ii) **Drain before the switch** — trigger a sync while Express is still serving and confirm
+      the queue is empty. State the limit rather than assuming it away: the queue is per-browser
+      `localStorage`, so a user offline across the cutover window cannot be drained.
+      (iii) **Do not use `clearQueue()` as the mitigation.** It discards customer writes. If it is
+      used at all, it needs an explicit user-visible decision, not a quiet call during cutover.
+      The underlying head-of-line blocking is a **pre-existing defect independent of this change** —
+      it reproduces today on any persistent 4xx and survives Phase 4 — so the durable fix (a
+      per-operation attempt cap, then drop-with-report or a visible dead-letter list) belongs in its
+      own issue, not in this change.
 - [ ] 3.8 Before implementation, record the currently registered production Stripe endpoint, the
       deployment that receives it, and the exact rollback target; do not assume the undeployed Express
       reference backend is reachable. Then cut Stripe webhooks over as a production change: add typed
