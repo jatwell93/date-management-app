@@ -98,6 +98,13 @@ export interface Database {
 
   // Dashboard queries
   getDashboardStats(organizationId: string): Promise<DashboardStats>;
+  /** Live counts backing GET /api/organization/usage. */
+  getUsageCounts(organizationId: string): Promise<UsageCounts>;
+  /**
+   * Bytes currently recorded against the organization's storage quota.
+   * Undercounts synchronous uploads by design -- see the implementation.
+   */
+  getStorageUsedBytes(organizationId: string): Promise<number>;
   getLastCatalogueUpload(organizationId: string): Promise<LastCatalogueUpload | null>;
   getExpiredItemsEnteredToday(organizationId: string): Promise<number>;
   getStockLossLast30Days(organizationId: string): Promise<number>;
@@ -195,6 +202,12 @@ export interface Database {
   // Product CRUD (scan flow)
   findProductByBarcode(organizationId: string, barcode: string): Promise<Product | null>;
   findProductBySku(organizationId: string, sku: string): Promise<Product | null>;
+  /**
+   * Creates a product unless the organization is at its tier SKU cap, in which
+   * case it resolves to `null` without inserting. The cap is checked inside the
+   * INSERT (see the implementation), so `null` is authoritative rather than
+   * advisory.
+   */
   createProduct(
     organizationId: string,
     data: {
@@ -204,7 +217,8 @@ export interface Database {
       costPrice?: number;
       notes?: string;
     },
-  ): Promise<Product>;
+    maxSkus: number,
+  ): Promise<Product | null>;
 
   // Inventory CRUD
   findInventoryItemById(organizationId: string, id: number): Promise<InventoryItem | null>;
@@ -217,6 +231,11 @@ export interface Database {
     productId: number,
     limit: number,
   ): Promise<RecentInventoryItem[]>;
+  /**
+   * Creates an inventory item unless the organization is at its tier
+   * active-expiry cap, in which case it resolves to `null` without inserting
+   * and without writing an audit row.
+   */
   createInventoryItem(
     organizationId: string,
     userId: number,
@@ -226,7 +245,8 @@ export interface Database {
       locationId: number;
       status?: string;
     },
-  ): Promise<InventoryItem>;
+    maxActiveExpiries: number,
+  ): Promise<InventoryItem | null>;
   updateInventoryItem(
     organizationId: string,
     userId: number,
@@ -521,6 +541,13 @@ export interface DashboardStats {
 export interface LastCatalogueUpload {
   fileName: string;
   uploadedAt: string;
+}
+
+/** Live resource counts for an organization, used for usage reporting. */
+export interface UsageCounts {
+  skus: number;
+  users: number;
+  activeExpiries: number;
 }
 
 export interface MonthlyExpiryReport {
@@ -1129,6 +1156,53 @@ export function createWorkersDatabase(env: Env): Database {
         expiringItems: expiring[0]?.count || 0,
         expiredActionItems: expiredAction[0]?.count || 0,
       };
+    },
+
+    async getUsageCounts(organizationId: string): Promise<UsageCounts> {
+      // Counted live for the same reason the limits are enforced live: the
+      // `organization_usage` counter columns this endpoint used to read are
+      // written once as literal zeros and never updated, so the dashboard
+      // showed every organization at 0 of its limit and the frontend's 80%
+      // UsageWarning could never fire.
+      //
+      // `activeExpiries` excludes the same terminal statuses as
+      // `countActiveExpiryItems` (backend/src/repositories/subscription.repository.ts:149)
+      // so the number shown matches the number enforced against.
+      const [skus, users, activeExpiries] = await Promise.all([
+        sql`SELECT COUNT(*)::int as count FROM products WHERE organization_id = ${organizationId}`,
+        sql`SELECT COUNT(*)::int as count FROM users WHERE organization_id = ${organizationId}`,
+        sql`
+          SELECT COUNT(*)::int as count FROM inventory_items
+          WHERE organization_id = ${organizationId}
+            AND status NOT IN ('Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through')
+        `,
+      ]);
+
+      return {
+        skus: Number(skus[0]?.count ?? 0),
+        users: Number(users[0]?.count ?? 0),
+        activeExpiries: Number(activeExpiries[0]?.count ?? 0),
+      };
+    },
+
+    async getStorageUsedBytes(organizationId: string): Promise<number> {
+      // Summed live rather than read from `organization_usage.storage_used_bytes`,
+      // which this Worker writes exactly once as a literal 0 and never updates.
+      //
+      // Known undercount: only queued catalogue imports persist an `uploads`
+      // row. Synchronous uploads (expiry lists, small direct posts) deliberately
+      // have none -- `handleUploadStatus` relies on their absence to fall
+      // through to R2 metadata -- so their bytes are invisible here. The gate
+      // therefore fails open, never closed: no caller is refused for storage
+      // they do not have. Closing the gap means recording those uploads and
+      // teaching the status endpoint to tell a quota row from a job row.
+      const rows = await sql`
+        SELECT COALESCE(SUM(file_size_bytes), 0)::bigint as "usedBytes"
+        FROM uploads
+        WHERE organization_id = ${organizationId}
+          AND status <> 'deleted'
+      `;
+      return Number(rows[0]?.usedBytes ?? 0);
     },
 
     // The latest catalogue upload timestamp lets users judge how stale their
@@ -2328,10 +2402,20 @@ export function createWorkersDatabase(env: Env): Database {
         costPrice?: number;
         notes?: string;
       },
-    ): Promise<Product> {
+      maxSkus: number,
+    ): Promise<Product | null> {
+      // Tier SKU cap enforced in the same statement that consumes it: the
+      // COUNT is a subquery of the INSERT, so two concurrent creates at
+      // limit-1 cannot both observe room. A read-then-insert would let them
+      // (Neon's HTTP driver has no transaction to wrap the pair in), which is
+      // exactly the TOCTOU that `product.service.ts:145` avoids in Express by
+      // running the check inside `$transaction`.
+      //
+      // Zero rows back means the cap was reached -- the caller turns that into
+      // a 402, and cannot confuse it with a failed insert, which throws.
       const rows = await sql`
         INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes, created_at, updated_at)
-        VALUES (
+        SELECT
           ${organizationId},
           ${data.barcode},
           ${data.sku ?? data.barcode},
@@ -2340,12 +2424,14 @@ export function createWorkersDatabase(env: Env): Database {
           ${data.notes ?? ''},
           NOW(),
           NOW()
-        )
+        WHERE (
+          SELECT COUNT(*) FROM products WHERE organization_id = ${organizationId}
+        ) < ${maxSkus}
         RETURNING id, name, barcode, sku,
                   cost_price as "costPrice", notes,
                   created_at as "createdAt", updated_at as "updatedAt"
       `;
-      return rows[0] as Product;
+      return (rows[0] as Product) ?? null;
     },
 
     // ---- Inventory CRUD ----
@@ -2418,7 +2504,8 @@ export function createWorkersDatabase(env: Env): Database {
         locationId: number;
         status?: string;
       },
-    ): Promise<InventoryItem> {
+      maxActiveExpiries: number,
+    ): Promise<InventoryItem | null> {
       // Validate product + location belong to the same org
       await assertReferencesBelongToOrganization(sql, organizationId, {
         productId: data.productId,
@@ -2427,13 +2514,25 @@ export function createWorkersDatabase(env: Env): Database {
 
       // Atomic insert + audit via CTE so we never end up with an inventory
       // item lacking an audit row (or vice versa) on partial failure.
+      //
+      // The tier active-expiry cap rides in the same CTE: the WHERE turns the
+      // INSERT into a no-op when the org is at its limit, `audited` then has no
+      // rows to write, and the final SELECT returns nothing -- so a refusal
+      // cannot leave an orphaned audit entry. The excluded statuses mirror
+      // `countActiveExpiryItems` (backend/src/repositories/subscription.repository.ts:149)
+      // so the Worker refuses on exactly the population Express counted.
       const rows = await sql`
         WITH inserted AS (
           INSERT INTO inventory_items
             (organization_id, product_id, expiry_date, location_id, status, created_at, updated_at)
-          VALUES
-            (${organizationId}, ${data.productId}, ${data.expiryDate}, ${data.locationId},
-             ${data.status ?? 'Normal'}, NOW(), NOW())
+          SELECT
+            ${organizationId}, ${data.productId}, ${data.expiryDate}, ${data.locationId},
+            ${data.status ?? 'Normal'}, NOW(), NOW()
+          WHERE (
+            SELECT COUNT(*) FROM inventory_items
+            WHERE organization_id = ${organizationId}
+              AND status NOT IN ('Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through')
+          ) < ${maxActiveExpiries}
           RETURNING id, product_id, expiry_date, location_id, status, created_at, updated_at
         ), audited AS (
           INSERT INTO audit_log
@@ -2452,7 +2551,7 @@ export function createWorkersDatabase(env: Env): Database {
         FROM inserted
       `;
 
-      return rows[0] as InventoryItem;
+      return (rows[0] as InventoryItem) ?? null;
     },
 
     async updateInventoryItem(

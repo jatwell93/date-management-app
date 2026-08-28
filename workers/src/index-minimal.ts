@@ -31,6 +31,15 @@ import {
   checkRateLimit,
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
+import {
+  LAUNCH_TIER_USER_LIMITS,
+  normalizeLaunchTier,
+  parsePositiveIntEnv,
+  resolveMaxActiveExpiries,
+  resolveMaxSkus,
+  resolveStorageLimitBytes,
+  type LaunchTier,
+} from './utils/usage-limits';
 import { handleWorkerUploadRoute } from './upload/upload-router';
 import {
   resolveBootstrapApiRoute,
@@ -525,6 +534,7 @@ import {
   type BulkLinkResult,
   type Supplier,
   type SupplierWriteData,
+  type UsageCounts,
 } from './database';
 import { isReferentialError } from './tenant-references';
 import { SignJWT, jwtVerify } from 'jose';
@@ -2283,13 +2293,22 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
   }
 
   try {
-    const product = await db.createProduct(auth.organizationId, {
-      barcode: body.barcode,
-      sku: body.sku ?? null,
-      name: body.name,
-      costPrice: typeof body.costPrice === 'number' ? body.costPrice : 0,
-      notes: typeof body.notes === 'string' ? body.notes : '',
-    });
+    const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+    const maxSkus = resolveMaxSkus(tier, env);
+    const product = await db.createProduct(
+      auth.organizationId,
+      {
+        barcode: body.barcode,
+        sku: body.sku ?? null,
+        name: body.name,
+        costPrice: typeof body.costPrice === 'number' ? body.costPrice : 0,
+        notes: typeof body.notes === 'string' ? body.notes : '',
+      },
+      maxSkus,
+    );
+    if (!product) {
+      return usageLimitResponse('SKU', maxSkus, env);
+    }
     return jsonResponse(product, 201, env);
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -2388,12 +2407,22 @@ async function handleCreateInventoryItem(
   }
 
   try {
-    const item = await db.createInventoryItem(auth.organizationId, auth.userId, {
-      productId,
-      expiryDate,
-      locationId,
-      status: typeof body.status === 'string' ? body.status : undefined,
-    });
+    const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+    const maxActiveExpiries = resolveMaxActiveExpiries(tier, env);
+    const item = await db.createInventoryItem(
+      auth.organizationId,
+      auth.userId,
+      {
+        productId,
+        expiryDate,
+        locationId,
+        status: typeof body.status === 'string' ? body.status : undefined,
+      },
+      maxActiveExpiries,
+    );
+    if (!item) {
+      return usageLimitResponse('active expiry item', maxActiveExpiries, env);
+    }
     return jsonResponse(item, 201, env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
@@ -3007,29 +3036,36 @@ const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow)
 
 // The frontend SubscriptionDashboard renders each resource as a
 // "{current} / {limit}" progress bar, so the API MUST return a nested
-// { current, limit } pair per resource — not a flat number. skus/users/
-// inventory limits are the per-org max_* columns (source of truth, see the
-// max_users enforcement query above). Storage has no per-org column, so its
-// limit is derived from the org's tier in the handler.
+// { current, limit } pair per resource -- not a flat number.
+//
+// Every `current` is a live count and every `limit` comes from the org's tier,
+// because the `organization_usage` columns these once read are written as
+// literal zeros and never maintained (task 3.1.a): the endpoint reported 0 of
+// N for every organization, so the dashboard bars sat empty and the frontend's
+// 80% UsageWarning (frontend/src/components/UsageWarning.tsx) could never
+// trigger. `users.current` is now accurate too, though the user limit itself
+// is still not enforced on either backend -- see the 3.1.a note in tasks.md.
 const mapOrganizationUsageResponse = (
-  usage: OrganizationUsageRow | undefined,
-  storageLimitBytes: number,
+  counts: UsageCounts,
+  storageUsedBytes: number,
+  tier: LaunchTier,
+  env: Env,
 ) => ({
   skus: {
-    current: Number(usage?.total_skus ?? 0),
-    limit: toNullableLimit(usage?.max_skus),
+    current: counts.skus,
+    limit: resolveMaxSkus(tier, env),
   },
   users: {
-    current: Number(usage?.active_users ?? 0),
-    limit: Number(usage?.max_users ?? 0),
+    current: counts.users,
+    limit: LAUNCH_TIER_USER_LIMITS[tier],
   },
   storage: {
-    current: Number(usage?.storage_used_bytes ?? 0),
-    limit: storageLimitBytes,
+    current: storageUsedBytes,
+    limit: resolveStorageLimitBytes(tier),
   },
   inventoryItems: {
-    current: Number(usage?.total_inventory_items ?? 0),
-    limit: toNullableLimit(usage?.max_inventory_items),
+    current: counts.activeExpiries,
+    limit: resolveMaxActiveExpiries(tier, env),
   },
 });
 
@@ -3097,28 +3133,13 @@ async function handleGetOrganizationUsage(
     ON CONFLICT (organization_id) DO NOTHING
   `;
 
-  const rows = await db.sql`
-    SELECT
-      total_skus,
-      active_users,
-      storage_used_bytes,
-      total_inventory_items,
-      max_users,
-      max_skus,
-      max_inventory_items
-    FROM organization_usage
-    WHERE organization_id = ${auth.organizationId}
-    LIMIT 1
-  `;
-
   const tier = await getOrganizationLaunchTier(auth.organizationId, db);
-  const storageLimitBytes = STORAGE_LIMIT_BYTES_BY_TIER[tier];
+  const [counts, storageUsedBytes] = await Promise.all([
+    db.getUsageCounts(auth.organizationId),
+    db.getStorageUsedBytes(auth.organizationId),
+  ]);
 
-  return jsonResponse(
-    mapOrganizationUsageResponse(rows[0] as OrganizationUsageRow, storageLimitBytes),
-    200,
-    env,
-  );
+  return jsonResponse(mapOrganizationUsageResponse(counts, storageUsedBytes, tier, env), 200, env);
 }
 
 // A missing products.retail_price column (migration 0003 not applied) is
@@ -3461,6 +3482,9 @@ export async function handleUploadInitiate(
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
 
+  const storageRefusal = await enforceStorageLimit(db, env, auth.organizationId, body.fileSize);
+  if (storageRefusal) return storageRefusal;
+
   const key = `uploads/user-${auth.userId}/${Date.now()}-${body.filename}`;
 
   if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES) {
@@ -3586,6 +3610,9 @@ export async function handleUploadDirect(
     return errorResponse('Invalid file type. Only CSV files are allowed.', 400, env);
   }
 
+  const storageRefusal = await enforceStorageLimit(db, env, auth.organizationId, fileValue.size);
+  if (storageRefusal) return storageRefusal;
+
   const data = await fileValue.arrayBuffer();
 
   if (queueEnabled && requestedImportType !== 'expiry-list') {
@@ -3707,6 +3734,9 @@ export async function handleUploadComplete(
   if (!object) {
     return errorResponse('Upload not found', 404, env);
   }
+
+  const storageRefusal = await enforceStorageLimit(db, env, auth.organizationId, object.size);
+  if (storageRefusal) return storageRefusal;
 
   if (env.CATALOGUE_QUEUE_ENABLED === 'true' && body.importType !== 'expiry-list') {
     return queueCompletedCatalogueUpload({
@@ -3849,8 +3879,6 @@ export async function handleUploadErrorReport(
 export { handleLogin, handleRegister, handleOrganizationBootstrap };
 export { getClerkAuthorizedParties };
 
-type LaunchTier = 'free' | 'starter' | 'professional' | 'enterprise';
-
 type MarkdownConfigRow = {
   credit_scope?: string | null;
   band1_percentage?: number | string | null;
@@ -3977,37 +4005,64 @@ function matrixUsesRetail(matrix: MarkdownMatrixConfig): boolean {
   );
 }
 
-const LAUNCH_TIER_LIMITS: Record<LaunchTier, { maxSkus: number; maxActiveExpiries: number }> = {
-  free: { maxSkus: 500, maxActiveExpiries: 500 },
-  starter: { maxSkus: 5000, maxActiveExpiries: 5000 },
-  professional: { maxSkus: 50000, maxActiveExpiries: 50000 },
-  enterprise: { maxSkus: 250000, maxActiveExpiries: 250000 },
-};
+/**
+ * Refusal for a create that would exceed a tier cap.
+ *
+ * 402 rather than Express's 403 (`feature-gate.middleware.ts:346`): this Worker
+ * already answers 402 on the one usage gate it shipped with
+ * (`handleCreateLegacyUser`), and the frontend keys off the message rather than
+ * the status, so matching the Worker's own precedent keeps the API internally
+ * consistent. `retryable: false` marks it as a state the caller cannot fix by
+ * retrying, only by upgrading or deleting.
+ */
+function usageLimitResponse(resource: string, limit: number, env: Env): Response {
+  return jsonResponse(
+    {
+      error: `${resource} limit reached for your subscription tier (max ${limit})`,
+      limit,
+      retryable: false,
+    },
+    402,
+    env,
+  );
+}
 
-const GIBIBYTE = 1024 * 1024 * 1024;
+/**
+ * Refuses an upload that would take the organization past its tier storage cap.
+ * Returns a 402 Response to short-circuit on, or `null` to proceed.
+ *
+ * Placed at the same three points Express gates it — initiate, direct and
+ * complete (`backend/src/routes/upload.routes.ts:32/48/64`) — so a caller is
+ * refused before bytes move rather than after.
+ */
+async function enforceStorageLimit(
+  db: Database,
+  env: Env,
+  organizationId: string,
+  incomingBytes: number,
+): Promise<Response | null> {
+  let tier: LaunchTier;
+  let used: number;
+  try {
+    tier = await getOrganizationLaunchTier(organizationId, db);
+    used = await db.getStorageUsedBytes(organizationId);
+  } catch (error) {
+    // Fails OPEN, deliberately. This gate already undercounts (see
+    // `getStorageUsedBytes`), so it is a backstop rather than a guarantee, and
+    // turning a transient read failure on subscription_tiers into a rejected
+    // upload costs a customer real work to protect a quota we cannot measure
+    // exactly anyway. The upload handlers have no catch of their own, so
+    // without this a blip here would surface as an unhandled throw rather than
+    // a clean response.
+    console.error('enforceStorageLimit: quota check failed, allowing upload:', error);
+    return null;
+  }
 
-// Per-tier storage limits (bytes). There is no per-org max_storage column, so
-// storage limits mirror StorageQuotaService's free/pro/enterprise buckets
-// (backend/src/services/storage-quota.service.ts), keyed by normalized launch
-// tier. Adjust here if product changes the storage entitlement per plan.
-const STORAGE_LIMIT_BYTES_BY_TIER: Record<LaunchTier, number> = {
-  free: 1 * GIBIBYTE,
-  starter: 10 * GIBIBYTE,
-  professional: 10 * GIBIBYTE,
-  enterprise: 1000 * GIBIBYTE,
-};
-
-function normalizeLaunchTier(value: unknown): LaunchTier {
-  const tier = String(value || '')
-    .trim()
-    .toLowerCase();
-  if (tier === 'free') return 'free';
-  if (tier === 'starter') return 'starter';
-  if (tier === 'professional') return 'professional';
-  if (tier === 'enterprise') return 'enterprise';
-  if (tier === 'premium') return 'professional';
-  if (tier === 'concierge') return 'enterprise';
-  return 'free';
+  const limit = resolveStorageLimitBytes(tier);
+  if (used + incomingBytes > limit) {
+    return usageLimitResponse('Storage', limit, env);
+  }
+  return null;
 }
 
 async function getOrganizationLaunchTier(
@@ -4022,15 +4077,6 @@ async function getOrganizationLaunchTier(
     LIMIT 1
   `;
   return normalizeLaunchTier(rows[0]?.tier_level);
-}
-
-// Parse a positive-integer env override, falling back to `fallback` when the value
-// is missing, non-numeric, NaN, or non-positive. Without this guard a misconfigured
-// ENTERPRISE_* var would yield NaN and silently fail every enterprise import
-// (e.g. `count <= NaN` is always false).
-function parsePositiveIntEnv(value: string | undefined, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
 function getTierFileSizeLimit(tier: LaunchTier, env: Env): number {
@@ -4052,15 +4098,8 @@ async function createQueuedCatalogueUpload(input: {
   tier: LaunchTier;
   env: Env;
 }): Promise<number | null> {
-  const tierLimits = LAUNCH_TIER_LIMITS[input.tier];
-  const maxSkus =
-    input.tier === 'enterprise'
-      ? parsePositiveIntEnv(input.env.ENTERPRISE_MAX_SKUS, tierLimits.maxSkus)
-      : tierLimits.maxSkus;
-  const maxActiveExpiries =
-    input.tier === 'enterprise'
-      ? parsePositiveIntEnv(input.env.ENTERPRISE_MAX_ACTIVE_EXPIRIES, tierLimits.maxActiveExpiries)
-      : tierLimits.maxActiveExpiries;
+  const maxSkus = resolveMaxSkus(input.tier, input.env);
+  const maxActiveExpiries = resolveMaxActiveExpiries(input.tier, input.env);
   try {
     const rows = await input.db.sql`
       INSERT INTO uploads (

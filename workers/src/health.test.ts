@@ -457,6 +457,9 @@ describe('Upload strategy parity', () => {
     ...overrides,
   });
 
+  // `getStorageUsedBytes` answers 0 so the tier storage cap (task 3.1.a) never
+  // decides these cases -- they are about upload strategy and parsing. The
+  // quota gate itself is covered separately, in the storage-limit tests below.
   const createUploadDb = (userId = 7): Database =>
     ({
       sql: vi.fn().mockResolvedValue([
@@ -466,6 +469,7 @@ describe('Upload strategy parity', () => {
           role: 'admin',
         },
       ]),
+      getStorageUsedBytes: vi.fn().mockResolvedValue(0),
     }) as unknown as Database;
 
   const createProductImportDb = (userId = 7): Database =>
@@ -494,7 +498,140 @@ describe('Upload strategy parity', () => {
         costPrice: 12.99,
         notes: '',
       }),
+      getStorageUsedBytes: vi.fn().mockResolvedValue(0),
     }) as unknown as Database;
+
+  // Task 3.1.a / #471: the storage quota gate, placed at the same three points
+  // Express gates it (backend/src/routes/upload.routes.ts:32/48/64) so a caller
+  // is refused before bytes move rather than after.
+  describe('tier storage quota', () => {
+    const quotaDb = (usedBytes: number, tierLevel = 'free'): Database =>
+      ({
+        sql: vi.fn((strings: TemplateStringsArray) => {
+          const query = strings.join('');
+          if (query.includes('FROM subscription_tiers')) {
+            return Promise.resolve([{ tier_level: tierLevel }]);
+          }
+          return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]);
+        }),
+        getStorageUsedBytes: vi.fn().mockResolvedValue(usedBytes),
+      }) as unknown as Database;
+
+    const initiateRequest = (fileSize: number) =>
+      new Request('https://example.com/api/upload/initiate', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filename: 'test.csv', fileSize, contentType: 'text/csv' }),
+      });
+
+    beforeEach(() => {
+      mockedVerifyToken.mockResolvedValue({
+        sub: 'user_clerk_7',
+        email: 'uploader@example.com',
+        org_id: 'org_test',
+        org_role: 'org:admin',
+      });
+    });
+
+    const ONE_GIB = 1024 * 1024 * 1024;
+
+    it('refuses an upload that would take the organization past its tier cap', async () => {
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = quotaDb(ONE_GIB - 100);
+
+      const response = await handleUploadInitiate(
+        initiateRequest(200),
+        envForUpload,
+        '/api/upload',
+        db,
+      );
+
+      expect(response.status).toBe(402);
+      await expect(response.json()).resolves.toMatchObject({
+        error: expect.stringContaining('Storage limit reached'),
+        limit: ONE_GIB,
+      });
+    });
+
+    // The per-file size limit is checked before the quota, so an oversized file
+    // gets the actionable 400 about file size rather than a 402 about a tier
+    // limit it has not actually reached.
+    it('reports an oversized file as a size error, not a quota error', async () => {
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = quotaDb(0);
+
+      const response = await handleUploadInitiate(
+        initiateRequest(ONE_GIB),
+        envForUpload,
+        '/api/upload',
+        db,
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: expect.stringContaining('File size exceeds'),
+      });
+    });
+
+    it('admits an upload that exactly fills the remaining quota', async () => {
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = quotaDb(ONE_GIB - 1024);
+
+      const response = await handleUploadInitiate(
+        initiateRequest(1024),
+        envForUpload,
+        '/api/upload',
+        db,
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('reads the cap from the organization tier rather than assuming free', async () => {
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      // 2 GiB used would exceed the free cap but sits well inside starter's 10 GiB.
+      const db = quotaDb(2 * ONE_GIB, 'starter');
+
+      const response = await handleUploadInitiate(
+        initiateRequest(1024),
+        envForUpload,
+        '/api/upload',
+        db,
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    // Fails OPEN by design: the sum undercounts synchronous uploads, so this
+    // gate is a backstop, and a transient read failure must not cost a customer
+    // their upload. Asserting it explicitly keeps the choice deliberate -- if
+    // someone later makes it fail closed, this test says so out loud.
+    it('allows the upload when the quota lookup itself fails', async () => {
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = {
+        sql: vi.fn((strings: TemplateStringsArray) => {
+          const query = strings.join('');
+          if (query.includes('FROM subscription_tiers')) {
+            return Promise.reject(new Error('connection reset'));
+          }
+          return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]);
+        }),
+        getStorageUsedBytes: vi.fn(),
+      } as unknown as Database;
+
+      const response = await handleUploadInitiate(
+        initiateRequest(1024),
+        envForUpload,
+        '/api/upload',
+        db,
+      );
+
+      expect(response.status).toBe(200);
+    });
+  });
 
   it('returns direct strategy for Clerk-authenticated upload initiation', async () => {
     mockedVerifyToken.mockResolvedValueOnce({
@@ -1342,9 +1479,12 @@ describe('Upload strategy parity', () => {
     );
 
     expect(response.status).toBe(200);
+    // Matched positively on the products write rather than "the first query
+    // that is not the user lookup": the storage-quota gate (task 3.1.a) now
+    // reads subscription_tiers first, and a negative filter would pick that up.
     const productWrite = vi
       .mocked(db.sql)
-      .mock.calls.find(([strings]) => !strings.join('').includes('FROM users'));
+      .mock.calls.find(([strings]) => strings.join('').includes('products'));
     expect(productWrite).toBeDefined();
     expect(productWrite).toContain('Milk, full cream');
   });

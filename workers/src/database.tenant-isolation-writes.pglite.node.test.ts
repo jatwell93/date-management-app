@@ -331,7 +331,12 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
     });
   });
 
-  describe('createInventoryItem cross-org references', () => {
+  // These cases assert the cross-org reference checks fire BEFORE the insert, so
+// the tier cap must never be the reason a create fails here. A cap far above
+// any fixture count keeps the assertions about references, not quota.
+const UNCAPPED = 1_000_000;
+
+describe('createInventoryItem cross-org references', () => {
     it("refuses to create an item pointing at another organization's product", async () => {
       const db = makeDb();
 
@@ -340,7 +345,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
           productId: foreignProductId,
           expiryDate: '2099-01-01',
           locationId: ownAreaId,
-        }),
+        }, UNCAPPED),
       ).rejects.toThrow('Product does not exist');
 
       const rows = await sql`
@@ -357,7 +362,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
           productId: ownProductId,
           expiryDate: '2099-01-01',
           locationId: foreignAreaId,
-        }),
+        }, UNCAPPED),
       ).rejects.toThrow('Location does not exist');
     });
   });
@@ -384,7 +389,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
             productId: foreignProductId,
             expiryDate: '2099-01-01',
             locationId: ownAreaId,
-          }),
+          }, UNCAPPED),
       ],
       [
         'createInventoryItem, foreign location',
@@ -393,7 +398,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
             productId: ownProductId,
             expiryDate: '2099-01-01',
             locationId: foreignAreaId,
-          }),
+          }, UNCAPPED),
       ],
       [
         'updateInventoryItem, foreign product',
