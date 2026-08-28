@@ -5,6 +5,20 @@
  * for handling transient connection failures in Cloudflare Workers.
  */
 
+/*
+ * UNWIRED as of 2026-08-28. This module has no production importer: its only
+ * callers were `handlers/products.ts`, `handlers/dashboard.ts` and
+ * `handlers/store-areas.ts`, deleted as a dead layer with zero importers of
+ * their own. The live path (`database.ts`) calls `neon()` directly and has NO
+ * transient-failure handling, so this is a tested solution to a gap the
+ * deployed Worker actually has rather than superseded code.
+ *
+ * Retained deliberately, not by oversight. Adopting it on the live path is a
+ * behaviour change and is tracked as its own task; if that decision goes the
+ * other way, delete this module and `__tests__/error-handling.test.ts` with it.
+ * Do not treat its presence as evidence the Worker retries anything today.
+ */
+
 /**
  * Minimal tagged-template signature used by `createRetryableSql`.
  *

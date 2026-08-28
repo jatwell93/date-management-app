@@ -1191,6 +1191,53 @@ equivalent, a relocated home, or an explicit retirement decision.
             ran. It is where inventory enforcement would naturally have been added. Before deleting,
             apply the 3.1.0 lesson: check whether `handlers.test.ts` is the only coverage of anything
             live. Needs its own task alongside the 4.1 sweep.
+      - [x] 3.1.0b **Delete the second dead Worker layer: `workers/src/handlers/`.** Found while
+            scoping 3.1.a, which would otherwise have added inventory enforcement to
+            `handlers/inventory.ts`. **DONE 2026-08-28**, 5 files deleted (`dashboard.ts`,
+            `inventory.ts`, `products.ts`, `store-areas.ts`, `handlers.test.ts`, 1015 lines).
+            Same shape as 3.1.0: **zero importers**, and `handlers/inventory.ts:105` inserted
+            `quantity` and `store_area_id` — columns the schema does not have — while omitting
+            `organization_id`, so it would have thrown if it ever ran. `handlers/products.ts` and
+            `handlers/store-areas.ts` were live decoys for 3.1.d and the store-area rows.
+            <br>**The orphan check paid off twice.** The importer grep that found the layer excluded
+            `*.test.ts` by design (it was looking for PRODUCTION importers), which hid a test importer
+            outside the directory: `__tests__/error-handling.test.ts` imported `handlers/products` and
+            `handlers/dashboard`. Run BOTH greps next time. That file was 19/28 tautological (it is in
+            the Finding 1 table), 3 more called a deleted handler inside a try/catch asserting in both
+            branches, and 2 were `skipIf(!NEON_CONNECTION_STRING)` and never ran in CI. Trimmed to the
+            4 real tests, which cover `withNeonRetry`. 44 tests removed in total, 39 of them incapable
+            of failing.
+            <br>**Audit impact:** 62 rows cited `handlers/handlers.test.ts`, every one inside a
+            `(searched: ...)` list and none as an equivalence — unsurprising for a file whose 20
+            assertions were all `expect(expected).toBe(true)`. Re-pointed at the pglite tenant-isolation
+            suites, which actually cover those behaviours. One row (part3:1187) DID rest on
+            `error-handling.test.ts` for missing-required-field rejection and is **REOPENED**: it cited
+            a test of the deleted `createProduct`, so the equivalence never held. Finding 1's placebo
+            table in part4 is now a scoreboard with a **Now** column; 2 of its 8 rows are closed.
+      - [ ] 3.1.0c **Decide the fate of `utils/db-retry.ts`: wire it into the live path, or delete it.**
+            Exposed by 3.1.0b — its only importers were the three deleted handlers, so it is now
+            unwired, and it is annotated as such in the file rather than left to look load-bearing.
+            **The gap it addresses is real:** `database.ts` calls `neon()` directly with no retry, so
+            the deployed Worker has **no transient-failure handling against Neon at all**, over an HTTP
+            driver where transient failures are the expected case. `withNeonRetry` is a working
+            implementation (3 attempts, exponential backoff, retries connection-refused/timeout/
+            too-many-connections) with 4 real tests. Check the Express side before calling this a
+            regression — `backend/src/utils/retry.ts` exists and is used by the webhook and bootstrap
+            paths, but whether Prisma queries themselves are retried is unverified. Then either adopt
+            it in `createWorkersDatabase` (a behaviour change: retries alter failure timing and can
+            duplicate non-idempotent writes, so the retryable-error list matters) or delete the module
+            and `__tests__/error-handling.test.ts` with it, which would also need the 154 search-list
+            mentions of that path swept.
+      - [ ] 3.1.0d **Sweep the remaining placebo tests.** Finding 1's table in part4 counts 90
+            assertions that cannot fail across 8 Worker files; 3.1.0b closed 2 of the 8. The 6 open
+            are `__tests__/multi-tenant-isolation.test.ts` (8/8), `org-status-integration.test.ts`
+            (16/19), `auth-integration.test.ts` (14/18), `subscription-validation.test.ts` (7/14),
+            `usage-limits-integration.test.ts` (4/13) and `feature-gates-integration.test.ts` (2/8).
+            A test that cannot fail is worse than no test, because the audit counts it as coverage —
+            `handlers.test.ts` is the proof: 20 passing tests kept a zero-importer layer looking
+            maintained. For each, either write the real assertion or delete it and let the 2.2 row for
+            that behaviour record the absence honestly. Sequence AFTER the rows that depend on those
+            files' citations, so the sweep is one pass rather than several.
       - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5). **Tracked as
             #472** — shipped Worker code, not gated on this change; see also task 3.8, whose Stripe
             handler must be written against the fixed pattern rather than the current one.
