@@ -1053,17 +1053,32 @@ equivalent, a relocated home, or an explicit retirement decision.
             (3) 246 rows across the 2.2 manifests cited the four deleted test files, and
             `verify-audit-manifest.js` check 2 requires cited Worker paths to exist. 215 were
             search-list mentions restated against live code with no decision changed; 16 were
-            repointed to live coverage; **31 were REOPENED** and need an owner decision — see the
+            repointed to live coverage; **25 were REOPENED** and need an owner decision (a further 4
+            were corrected to `retire`, and 2 to a non-upload framing — see the finding below) — see the
             re-pointing note in each manifest header.
-            <br>**Finding — live authorization gap, not a coverage gap.** Express restricts uploads
-            to admin/manager (`requirePermission('upload_files')`). The deployed Worker checks **no
-            role on any upload path**: `canUpload`/`UPLOAD_ALLOWED_ROLES` have no production importer
-            and no occurrence of `role` appears in `index-minimal.ts:3400-3900` (all six upload
-            handlers). Six 2.2 rows had retired the Express upload-authorization tests citing
-            `require-role.test.ts` — a test for middleware that never ran. Intra-org privilege, not
-            cross-tenant, so it is #471-class rather than #462/#466-class; it exists in production
-            now and is independent of this migration, so by the #460 precedent it wants an issue.
-            **Not yet filed.**
+            <br>**Finding — a permission model wired to nothing, on both sides.** The Worker applies
+            no role check to any upload path (`canUpload`/`UPLOAD_ALLOWED_ROLES` have no production
+            importer; no `role` appears in `index-minimal.ts:3400-3900`). **Express does not gate
+            uploads by role either**: `backend/src/routes/upload.routes.ts` uses `authenticateToken`
+            + `checkUsageLimit('storage_bytes')` + rate limiters and no role middleware, and
+            `requirePermission` (`backend/src/middleware/requireOrgRole.ts:75`) and `requireMinRole`
+            (`:110`) occur nowhere outside their own JSDoc examples at `:73` and `:107`. So this is
+            **parity, not a regression** — no issue to file. `PERMISSIONS.UPLOAD_FILES` /
+            `requirePermission` / `requireMinRole` on the Express side and `canUpload` /
+            `UPLOAD_ALLOWED_ROLES` / `createUploadRoleMiddleware` on the Worker side are a permission
+            model that was built, tested on both sides, and applied to no route. The four 2.2 rows
+            covering it are `retire`; upload authorization, if wanted, is net-new product work on a
+            fresh decision.
+            <br>*(An earlier pass of this task recorded the above as a live authorization gap. That
+            read the Worker's absent check as a regression without verifying the Express side, and
+            was wrong — the same "does anything call this?" check the audit itself prescribes,
+            applied to only one of the two backends. The audit rows and manifest headers carry the
+            correction.)*
+            <br>**What is still a real gap:** `requireOrgRole(admin, manager)` **is** live Express
+            middleware on `admin.metrics`, `database.backup`, `health`, `organization-invite`,
+            `store-area` and `user` routes, and the Worker has only three admin-only gates and no
+            admin+manager gate anywhere. Two reopened 2.2 rows track it; it resolves as those routes
+            gain Worker handlers in 3.1.
             <br>Related, smaller: the live rate limiter's reject path is untested —
             `minimal-rate-limit.test.ts` asserts `checkRateLimit` only for `allowed: true`, and
             `applyRateLimitHeaders` is exercised against a pre-built 429.
