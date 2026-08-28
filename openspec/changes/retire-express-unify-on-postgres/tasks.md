@@ -1004,7 +1004,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       the call site is one piece of work. **Its test pins the defect** —
       `__tests__/StorageQuotaWarning.test.tsx:54-55` asserts the literal relative path, so the
       corrected code fails that test until it is updated to assert the built URL.
-      - [ ] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
+      - [x] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
             `workers/build.js:11` bundles `workers/src/index-minimal.ts` and `workers/wrangler.toml:2`
             deploys that bundle, so nothing reachable only from `workers/src/index.ts` runs in
             production. That abandoned entry point is not two files. These nine modules have their
@@ -1035,6 +1035,46 @@ equivalent, a relocated home, or an explicit retirement decision.
             Sentry → `@sentry/cloudflare` `withSentry(...)` at `index-minimal.ts:274`.
             Security headers, environment validation, business-rule integrity and a global body cap
             have **no** live equivalent and are net-new (see the four §F gaps above).
+            <br>**DONE 2026-08-28.** 16 files deleted (`index.ts`, `express-adapter.ts`, the nine
+            middleware modules, `middleware/auth.ts`, `utils/auth.ts`, and four test files).
+            Gates: workers suite 348 passed/4 skipped, deploy + test typechecks clean,
+            `node build.js` succeeds, both audit gates green.
+            <br>**Three things the scope did not anticipate.**
+            (1) `utils/feature-gates.ts:9` — the module excluded from deletion pending **#471** —
+            imported `TIER_LIMITS`/`TierLevel`/`AVAILABLE_FEATURES` from `./auth`, a pure re-export
+            barrel over `shared/types/subscription`. Repointed it and its test at the shared source;
+            that is what made `utils/auth.ts` deletable at all.
+            (2) `middleware/require-role.test.ts` was the **only** coverage of `constants/roles.ts`,
+            which is live: `index-minimal.ts:84` imports `normalizeRole`/`ROLES` and gates on it at
+            `:1612`, `:1720`, `:1826`. Added `workers/src/constants/roles.test.ts` and three tests in
+            `minimal-api-routes.test.ts` for the two previously-untested gates
+            (`handleClearSupplierPolicy`, `handleBulkAttachPolicy`); mutation-verified by disabling
+            both gates and confirming exactly those tests fail.
+            (3) 246 rows across the 2.2 manifests cited the four deleted test files, and
+            `verify-audit-manifest.js` check 2 requires cited Worker paths to exist. 215 were
+            search-list mentions restated against live code with no decision changed; 16 were
+            repointed to live coverage; **31 were REOPENED** and need an owner decision — see the
+            re-pointing note in each manifest header.
+            <br>**Finding — live authorization gap, not a coverage gap.** Express restricts uploads
+            to admin/manager (`requirePermission('upload_files')`). The deployed Worker checks **no
+            role on any upload path**: `canUpload`/`UPLOAD_ALLOWED_ROLES` have no production importer
+            and no occurrence of `role` appears in `index-minimal.ts:3400-3900` (all six upload
+            handlers). Six 2.2 rows had retired the Express upload-authorization tests citing
+            `require-role.test.ts` — a test for middleware that never ran. Intra-org privilege, not
+            cross-tenant, so it is #471-class rather than #462/#466-class; it exists in production
+            now and is independent of this migration, so by the #460 precedent it wants an issue.
+            **Not yet filed.**
+            <br>Related, smaller: the live rate limiter's reject path is untested —
+            `minimal-rate-limit.test.ts` asserts `checkRateLimit` only for `allowed: true`, and
+            `applyRateLimitHeaders` is exercised against a pre-built 429.
+            <br>**Two follow-ups left out of scope, for 4.1.** `workers/src/utils/getRequestMetrics.ts`
+            now has zero importers (`index.ts` took `getRequestMetrics` from
+            `metrics.middleware.ts`, not from it) — another orphan of the same shape, not in the
+            enumerated scope so not deleted here. And five docs still point at the deleted modules,
+            two of them describing security controls that never executed:
+            `docs/security-audit.md` (4 refs), `docs/security.md:695`,
+            `docs/production-deployment-checklist.md:61`, `backend/docs/observability.md` (3 refs),
+            `docs/cost-optimization.md:249`. That is 2.5 §I territory.
       **Three defects against shipped Worker code, found during 2.2 part 4 and deliberately deferred
       here rather than fixed mid-audit.** None is a tenant-isolation defect — no organization can
       reach another's data through any of them — which is why they are 3.1 work items and not

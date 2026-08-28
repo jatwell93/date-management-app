@@ -942,6 +942,80 @@ describe('minimal API route table', () => {
     expect(bulkAttachSupplier).not.toHaveBeenCalled();
   });
 
+  // The three `normalizeRole(...) !== ROLES.ADMIN` gates in index-minimal.ts are the
+  // only live consumers of constants/roles.ts. The supplier-policy write gate is
+  // covered above ('forbids a changed policy for a non-admin before writing'); these
+  // two cover the remaining gates, which had no test before task 3.1.0.
+  it('forbids clearing a supplier policy for a non-admin before writing', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const clearSupplierPolicy = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'manager' }]),
+      clearSupplierPolicy,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers/4/policy', {
+        method: 'DELETE',
+      }),
+      pathname: '/api/supplier-credits/suppliers/4/policy',
+      method: 'DELETE',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toMatchObject({ code: 'AUTHORIZATION_ERROR' });
+    expect(clearSupplierPolicy).not.toHaveBeenCalled();
+  });
+
+  it('forbids a bulk policy attach for a non-admin before writing', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const bulkAttachSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'team_member' }]),
+      bulkAttachSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/policy-review/bulk-attach', {
+        method: 'POST',
+        body: JSON.stringify({ supplierId: 4, brandIds: [10] }),
+      }),
+      pathname: '/api/supplier-credits/policy-review/bulk-attach',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toMatchObject({ code: 'AUTHORIZATION_ERROR' });
+    expect(bulkAttachSupplier).not.toHaveBeenCalled();
+  });
+
+  it('admits a legacy Clerk admin role string through the bulk policy attach gate', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const bulkAttachSupplier = vi.fn().mockResolvedValue({ attached: 1 });
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'org:admin' }]),
+      bulkAttachSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/policy-review/bulk-attach', {
+        method: 'POST',
+        body: JSON.stringify({ supplierId: 4, brandIds: [10] }),
+      }),
+      pathname: '/api/supplier-credits/policy-review/bulk-attach',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).not.toBe(403);
+    expect(bulkAttachSupplier).toHaveBeenCalled();
+  });
+
   it('rejects claimability vocabulary on catalogue review', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const reviewBrands = vi.fn().mockResolvedValue({ items: [], nextCursor: null });

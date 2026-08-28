@@ -6,7 +6,11 @@
  * Ported from backend/src/middleware/feature-gate.middleware.ts with edge optimization.
  */
 
-import { TIER_LIMITS, TierLevel, AVAILABLE_FEATURES } from './auth';
+import {
+  TIER_LIMITS,
+  TierLevel,
+  AVAILABLE_FEATURES,
+} from '../../../shared/types/subscription';
 
 // Re-export for external consumers
 export { AVAILABLE_FEATURES };

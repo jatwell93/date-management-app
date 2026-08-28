@@ -15,8 +15,8 @@ import {
   type FeatureKey,
   type LimitKey,
 } from './feature-gates';
-import { TIER_LIMITS } from './auth';
-import type { TierLevel } from './auth';
+import { TIER_LIMITS } from '../../../shared/types/subscription';
+import type { TierLevel } from '../../../shared/types/subscription';
 
 describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
   describe('checkFeatureAccess', () => {
