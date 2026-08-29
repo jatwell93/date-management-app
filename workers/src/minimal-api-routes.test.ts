@@ -8,6 +8,7 @@ import * as minimalEntrypoint from './index-minimal';
 import { authenticateClerkRequest } from './clerk/bootstrap-handler';
 import type { Database } from './database';
 import type { Env } from './types/env';
+import { UNLIMITED_CAP } from './utils/usage-limits';
 
 vi.mock('./clerk/bootstrap-handler', () => ({
   authenticateClerkRequest: vi.fn(),
@@ -15,7 +16,10 @@ vi.mock('./clerk/bootstrap-handler', () => ({
   handleOrganizationBootstrap: vi.fn().mockResolvedValue(new Response('bootstrap')),
 }));
 
+// The bare env is the deployed default: USAGE_LIMITS_ENFORCE unset, so limits
+// are measured and logged but not enforced (workers/src/utils/usage-limits.ts).
 const env = {} as Env;
+const enforcingEnv = { USAGE_LIMITS_ENFORCE: 'true' } as Env;
 const db = {} as Database;
 const mockedAuthenticateClerkRequest = vi.mocked(authenticateClerkRequest);
 const authenticatedClerkOrgContext = {
@@ -34,8 +38,12 @@ function getMinimalRoutes(): MinimalApiRoute[] {
   ).MINIMAL_API_ROUTES!;
 }
 
-function createAuthenticatedOrgDatabase(tableRowsByQueryText: Record<string, unknown[]>): Database {
+function createAuthenticatedOrgDatabase(
+  tableRowsByQueryText: Record<string, unknown[]>,
+  methodOverrides: Partial<Record<keyof Database, unknown>> = {},
+): Database {
   return {
+    ...methodOverrides,
     sql: vi.fn((strings: TemplateStringsArray) => {
       const query = strings.join(' ');
 
@@ -575,26 +583,40 @@ describe('minimal API route table', () => {
 
   it('returns organization usage for an authenticated organization', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
-    const dbWithRows = createAuthenticatedOrgDatabase({
-      'FROM organization_usage': [
-        {
-          total_skus: 42,
-          active_users: 3,
-          storage_used_bytes: 4096,
-          total_inventory_items: 84,
-          max_skus: 5000,
-          max_users: 3,
-          max_inventory_items: 5000,
-        },
-      ],
-      'FROM subscription_tiers': [{ tier_level: 'starter' }],
-    });
+    // The organization_usage row below is deliberately populated AND
+    // deliberately wrong. Before task 3.1.a this endpoint reported those
+    // columns verbatim; in production they are written once as literal zeros
+    // and never maintained, so every organization saw 0 of its limit. Seeding
+    // contradictory values here means the assertion fails if anything ever
+    // reads the columns again instead of counting.
+    const dbWithRows = createAuthenticatedOrgDatabase(
+      {
+        'FROM organization_usage': [
+          {
+            total_skus: 999999,
+            active_users: 999999,
+            storage_used_bytes: 999999,
+            total_inventory_items: 999999,
+            max_skus: 1,
+            max_users: 1,
+            max_inventory_items: 1,
+          },
+        ],
+        'FROM subscription_tiers': [{ tier_level: 'starter' }],
+      },
+      {
+        getUsageCounts: vi.fn().mockResolvedValue({ skus: 42, users: 3, activeExpiries: 84 }),
+        getStorageUsedBytes: vi.fn().mockResolvedValue(4096),
+      },
+    );
 
     const response = await resolveMinimalGet('/api/organization/usage', dbWithRows);
 
     expect(response?.status).toBe(200);
     // The frontend ProgressBar consumes a nested { current, limit } shape;
     // a flat number here is what crashed SubscriptionDashboard in production.
+    // Every `current` is the live count and every `limit` is the starter-tier
+    // entitlement -- neither comes from the row above.
     await expect(response?.json()).resolves.toEqual({
       skus: { current: 42, limit: 5000 },
       users: { current: 3, limit: 3 },
@@ -942,6 +964,304 @@ describe('minimal API route table', () => {
     expect(bulkAttachSupplier).not.toHaveBeenCalled();
   });
 
+  // The three `normalizeRole(...) !== ROLES.ADMIN` gates in index-minimal.ts are the
+  // only live consumers of constants/roles.ts. The supplier-policy write gate is
+  // covered above ('forbids a changed policy for a non-admin before writing'); these
+  // two cover the remaining gates, which had no test before task 3.1.0.
+  // Task 3.1.a / #471. The tier cap itself is enforced inside the INSERT and is
+  // covered against real SQL in database.usage-limits.pglite.node.test.ts; what
+  // these assert is the route contract on top of it -- that a refusal from the
+  // database layer becomes a 402 naming the limit rather than a 500 or a
+  // success with a null body.
+  const tierDatabase = (
+    tierLevel: string,
+    overrides: Partial<Record<keyof Database, unknown>>,
+  ): Database =>
+    ({
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        if (query.includes('FROM subscription_tiers')) {
+          return Promise.resolve([{ tier_level: tierLevel }]);
+        }
+        return Promise.resolve([]);
+      }),
+      ...overrides,
+    }) as unknown as Database;
+
+  it('refuses a product create that would exceed the tier SKU cap', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    // null is the database layer's "the cap subquery admitted no row" signal.
+    const createProduct = vi.fn().mockResolvedValue(null);
+    const database = tierDatabase('free', { createProduct });
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env: enforcingEnv,
+    });
+
+    expect(response?.status).toBe(402);
+    await expect(response?.json()).resolves.toMatchObject({
+      error: expect.stringContaining('SKU limit reached'),
+      limit: 500,
+      retryable: false,
+    });
+  });
+
+  it('passes the tier SKU cap to the database layer rather than a hardcoded one', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createProduct = vi.fn().mockResolvedValue({ id: 1, name: 'Milk' });
+    const database = tierDatabase('professional', { createProduct });
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(201);
+    // A cap resolved from the org's own tier, not the free-tier default: the
+    // create would be wrongly refused at 500 SKUs if this regressed.
+    expect(createProduct).toHaveBeenCalledWith('org_123', expect.anything(), 50000);
+  });
+
+  it('refuses an inventory create that would exceed the tier active-expiry cap', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createInventoryItem = vi.fn().mockResolvedValue(null);
+    const database = tierDatabase('free', { createInventoryItem });
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/inventory-items', {
+        method: 'POST',
+        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+      }),
+      pathname: '/api/inventory-items',
+      method: 'POST',
+      db: database,
+      env: enforcingEnv,
+    });
+
+    expect(response?.status).toBe(402);
+    await expect(response?.json()).resolves.toMatchObject({
+      error: expect.stringContaining('active expiry item limit reached'),
+      limit: 500,
+    });
+  });
+
+  // Task 3.1.a, measure-only mode. The default is OFF because the numbers in
+  // LAUNCH_TIER_LIMITS are estimates pending a usage trial, and a cap that
+  // refuses writes during the trial would truncate the data the trial exists to
+  // gather. These assert the two halves of that: the write still succeeds, and
+  // the crossing is still recorded.
+  it('allows an over-cap product create when enforcement is off, and records it', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    // Refuses under the real cap, admits under the lifted one -- the same shape
+    // the SQL has, where the cap is a parameter of the INSERT.
+    const createProduct = vi
+      .fn()
+      .mockImplementation((_org: string, _data: unknown, cap: number) =>
+        Promise.resolve(cap === UNLIMITED_CAP ? { id: 1, name: 'Milk' } : null),
+      );
+    const database = tierDatabase('free', { createProduct });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(201);
+    // The real cap is attempted first, so the refusal is observed rather than
+    // skipped: a change that jumped straight to UNLIMITED_CAP would measure
+    // nothing and this would catch it.
+    expect(createProduct).toHaveBeenNthCalledWith(1, 'org_123', expect.anything(), 500);
+    expect(createProduct).toHaveBeenNthCalledWith(2, 'org_123', expect.anything(), UNLIMITED_CAP);
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toEqual({
+      event: 'usage_limit_reached',
+      resource: 'SKU',
+      organizationId: 'org_123',
+      tier: 'free',
+      limit: 500,
+      enforced: false,
+    });
+    warn.mockRestore();
+  });
+
+  it('allows an over-cap inventory create when enforcement is off, and records it', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createInventoryItem = vi
+      .fn()
+      .mockImplementation((_org: string, _user: string, _data: unknown, cap: number) =>
+        Promise.resolve(cap === UNLIMITED_CAP ? { id: 1 } : null),
+      );
+    const database = tierDatabase('free', { createInventoryItem });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/inventory-items', {
+        method: 'POST',
+        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+      }),
+      pathname: '/api/inventory-items',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(201);
+    expect(createInventoryItem).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+      event: 'usage_limit_reached',
+      resource: 'active expiry item',
+      enforced: false,
+    });
+    warn.mockRestore();
+  });
+
+  it('still records the crossing when enforcement IS on', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const database = tierDatabase('free', { createProduct: vi.fn().mockResolvedValue(null) });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env: enforcingEnv,
+    });
+
+    // The log is not a substitute for the refusal, it accompanies it -- so the
+    // enforced flag is the only difference between the two states.
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+      event: 'usage_limit_reached',
+      enforced: true,
+    });
+    warn.mockRestore();
+  });
+
+  it.each(['1', 'yes', 'TRUE', ''])(
+    'leaves enforcement off for the near-miss flag value %o',
+    async (value) => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const createProduct = vi
+        .fn()
+        .mockImplementation((_org: string, _data: unknown, cap: number) =>
+          Promise.resolve(cap === UNLIMITED_CAP ? { id: 1, name: 'Milk' } : null),
+        );
+      const database = tierDatabase('free', { createProduct });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request('https://example.com/api/products', {
+          method: 'POST',
+          body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+        }),
+        pathname: '/api/products',
+        method: 'POST',
+        db: database,
+        env: { USAGE_LIMITS_ENFORCE: value } as Env,
+      });
+
+      // A guard on customer writes should only arm on the exact opt-in string;
+      // anything else must leave it disarmed rather than half-enabled.
+      expect(response?.status).toBe(201);
+      warn.mockRestore();
+    },
+  );
+
+  it('forbids clearing a supplier policy for a non-admin before writing', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const clearSupplierPolicy = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'manager' }]),
+      clearSupplierPolicy,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers/4/policy', {
+        method: 'DELETE',
+      }),
+      pathname: '/api/supplier-credits/suppliers/4/policy',
+      method: 'DELETE',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toMatchObject({ code: 'AUTHORIZATION_ERROR' });
+    expect(clearSupplierPolicy).not.toHaveBeenCalled();
+  });
+
+  it('forbids a bulk policy attach for a non-admin before writing', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const bulkAttachSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'team_member' }]),
+      bulkAttachSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/policy-review/bulk-attach', {
+        method: 'POST',
+        body: JSON.stringify({ supplierId: 4, brandIds: [10] }),
+      }),
+      pathname: '/api/supplier-credits/policy-review/bulk-attach',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toMatchObject({ code: 'AUTHORIZATION_ERROR' });
+    expect(bulkAttachSupplier).not.toHaveBeenCalled();
+  });
+
+  it('admits a legacy Clerk admin role string through the bulk policy attach gate', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const bulkAttachSupplier = vi.fn().mockResolvedValue({ attached: 1 });
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'org:admin' }]),
+      bulkAttachSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/policy-review/bulk-attach', {
+        method: 'POST',
+        body: JSON.stringify({ supplierId: 4, brandIds: [10] }),
+      }),
+      pathname: '/api/supplier-credits/policy-review/bulk-attach',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).not.toBe(403);
+    expect(bulkAttachSupplier).toHaveBeenCalled();
+  });
+
   it('rejects claimability vocabulary on catalogue review', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const reviewBrands = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
@@ -1061,9 +1381,13 @@ describe('minimal API route table', () => {
 
   it('creates default organization usage with production-required timestamps', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
-    const dbWithRows = createAuthenticatedOrgDatabase({
-      'FROM organization_usage': [],
-    });
+    const dbWithRows = createAuthenticatedOrgDatabase(
+      { 'FROM organization_usage': [] },
+      {
+        getUsageCounts: vi.fn().mockResolvedValue({ skus: 0, users: 0, activeExpiries: 0 }),
+        getStorageUsedBytes: vi.fn().mockResolvedValue(0),
+      },
+    );
 
     const response = await resolveMinimalGet('/api/organization/usage', dbWithRows);
 

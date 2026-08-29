@@ -31,6 +31,11 @@ STORAGE_PROVIDER = "r2"
 MAX_FILE_SIZE = "26214400"
 CSV_BATCH_SIZE = "1000"
 CATALOGUE_QUEUE_ENABLED = "false"
+# Measure-only until the usage trial sets real tier limits. Over-cap writes are
+# logged as `usage_limit_reached` with `enforced:false` and then allowed. Flip
+# to "true" only once LAUNCH_TIER_LIMITS holds observed numbers rather than
+# estimates -- see workers/src/utils/usage-limits.ts.
+USAGE_LIMITS_ENFORCE = "false"
 ENTERPRISE_MAX_SKUS = "250000"
 ENTERPRISE_MAX_ACTIVE_EXPIRIES = "250000"
 ENTERPRISE_MAX_FILE_SIZE = "104857600"
@@ -102,6 +107,7 @@ STORAGE_PROVIDER = "local"
 MAX_FILE_SIZE = "26214400"
 CSV_BATCH_SIZE = "1000"
 CATALOGUE_QUEUE_ENABLED = "true"
+USAGE_LIMITS_ENFORCE = "false"
 ENTERPRISE_MAX_SKUS = "250000"
 ENTERPRISE_MAX_ACTIVE_EXPIRIES = "250000"
 ENTERPRISE_MAX_FILE_SIZE = "104857600"
@@ -145,6 +151,7 @@ workers_dev = true
 NODE_ENV = "development"
 STORAGE_PROVIDER = "local"
 CATALOGUE_QUEUE_ENABLED = "false"
+USAGE_LIMITS_ENFORCE = "false"
 MAX_FILE_SIZE = "26214400"
 CSV_BATCH_SIZE = "1000"
 ENTERPRISE_MAX_SKUS = "250000"

@@ -3,7 +3,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "src/index.ts",
     "src/**/*.test.ts",
     "src/__tests__/**",
     "../backend/src/tests",

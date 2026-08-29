@@ -1004,7 +1004,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       the call site is one piece of work. **Its test pins the defect** —
       `__tests__/StorageQuotaWarning.test.tsx:54-55` asserts the literal relative path, so the
       corrected code fails that test until it is updated to assert the built URL.
-      - [ ] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
+      - [x] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
             `workers/build.js:11` bundles `workers/src/index-minimal.ts` and `workers/wrangler.toml:2`
             deploys that bundle, so nothing reachable only from `workers/src/index.ts` runs in
             production. That abandoned entry point is not two files. These nine modules have their
@@ -1035,12 +1035,67 @@ equivalent, a relocated home, or an explicit retirement decision.
             Sentry → `@sentry/cloudflare` `withSentry(...)` at `index-minimal.ts:274`.
             Security headers, environment validation, business-rule integrity and a global body cap
             have **no** live equivalent and are net-new (see the four §F gaps above).
+            <br>**DONE 2026-08-28.** 16 files deleted (`index.ts`, `express-adapter.ts`, the nine
+            middleware modules, `middleware/auth.ts`, `utils/auth.ts`, and four test files).
+            Gates: workers suite 348 passed/4 skipped, deploy + test typechecks clean,
+            `node build.js` succeeds, both audit gates green.
+            <br>**Three things the scope did not anticipate.**
+            (1) `utils/feature-gates.ts:9` — the module excluded from deletion pending **#471** —
+            imported `TIER_LIMITS`/`TierLevel`/`AVAILABLE_FEATURES` from `./auth`, a pure re-export
+            barrel over `shared/types/subscription`. Repointed it and its test at the shared source;
+            that is what made `utils/auth.ts` deletable at all.
+            (2) `middleware/require-role.test.ts` was the **only** coverage of `constants/roles.ts`,
+            which is live: `index-minimal.ts:84` imports `normalizeRole`/`ROLES` and gates on it at
+            `:1612`, `:1720`, `:1826`. Added `workers/src/constants/roles.test.ts` and three tests in
+            `minimal-api-routes.test.ts` for the two previously-untested gates
+            (`handleClearSupplierPolicy`, `handleBulkAttachPolicy`); mutation-verified by disabling
+            both gates and confirming exactly those tests fail.
+            (3) 246 rows across the 2.2 manifests cited the four deleted test files, and
+            `verify-audit-manifest.js` check 2 requires cited Worker paths to exist. 215 were
+            search-list mentions restated against live code with no decision changed; 16 were
+            repointed to live coverage; **25 were REOPENED** and need an owner decision (a further 4
+            were corrected to `retire`, and 2 to a non-upload framing — see the finding below) — see the
+            re-pointing note in each manifest header.
+            <br>**Finding — a permission model wired to nothing, on both sides.** The Worker applies
+            no role check to any upload path (`canUpload`/`UPLOAD_ALLOWED_ROLES` have no production
+            importer; no `role` appears in `index-minimal.ts:3400-3900`). **Express does not gate
+            uploads by role either**: `backend/src/routes/upload.routes.ts` uses `authenticateToken`
+            + `checkUsageLimit('storage_bytes')` + rate limiters and no role middleware, and
+            `requirePermission` (`backend/src/middleware/requireOrgRole.ts:75`) and `requireMinRole`
+            (`:110`) occur nowhere outside their own JSDoc examples at `:73` and `:107`. So this is
+            **parity, not a regression** — no issue to file. `PERMISSIONS.UPLOAD_FILES` /
+            `requirePermission` / `requireMinRole` on the Express side and `canUpload` /
+            `UPLOAD_ALLOWED_ROLES` / `createUploadRoleMiddleware` on the Worker side are a permission
+            model that was built, tested on both sides, and applied to no route. The four 2.2 rows
+            covering it are `retire`; upload authorization, if wanted, is net-new product work on a
+            fresh decision.
+            <br>*(An earlier pass of this task recorded the above as a live authorization gap. That
+            read the Worker's absent check as a regression without verifying the Express side, and
+            was wrong — the same "does anything call this?" check the audit itself prescribes,
+            applied to only one of the two backends. The audit rows and manifest headers carry the
+            correction.)*
+            <br>**What is still a real gap:** `requireOrgRole(admin, manager)` **is** live Express
+            middleware on `admin.metrics`, `database.backup`, `health`, `organization-invite`,
+            `store-area` and `user` routes, and the Worker has only three admin-only gates and no
+            admin+manager gate anywhere. Two reopened 2.2 rows track it; it resolves as those routes
+            gain Worker handlers in 3.1.
+            <br>Related, smaller: the live rate limiter's reject path is untested —
+            `minimal-rate-limit.test.ts` asserts `checkRateLimit` only for `allowed: true`, and
+            `applyRateLimitHeaders` is exercised against a pre-built 429.
+            <br>**Two follow-ups left out of scope, for 4.1.** `workers/src/utils/getRequestMetrics.ts`
+            now has zero importers (`index.ts` took `getRequestMetrics` from
+            `metrics.middleware.ts`, not from it) — another orphan of the same shape, not in the
+            enumerated scope so not deleted here. And five docs still point at the deleted modules,
+            two of them describing security controls that never executed:
+            `docs/security-audit.md` (4 refs), `docs/security.md:695`,
+            `docs/production-deployment-checklist.md:61`, `backend/docs/observability.md` (3 refs),
+            `docs/cost-optimization.md:249`. That is 2.5 §I territory.
       **Three defects against shipped Worker code, found during 2.2 part 4 and deliberately deferred
       here rather than fixed mid-audit.** None is a tenant-isolation defect — no organization can
       reach another's data through any of them — which is why they are 3.1 work items and not
       immediate fixes in the shape of #462/#466. Each is evidenced in
       `audit/2.2-test-manifest-part4.md`; do not re-derive.
-      - [ ] 3.1.a **Usage limits are not enforced on any interactive path** (Finding 4). **Tracked as #471** —
+      - [x] 3.1.a **Usage limits are not enforced on any interactive path** (Finding 4). **Tracked as #471** —
             the defect exists in production now and is not gated on this change; that issue is the
             authoritative record and survives this change being archived.
             `workers/src/utils/feature-gates.ts` has no production importer — its five exports are
@@ -1058,6 +1113,213 @@ equivalent, a relocated home, or an explicit retirement decision.
             currently at `:2673`. Also carry the **soft warning at 80%**, which Express emits via
             `res.locals.usageWarning` and the Worker's response envelope has no slot for. Source
             rows: `multi-tenant-usage-limits.test.ts:142/169/432/554`.
+            <br>**DONE 2026-08-28.** `utils/feature-gates.ts` deleted and replaced by
+            `utils/usage-limits.ts`; caps enforced on `POST /api/products`, `POST /api/inventory-items`
+            and the three upload write paths; `GET /api/organization/usage` repointed at live counts.
+            Gates: workers suite 320 passed/4 skipped, `test:db` 126 passed, both typechecks clean,
+            `node build.js` succeeds, both audit gates green with section/row counts unchanged.
+            <br>**Decision: replaced, not repaired.** Every branch of the module's `checkUsageLimit`
+            queried `"Product"`/`"User"`/`"InventoryItem"`/`"Upload"`, so repairing it meant rewriting
+            it — and the counter-column design it implemented is the defect, not the fix.
+            **Caps are enforced by counting rows inside the INSERT**, e.g.
+            `INSERT INTO products ... SELECT ... WHERE (SELECT COUNT(*) ...) < ${maxSkus} RETURNING ...`;
+            zero rows back means the cap was reached. That answers the atomicity requirement without a
+            transaction — check and write are one statement, so two creates racing for the last slot
+            cannot both win — and it matches the shape `createQueuedCatalogueUpload`
+            (`index-minimal.ts:4065`) already used. Every limit that works anywhere in this repo counts
+            live (`countActiveExpiryItems`, the invite path's seat check); every limit that is broken
+            reads a counter.
+            <br>**Two scope corrections, both from checking BOTH backends before calling something a
+            regression.**
+            (1) **`max_users` is parity, not a regression — deliberately not fixed.** Express's
+            `checkUsageLimit('max_users')` (`user.routes.ts:37`) reads `organization_usage.active_users`,
+            and that column is **never incremented anywhere in the repo** — every write sets it to a
+            literal `0` (`storage-quota.repository.ts:61`, `subscription.repository.ts:242`,
+            `webhook.service.ts:309/963/1148`) or `1` (`subscription-trial.helpers.ts:51`). So Express
+            compares `0 >= max` and never fires, exactly like the Worker gate at `:2673`. The only seat
+            limit that works is `ensureWithinUserLimit` (`organization-invite.service.ts:300`) — and it
+            works because it counts live. Enforcing it in the Worker would be **net-new** behaviour that
+            starts refusing orgs nothing has ever refused, so it is left as a pre-existing defect on both
+            backends for the owner to decide. The usage endpoint now reports the true seat count.
+            (2) **The 80% soft warning is not a shipped behaviour — nothing to carry.**
+            `res.locals.usageWarning` (`feature-gate.middleware.ts:375`) is assigned and read by nothing
+            outside tests; no serializer puts `res.locals` in a body. The test that appears to cover it
+            (`multi-tenant-usage-limits.test.ts:432`) builds a throwaway `express()` app whose own handler
+            reads `res.locals`, so it tests the middleware, not the product. The real warning is already
+            client-side: `frontend/src/components/UsageWarning.tsx` derives its own 80% threshold from the
+            `{current, limit}` pairs `/api/organization/usage` returns. The Worker envelope needs no slot.
+            <br>**Unplanned but in scope: the usage endpoint reported 0 for everything.**
+            `GET /api/organization/usage` read the same unmaintained columns, so every organization saw
+            0 of its limit — empty dashboard bars, and the client-side 80% warning could never fire. It
+            now reports live counts and tier limits. The route test seeds a deliberately contradictory
+            `organization_usage` row so it fails if those columns are ever read again.
+            <br>**Storage: gate shipped, recording gap flagged.** `enforceStorageLimit` is applied at the
+            same three points Express registers `checkUsageLimit('storage_bytes')` (initiate, direct,
+            complete). It sums `uploads.file_size_bytes` live, and **undercounts**: only queued catalogue
+            imports persist an `uploads` row, because `handleUploadStatus` relies on synchronous uploads
+            having none in order to fall through to R2 metadata. Closing that means recording those
+            uploads AND teaching the status endpoint to tell a quota row from a job row — deliberately
+            not smuggled into this task. The gate therefore **fails open**, never closed, including on a
+            failed quota read; without that catch a transient error became an unhandled throw, since the
+            upload handlers have no catch of their own.
+            <br>**Storage limits disagree across three constants, and the divergence is now asserted.**
+            `STORAGE_LIMIT_BYTES_BY_TIER` and backend `SUBSCRIPTION_TIERS` say 1/10/1000 GiB;
+            `TIER_LIMITS.storage_bytes` says 100GB for professional and enterprise — and Express enforces
+            against the latter while reporting against the former. The Worker enforces the 1/10/1000 line
+            so the limit a caller is refused against is the limit their dashboard shows. Not silently
+            reconciled: `utils/usage-limits.test.ts` asserts the divergence, so anyone unifying the
+            constants fails a test rather than quietly changing an entitlement. **Owner decision.**
+            <br>**Verification.** Five mutations of the SQL each fail exactly the intended tests and no
+            others (cap ignored, tenant scoping dropped, inventory cap ignored, terminal-status filter
+            removed, deleted-upload filter removed), plus a sixth removing all three route gates. One
+            assertion was found to be a placebo and corrected: pglite returns `bigint` as a JS number
+            while the Neon driver returns a string, so the `Number()` cast in `getStorageUsedBytes` is
+            load-bearing in production but unfalsifiable from a pglite test — the test now says so
+            instead of implying cover.
+            <br>**Audit impact.** 94 rows across the 2.2 manifests cited the deleted test. 67 were
+            search-list mentions restated against live files; **16 rows are now SATISFIED or RE-POINTED**
+            by the coverage this task added (the active-expiry status exclusion, the usage endpoint
+            response, the three-point storage guard, the tier-limit tables, the at-cap/under-cap product
+            creates, and the four-tier storage mapping that :1012 explicitly asked to see recorded in a
+            test); **2 are REOPENED** — part3:509 and :1167, tier-FEATURE-flag gating, which lost its
+            only equivalent with `checkFeatureAccess` and has no Worker representation at all. Those two
+            turn on the same product decision as part4:454-455 and need an owner.
+            <br>**Follow-up found, not actioned: `workers/src/handlers/` is a second dead layer.**
+            `dashboard.ts`, `inventory.ts`, `products.ts`, `store-areas.ts` and `handlers.test.ts` have
+            **zero importers**. `handlers/inventory.ts:105` inserts `quantity` and `store_area_id`,
+            columns the schema does not have, and omits `organization_id` — it would throw if it ever
+            ran. It is where inventory enforcement would naturally have been added. Before deleting,
+            apply the 3.1.0 lesson: check whether `handlers.test.ts` is the only coverage of anything
+            live. Needs its own task alongside the 4.1 sweep.
+      - [x] 3.1.0e **Gate usage enforcement behind `USAGE_LIMITS_ENFORCE`, defaulting OFF.**
+            **DONE 2026-08-29.** 3.1.a shipped enforcement with no off switch, and the numbers it
+            enforces (`LAUNCH_TIER_LIMITS`) are estimates pending a usage trial. Enforcing an estimate
+            during the trial measuring it would cap usage at the guess and confirm the assumption
+            instead of testing it. Second reason: an org whose Clerk webhook was dropped has no
+            `subscription_tiers` row, so `getOrganizationLaunchTier` falls back to `free` and inherits
+            the smallest caps in the table -- with the flag on, a webhook failure becomes a hard write
+            refusal for a paying customer.
+            <br>**Off is measure-only, not unmeasured.** All three gates still resolve the tier and
+            still apply the cap inside the INSERT; the refusal is detected, logged as one line of JSON
+            (`usage_limit_reached`, with an `enforced` field so the event name does not lie in either
+            state), and then the products/inventory writes are re-run with `UNLIMITED_CAP`. The retry
+            reuses the same parameterised statement rather than adding an uncapped code path, so one
+            statement stays under test in both flag states and there is no unguarded INSERT in the file
+            for a later change to reach for. Cost is one extra round trip, paid only by over-cap orgs
+            with the flag off. No observed-count field: with enforcement off usage is unbounded, so
+            "where does usage land per tier" is answered by reading `getUsageCounts` at the end of the
+            trial, not by an extra COUNT on every over-cap write. Storage is the exception -- it already
+            holds the used-byte total, so it logs `observedBytes` for free.
+            <br>**Divergence from Express, deliberate and reversible.** With the flag off the Worker
+            allows over-cap inventory and storage writes that Express refuses
+            (`feature-gate.middleware.ts:274` counts active expiry items live, and `storageUsedBytes`
+            is genuinely maintained by `storage-quota.repository.ts:53/59/90`). SKUs are unaffected:
+            `checkUsageLimit`'s default branch returns a hardcoded `currentUsage: 0` against
+            `MAX_SAFE_INTEGER` (`feature-gate.middleware.ts:289`), so Express never refused a SKU
+            create at all -- measure-only is closer to Express there, not further. Flipping the flag to
+            "true" restores full parity in one config change; **that is the decision to revisit after
+            the trial**, together with whether the trial needs per-account limit overrides.
+            <br>Strict `=== 'true'` matching `CATALOGUE_QUEUE_ENABLED`, so "1"/"yes"/"TRUE" leave it
+            disarmed rather than half-armed -- a guard on customer writes should fail towards the state
+            that cannot reject a customer. Declared explicitly as "false" in all three `wrangler.toml`
+            env blocks rather than left absent, so the deployed config states the intent.
+            <br>**Gates:** workers 345 passed / 2 skipped (+18), `test:db` 128 passed / 1 skipped (+1),
+            both typechecks clean, build succeeds. Mutation-verified in both directions: forcing the
+            resolver false fails exactly the 5 on-state tests, forcing it true fails exactly the 15
+            off-state tests. The `UNLIMITED_CAP` retry is asserted against real SQL in pglite, not just
+            as a JS constant -- `Number.MAX_SAFE_INTEGER` exceeds int4, so a cap parameter inferred as
+            `integer` would error rather than admit the row, and only real SQL can show it does not.
+      - [x] 3.1.0f **Correct the atomicity claim, and the review findings on #486.**
+            **DONE 2026-08-29.** PR review found the 3.1.a enforcement docs overstated their
+            guarantee, and the correction matters because it is the contract an operator relies on
+            when flipping `USAGE_LIMITS_ENFORCE` on after the trial.
+            <br>**The cap is soft, not exact.** `INSERT ... SELECT ... WHERE (SELECT COUNT(*)) < cap`
+            does NOT make check-and-write inseparable. Each statement is its own implicit transaction
+            under READ COMMITTED and snapshots at statement start, so two creates racing at limit-1
+            can both observe room and both insert. The overshoot is bounded by in-flight request
+            count and the window shrinks from a full round trip to the snapshot-to-commit interval --
+            a narrowed race, not a closed one. An exact cap needs SERIALIZABLE, a per-org advisory
+            lock, or a counter row claimed with `UPDATE ... SET used = used + 1 WHERE used < cap`
+            (atomic because an UPDATE re-checks its predicate after taking the row lock). None are
+            expressible in one statement over the Neon HTTP driver; the counter is also what the dead
+            `organization_usage` columns were, and a counter unmaintained on any path fails open
+            silently. Counting is wrong by a bounded amount under load; that is the trade recorded.
+            <br>**A test I wrote asserted the property it could not test.** "admits exactly one of two
+            concurrent creates racing for the last slot" passed because pglite is a single in-process
+            connection that SERIALIZES the two statements -- the interleaving never occurred. It is
+            the exact failure mode 3.1.0d is sweeping (a green test standing in for coverage that does
+            not exist), authored while doing the sweep. Both product and inventory versions are
+            renamed to "refuses the second of two back-to-back creates for the last slot" and state
+            what the harness can and cannot show. **Lesson: a concurrency assertion needs two real
+            connections; `Promise.all` over one connection tests the driver's queue, not the database.**
+            <br>**Storage refusal leaked R2 objects.** At `complete` the bytes are already in R2, and a
+            refused complete never reaches `createQueuedCatalogueUpload`'s `INSERT INTO uploads` -- so
+            the object consumed quota `getStorageUsedBytes` could never see, and each retry added
+            another. Now deleted on refusal (mutation-verified: removing the delete fails exactly one
+            test). `enforceStorageLimit`'s doc claim that callers are "refused before bytes move" was
+            true for initiate and direct and false for complete; corrected.
+            <br>**Terminal-status list de-duplicated.** It was hardcoded in both `getUsageCounts` and
+            `createInventoryItem`'s cap check; if the two drifted the dashboard would report a
+            different active-expiry number than the cap enforced, silently. Now one
+            `TERMINAL_INVENTORY_STATUSES` constant feeding both via `status <> ALL(${...})`, verified
+            against real SQL.
+            <br>**Left as owner decisions, not silently actioned:** (a) the `GET /api/organization/usage`
+            handler still seeds `organization_usage` with hardcoded free-tier literals for every org
+            though nothing on that path reads it -- annotated in place, because its one remaining
+            reader is the seat gate in `handleCreateLegacyUser` and removing seed and gate together is
+            3.1.j(a)'s job on an auth-adjacent path; (b) `utils/db-retry.ts` (3.1.0c) -- the reviewer
+            argued for delete-now-restore-from-history over carrying dead code behind a comment, and
+            `createRetryableSql` does exist so wiring is genuinely small. Note before adopting it: a
+            retry after a timeout that the server actually committed would DOUBLE-INSERT, and these
+            INSERTs are the non-idempotent quota-consuming ones, so "retry everything" is not safe as
+            a one-liner. 3.1.0c stands, with delete as the default if it does not land soon.
+      - [x] 3.1.0b **Delete the second dead Worker layer: `workers/src/handlers/`.** Found while
+            scoping 3.1.a, which would otherwise have added inventory enforcement to
+            `handlers/inventory.ts`. **DONE 2026-08-28**, 5 files deleted (`dashboard.ts`,
+            `inventory.ts`, `products.ts`, `store-areas.ts`, `handlers.test.ts`, 1015 lines).
+            Same shape as 3.1.0: **zero importers**, and `handlers/inventory.ts:105` inserted
+            `quantity` and `store_area_id` — columns the schema does not have — while omitting
+            `organization_id`, so it would have thrown if it ever ran. `handlers/products.ts` and
+            `handlers/store-areas.ts` were live decoys for 3.1.d and the store-area rows.
+            <br>**The orphan check paid off twice.** The importer grep that found the layer excluded
+            `*.test.ts` by design (it was looking for PRODUCTION importers), which hid a test importer
+            outside the directory: `__tests__/error-handling.test.ts` imported `handlers/products` and
+            `handlers/dashboard`. Run BOTH greps next time. That file was 19/28 tautological (it is in
+            the Finding 1 table), 3 more called a deleted handler inside a try/catch asserting in both
+            branches, and 2 were `skipIf(!NEON_CONNECTION_STRING)` and never ran in CI. Trimmed to the
+            4 real tests, which cover `withNeonRetry`. 44 tests removed in total, 39 of them incapable
+            of failing.
+            <br>**Audit impact:** 62 rows cited `handlers/handlers.test.ts`, every one inside a
+            `(searched: ...)` list and none as an equivalence — unsurprising for a file whose 20
+            assertions were all `expect(expected).toBe(true)`. Re-pointed at the pglite tenant-isolation
+            suites, which actually cover those behaviours. One row (part3:1187) DID rest on
+            `error-handling.test.ts` for missing-required-field rejection and is **REOPENED**: it cited
+            a test of the deleted `createProduct`, so the equivalence never held. Finding 1's placebo
+            table in part4 is now a scoreboard with a **Now** column; 2 of its 8 rows are closed.
+      - [ ] 3.1.0c **Decide the fate of `utils/db-retry.ts`: wire it into the live path, or delete it.**
+            Exposed by 3.1.0b — its only importers were the three deleted handlers, so it is now
+            unwired, and it is annotated as such in the file rather than left to look load-bearing.
+            **The gap it addresses is real:** `database.ts` calls `neon()` directly with no retry, so
+            the deployed Worker has **no transient-failure handling against Neon at all**, over an HTTP
+            driver where transient failures are the expected case. `withNeonRetry` is a working
+            implementation (3 attempts, exponential backoff, retries connection-refused/timeout/
+            too-many-connections) with 4 real tests. Check the Express side before calling this a
+            regression — `backend/src/utils/retry.ts` exists and is used by the webhook and bootstrap
+            paths, but whether Prisma queries themselves are retried is unverified. Then either adopt
+            it in `createWorkersDatabase` (a behaviour change: retries alter failure timing and can
+            duplicate non-idempotent writes, so the retryable-error list matters) or delete the module
+            and `__tests__/error-handling.test.ts` with it, which would also need the 154 search-list
+            mentions of that path swept.
+      - [ ] 3.1.0d **Sweep the remaining placebo tests.** Finding 1's table in part4 counts 90
+            assertions that cannot fail across 8 Worker files; 3.1.0b closed 2 of the 8. The 6 open
+            are `__tests__/multi-tenant-isolation.test.ts` (8/8), `org-status-integration.test.ts`
+            (16/19), `auth-integration.test.ts` (14/18), `subscription-validation.test.ts` (7/14),
+            `usage-limits-integration.test.ts` (4/13) and `feature-gates-integration.test.ts` (2/8).
+            A test that cannot fail is worse than no test, because the audit counts it as coverage —
+            `handlers.test.ts` is the proof: 20 passing tests kept a zero-importer layer looking
+            maintained. For each, either write the real assertion or delete it and let the 2.2 row for
+            that behaviour record the absence honestly. Sequence AFTER the rows that depend on those
+            files' citations, so the sweep is one pass rather than several.
       - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5). **Tracked as
             #472** — shipped Worker code, not gated on this change; see also task 3.8, whose Stripe
             handler must be written against the fixed pattern rather than the current one.
