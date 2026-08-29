@@ -22,6 +22,7 @@ export interface Env {
   QUERY_TIMEOUT_MS?: string; // default: 10000
   FRONTEND_URL?: string; // Frontend URL for CORS + Clerk authorizedParties
   CATALOGUE_QUEUE_ENABLED?: string;
+  USAGE_LIMITS_ENFORCE?: string; // "true" to refuse over-cap writes; default off (measure only)
   ENTERPRISE_MAX_SKUS?: string;
   ENTERPRISE_MAX_ACTIVE_EXPIRIES?: string;
   ENTERPRISE_MAX_FILE_SIZE?: string;

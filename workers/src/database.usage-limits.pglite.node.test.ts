@@ -27,6 +27,7 @@ vi.mock('@neondatabase/serverless', () => ({
 }));
 
 import { createWorkersDatabase } from './database';
+import { UNLIMITED_CAP } from './utils/usage-limits';
 
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';
@@ -146,6 +147,25 @@ describe('Workers tier usage limits (real SQL)', () => {
 
       expect(product).toBeNull();
       expect(await countProducts()).toBe(0);
+    });
+
+    // Measure-only mode (USAGE_LIMITS_ENFORCE off) retries the refused INSERT
+    // with UNLIMITED_CAP. The unit tests can only show that constant is a safe
+    // JS integer; whether it survives the driver as an integer the planner will
+    // compare against COUNT(*) is a real-SQL question, so it is asked here.
+    // Number.MAX_SAFE_INTEGER exceeds int4, so a cap parameter inferred as
+    // `integer` rather than `bigint` would error instead of admitting the row.
+    it('admits the over-cap product when the cap is lifted to UNLIMITED_CAP', async () => {
+      await seedProducts(5);
+
+      const product = await makeDb().createProduct(
+        ORG,
+        { barcode: 'BAR-OVER', name: 'One too many' },
+        UNLIMITED_CAP,
+      );
+
+      expect(product).not.toBeNull();
+      expect(await countProducts()).toBe(6);
     });
   });
 

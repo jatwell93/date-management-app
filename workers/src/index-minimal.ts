@@ -35,9 +35,11 @@ import {
   LAUNCH_TIER_USER_LIMITS,
   normalizeLaunchTier,
   parsePositiveIntEnv,
+  isUsageEnforcementEnabled,
   resolveMaxActiveExpiries,
   resolveMaxSkus,
   resolveStorageLimitBytes,
+  UNLIMITED_CAP,
   type LaunchTier,
 } from './utils/usage-limits';
 import { handleWorkerUploadRoute } from './upload/upload-router';
@@ -2295,19 +2297,35 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
   try {
     const tier = await getOrganizationLaunchTier(auth.organizationId, db);
     const maxSkus = resolveMaxSkus(tier, env);
-    const product = await db.createProduct(
-      auth.organizationId,
-      {
-        barcode: body.barcode,
-        sku: body.sku ?? null,
-        name: body.name,
-        costPrice: typeof body.costPrice === 'number' ? body.costPrice : 0,
-        notes: typeof body.notes === 'string' ? body.notes : '',
-      },
-      maxSkus,
-    );
+    const enforced = isUsageEnforcementEnabled(env);
+    const input = {
+      barcode: body.barcode,
+      sku: body.sku ?? null,
+      name: body.name,
+      costPrice: typeof body.costPrice === 'number' ? body.costPrice : 0,
+      notes: typeof body.notes === 'string' ? body.notes : '',
+    };
+
+    let product = await db.createProduct(auth.organizationId, input, maxSkus);
     if (!product) {
-      return usageLimitResponse('SKU', maxSkus, env);
+      logUsageLimitReached({
+        resource: 'SKU',
+        organizationId: auth.organizationId,
+        tier,
+        limit: maxSkus,
+        enforced,
+      });
+      if (enforced) {
+        return usageLimitResponse('SKU', maxSkus, env);
+      }
+      // Measure-only: re-run the same statement with the cap lifted. The first
+      // attempt inserted nothing (it returned no rows), so this is the only
+      // write, not a second one.
+      product = await db.createProduct(auth.organizationId, input, UNLIMITED_CAP);
+      if (!product) {
+        console.error('handleCreateProduct: uncapped retry inserted no row');
+        return errorResponse('Internal server error', 500, env);
+      }
     }
     return jsonResponse(product, 201, env);
   } catch (error) {
@@ -2409,19 +2427,38 @@ async function handleCreateInventoryItem(
   try {
     const tier = await getOrganizationLaunchTier(auth.organizationId, db);
     const maxActiveExpiries = resolveMaxActiveExpiries(tier, env);
-    const item = await db.createInventoryItem(
+    const enforced = isUsageEnforcementEnabled(env);
+    const input = {
+      productId,
+      expiryDate,
+      locationId,
+      status: typeof body.status === 'string' ? body.status : undefined,
+    };
+
+    let item = await db.createInventoryItem(
       auth.organizationId,
       auth.userId,
-      {
-        productId,
-        expiryDate,
-        locationId,
-        status: typeof body.status === 'string' ? body.status : undefined,
-      },
+      input,
       maxActiveExpiries,
     );
     if (!item) {
-      return usageLimitResponse('active expiry item', maxActiveExpiries, env);
+      logUsageLimitReached({
+        resource: 'active expiry item',
+        organizationId: auth.organizationId,
+        tier,
+        limit: maxActiveExpiries,
+        enforced,
+      });
+      if (enforced) {
+        return usageLimitResponse('active expiry item', maxActiveExpiries, env);
+      }
+      // Measure-only. The refused attempt wrote neither the item nor its audit
+      // row (both live in one CTE), so the retry is the only write.
+      item = await db.createInventoryItem(auth.organizationId, auth.userId, input, UNLIMITED_CAP);
+      if (!item) {
+        console.error('handleCreateInventoryItem: uncapped retry inserted no row');
+        return errorResponse('Internal server error', 500, env);
+      }
     }
     return jsonResponse(item, 201, env);
   } catch (error) {
@@ -4015,6 +4052,43 @@ function matrixUsesRetail(matrix: MarkdownMatrixConfig): boolean {
  * consistent. `retryable: false` marks it as a state the caller cannot fix by
  * retrying, only by upgrading or deleting.
  */
+/**
+ * Records a write that met its tier cap, in BOTH flag states.
+ *
+ * The event name is `usage_limit_reached`, not `would_refuse`, because with
+ * enforcement on it is a refusal and with it off it is not; `enforced` carries
+ * that distinction rather than the name lying in one of the two states. One
+ * line of JSON so the events are greppable in `wrangler tail` and parseable by
+ * Logpush without a custom decoder.
+ *
+ * There is no observed-count field, and that is deliberate. Emitting one would
+ * cost an extra round trip on every over-cap write, and with enforcement off
+ * usage is unbounded — so the question the trial actually asks (where does
+ * usage land per tier) is answered by reading `getUsageCounts` at the end, not
+ * by sampling it here. What this log uniquely provides is which organizations
+ * crossed the provisional line, and when.
+ */
+function logUsageLimitReached(input: {
+  resource: string;
+  organizationId: string;
+  tier: LaunchTier;
+  limit: number;
+  enforced: boolean;
+  observedBytes?: number;
+}): void {
+  console.warn(
+    JSON.stringify({
+      event: 'usage_limit_reached',
+      resource: input.resource,
+      organizationId: input.organizationId,
+      tier: input.tier,
+      limit: input.limit,
+      enforced: input.enforced,
+      ...(input.observedBytes === undefined ? {} : { observedBytes: input.observedBytes }),
+    }),
+  );
+}
+
 function usageLimitResponse(resource: string, limit: number, env: Env): Response {
   return jsonResponse(
     {
@@ -4060,7 +4134,20 @@ async function enforceStorageLimit(
 
   const limit = resolveStorageLimitBytes(tier);
   if (used + incomingBytes > limit) {
-    return usageLimitResponse('Storage', limit, env);
+    const enforced = isUsageEnforcementEnabled(env);
+    // `used` is already in hand here, so unlike the row-count gates this one
+    // can report the observed total without paying for another query.
+    logUsageLimitReached({
+      resource: 'Storage',
+      organizationId,
+      tier,
+      limit,
+      enforced,
+      observedBytes: used + incomingBytes,
+    });
+    if (enforced) {
+      return usageLimitResponse('Storage', limit, env);
+    }
   }
   return null;
 }

@@ -17,6 +17,8 @@ import { describe, expect, it } from 'vitest';
 import { TIER_LIMITS } from '../../../shared/types/subscription';
 import type { Env } from '../types/env';
 import {
+  isUsageEnforcementEnabled,
+  UNLIMITED_CAP,
   LAUNCH_TIER_LIMITS,
   LAUNCH_TIER_USER_LIMITS,
   STORAGE_LIMIT_BYTES_BY_TIER,
@@ -149,5 +151,42 @@ describe('limit resolution', () => {
 
   it.each(LAUNCH_TIERS)('resolves the storage cap for %s', (tier) => {
     expect(resolveStorageLimitBytes(tier)).toBe(STORAGE_LIMIT_BYTES_BY_TIER[tier]);
+  });
+});
+
+describe('isUsageEnforcementEnabled', () => {
+  // The default matters more than the parse. An unset flag is the deployed
+  // state until the usage trial replaces the estimated tier limits, so this is
+  // the assertion that would catch someone "tidying" the check into a truthy
+  // test and silently arming every cap in production.
+  it('is off when the flag is unset', () => {
+    expect(isUsageEnforcementEnabled({} as Env)).toBe(false);
+  });
+
+  it('is on only for the exact string "true"', () => {
+    expect(isUsageEnforcementEnabled({ USAGE_LIMITS_ENFORCE: 'true' } as Env)).toBe(true);
+  });
+
+  // Wrangler vars are strings, so a boolean `true` in wrangler.toml arrives as
+  // "true", but "1"/"yes"/"TRUE" are plausible hand-edits. A guard on customer
+  // writes should stay disarmed for all of them rather than half-arm.
+  it.each(['1', 'yes', 'TRUE', 'True', 'on', '', ' true '])(
+    'stays off for the near-miss value %o',
+    (value) => {
+      expect(isUsageEnforcementEnabled({ USAGE_LIMITS_ENFORCE: value } as Env)).toBe(false);
+    },
+  );
+});
+
+describe('UNLIMITED_CAP', () => {
+  // It is compared against COUNT(*) inside the INSERT, so it has to survive the
+  // trip through the driver as an exact integer and sit inside bigint.
+  it('is an exact integer no real tier limit can reach', () => {
+    expect(Number.isSafeInteger(UNLIMITED_CAP)).toBe(true);
+    expect(UNLIMITED_CAP).toBeLessThan(2 ** 63 - 1);
+    for (const tier of LAUNCH_TIERS) {
+      expect(LAUNCH_TIER_LIMITS[tier].maxSkus).toBeLessThan(UNLIMITED_CAP);
+      expect(LAUNCH_TIER_LIMITS[tier].maxActiveExpiries).toBeLessThan(UNLIMITED_CAP);
+    }
   });
 });

@@ -128,3 +128,42 @@ export function resolveMaxActiveExpiries(tier: LaunchTier, env: Env): number {
 export function resolveStorageLimitBytes(tier: LaunchTier): number {
   return STORAGE_LIMIT_BYTES_BY_TIER[tier];
 }
+
+/**
+ * Master switch for refusing over-cap writes. **Defaults to off.**
+ *
+ * The comparison is strict `=== 'true'`, matching `CATALOGUE_QUEUE_ENABLED`
+ * (`index-minimal.ts:3478`), so a near-miss value like `"1"` or `"yes"` leaves
+ * enforcement off rather than half-enabling it. A flag that guards writes
+ * should fail towards the state that cannot reject a customer.
+ *
+ * **Off does not mean unmeasured.** Every gate still resolves the tier, still
+ * applies the cap inside its INSERT, and still detects the write the cap would
+ * have refused; it logs that as `usage_limit_reached` and then allows the
+ * write. Two reasons the default is off:
+ *
+ * 1. The numbers in `LAUNCH_TIER_LIMITS` are provisional pending a usage
+ *    trial. Enforcing them during the trial would cap usage at the guess and
+ *    truncate the very data the trial exists to produce — the measurement
+ *    would confirm the assumption instead of testing it.
+ * 2. An organization whose Clerk webhook was dropped has no `subscription_tiers`
+ *    row, so `getOrganizationLaunchTier` falls back to `free` and the org
+ *    inherits the smallest caps in the table. With enforcement off that
+ *    misconfiguration surfaces as a log line; with it on, a webhook failure
+ *    becomes a hard write refusal for a paying customer.
+ */
+export function isUsageEnforcementEnabled(env: Env): boolean {
+  return env.USAGE_LIMITS_ENFORCE === 'true';
+}
+
+/**
+ * The cap passed to the counting INSERTs when enforcement is off.
+ *
+ * The retry deliberately reuses the same parameterised SQL rather than taking
+ * a second, uncapped code path: one statement stays under test in both flag
+ * states, and there is no unguarded INSERT in the file for a later change to
+ * reach for by mistake. `Number.MAX_SAFE_INTEGER` is an exact JS integer and
+ * sits far inside PostgreSQL `bigint`, so `COUNT(*) < $cap` is simply always
+ * true.
+ */
+export const UNLIMITED_CAP = Number.MAX_SAFE_INTEGER;

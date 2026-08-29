@@ -539,7 +539,10 @@ describe('Upload strategy parity', () => {
     const ONE_GIB = 1024 * 1024 * 1024;
 
     it('refuses an upload that would take the organization past its tier cap', async () => {
-      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const envForUpload = createUploadEnv({
+        CLERK_SECRET_KEY: 'test-clerk-secret',
+        USAGE_LIMITS_ENFORCE: 'true',
+      });
       const db = quotaDb(ONE_GIB - 100);
 
       const response = await handleUploadInitiate(
@@ -554,6 +557,34 @@ describe('Upload strategy parity', () => {
         error: expect.stringContaining('Storage limit reached'),
         limit: ONE_GIB,
       });
+    });
+
+    // Task 3.1.a: the deployed default is measure-only, so the same over-cap
+    // upload must proceed while still being recorded. Unlike the row-count
+    // gates, this one already holds the used-byte total, so the log can carry
+    // the observed figure without an extra query.
+    it('allows the same over-cap upload when enforcement is off, and records it', async () => {
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = quotaDb(ONE_GIB - 100);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const response = await handleUploadInitiate(
+        initiateRequest(200),
+        envForUpload,
+        '/api/upload',
+        db,
+      );
+
+      expect(response.status).not.toBe(402);
+      expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+        event: 'usage_limit_reached',
+        resource: 'Storage',
+        tier: 'free',
+        limit: ONE_GIB,
+        enforced: false,
+        observedBytes: ONE_GIB + 100,
+      });
+      warn.mockRestore();
     });
 
     // The per-file size limit is checked before the quota, so an oversized file

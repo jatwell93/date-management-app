@@ -8,6 +8,7 @@ import * as minimalEntrypoint from './index-minimal';
 import { authenticateClerkRequest } from './clerk/bootstrap-handler';
 import type { Database } from './database';
 import type { Env } from './types/env';
+import { UNLIMITED_CAP } from './utils/usage-limits';
 
 vi.mock('./clerk/bootstrap-handler', () => ({
   authenticateClerkRequest: vi.fn(),
@@ -15,7 +16,10 @@ vi.mock('./clerk/bootstrap-handler', () => ({
   handleOrganizationBootstrap: vi.fn().mockResolvedValue(new Response('bootstrap')),
 }));
 
+// The bare env is the deployed default: USAGE_LIMITS_ENFORCE unset, so limits
+// are measured and logged but not enforced (workers/src/utils/usage-limits.ts).
 const env = {} as Env;
+const enforcingEnv = { USAGE_LIMITS_ENFORCE: 'true' } as Env;
 const db = {} as Database;
 const mockedAuthenticateClerkRequest = vi.mocked(authenticateClerkRequest);
 const authenticatedClerkOrgContext = {
@@ -1001,7 +1005,7 @@ describe('minimal API route table', () => {
       pathname: '/api/products',
       method: 'POST',
       db: database,
-      env,
+      env: enforcingEnv,
     });
 
     expect(response?.status).toBe(402);
@@ -1047,7 +1051,7 @@ describe('minimal API route table', () => {
       pathname: '/api/inventory-items',
       method: 'POST',
       db: database,
-      env,
+      env: enforcingEnv,
     });
 
     expect(response?.status).toBe(402);
@@ -1056,6 +1060,137 @@ describe('minimal API route table', () => {
       limit: 500,
     });
   });
+
+  // Task 3.1.a, measure-only mode. The default is OFF because the numbers in
+  // LAUNCH_TIER_LIMITS are estimates pending a usage trial, and a cap that
+  // refuses writes during the trial would truncate the data the trial exists to
+  // gather. These assert the two halves of that: the write still succeeds, and
+  // the crossing is still recorded.
+  it('allows an over-cap product create when enforcement is off, and records it', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    // Refuses under the real cap, admits under the lifted one -- the same shape
+    // the SQL has, where the cap is a parameter of the INSERT.
+    const createProduct = vi
+      .fn()
+      .mockImplementation((_org: string, _data: unknown, cap: number) =>
+        Promise.resolve(cap === UNLIMITED_CAP ? { id: 1, name: 'Milk' } : null),
+      );
+    const database = tierDatabase('free', { createProduct });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(201);
+    // The real cap is attempted first, so the refusal is observed rather than
+    // skipped: a change that jumped straight to UNLIMITED_CAP would measure
+    // nothing and this would catch it.
+    expect(createProduct).toHaveBeenNthCalledWith(1, 'org_123', expect.anything(), 500);
+    expect(createProduct).toHaveBeenNthCalledWith(2, 'org_123', expect.anything(), UNLIMITED_CAP);
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toEqual({
+      event: 'usage_limit_reached',
+      resource: 'SKU',
+      organizationId: 'org_123',
+      tier: 'free',
+      limit: 500,
+      enforced: false,
+    });
+    warn.mockRestore();
+  });
+
+  it('allows an over-cap inventory create when enforcement is off, and records it', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createInventoryItem = vi
+      .fn()
+      .mockImplementation((_org: string, _user: string, _data: unknown, cap: number) =>
+        Promise.resolve(cap === UNLIMITED_CAP ? { id: 1 } : null),
+      );
+    const database = tierDatabase('free', { createInventoryItem });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/inventory-items', {
+        method: 'POST',
+        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+      }),
+      pathname: '/api/inventory-items',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(201);
+    expect(createInventoryItem).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+      event: 'usage_limit_reached',
+      resource: 'active expiry item',
+      enforced: false,
+    });
+    warn.mockRestore();
+  });
+
+  it('still records the crossing when enforcement IS on', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const database = tierDatabase('free', { createProduct: vi.fn().mockResolvedValue(null) });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env: enforcingEnv,
+    });
+
+    // The log is not a substitute for the refusal, it accompanies it -- so the
+    // enforced flag is the only difference between the two states.
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+      event: 'usage_limit_reached',
+      enforced: true,
+    });
+    warn.mockRestore();
+  });
+
+  it.each(['1', 'yes', 'TRUE', ''])(
+    'leaves enforcement off for the near-miss flag value %o',
+    async (value) => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const createProduct = vi
+        .fn()
+        .mockImplementation((_org: string, _data: unknown, cap: number) =>
+          Promise.resolve(cap === UNLIMITED_CAP ? { id: 1, name: 'Milk' } : null),
+        );
+      const database = tierDatabase('free', { createProduct });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request('https://example.com/api/products', {
+          method: 'POST',
+          body: JSON.stringify({ barcode: 'BAR-1', name: 'Milk' }),
+        }),
+        pathname: '/api/products',
+        method: 'POST',
+        db: database,
+        env: { USAGE_LIMITS_ENFORCE: value } as Env,
+      });
+
+      // A guard on customer writes should only arm on the exact opt-in string;
+      // anything else must leave it disarmed rather than half-enabled.
+      expect(response?.status).toBe(201);
+      warn.mockRestore();
+    },
+  );
 
   it('forbids clearing a supplier policy for a non-admin before writing', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);

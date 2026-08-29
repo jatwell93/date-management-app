@@ -1191,6 +1191,44 @@ equivalent, a relocated home, or an explicit retirement decision.
             ran. It is where inventory enforcement would naturally have been added. Before deleting,
             apply the 3.1.0 lesson: check whether `handlers.test.ts` is the only coverage of anything
             live. Needs its own task alongside the 4.1 sweep.
+      - [x] 3.1.0e **Gate usage enforcement behind `USAGE_LIMITS_ENFORCE`, defaulting OFF.**
+            **DONE 2026-08-29.** 3.1.a shipped enforcement with no off switch, and the numbers it
+            enforces (`LAUNCH_TIER_LIMITS`) are estimates pending a usage trial. Enforcing an estimate
+            during the trial measuring it would cap usage at the guess and confirm the assumption
+            instead of testing it. Second reason: an org whose Clerk webhook was dropped has no
+            `subscription_tiers` row, so `getOrganizationLaunchTier` falls back to `free` and inherits
+            the smallest caps in the table -- with the flag on, a webhook failure becomes a hard write
+            refusal for a paying customer.
+            <br>**Off is measure-only, not unmeasured.** All three gates still resolve the tier and
+            still apply the cap inside the INSERT; the refusal is detected, logged as one line of JSON
+            (`usage_limit_reached`, with an `enforced` field so the event name does not lie in either
+            state), and then the products/inventory writes are re-run with `UNLIMITED_CAP`. The retry
+            reuses the same parameterised statement rather than adding an uncapped code path, so one
+            statement stays under test in both flag states and there is no unguarded INSERT in the file
+            for a later change to reach for. Cost is one extra round trip, paid only by over-cap orgs
+            with the flag off. No observed-count field: with enforcement off usage is unbounded, so
+            "where does usage land per tier" is answered by reading `getUsageCounts` at the end of the
+            trial, not by an extra COUNT on every over-cap write. Storage is the exception -- it already
+            holds the used-byte total, so it logs `observedBytes` for free.
+            <br>**Divergence from Express, deliberate and reversible.** With the flag off the Worker
+            allows over-cap inventory and storage writes that Express refuses
+            (`feature-gate.middleware.ts:274` counts active expiry items live, and `storageUsedBytes`
+            is genuinely maintained by `storage-quota.repository.ts:53/59/90`). SKUs are unaffected:
+            `checkUsageLimit`'s default branch returns a hardcoded `currentUsage: 0` against
+            `MAX_SAFE_INTEGER` (`feature-gate.middleware.ts:289`), so Express never refused a SKU
+            create at all -- measure-only is closer to Express there, not further. Flipping the flag to
+            "true" restores full parity in one config change; **that is the decision to revisit after
+            the trial**, together with whether the trial needs per-account limit overrides.
+            <br>Strict `=== 'true'` matching `CATALOGUE_QUEUE_ENABLED`, so "1"/"yes"/"TRUE" leave it
+            disarmed rather than half-armed -- a guard on customer writes should fail towards the state
+            that cannot reject a customer. Declared explicitly as "false" in all three `wrangler.toml`
+            env blocks rather than left absent, so the deployed config states the intent.
+            <br>**Gates:** workers 345 passed / 2 skipped (+18), `test:db` 128 passed / 1 skipped (+1),
+            both typechecks clean, build succeeds. Mutation-verified in both directions: forcing the
+            resolver false fails exactly the 5 on-state tests, forcing it true fails exactly the 15
+            off-state tests. The `UNLIMITED_CAP` retry is asserted against real SQL in pglite, not just
+            as a JS constant -- `Number.MAX_SAFE_INTEGER` exceeds int4, so a cap parameter inferred as
+            `integer` would error rather than admit the row, and only real SQL can show it does not.
       - [x] 3.1.0b **Delete the second dead Worker layer: `workers/src/handlers/`.** Found while
             scoping 3.1.a, which would otherwise have added inventory enforcement to
             `handlers/inventory.ts`. **DONE 2026-08-28**, 5 files deleted (`dashboard.ts`,
