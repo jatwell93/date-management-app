@@ -59,6 +59,27 @@ import { assertReferencesBelongToOrganization } from './tenant-references';
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
 /**
+ * Statuses that take an inventory item out of the "active expiry" population.
+ *
+ * Mirrors `countActiveExpiryItems`
+ * (backend/src/repositories/subscription.repository.ts:149) so the Worker
+ * counts the population Express counted.
+ *
+ * **Shared by the cap check and the usage count on purpose.** They were two
+ * hardcoded copies; if a new terminal status reached only one of them, the
+ * dashboard's "{current} / {limit}" bar would disagree with what creates are
+ * actually refused against, with no error to notice -- the reading and the
+ * enforcing would just quietly describe different populations.
+ */
+const TERMINAL_INVENTORY_STATUSES = [
+  'Processed',
+  'Completed',
+  'Discarded',
+  'Archived',
+  'Sold Through',
+];
+
+/**
  * Database wrapper providing typed query methods
  */
 export interface Database {
@@ -1174,7 +1195,7 @@ export function createWorkersDatabase(env: Env): Database {
         sql`
           SELECT COUNT(*)::int as count FROM inventory_items
           WHERE organization_id = ${organizationId}
-            AND status NOT IN ('Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through')
+            AND status <> ALL(${TERMINAL_INVENTORY_STATUSES})
         `,
       ]);
 
@@ -2404,12 +2425,24 @@ export function createWorkersDatabase(env: Env): Database {
       },
       maxSkus: number,
     ): Promise<Product | null> {
-      // Tier SKU cap enforced in the same statement that consumes it: the
-      // COUNT is a subquery of the INSERT, so two concurrent creates at
-      // limit-1 cannot both observe room. A read-then-insert would let them
-      // (Neon's HTTP driver has no transaction to wrap the pair in), which is
-      // exactly the TOCTOU that `product.service.ts:145` avoids in Express by
-      // running the check inside `$transaction`.
+      // Tier SKU cap checked inside the statement that consumes it, so the
+      // check cannot go stale across a network round trip the way a
+      // read-then-insert would (Neon's HTTP driver has no transaction to wrap
+      // the pair in, which is what `product.service.ts:145` uses `$transaction`
+      // for in Express).
+      //
+      // **This is a soft cap, not an exact one.** Each statement runs as its
+      // own implicit transaction under READ COMMITTED and snapshots at
+      // statement start, so two creates racing at limit-1 can both see room and
+      // both insert. The overshoot is bounded by the number of in-flight
+      // requests, not unbounded, and the window is the snapshot-to-commit
+      // interval rather than a full round trip -- but it is a narrowed race,
+      // not a closed one. An exact cap needs something this driver cannot
+      // express in one statement: SERIALIZABLE, a per-org advisory lock, or a
+      // counter row claimed with `UPDATE ... SET used = used + 1 WHERE used <
+      // cap` (which re-checks the predicate after taking the row lock). See
+      // `utils/usage-limits.ts` for why a counter is not the obvious answer
+      // here.
       //
       // Zero rows back means the cap was reached -- the caller turns that into
       // a 402, and cannot confuse it with a failed insert, which throws.
@@ -2521,6 +2554,9 @@ export function createWorkersDatabase(env: Env): Database {
       // cannot leave an orphaned audit entry. The excluded statuses mirror
       // `countActiveExpiryItems` (backend/src/repositories/subscription.repository.ts:149)
       // so the Worker refuses on exactly the population Express counted.
+      //
+      // Same soft-cap caveat as `createProduct`: READ COMMITTED lets concurrent
+      // creates at limit-1 both observe room. See `utils/usage-limits.ts`.
       const rows = await sql`
         WITH inserted AS (
           INSERT INTO inventory_items
@@ -2531,7 +2567,7 @@ export function createWorkersDatabase(env: Env): Database {
           WHERE (
             SELECT COUNT(*) FROM inventory_items
             WHERE organization_id = ${organizationId}
-              AND status NOT IN ('Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through')
+              AND status <> ALL(${TERMINAL_INVENTORY_STATUSES})
           ) < ${maxActiveExpiries}
           RETURNING id, product_id, expiry_date, location_id, status, created_at, updated_at
         ), audited AS (

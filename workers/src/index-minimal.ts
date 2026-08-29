@@ -3153,6 +3153,19 @@ async function handleGetOrganizationUsage(
     return auth;
   }
 
+  // NOTE: this GET still seeds `organization_usage`, and nothing on this path
+  // reads it any more -- 3.1.a moved the response onto live counts precisely
+  // because these columns are written once as literal zeros and maintained
+  // nowhere. The hardcoded free-tier values below (max_users 1, max_skus 500)
+  // are seeded for every org regardless of tier, which is the mis-seeding
+  // hazard task 3.1.j(a) tracks.
+  //
+  // It is left in place rather than removed here because the row's one
+  // remaining reader is the seat gate in `handleCreateLegacyUser`
+  // (`active_users`, always 0, so it never fires). Removing the seed and that
+  // gate together is 3.1.j(a)'s job; removing the seed alone would leave the
+  // gate reading a row that may not exist, and that is an auth-adjacent path
+  // whose fate is an owner decision, not a tidy-up.
   await db.sql`
     INSERT INTO organization_usage (
       organization_id,
@@ -3773,7 +3786,19 @@ export async function handleUploadComplete(
   }
 
   const storageRefusal = await enforceStorageLimit(db, env, auth.organizationId, object.size);
-  if (storageRefusal) return storageRefusal;
+  if (storageRefusal) {
+    // Unlike initiate and direct, the bytes are already in R2 by the time this
+    // runs, and a refused complete never reaches the `INSERT INTO uploads` in
+    // `createQueuedCatalogueUpload` -- so the object would sit in the bucket
+    // with no row to represent it, invisible to `getStorageUsedBytes` and
+    // therefore consuming quota the gate can never see. Repeated refusals would
+    // accumulate uncounted objects indefinitely. Deleting is safe: the client
+    // got a 402 and can re-upload after freeing space.
+    await env.CSV_UPLOADS.delete(body.key).catch((error) => {
+      console.error('handleUploadComplete: failed to delete refused upload object:', error);
+    });
+    return storageRefusal;
+  }
 
   if (env.CATALOGUE_QUEUE_ENABLED === 'true' && body.importType !== 'expiry-list') {
     return queueCompletedCatalogueUpload({
@@ -4106,8 +4131,11 @@ function usageLimitResponse(resource: string, limit: number, env: Env): Response
  * Returns a 402 Response to short-circuit on, or `null` to proceed.
  *
  * Placed at the same three points Express gates it — initiate, direct and
- * complete (`backend/src/routes/upload.routes.ts:32/48/64`) — so a caller is
- * refused before bytes move rather than after.
+ * complete (`backend/src/routes/upload.routes.ts:32/48/64`).
+ *
+ * At initiate and direct this refuses before bytes move. At complete it cannot:
+ * the object is already in R2 by then, so that call site deletes it on refusal
+ * rather than leaving an object no `uploads` row accounts for.
  */
 async function enforceStorageLimit(
   db: Database,

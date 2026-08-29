@@ -1229,6 +1229,50 @@ equivalent, a relocated home, or an explicit retirement decision.
             off-state tests. The `UNLIMITED_CAP` retry is asserted against real SQL in pglite, not just
             as a JS constant -- `Number.MAX_SAFE_INTEGER` exceeds int4, so a cap parameter inferred as
             `integer` would error rather than admit the row, and only real SQL can show it does not.
+      - [x] 3.1.0f **Correct the atomicity claim, and the review findings on #486.**
+            **DONE 2026-08-29.** PR review found the 3.1.a enforcement docs overstated their
+            guarantee, and the correction matters because it is the contract an operator relies on
+            when flipping `USAGE_LIMITS_ENFORCE` on after the trial.
+            <br>**The cap is soft, not exact.** `INSERT ... SELECT ... WHERE (SELECT COUNT(*)) < cap`
+            does NOT make check-and-write inseparable. Each statement is its own implicit transaction
+            under READ COMMITTED and snapshots at statement start, so two creates racing at limit-1
+            can both observe room and both insert. The overshoot is bounded by in-flight request
+            count and the window shrinks from a full round trip to the snapshot-to-commit interval --
+            a narrowed race, not a closed one. An exact cap needs SERIALIZABLE, a per-org advisory
+            lock, or a counter row claimed with `UPDATE ... SET used = used + 1 WHERE used < cap`
+            (atomic because an UPDATE re-checks its predicate after taking the row lock). None are
+            expressible in one statement over the Neon HTTP driver; the counter is also what the dead
+            `organization_usage` columns were, and a counter unmaintained on any path fails open
+            silently. Counting is wrong by a bounded amount under load; that is the trade recorded.
+            <br>**A test I wrote asserted the property it could not test.** "admits exactly one of two
+            concurrent creates racing for the last slot" passed because pglite is a single in-process
+            connection that SERIALIZES the two statements -- the interleaving never occurred. It is
+            the exact failure mode 3.1.0d is sweeping (a green test standing in for coverage that does
+            not exist), authored while doing the sweep. Both product and inventory versions are
+            renamed to "refuses the second of two back-to-back creates for the last slot" and state
+            what the harness can and cannot show. **Lesson: a concurrency assertion needs two real
+            connections; `Promise.all` over one connection tests the driver's queue, not the database.**
+            <br>**Storage refusal leaked R2 objects.** At `complete` the bytes are already in R2, and a
+            refused complete never reaches `createQueuedCatalogueUpload`'s `INSERT INTO uploads` -- so
+            the object consumed quota `getStorageUsedBytes` could never see, and each retry added
+            another. Now deleted on refusal (mutation-verified: removing the delete fails exactly one
+            test). `enforceStorageLimit`'s doc claim that callers are "refused before bytes move" was
+            true for initiate and direct and false for complete; corrected.
+            <br>**Terminal-status list de-duplicated.** It was hardcoded in both `getUsageCounts` and
+            `createInventoryItem`'s cap check; if the two drifted the dashboard would report a
+            different active-expiry number than the cap enforced, silently. Now one
+            `TERMINAL_INVENTORY_STATUSES` constant feeding both via `status <> ALL(${...})`, verified
+            against real SQL.
+            <br>**Left as owner decisions, not silently actioned:** (a) the `GET /api/organization/usage`
+            handler still seeds `organization_usage` with hardcoded free-tier literals for every org
+            though nothing on that path reads it -- annotated in place, because its one remaining
+            reader is the seat gate in `handleCreateLegacyUser` and removing seed and gate together is
+            3.1.j(a)'s job on an auth-adjacent path; (b) `utils/db-retry.ts` (3.1.0c) -- the reviewer
+            argued for delete-now-restore-from-history over carrying dead code behind a comment, and
+            `createRetryableSql` does exist so wiring is genuinely small. Note before adopting it: a
+            retry after a timeout that the server actually committed would DOUBLE-INSERT, and these
+            INSERTs are the non-idempotent quota-consuming ones, so "retry everything" is not safe as
+            a one-liner. 3.1.0c stands, with delete as the default if it does not land soon.
       - [x] 3.1.0b **Delete the second dead Worker layer: `workers/src/handlers/`.** Found while
             scoping 3.1.a, which would otherwise have added inventory enforcement to
             `handlers/inventory.ts`. **DONE 2026-08-28**, 5 files deleted (`dashboard.ts`,

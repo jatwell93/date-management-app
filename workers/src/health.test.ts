@@ -587,6 +587,44 @@ describe('Upload strategy parity', () => {
       warn.mockRestore();
     });
 
+    // Refusing at `complete` is the one call site where the bytes have already
+    // landed in R2. A refused complete never reaches the `INSERT INTO uploads`
+    // that would record them, so without this the object would consume quota
+    // that `getStorageUsedBytes` cannot see -- and every retry would add
+    // another invisible object.
+    it('deletes the stored object when it refuses at the complete step', async () => {
+      const key = 'uploads/user-7/products.csv';
+      const deleteObject = vi.fn().mockResolvedValue(undefined);
+      const envForUpload = createUploadEnv({
+        CLERK_SECRET_KEY: 'test-clerk-secret',
+        USAGE_LIMITS_ENFORCE: 'true',
+        CSV_UPLOADS: {
+          head: vi.fn().mockResolvedValue({
+            key,
+            size: 200,
+            httpMetadata: { contentType: 'text/csv' },
+          }),
+          delete: deleteObject,
+        } as unknown as R2Bucket,
+      });
+
+      const response = await handleUploadComplete(
+        new Request('https://example.com/api/upload/complete', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer clerk-session-token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ key }),
+        }),
+        envForUpload,
+        quotaDb(ONE_GIB - 100),
+      );
+
+      expect(response.status).toBe(402);
+      expect(deleteObject).toHaveBeenCalledWith(key);
+    });
+
     // The per-file size limit is checked before the quota, so an oversized file
     // gets the actionable 400 about file size rather than a 402 about a tier
     // limit it has not actually reached.

@@ -14,9 +14,28 @@
  * it compares `0 >= max` and never fires. Express's own limits that work
  * (`max_inventory_items`, and the invite path's user limit at
  * `backend/src/services/organization-invite.service.ts:300`) count live for the
- * same reason. Counting also removes the atomicity problem: the count sits
- * inside the same INSERT that consumes the quota, so check and write cannot be
- * separated by a concurrent request. See the callers in `database.ts`.
+ * same reason.
+ *
+ * **Counting narrows the atomicity problem; it does not remove it.** The count
+ * sits inside the same INSERT that consumes the quota, so the check can no
+ * longer go stale across a network round trip. But PostgreSQL runs each
+ * statement under READ COMMITTED with its own snapshot -- and Neon's HTTP
+ * driver gives each statement its own implicit transaction -- so two creates
+ * racing at limit-1 can both observe room and both insert. **The cap is soft
+ * under concurrency**, exceedable by up to the number of in-flight requests.
+ *
+ * That is the guarantee to rely on when flipping `USAGE_LIMITS_ENFORCE` on: an
+ * organization cannot drift far past its tier, but it can sit a few rows over.
+ * A hard cap would need SERIALIZABLE, a per-org advisory lock, or a counter row
+ * claimed with `UPDATE ... SET used = used + 1 WHERE used < cap` -- the last
+ * being genuinely atomic, since an UPDATE re-evaluates its predicate after
+ * taking the row lock. Note the irony before reaching for it: a counter is what
+ * the dead `organization_usage` columns were, and a counter that is not
+ * maintained on every path fails open and silently, which is how the limits
+ * came to be unenforced in the first place. Counting is wrong by a bounded
+ * amount under load; an unmaintained counter is wrong by everything, always.
+ *
+ * See the callers in `database.ts`.
  */
 import type { Env } from '../types/env';
 

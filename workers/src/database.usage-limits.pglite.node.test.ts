@@ -2,11 +2,16 @@
  * Real-data (pglite) coverage for tier usage limits (task 3.1.a, issue #471).
  *
  * These have to run against real SQL rather than a mocked `sql` tag, because
- * the property under test IS the SQL: the cap is a subquery of the INSERT, so
- * check-and-write cannot be separated. A stubbed driver would happily "pass"
- * a read-then-insert implementation with the same TOCTOU hole the Worker had
- * before — Neon's HTTP driver gives no transaction to close it with, which is
- * why the check lives in the statement instead of around it.
+ * the property under test IS the SQL: the cap is a subquery of the INSERT. A
+ * stubbed driver would happily "pass" a read-then-insert implementation with a
+ * far wider TOCTOU window — Neon's HTTP driver gives no transaction to close it
+ * with, which is why the check lives in the statement instead of around it.
+ *
+ * **The cap is soft, not exact**, and nothing here proves otherwise: pglite is
+ * one in-process connection and serializes every statement, so the concurrent
+ * interleaving that lets two creates both observe room cannot be reproduced in
+ * this harness. See `utils/usage-limits.ts` for the guarantee that actually
+ * holds in production.
  *
  * Context for why the caps are counted rather than read from a column:
  * `organization_usage.active_users` / `.total_skus` are written once as
@@ -125,10 +130,19 @@ describe('Workers tier usage limits (real SQL)', () => {
       expect(await countProducts(OTHER_ORG)).toBe(50);
     });
 
-    // The reason the cap is a subquery of the INSERT rather than a preceding
-    // SELECT. With one slot free and two creates in flight, a read-then-insert
-    // lets both observe 4 < 5 and both write, landing the org at 6/5.
-    it('admits exactly one of two concurrent creates racing for the last slot', async () => {
+    // Each create re-evaluates the cap against committed state, so the second
+    // of two back-to-back creates for the last slot is refused. A cap resolved
+    // once and reused, or counted before the loop, would admit both.
+    //
+    // **This does NOT prove the concurrent case, despite the `Promise.all`.**
+    // pglite is a single in-process connection and serializes these two
+    // statements, so the first has committed before the second takes its
+    // snapshot -- the interleaving that matters cannot occur here. Under real
+    // concurrency the cap is soft: READ COMMITTED lets both statements observe
+    // room and both insert (see `utils/usage-limits.ts`). Demonstrating that
+    // needs two real connections, which this harness does not have; asserting
+    // it here would be asserting the harness, not the database.
+    it('refuses the second of two back-to-back creates for the last slot', async () => {
       await seedProducts(4);
       const db = makeDb();
 
@@ -248,7 +262,9 @@ describe('Workers tier usage limits (real SQL)', () => {
       },
     );
 
-    it('admits exactly one of two concurrent creates racing for the last slot', async () => {
+    // Serialized by pglite, like its products counterpart above -- it shows the
+    // cap is re-evaluated per statement, not that the concurrent race is closed.
+    it('refuses the second of two back-to-back creates for the last slot', async () => {
       await seedItems(2);
       const db = makeDb();
 
