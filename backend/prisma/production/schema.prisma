@@ -167,7 +167,7 @@ model ClerkWebhookEvent {
   id          String    @id
   eventType   String    @map("event_type")
   processedAt DateTime  @default(now()) @map("processed_at")
-  completedAt DateTime? @map("completed_at")
+  completedAt DateTime? @default(now()) @map("completed_at")
 
   @@index([eventType, processedAt])
   @@map("clerk_webhook_events")

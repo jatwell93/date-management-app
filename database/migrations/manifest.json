@@ -291,9 +291,9 @@
         "completeness": "complete"
       },
       "backfill": {
-        "required": true,
-        "plan": "Set clerk_webhook_events.completed_at = processed_at for every pre-existing row, because every row written before this migration records finished work. Idempotent via WHERE completed_at IS NULL.",
-        "resumable": true
+        "required": false,
+        "plan": "none",
+        "resumable": false
       },
       "contract": {
         "planned": false,

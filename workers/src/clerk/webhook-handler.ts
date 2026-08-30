@@ -59,17 +59,37 @@ export async function handleClerkWebhook(
     // retries on timeout or 5xx, so concurrent redelivery of one event id is the
     // expected case, not the exotic one; claiming afterwards deduplicated the
     // marker row while the side effects still ran twice (issue #472).
-    const claimed = await claimClerkWebhookEvent(db.sql, headers.id, eventType);
+    const claim = await claimClerkWebhookEvent(db.sql, headers.id, eventType);
 
-    if (!claimed) {
-      // Either a replay of finished work or a sibling delivery still in flight.
-      // Both are 200: the sibling owns the outcome, and if it fails it returns
-      // 500 on its own request, which is the delivery Svix will retry.
-      console.log('[CLERK_WEBHOOK] Skipping duplicate delivery', {
+    if (claim === 'completed') {
+      // A replay of work that finished. Acknowledging ends the retry chain,
+      // which is exactly right: there is nothing left to do for this event.
+      console.log('[CLERK_WEBHOOK] Skipping replay of a completed event', {
         eventId: headers.id,
         eventType,
       });
       return jsonResponse({ received: true }, 200, env, requestOrigin);
+    }
+
+    if (claim === 'in_flight') {
+      // A sibling delivery holds the claim. This must NOT be acknowledged: a 200
+      // ends Svix's retry chain for this delivery, and if the claim holder dies
+      // without releasing (eviction, runtime kill — no 500 to retry), the only
+      // thing that can re-drive the event is a later redelivery arriving after
+      // the staleness window. Acknowledging here would remove that redelivery and
+      // leave the claim stranded until a manual replay. A retryable status keeps
+      // the delivery alive; if the sibling succeeds, the retry finds `completed`
+      // and acknowledges then.
+      console.log('[CLERK_WEBHOOK] Event claimed by another delivery; asking for a retry', {
+        eventId: headers.id,
+        eventType,
+      });
+      return errorResponse(
+        'Webhook event is already being processed; retry shortly',
+        503,
+        env,
+        requestOrigin,
+      );
     }
 
     try {

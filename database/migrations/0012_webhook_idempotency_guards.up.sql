@@ -12,9 +12,21 @@
 --    single `INSERT ... ON CONFLICT ... RETURNING` and lets a claim abandoned
 --    by a crashed isolate be re-driven after a staleness window.
 --
---    Every pre-existing row records finished work, so the backfill sets
---    `completed_at = processed_at`. Nullable and defaulted-by-backfill, so an
---    old Worker that never writes the column keeps working.
+--    Every row that exists when this runs records finished work, and so does
+--    every row an *old* Worker writes during the deploy gap -- it inserts its
+--    marker after processing and never mentions `completed_at`. Both cases are
+--    handled by the column default rather than by a backfill: `DEFAULT
+--    CURRENT_TIMESTAMP` on a non-volatile expression is evaluated once at DDL
+--    time and stored as the attribute's missing value, so existing rows read as
+--    completed with no table rewrite, no WAL spike and no dead tuples, and rows
+--    inserted later without the column are born completed. The stored instant is
+--    "at or before the migration", not the true completion time; nothing reads
+--    the value, only whether it is NULL.
+--
+--    The new Worker's claim always writes `completed_at` explicitly as NULL, so
+--    the default never applies to it. That is load-bearing: any future writer of
+--    this table must name the column, or its row is born completed and the event
+--    it represents will never be processed.
 --
 -- 2. `subscription_tiers` has no unique index on `organization_id`, yet every
 --    reader in both backends selects a single row per organization with
@@ -38,12 +50,25 @@
 -- old Worker running against the new constraint is safe: its check-then-insert
 -- race now raises a unique violation and returns 500, which Svix retries,
 -- instead of silently writing a second row.
+--
+-- Locking: the ADD CONSTRAINT below takes ACCESS EXCLUSIVE on subscription_tiers
+-- while it builds the index. It is not guarded here because the runner already
+-- guards it -- `configureSession` (src/database/migrations/runner.ts:396-400)
+-- sets `lock_timeout = '10s'` and `statement_timeout = '5min'` on the session
+-- before any migration is applied, so a migration that would queue behind a
+-- long-running query fails fast and rolls back instead of stalling the table.
+-- A `SET LOCAL` here would be narrower than what is already in force.
+--
+-- The SQLite dev schema (`backend/prisma/schema.prisma`) is deliberately NOT
+-- given the matching `@@unique`, against the general "update both schemas" rule
+-- in docs/database-migrations.md:296. This migration never runs against SQLite;
+-- more importantly, Express's own `createSubscription`
+-- (services/subscription-billing-lifecycle.service.ts:69) inserts a fresh row
+-- per Stripe subscription, so the constraint would break the rollback backend's
+-- paid-conversion path in dev for no production benefit. The dev schema's
+-- datasource is sqlite, so no `db push` from it can reach Postgres.
 ALTER TABLE clerk_webhook_events
-  ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP(3);
-
-UPDATE clerk_webhook_events
-SET completed_at = processed_at
-WHERE completed_at IS NULL;
+  ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
 
 DO $$
 DECLARE

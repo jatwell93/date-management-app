@@ -252,7 +252,10 @@ const SCHEMA_SQL = `
     id TEXT PRIMARY KEY,
     event_type TEXT NOT NULL,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at TIMESTAMPTZ
+    -- Defaulted, as 0012 leaves it: a row inserted without naming the column is
+    -- born completed, which is what makes an old Worker's post-hoc marker safe
+    -- during the deploy gap. The claim always writes NULL explicitly.
+    completed_at TIMESTAMPTZ DEFAULT NOW()
   );
 
   CREATE TABLE suppliers (

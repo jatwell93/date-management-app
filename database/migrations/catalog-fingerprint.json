@@ -453,7 +453,7 @@
       "name": "completed_at",
       "type": "timestamp(3) without time zone",
       "not_null": false,
-      "default": null
+      "default": "CURRENT_TIMESTAMP"
     },
     {
       "table": "credit_claim_events",

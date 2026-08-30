@@ -198,7 +198,7 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
     expect((await marker('msg_replay'))?.completed_at).toEqual(completedAtBefore);
   });
 
-  it('performs no work while a sibling delivery still holds the claim', async () => {
+  it('asks for a retry, without doing work, while a sibling holds the claim', async () => {
     // A claim in flight: the marker row exists with no completion.
     await sql`
       INSERT INTO clerk_webhook_events (id, event_type, processed_at, completed_at)
@@ -209,11 +209,54 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
       userCreatedEvent({ clerkUserId: 'user_1', email: 'a@acme.test', clerkOrgId: 'org_clerk_1' }),
     );
 
-    expect(response.status).toBe(200);
+    // Not 200. A 200 would acknowledge the delivery and end its retry chain; if
+    // the claim holder died without releasing, this delivery is the only thing
+    // that can re-drive the event once the staleness window expires.
+    expect(response.status).toBe(503);
     expect(await countUsers('user_1')).toBe(0);
     expect(await countSubscriptions()).toBe(0);
     // The sibling still owns it; this delivery must not have completed it.
     expect((await marker('msg_inflight'))?.completed_at).toBeNull();
+  });
+
+  it('acknowledges once the sibling that held the claim has completed', async () => {
+    await sql`
+      INSERT INTO clerk_webhook_events (id, event_type, processed_at, completed_at)
+      VALUES (${'msg_handoff'}, ${'user.created'}, NOW(), NULL)`;
+    const event = userCreatedEvent({
+      clerkUserId: 'user_1',
+      email: 'a@acme.test',
+      clerkOrgId: 'org_clerk_1',
+    });
+
+    expect((await deliver('msg_handoff', event)).status).toBe(503);
+
+    // The sibling finishes.
+    await sql`UPDATE clerk_webhook_events SET completed_at = NOW() WHERE id = ${'msg_handoff'}`;
+
+    // The retry Svix kept alive now settles the delivery instead of looping.
+    const retry = await deliver('msg_handoff', event);
+    expect(retry.status).toBe(200);
+    expect(await countUsers('user_1')).toBe(0);
+  });
+
+  it('treats a marker written without completed_at as finished work', async () => {
+    // What the *old* Worker writes during the deploy gap: it inserts its marker
+    // after processing and never names completed_at. The column default has to
+    // make that row read as completed, or a redelivery arriving after the
+    // staleness window would re-run side effects that already happened.
+    await sql`
+      INSERT INTO clerk_webhook_events (id, event_type, processed_at)
+      VALUES (${'msg_deploy_gap'}, ${'user.created'}, NOW() - INTERVAL '10 minutes')`;
+
+    const response = await deliver(
+      'msg_deploy_gap',
+      userCreatedEvent({ clerkUserId: 'user_1', email: 'a@acme.test', clerkOrgId: 'org_clerk_1' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await countUsers('user_1')).toBe(0);
+    expect(await countSubscriptions()).toBe(0);
   });
 
   it('takes over a claim abandoned longer ago than the staleness window', async () => {

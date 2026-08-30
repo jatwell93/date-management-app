@@ -436,24 +436,38 @@ export async function processClerkWebhookEvent(
 /**
  * How long a claimed-but-unfinished event is left alone before another delivery
  * may take it over. It bounds the damage from an isolate that dies between the
- * claim and the completion: until the window expires the event looks in-flight
- * and redeliveries are ignored; after it, the next redelivery re-drives it.
+ * claim and the completion: until the window expires the event looks in-flight,
+ * and after it the next redelivery re-drives the work.
  *
- * Sized above the Worker's own request budget so a still-running delivery is
- * never stolen from, and below Svix's retry schedule so a lost one is picked up
- * by an ordinary retry rather than needing a manual replay.
+ * Sized between two things. Above: the time a delivery can legitimately spend
+ * inside `processClerkWebhookEvent`, which is a handful of queries — so a
+ * still-running delivery is never stolen from. Below: the interval to a later
+ * Svix retry, so an abandoned claim is picked up by an ordinary redelivery
+ * rather than needing a manual replay. Svix's published schedule retries at 5s,
+ * then 5m, then 30m and up; two minutes clears the second retry outright rather
+ * than landing on top of it, and the design only needs *some* retry to fall
+ * outside the window, which every later one does.
  */
-export const CLERK_WEBHOOK_STALE_CLAIM_SECONDS = 300;
+export const CLERK_WEBHOOK_STALE_CLAIM_SECONDS = 120;
 
 /**
- * Claim an event id for processing, returning `false` if another delivery owns
- * it or already finished it.
+ * What a delivery found when it tried to claim an event.
  *
- * This is the whole idempotency mechanism, and it is one statement on purpose.
- * The previous shape — read, branch, process, then insert the marker — let two
- * concurrent Svix deliveries of one event id both read "new" and both perform
- * the side effects; the marker's `ON CONFLICT DO NOTHING` deduplicated the row,
- * not the work (issue #472).
+ * The distinction between `in_flight` and `completed` is not cosmetic: it decides
+ * whether the caller may acknowledge the delivery to Svix. Acknowledging an
+ * in-flight event ends its retry chain, which would strand the event if the
+ * delivery holding the claim died without releasing it.
+ */
+export type ClerkWebhookClaimOutcome = 'claimed' | 'in_flight' | 'completed';
+
+/**
+ * Claim an event id for processing.
+ *
+ * This is the whole idempotency mechanism, and the claim itself is one statement
+ * on purpose. The previous shape — read, branch, process, then insert the marker
+ * — let two concurrent Svix deliveries of one event id both read "new" and both
+ * perform the side effects; the marker's `ON CONFLICT DO NOTHING` deduplicated
+ * the row, not the work (issue #472).
  *
  * Unlike a conditional `INSERT ... SELECT ... WHERE NOT EXISTS`, this one really
  * is atomic. Two concurrent inserts of the same id cannot both win: the second
@@ -461,18 +475,24 @@ export const CLERK_WEBHOOK_STALE_CLAIM_SECONDS = 300;
  * UPDATE` then re-reads the committed row rather than its own snapshot from
  * statement start, so it sees the fresh claim and its `WHERE` filters it out.
  *
- * The three outcomes of the conflict branch:
+ * The conflict branch produces no rows for two very different reasons, so a
+ * follow-up read separates them. It is a second statement, and it must be: a
+ * subquery in the same statement would read the snapshot taken at statement
+ * start and could miss a row committed while this one was blocked on the index.
+ * A fresh statement sees the committed row. The read costs a round trip only on
+ * the duplicate path, never on the common one.
  *
- * - row is complete (`completed_at IS NOT NULL`) — a replay; no rows, `false`.
- * - row is claimed and fresh — a concurrent delivery owns it; no rows, `false`.
- * - row is claimed and stale — the owner died; the claim is taken over, `true`.
+ * - no row existed — inserted; `claimed`.
+ * - row is claimed and stale — the owner died; taken over; `claimed`.
+ * - row is claimed and fresh — another delivery owns it; `in_flight`.
+ * - row is complete — a replay of finished work; `completed`.
  */
 export async function claimClerkWebhookEvent(
   sql: SqlClient,
   eventId: string,
   eventType: string,
   staleClaimSeconds: number = CLERK_WEBHOOK_STALE_CLAIM_SECONDS,
-): Promise<boolean> {
+): Promise<ClerkWebhookClaimOutcome> {
   const rows = await sql`
     INSERT INTO clerk_webhook_events (id, event_type, processed_at, completed_at)
     VALUES (${eventId}, ${eventType}, NOW(), NULL)
@@ -485,7 +505,24 @@ export async function claimClerkWebhookEvent(
     RETURNING id
   `;
 
-  return rows.length > 0;
+  if (rows.length > 0) {
+    return 'claimed';
+  }
+
+  const existing = await sql`
+    SELECT completed_at
+    FROM clerk_webhook_events
+    WHERE id = ${eventId}
+  `;
+
+  // A row that has vanished between the two statements can only mean the owner
+  // released it after failing. Treat that as in-flight: this delivery must stay
+  // retryable rather than acknowledge work nobody did.
+  if (existing.length === 0) {
+    return 'in_flight';
+  }
+
+  return existing[0].completed_at === null ? 'in_flight' : 'completed';
 }
 
 /**
