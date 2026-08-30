@@ -1296,30 +1296,88 @@ equivalent, a relocated home, or an explicit retirement decision.
             `error-handling.test.ts` for missing-required-field rejection and is **REOPENED**: it cited
             a test of the deleted `createProduct`, so the equivalence never held. Finding 1's placebo
             table in part4 is now a scoreboard with a **Now** column; 2 of its 8 rows are closed.
-      - [ ] 3.1.0c **Decide the fate of `utils/db-retry.ts`: wire it into the live path, or delete it.**
-            Exposed by 3.1.0b — its only importers were the three deleted handlers, so it is now
-            unwired, and it is annotated as such in the file rather than left to look load-bearing.
-            **The gap it addresses is real:** `database.ts` calls `neon()` directly with no retry, so
-            the deployed Worker has **no transient-failure handling against Neon at all**, over an HTTP
-            driver where transient failures are the expected case. `withNeonRetry` is a working
-            implementation (3 attempts, exponential backoff, retries connection-refused/timeout/
-            too-many-connections) with 4 real tests. Check the Express side before calling this a
-            regression — `backend/src/utils/retry.ts` exists and is used by the webhook and bootstrap
-            paths, but whether Prisma queries themselves are retried is unverified. Then either adopt
-            it in `createWorkersDatabase` (a behaviour change: retries alter failure timing and can
-            duplicate non-idempotent writes, so the retryable-error list matters) or delete the module
-            and `__tests__/error-handling.test.ts` with it, which would also need the 154 search-list
-            mentions of that path swept.
-      - [ ] 3.1.0d **Sweep the remaining placebo tests.** Finding 1's table in part4 counts 90
-            assertions that cannot fail across 8 Worker files; 3.1.0b closed 2 of the 8. The 6 open
-            are `__tests__/multi-tenant-isolation.test.ts` (8/8), `org-status-integration.test.ts`
-            (16/19), `auth-integration.test.ts` (14/18), `subscription-validation.test.ts` (7/14),
-            `usage-limits-integration.test.ts` (4/13) and `feature-gates-integration.test.ts` (2/8).
-            A test that cannot fail is worse than no test, because the audit counts it as coverage —
-            `handlers.test.ts` is the proof: 20 passing tests kept a zero-importer layer looking
-            maintained. For each, either write the real assertion or delete it and let the 2.2 row for
-            that behaviour record the absence honestly. Sequence AFTER the rows that depend on those
-            files' citations, so the sweep is one pass rather than several.
+      - [x] 3.1.0c **Decide the fate of `utils/db-retry.ts`: DELETED, with the gap filed as #487.**
+            **DONE 2026-08-30.** Deleted `utils/db-retry.ts` and `__tests__/error-handling.test.ts`
+            (its only importer; they referenced nothing but each other). 4 tests removed, all real.
+            <br>**The deciding evidence overturned this row's own premise.** The row said
+            `backend/src/utils/retry.ts` "is used by the webhook and bootstrap paths" -- that was an
+            unverified claim and it is **false**. `retryWithBackoff`, `withDatabaseRetry` and
+            `withApiRetry` have **zero references anywhere in the repo, including tests**. So neither
+            backend has ever retried a query, and wiring the Worker module would have been a NEW
+            capability, not restored parity. That reframes it out of the migration: a cutover is the
+            wrong moment to change failure timing in the surviving backend. Two dead retry modules,
+            one per backend, is also its own finding about how this codebase accumulated
+            infrastructure nobody connected -- the same shape as `feature-gates.ts` and both dead
+            handler layers.
+            <br>**The gap is real and now owned: #487.** The deployed Worker still has no
+            transient-failure handling against Neon over an HTTP driver. The issue carries the
+            recovery command (`git show dfd7ac8f:workers/src/utils/db-retry.ts`), the **read-only**
+            design (`/^\s*SELECT/` gates the retry; `WITH ... INSERT` CTEs correctly fall through to
+            no-retry), and the hazard that ruled out the reviewer's one-line
+            `createRetryableSql(neon(...))`: `withNeonRetry` treats `/timeout/i` as transient, so a
+            statement that timed out AFTER the server committed would be applied twice --
+            `createInventoryItem` has no unique constraint to catch it and would duplicate both the
+            item and its audit row. It also records that no production failure rate has been measured,
+            so the first step is data, not code.
+            <br>**Audit sweep: 218 mentions, and none was positive evidence** -- unsurprising for a
+            retry test. 138 dropped from multi-path `(searched: ...)` lists; 14 rows where it was the
+            SOLE searched path were repointed at the file that would actually hold the behaviour
+            (2 CORS rows -> `utils/worker-response.test.ts`, 12 error-mapping rows ->
+            `minimal-api-routes.test.ts`), each **searched first** so the new citation is a fact
+            rather than a guess -- dropping the path instead would have left `none found (searched: )`,
+            the unqualified negative check 3 rejects. Row counts unchanged (697/385/512/396).
+            <br>**Two self-inflicted sweep bugs, caught by re-reading rather than by the gate.** The
+            first pass left the CORS rows saying `worker-response.test.ts` was "a stub, since deleted"
+            -- that described the OLD file, and the new one is live and real. The prose rewrite also
+            silently skipped 12 rows because its guard tested for a path the searched-list rewrite had
+            already removed, leaving cells that named one file and described another. **Both gates
+            passed in that state.** The verifier checks that citations resolve, not that prose agrees
+            with them; a bulk restatement needs rows re-read afterwards, not just re-gated.
+      - [x] 3.1.0d **Sweep the remaining placebo tests.** **DONE 2026-08-30.** All 8 rows of
+            Finding 1's table in part4 are now closed.
+            <br>**The placebo count was a floor, not a total.** The audit counted 44 tautological
+            assertions across the 5 remaining files. The real number is 72 -- every test in them --
+            because **none of the five imported a single production module.** They asserted against a
+            local `__tests__/fixtures.ts`, so the "real" assertions were equally unfalsifiable, just
+            better disguised: `expect(gracePeriodDays).toBe(7)` where the 7 was a constant three lines
+            above. Deleting `authenticateClerkRequest` outright would not have failed one of them.
+            **Method note: the tell was `grep -c "from '\.\./"` returning 0, not reading the
+            assertions.** A file that imports nothing from production cannot test production, whatever
+            its assertions look like -- that check is cheaper and more reliable than the placebo
+            detector and should run first next time.
+            <br>**Two findings fell out of it.** (a) `usage-limits-integration.test.ts` encoded a
+            `tierLimits` fixture claiming starter = 500 SKUs and professional = 2,000; the real table
+            is 5,000 and 50,000. It passed, so the wrong numbers read as verified. (b) **Three of the
+            files describe gates that were never built.** `requireActiveOrganization()`,
+            `requireActiveSubscription()` and `requireFeatureAccess()` have zero references anywhere
+            in the repo -- Worker or Express -- and the live Worker performs no organization-status
+            and no subscription-STATUS check on any path. **A canceled subscription and a suspended
+            organization block nothing today.** These were not untested gates but green descriptions
+            of unbuilt ones, which is exactly why the absence stayed invisible; it is the #462
+            mechanism with the gate missing entirely rather than merely wrong.
+            <br>**Disposition: 4 pointer files + 1 real replacement.** Following the
+            `multi-tenant-isolation.test.ts` precedent, the five files become skipped pointer files
+            whose headers record what was there, why it proved nothing, and where the real coverage
+            lives -- or that there is none. They are NOT deleted, because 625 audit rows cite their
+            paths as searched-and-empty evidence; keeping the paths meant **zero citation churn**
+            against 625 rows, and the sweep I ran at 218 rows in 3.1.0c introduced two bugs of its
+            own, so avoiding the bigger one was the point. `__tests__/fixtures.ts` is deleted with its
+            last importer.
+            <br>**New real coverage: `clerk/request-authentication.test.ts`** (10 tests) against the
+            live `authenticateClerkRequest`, with only Clerk's `verifyToken` mocked. Covers the five
+            malformed-header shapes (asserting `verifyToken` is NOT called, so a loose parser that
+            still answered 401 would fail), verification failure, the missing-subject guard,
+            secret-unset answering 500 rather than 401, email lower-casing, and the
+            organization-comes-from-the-token property the deleted file asserted against a constant.
+            Mutation-verified: loosening the header gate to presence-only fails exactly 3, removing
+            the missing-subject guard fails exactly 1.
+            <br>**Gates:** workers 281 passed / 6 skipped (was 342 / 2 -- 72 fictional tests out, 10
+            real in), `test:db` unchanged, both typechecks clean, build succeeds, both audit gates
+            green with row counts unchanged, `openspec validate --strict` passes.
+            <br>**Follow-up for an owner, NOT actioned here:** whether suspended organizations and
+            canceled subscriptions should block writes. That is unbuilt product work, not a test gap,
+            and it interacts with the tier-feature-gating decision already open on part3:509,
+            part3:1167 and part4:454-455.
       - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5). **Tracked as
             #472** — shipped Worker code, not gated on this change; see also task 3.8, whose Stripe
             handler must be written against the fixed pattern rather than the current one.
