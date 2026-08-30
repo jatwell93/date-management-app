@@ -2,15 +2,13 @@ import { createWorkersDatabase } from '../database';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
 import {
-  isNewClerkWebhookEvent,
-  markClerkWebhookEventProcessed,
+  claimClerkWebhookEvent,
+  completeClerkWebhookEvent,
   processClerkWebhookEvent,
+  releaseClerkWebhookEventClaim,
   type ClerkWebhookEventPayload,
 } from './clerk-persistence';
-import {
-  verifyClerkSvixSignature,
-  type ClerkWebhookHeaders,
-} from './webhook-signature';
+import { verifyClerkSvixSignature, type ClerkWebhookHeaders } from './webhook-signature';
 
 export async function handleClerkWebhook(
   request: Request,
@@ -56,14 +54,40 @@ export async function handleClerkWebhook(
 
   try {
     const db = createWorkersDatabase(env);
-    const isNew = await isNewClerkWebhookEvent(db.sql, headers.id);
 
-    if (!isNew) {
+    // Claim the event *before* doing the work. Svix delivers at least once and
+    // retries on timeout or 5xx, so concurrent redelivery of one event id is the
+    // expected case, not the exotic one; claiming afterwards deduplicated the
+    // marker row while the side effects still ran twice (issue #472).
+    const claimed = await claimClerkWebhookEvent(db.sql, headers.id, eventType);
+
+    if (!claimed) {
+      // Either a replay of finished work or a sibling delivery still in flight.
+      // Both are 200: the sibling owns the outcome, and if it fails it returns
+      // 500 on its own request, which is the delivery Svix will retry.
+      console.log('[CLERK_WEBHOOK] Skipping duplicate delivery', {
+        eventId: headers.id,
+        eventType,
+      });
       return jsonResponse({ received: true }, 200, env, requestOrigin);
     }
 
-    await processClerkWebhookEvent(db.sql, event);
-    await markClerkWebhookEventProcessed(db.sql, headers.id, eventType);
+    try {
+      await processClerkWebhookEvent(db.sql, event);
+    } catch (error) {
+      // Hand the event back so the retry re-drives it immediately rather than
+      // waiting out the staleness window.
+      await releaseClerkWebhookEventClaim(db.sql, headers.id).catch((releaseError: unknown) => {
+        console.error('[CLERK_WEBHOOK] Failed to release claim after processing error', {
+          eventId: headers.id,
+          eventType,
+          error: releaseError instanceof Error ? releaseError.message : 'unknown',
+        });
+      });
+      throw error;
+    }
+
+    await completeClerkWebhookEvent(db.sql, headers.id);
 
     return jsonResponse({ received: true }, 200, env, requestOrigin);
   } catch (error) {

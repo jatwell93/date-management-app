@@ -1378,7 +1378,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             canceled subscriptions should block writes. That is unbuilt product work, not a test gap,
             and it interacts with the tier-feature-gating decision already open on part3:509,
             part3:1167 and part4:454-455.
-      - [ ] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5). **Tracked as
+      - [x] 3.1.b **Clerk webhook idempotency is check-then-act and has no test** (Finding 5). **Tracked as
             #472** — shipped Worker code, not gated on this change; see also task 3.8, whose Stripe
             handler must be written against the fixed pattern rather than the current one.
             `handleClerkWebhook` runs `isNewClerkWebhookEvent` → `processClerkWebhookEvent` →
@@ -1393,6 +1393,44 @@ equivalent, a relocated home, or an explicit retirement decision.
             across `workers/src/**/*.test.ts` returns nothing. Fix the existing Clerk path **and**
             treat it as a constraint on the net-new Stripe handler: exactly-once must hold for the
             processing, not just the marker.
+            <br>**DONE 2026-08-30.** The claim now happens *before* the work, in one statement:
+            `claimClerkWebhookEvent` (`clerk/clerk-persistence.ts`) is an `INSERT ... ON CONFLICT (id)
+            DO UPDATE ... RETURNING id`, and no rows back means another delivery owns the event. This
+            is a stronger guarantee than the single-statement pattern 3.1.a used for usage limits, and
+            for a different reason: `INSERT ... SELECT ... WHERE NOT EXISTS` is soft because both
+            statements snapshot at statement start, whereas two inserts of one id serialize on the
+            unique index and the `DO UPDATE` branch re-reads the committed row. Migration **0012**
+            supplies what the mechanism rests on: `clerk_webhook_events.completed_at` (a claim is a row
+            with `completed_at IS NULL`; existing rows backfill to `processed_at`) and a unique
+            constraint on `subscription_tiers.organization_id`, which is what actually makes
+            `ensureTrialSubscription` idempotent — it now inserts with a target-less `ON CONFLICT DO
+            NOTHING`, correct on both sides of the migration. The migration refuses rather than
+            de-duplicates if the table already violates the constraint; duplicates are a repair
+            decision, not a silent one.
+            <br>Crash semantics were chosen explicitly rather than inherited: claim-first converts
+            "processed twice" into "claimed but never processed", so a failure inside the handler
+            *releases* the claim (Svix's retry re-drives it immediately) and an isolate that dies
+            without running any handler is covered by a 300-second staleness window after which the
+            next redelivery takes the claim over.
+            <br>Covered by `workers/src/clerk/webhook-handler.node.test.ts` — 7 real-SQL tests against
+            pglite, **mutation-verified**: claim-always-true, no-`ON CONFLICT`, no staleness predicate,
+            a day-long staleness window, never completing, and a no-op release each fail exactly the
+            intended tests and no others. There is deliberately no `Promise.all` "concurrent
+            deliveries" test: pglite is one connection and serializes, so that test would be green
+            regardless of the code (the 3.1.0 lesson). The harness gained the constraint and the table,
+            and one test asserts the constraint really rejects a second row, so a green idempotency
+            result cannot mean "nothing tried to insert".
+            <br>Audit rows part4:562-563 still describe the old `isNewClerkWebhookEvent` /
+            `markClerkWebhookEventProcessed` shape; they are the Phase 2 record of what was found, and
+            this note is their resolution. Task 3.8's Stripe handler should copy `claimClerkWebhookEvent`.
+            <br>**Constraint the constraint creates, for 3.8:** one `subscription_tiers` row per
+            organization is what every reader in both backends already assumes (`LIMIT 1`), but it is
+            *not* what Express's `createSubscription`
+            (`services/subscription-billing-lifecycle.service.ts:69`) does — it inserts a fresh row per
+            Stripe subscription with no check for an existing one. That path would now raise a unique
+            violation against Postgres. Harmless today (Express is SQLite-only and 0012 does not touch
+            the dev schema; Express against Postgres has never been a running configuration), but the
+            Worker's Stripe handler must **update the organization's row**, not insert a second one.
       - [ ] 3.1.c **Restore the CSV formula-injection control lost at cutover.** **Tracked as #473** — the
             control is already gone from the production Workers path, so this is not gated on the
             retirement. Express sanitizes

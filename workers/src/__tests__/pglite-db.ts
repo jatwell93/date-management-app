@@ -238,7 +238,21 @@ const SCHEMA_SQL = `
     trial_started_at TIMESTAMPTZ,
     trial_end_date TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Migration 0012: one subscription row per organization. Every reader in
+    -- both backends selects it with LIMIT 1, and ensureTrialSubscription's
+    -- ON CONFLICT relies on this constraint existing -- without it here the
+    -- idempotency tests would pass for the wrong reason (issue #472).
+    CONSTRAINT subscription_tiers_organization_id_key UNIQUE (organization_id)
+  );
+
+  -- Svix delivery ledger. completed_at (migration 0012) is what makes the row a
+  -- claim rather than a receipt: NULL = a delivery is processing it.
+  CREATE TABLE clerk_webhook_events (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
   );
 
   CREATE TABLE suppliers (

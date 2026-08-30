@@ -276,6 +276,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0012",
+      "forward": "0012_webhook_idempotency_guards.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0012_webhook_idempotency_guards.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      },
+      "backfill": {
+        "required": true,
+        "plan": "Set clerk_webhook_events.completed_at = processed_at for every pre-existing row, because every row written before this migration records finished work. Idempotent via WHERE completed_at IS NULL.",
+        "resumable": true
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }
