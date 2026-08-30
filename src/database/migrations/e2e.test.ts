@@ -650,7 +650,7 @@ test('e2e: guarded down migration refuses bigint storage limits before an explic
   }
 });
 
-test('e2e: forward fix — re-apply 0010+0011 and reseed after guarded down → verify passes', async () => {
+test('e2e: forward fix — re-apply 0010+0011+0012 and reseed after guarded down → verify passes', async () => {
   const client = await createClient();
   try {
     await resetSchema(client);
@@ -671,18 +671,20 @@ test('e2e: forward fix — re-apply 0010+0011 and reseed after guarded down → 
 
     // Forward-fix recovery: delete the 0010 ledger row so the runner sees it
     // as pending, then re-apply. This is the documented recovery path for a
-    // forward-fix migration whose down was executed. Because 0011 sits after
-    // 0010, its ledger row must be removed too — the runner requires applied
-    // migrations to be a contiguous prefix, so it cannot re-run 0010 while
-    // 0011 stays stamped above the gap. 0011's up is idempotent
-    // (ADD COLUMN IF NOT EXISTS), so re-applying it over the existing columns
+    // forward-fix migration whose down was executed. Every migration *after*
+    // 0010 must be unstamped too — the runner requires applied migrations to be
+    // a contiguous prefix, so it cannot re-run 0010 while a later id stays
+    // stamped above the gap. That means this list grows with the history: it is
+    // 0011 and 0012 today. Both are idempotent when re-applied
+    // (`ADD COLUMN IF NOT EXISTS`, and 0012's `DROP CONSTRAINT IF EXISTS`
+    // before its `ADD CONSTRAINT`), so replaying them over the existing schema
     // is a safe no-op.
-    await client.query("DELETE FROM schema_migrations WHERE id IN ('0010', '0011')");
+    await client.query("DELETE FROM schema_migrations WHERE id IN ('0010', '0011', '0012')");
 
     const result = await applyPendingMigrations(client, history, {
       deploymentSha: TEST_DEPLOYMENT_SHA,
     });
-    assert.deepEqual(result.applied, ['0010', '0011']);
+    assert.deepEqual(result.applied, ['0010', '0011', '0012']);
     await seedTierFeatureFlags(client);
 
     // The column is bigint again.
