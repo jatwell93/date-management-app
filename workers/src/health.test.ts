@@ -504,6 +504,26 @@ describe('Upload strategy parity', () => {
   // Task 3.1.a / #471: the storage quota gate, placed at the same three points
   // Express gates it (backend/src/routes/upload.routes.ts:32/48/64) so a caller
   // is refused before bytes move rather than after.
+  /**
+   * The structured record for `event`, chosen by name rather than by position.
+   * The entitlement gate (#489) also writes a JSON warning on this path, so an
+   * index-based assertion here would be asserting call ordering rather than the
+   * usage-limit record it means to check.
+   */
+  const findWarnEvent = (
+    warn: { mock: { calls: unknown[][] } },
+    event: string,
+  ): Record<string, unknown> | undefined =>
+    warn.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(String(call[0])) as Record<string, unknown>;
+        } catch {
+          return undefined;
+        }
+      })
+      .find((record) => record?.event === event);
+
   describe('tier storage quota', () => {
     const quotaDb = (usedBytes: number, tierLevel = 'free'): Database =>
       ({
@@ -576,7 +596,7 @@ describe('Upload strategy parity', () => {
       );
 
       expect(response.status).not.toBe(402);
-      expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+      expect(findWarnEvent(warn, 'usage_limit_reached')).toMatchObject({
         event: 'usage_limit_reached',
         resource: 'Storage',
         tier: 'free',

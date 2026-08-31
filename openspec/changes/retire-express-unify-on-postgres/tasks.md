@@ -1640,7 +1640,14 @@ equivalent, a relocated home, or an explicit retirement decision.
             (`workers/src/clerk/clerk-persistence.ts:90-101`) legitimately creates rows with no Stripe
             id for every trial — so the fix has to distinguish a trial from a paid signup that failed
             partway, rather than requiring a Stripe id outright.
-      - [ ] 3.1.k **Decide the cancellation grace period explicitly.** Express's `isAccessActive`
+            <br>**(b) is DONE (2026-08-31)** — see 3.1.k below for the shipped gate and the policy
+            behind it. The row's premise was stale: `validateOrganizationStatus` was deleted with the
+            dead API layer in 3.1.0, so the Worker granted access on *every* subscription state, not
+            merely on a row with a null Stripe id. The new rule never requires a Stripe id, which is
+            what the row asked for: it judges entitlement on dates the trial path already writes, so
+            `ensureTrialSubscription`'s Stripe-less rows are entitled for exactly as long as their
+            `trial_end_date` allows. **(a) remains open** and still gates #471 enforcement.
+      - [x] 3.1.k **Decide the cancellation grace period explicitly.** Express's `isAccessActive`
             consults Stripe and keeps a cancelled customer inside the period they have paid for
             (`subscription.service.test.ts:745`, `:771`). The Worker's `validateOrganizationStatus`
             (`workers/src/utils/auth.ts:199-203`) denies the moment `status` is `CANCELED`, with no
@@ -1651,6 +1658,50 @@ equivalent, a relocated home, or an explicit retirement decision.
             is written down. `current_period_end` has existed in the schema since migration 0011 and
             is read for display (`index-minimal.ts:3044`) but never for access, so the data needed to
             implement a grace period is already there.
+            <br>**DECIDED AND IMPLEMENTED (2026-08-31), together with (b) above and #489.** The
+            premise of both rows needs correcting first: they describe
+            `workers/src/utils/auth.ts:187-208`, which **no longer exists** — `validateOrganizationStatus`
+            went with the dead API layer in task 3.1.0. So the Worker was not "stricter on
+            cancellation and looser on non-payment"; it enforced **nothing at all** on any request
+            path, which is what #489 records.
+            <br>**Policy, decided by the product owner (jatwell93):** parity with Express rather than
+            new product surface — there is no `organizations.status` column anywhere in Postgres or
+            either Prisma schema, so org suspension is a capability that does not exist and was not
+            built here. A lapse **degrades the organization to free-tier limits and refuses creation**;
+            reads and updates stay available in every lapsed state. Lapse is **derived from dates at
+            request time** rather than read from the stored `status` enum, because no Worker writer
+            maintains that enum (no cron — 3.1.i; no Stripe handler — 3.8). An organization with no
+            subscription row stays on the free tier and is logged, rather than rejected as Express
+            rejects it: a dropped `organization.created` webhook must not become a total lockout.
+            <br>**One deliberate divergence from Express, chosen explicitly:** a cancellation past its
+            paid-through window blocks creation only, where Express's `authenticateToken` rejects the
+            request outright. One rule for every lapse reason, and a customer never loses access to
+            data they already own over a billing state.
+            <br>**Shipped:** `workers/src/subscription-status.ts` (`deriveSubscriptionAccess`, pure)
+            plus the gate in `resolveAuthenticatedUser`, extracted from `authenticateApiRequest` so
+            every authenticated route is covered at one choke point and none can be forgotten. The
+            entitlement columns ride along on the existing user lookup as a join — safe only because
+            migration 0012 made `subscription_tiers.organization_id` unique (3.1.b), or a second row
+            would multiply the result. `getOrganizationLaunchTier` now returns the **effective** tier,
+            so the degrade-to-free half reaches every quota (interactive creates, queued imports,
+            storage) through one function.
+            <br>**Grace periods, now written down:** cancellation keeps access while
+            `cancel_at_period_end AND current_period_end > now` (the same pair Express asks Stripe
+            for, read from the 0011 columns instead); non-payment keeps access for
+            `DUNNING_GRACE_DAYS = 7` from `past_due_since`, matching the dunning job; a trial lapses
+            at `trial_end_date`. An unrecognized status **fails open** and is logged, as Express does.
+            <br>**Evidence:** 16 unit cases over the derivation matrix, and 13 real-SQL tests driving
+            the actual joined query on pglite. Seven mutations, each failing exactly the intended
+            tests: gate never fires (4), gate applied to every method (3), creation-lock trigger
+            removed (1), **creation-lock SQL alias dropped (1)** — the one that justifies the pglite
+            layer over hand-built rows — subscription join broken (3), tier no longer degrades (1),
+            missing-row detection removed (1).
+            <br>Two pre-existing tests were corrected rather than accommodated: `health.test.ts` and
+            `minimal-api-routes.test.ts` asserted the usage-limit log was `warn.mock.calls[0]`, which
+            pinned call ordering rather than the record. They now select the record by event name.
+            <br>**Note for 3.1.i:** status gating is no longer blocked on the Worker gaining a Cron
+            Trigger. Deriving from dates is what removed that dependency; a cron would still be needed
+            to send the reminder and downgrade *emails*, which this does not attempt.
       **One product decision, not a defect.** No Worker route is gated on tier — every use of tier in
       `index-minimal.ts` is a quota or display value, and all twelve `/api/reports/*` handlers are
       reachable by any authenticated caller regardless of subscription, which is what

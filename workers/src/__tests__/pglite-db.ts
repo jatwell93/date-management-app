@@ -237,6 +237,15 @@ const SCHEMA_SQL = `
     billing_cycle TEXT NOT NULL DEFAULT 'monthly',
     trial_started_at TIMESTAMPTZ,
     trial_end_date TIMESTAMPTZ,
+    trial_converted_at TIMESTAMPTZ,
+    stripe_subscription_id TEXT,
+    -- past_due_since is baseline; current_period_end and cancel_at_period_end
+    -- arrived in migration 0011. All three are inputs to the derived access
+    -- state (#489), so the harness carries them or its gating tests would pass
+    -- against a schema the production gate cannot actually query.
+    past_due_since TIMESTAMPTZ,
+    current_period_end TIMESTAMPTZ,
+    cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Migration 0012: one subscription row per organization. Every reader in
