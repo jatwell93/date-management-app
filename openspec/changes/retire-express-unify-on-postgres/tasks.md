@@ -1699,6 +1699,15 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>Two pre-existing tests were corrected rather than accommodated: `health.test.ts` and
             `minimal-api-routes.test.ts` asserted the usage-limit log was `warn.mock.calls[0]`, which
             pinned call ordering rather than the record. They now select the record by event name.
+            <br>**Behind `SUBSCRIPTION_GATE_ENFORCE`, default OFF**, the same shape 3.1.0e gave
+            usage limits: no organization on this backend has ever been refused for a billing state,
+            so the first deploy *measures* what it would refuse. Every decision is logged as
+            `subscription_gate_blocked` with `enforced` attached, in both flag states, and only the
+            403 itself is withheld — so what the flag turns on is exactly what the measure-only
+            period counted. The flag covers the stored creation lock as well as the derived lapse:
+            neither has ever refused a Worker request, so measuring half the gate would be
+            misleading. Verified by two further mutations (flag ignored in each direction), each
+            failing only the cases that belong to that flag state.
             <br>**Note for 3.1.i:** status gating is no longer blocked on the Worker gaining a Cron
             Trigger. Deriving from dates is what removed that dependency; a cron would still be needed
             to send the reminder and downgrade *emails*, which this does not attempt.

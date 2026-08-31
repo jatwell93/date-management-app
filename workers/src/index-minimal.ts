@@ -42,7 +42,11 @@ import {
   UNLIMITED_CAP,
   type LaunchTier,
 } from './utils/usage-limits';
-import { deriveSubscriptionAccess, type SubscriptionAccessRow } from './subscription-status';
+import {
+  deriveSubscriptionAccess,
+  isSubscriptionGateEnabled,
+  type SubscriptionAccessRow,
+} from './subscription-status';
 import { handleWorkerUploadRoute } from './upload/upload-router';
 import {
   resolveBootstrapApiRoute,
@@ -931,6 +935,10 @@ export async function resolveAuthenticatedUser(
  * is a stored flag Express's webhook and dunning paths set on an over-limit
  * downgrade; the derived lapse is the same conclusion reached from dates, for
  * the transitions no Worker writer performs yet (#489).
+ *
+ * Gated by `SUBSCRIPTION_GATE_ENFORCE`, default off: every decision is logged in
+ * both flag states and only the refusal itself is withheld, so what gets turned
+ * on later is exactly what the measure-only period counted.
  */
 function checkOrganizationEntitlement(
   request: Request,
@@ -963,43 +971,49 @@ function checkOrganizationEntitlement(
     );
   }
 
-  if (row.isCreationLocked === true) {
-    return jsonResponse(
-      {
-        error:
-          'Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation.',
-        locked: true,
-        retryable: false,
-      },
-      403,
-      env,
-      requestOrigin,
-    );
+  // The stored lock and the derived lapse are one control from two directions,
+  // so one flag covers both: neither has ever refused a request on this
+  // backend, and measure-only has to measure the whole gate to be worth
+  // anything. The lock is checked first because it names a different remedy.
+  const refusal =
+    row.isCreationLocked === true
+      ? {
+          reason: 'creation-locked' as const,
+          message:
+            'Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation.',
+        }
+      : access.lapsed
+        ? {
+            reason: access.reason,
+            message:
+              'Your subscription is no longer active, so new records cannot be created. Existing data stays available. Renew or upgrade to re-enable creation.',
+          }
+        : null;
+
+  if (!refusal) {
+    return null;
   }
 
-  if (access.lapsed) {
-    console.warn(
-      JSON.stringify({
-        event: 'subscription_lapsed_creation_blocked',
-        reason: access.reason,
-        organizationId,
-      }),
-    );
-    return jsonResponse(
-      {
-        error:
-          'Your subscription is no longer active, so new records cannot be created. Existing data stays available. Renew or upgrade to re-enable creation.',
-        locked: true,
-        reason: access.reason,
-        retryable: false,
-      },
-      403,
-      env,
-      requestOrigin,
-    );
+  const enforced = isSubscriptionGateEnabled(env);
+  console.warn(
+    JSON.stringify({
+      event: 'subscription_gate_blocked',
+      reason: refusal.reason,
+      organizationId,
+      enforced,
+    }),
+  );
+
+  if (!enforced) {
+    return null;
   }
 
-  return null;
+  return jsonResponse(
+    { error: refusal.message, locked: true, reason: refusal.reason, retryable: false },
+    403,
+    env,
+    requestOrigin,
+  );
 }
 
 /**

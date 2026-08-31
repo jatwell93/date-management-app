@@ -21,6 +21,7 @@
  * should adopt this one rather than porting the Express shape.
  */
 import { normalizeLaunchTier, type LaunchTier } from './utils/usage-limits';
+import type { Env } from './types/env';
 
 /** Express's dunning grace before a past-due subscription is downgraded. */
 export const DUNNING_GRACE_DAYS = 7;
@@ -145,4 +146,19 @@ export function deriveSubscriptionAccess(
   }
 
   return active('unrecognized-status');
+}
+
+/**
+ * Whether a lapsed subscription actually refuses creation.
+ *
+ * Defaults **off**, like `USAGE_LIMITS_ENFORCE` before it (#486): no
+ * organization on this backend has ever been refused for a billing state, so
+ * the first deploy measures how many would be — `subscription_gate_blocked`
+ * records every decision with the flag state attached — and the refusal is
+ * turned on once those numbers are understood. The derivation, the query and
+ * the logging are identical in both states; only the returned Response differs,
+ * so what the flag turns on is exactly what was measured.
+ */
+export function isSubscriptionGateEnabled(env: Env): boolean {
+  return env.SUBSCRIPTION_GATE_ENFORCE === 'true';
 }

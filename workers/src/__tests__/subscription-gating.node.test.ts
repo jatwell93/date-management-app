@@ -31,7 +31,12 @@ afterEach(async () => {
   await harness.close();
 });
 
-const env = {} as unknown as Env;
+// Enforcement is off by default in production (SUBSCRIPTION_GATE_ENFORCE), so the
+// refusal cases have to turn it on explicitly. `measureOnlyEnv` is the shipped
+// default, and the pair of them is what proves the flag gates the response and
+// nothing else.
+const env = { SUBSCRIPTION_GATE_ENFORCE: 'true' } as unknown as Env;
+const measureOnlyEnv = {} as unknown as Env;
 
 function request(method: string): Request {
   return new Request('https://api.test/api/products', { method });
@@ -79,8 +84,11 @@ async function seedSubscription(seed: SubscriptionSeed): Promise<void> {
   );
 }
 
-async function authenticate(method: string): Promise<Response | { organizationId: string }> {
-  return (await resolveAuthenticatedUser(request(method), harness.db, CLERK_USER, env, '')) as
+async function authenticate(
+  method: string,
+  withEnv: Env = env,
+): Promise<Response | { organizationId: string }> {
+  return (await resolveAuthenticatedUser(request(method), harness.db, CLERK_USER, withEnv, '')) as
     | Response
     | { organizationId: string };
 }
@@ -261,6 +269,52 @@ describe('organization entitlement gate (real SQL)', () => {
     try {
       await authenticate('GET');
       expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('records the refusal but allows it through while enforcement is off', async () => {
+    // The shipped default. No organization on this backend has ever been refused
+    // for a billing state, so the first deploy counts what it would refuse.
+    await seedOrganization();
+    await seedSubscription({
+      status: 'trialing',
+      tierLevel: 'professional',
+      trialEndDate: daysFromNow(-1),
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(await authenticate('POST', measureOnlyEnv)).toMatchObject({ organizationId: ORG });
+      const records = warn.mock.calls.map((call) => JSON.parse(String(call[0])));
+      expect(records).toContainEqual(
+        expect.objectContaining({
+          event: 'subscription_gate_blocked',
+          reason: 'trial-expired',
+          organizationId: ORG,
+          enforced: false,
+        }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('records the same decision when enforcement is on, so the measurement transfers', async () => {
+    await seedOrganization({ creationLocked: true });
+    await seedSubscription({ status: 'active', tierLevel: 'professional' });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const blocked = await authenticate('POST');
+      expect((blocked as Response).status).toBe(403);
+      const records = warn.mock.calls.map((call) => JSON.parse(String(call[0])));
+      expect(records).toContainEqual(
+        expect.objectContaining({
+          event: 'subscription_gate_blocked',
+          reason: 'creation-locked',
+          enforced: true,
+        }),
+      );
     } finally {
       warn.mockRestore();
     }
