@@ -22,7 +22,7 @@ applied.
 
 The history is a set of `NNNN_name.up.sql` / `NNNN_name.down.sql` pairs plus
 `database/migrations/manifest.json`, which is the declaration of intent for each migration.
-`0000_baseline` through `0011_add_subscription_period_fields` are installed today.
+`0000_baseline` through `0012_webhook_idempotency_guards` are installed today.
 
 Each manifest entry declares an exact key set — `id`, `forward`, `transaction`, `compatibility`,
 `dataLoss`, `recovery`, `backfill`, `contract` — and the loader rejects anything else

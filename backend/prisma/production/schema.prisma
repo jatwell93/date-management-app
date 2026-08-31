@@ -84,7 +84,7 @@ model SubscriptionTier {
   currentPeriodEnd     DateTime?    @map("current_period_end")
   organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId])
+  @@unique([organizationId])
   @@index([tierLevel])
   @@index([status])
   @@index([trialEndDate])
@@ -164,9 +164,10 @@ model ProcessedWebhookEvent {
 }
 
 model ClerkWebhookEvent {
-  id          String   @id
-  eventType   String   @map("event_type")
-  processedAt DateTime @default(now()) @map("processed_at")
+  id          String    @id
+  eventType   String    @map("event_type")
+  processedAt DateTime  @default(now()) @map("processed_at")
+  completedAt DateTime? @default(now()) @map("completed_at")
 
   @@index([eventType, processedAt])
   @@map("clerk_webhook_events")

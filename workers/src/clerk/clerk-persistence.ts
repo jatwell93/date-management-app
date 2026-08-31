@@ -83,21 +83,25 @@ export function deriveUsername(
   return sanitizeSlug(raw, `user-${Date.now().toString(36)}`);
 }
 
+/**
+ * Give an organization a trial subscription if it does not have one already.
+ *
+ * Idempotent at the database, not in application code: migration 0012 puts a
+ * unique constraint on `subscription_tiers.organization_id`, and this insert
+ * defers to it. The previous check-then-insert had nothing behind it, so two
+ * concurrent `organization.created` deliveries could each observe no row and
+ * each write one — two `trialing` rows for one organization, which every
+ * reader's `LIMIT 1` then resolves arbitrarily (issue #472).
+ *
+ * The `ON CONFLICT` deliberately names no conflict target. An inference clause
+ * (`ON CONFLICT (organization_id)`) would require the constraint to exist and
+ * would fail against a database that has not applied 0012 yet; the bare form is
+ * correct on both sides of that migration.
+ */
 export async function ensureTrialSubscription(
   sql: SqlClient,
   organizationId: string,
 ): Promise<void> {
-  const existing = await sql`
-    SELECT id
-    FROM subscription_tiers
-    WHERE organization_id = ${organizationId}
-    LIMIT 1
-  `;
-
-  if (existing.length > 0) {
-    return;
-  }
-
   await sql`
     INSERT INTO subscription_tiers (
       organization_id,
@@ -118,6 +122,7 @@ export async function ensureTrialSubscription(
       NOW(),
       NOW()
     )
+    ON CONFLICT DO NOTHING
   `;
 }
 
@@ -428,28 +433,125 @@ export async function processClerkWebhookEvent(
   }
 }
 
-export async function isNewClerkWebhookEvent(
-  sql: SqlClient,
-  eventId: string,
-): Promise<boolean> {
-  const rows = await sql`
-    SELECT id
-    FROM clerk_webhook_events
-    WHERE id = ${eventId}
-    LIMIT 1
-  `;
+/**
+ * How long a claimed-but-unfinished event is left alone before another delivery
+ * may take it over. It bounds the damage from an isolate that dies between the
+ * claim and the completion: until the window expires the event looks in-flight,
+ * and after it the next redelivery re-drives the work.
+ *
+ * Sized between two things. Above: the time a delivery can legitimately spend
+ * inside `processClerkWebhookEvent`, which is a handful of queries — so a
+ * still-running delivery is never stolen from. Below: the interval to a later
+ * Svix retry, so an abandoned claim is picked up by an ordinary redelivery
+ * rather than needing a manual replay. Svix's published schedule retries at 5s,
+ * then 5m, then 30m and up; two minutes clears the second retry outright rather
+ * than landing on top of it, and the design only needs *some* retry to fall
+ * outside the window, which every later one does.
+ */
+export const CLERK_WEBHOOK_STALE_CLAIM_SECONDS = 120;
 
-  return rows.length === 0;
-}
+/**
+ * What a delivery found when it tried to claim an event.
+ *
+ * The distinction between `in_flight` and `completed` is not cosmetic: it decides
+ * whether the caller may acknowledge the delivery to Svix. Acknowledging an
+ * in-flight event ends its retry chain, which would strand the event if the
+ * delivery holding the claim died without releasing it.
+ */
+export type ClerkWebhookClaimOutcome = 'claimed' | 'in_flight' | 'completed';
 
-export async function markClerkWebhookEventProcessed(
+/**
+ * Claim an event id for processing.
+ *
+ * This is the whole idempotency mechanism, and the claim itself is one statement
+ * on purpose. The previous shape — read, branch, process, then insert the marker
+ * — let two concurrent Svix deliveries of one event id both read "new" and both
+ * perform the side effects; the marker's `ON CONFLICT DO NOTHING` deduplicated
+ * the row, not the work (issue #472).
+ *
+ * Unlike a conditional `INSERT ... SELECT ... WHERE NOT EXISTS`, this one really
+ * is atomic. Two concurrent inserts of the same id cannot both win: the second
+ * blocks on the unique index entry until the first commits, and `ON CONFLICT DO
+ * UPDATE` then re-reads the committed row rather than its own snapshot from
+ * statement start, so it sees the fresh claim and its `WHERE` filters it out.
+ *
+ * The conflict branch produces no rows for two very different reasons, so a
+ * follow-up read separates them. It is a second statement, and it must be: a
+ * subquery in the same statement would read the snapshot taken at statement
+ * start and could miss a row committed while this one was blocked on the index.
+ * A fresh statement sees the committed row. The read costs a round trip only on
+ * the duplicate path, never on the common one.
+ *
+ * - no row existed — inserted; `claimed`.
+ * - row is claimed and stale — the owner died; taken over; `claimed`.
+ * - row is claimed and fresh — another delivery owns it; `in_flight`.
+ * - row is complete — a replay of finished work; `completed`.
+ */
+export async function claimClerkWebhookEvent(
   sql: SqlClient,
   eventId: string,
   eventType: string,
+  staleClaimSeconds: number = CLERK_WEBHOOK_STALE_CLAIM_SECONDS,
+): Promise<ClerkWebhookClaimOutcome> {
+  const rows = await sql`
+    INSERT INTO clerk_webhook_events (id, event_type, processed_at, completed_at)
+    VALUES (${eventId}, ${eventType}, NOW(), NULL)
+    ON CONFLICT (id) DO UPDATE
+      SET event_type = EXCLUDED.event_type,
+          processed_at = NOW()
+      WHERE clerk_webhook_events.completed_at IS NULL
+        AND clerk_webhook_events.processed_at
+              < NOW() - make_interval(secs => ${staleClaimSeconds}::double precision)
+    RETURNING id
+  `;
+
+  if (rows.length > 0) {
+    return 'claimed';
+  }
+
+  const existing = await sql`
+    SELECT completed_at
+    FROM clerk_webhook_events
+    WHERE id = ${eventId}
+  `;
+
+  // A row that has vanished between the two statements can only mean the owner
+  // released it after failing. Treat that as in-flight: this delivery must stay
+  // retryable rather than acknowledge work nobody did.
+  if (existing.length === 0) {
+    return 'in_flight';
+  }
+
+  return existing[0].completed_at === null ? 'in_flight' : 'completed';
+}
+
+/**
+ * Mark a claimed event finished. Until this runs the row reads as in-flight, so
+ * failing to reach it leaves the event replayable once the staleness window
+ * expires — the safe direction of the trade.
+ */
+export async function completeClerkWebhookEvent(sql: SqlClient, eventId: string): Promise<void> {
+  await sql`
+    UPDATE clerk_webhook_events
+    SET completed_at = NOW()
+    WHERE id = ${eventId}
+  `;
+}
+
+/**
+ * Drop a claim whose processing failed, so Svix's retry re-drives the event
+ * immediately instead of waiting out the staleness window.
+ *
+ * Guarded on `completed_at IS NULL` so a late failure can never delete the
+ * marker of work that actually completed.
+ */
+export async function releaseClerkWebhookEventClaim(
+  sql: SqlClient,
+  eventId: string,
 ): Promise<void> {
   await sql`
-    INSERT INTO clerk_webhook_events (id, event_type, processed_at)
-    VALUES (${eventId}, ${eventType}, NOW())
-    ON CONFLICT (id) DO NOTHING
+    DELETE FROM clerk_webhook_events
+    WHERE id = ${eventId}
+      AND completed_at IS NULL
   `;
 }

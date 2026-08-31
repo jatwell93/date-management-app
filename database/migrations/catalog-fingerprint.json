@@ -449,6 +449,13 @@
       "default": "CURRENT_TIMESTAMP"
     },
     {
+      "table": "clerk_webhook_events",
+      "name": "completed_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
       "table": "credit_claim_events",
       "name": "id",
       "type": "integer",
@@ -3190,9 +3197,9 @@
     },
     {
       "table": "subscription_tiers",
-      "name": "subscription_tiers_organization_id_idx",
-      "definition": "CREATE INDEX subscription_tiers_organization_id_idx ON public.subscription_tiers USING btree (organization_id)",
-      "unique": false,
+      "name": "subscription_tiers_organization_id_key",
+      "definition": "CREATE UNIQUE INDEX subscription_tiers_organization_id_key ON public.subscription_tiers USING btree (organization_id)",
+      "unique": true,
       "primary": false,
       "predicate": null
     },
@@ -5137,6 +5144,12 @@
       "name": "subscription_tiers_organization_id_fkey",
       "type": "f",
       "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "subscription_tiers",
+      "name": "subscription_tiers_organization_id_key",
+      "type": "u",
+      "definition": "UNIQUE (organization_id)"
     },
     {
       "table": "subscription_tiers",
