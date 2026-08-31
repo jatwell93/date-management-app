@@ -70,6 +70,27 @@ function resolveMinimalGet(pathname: string, database: Database = db, requestPat
   });
 }
 
+/**
+ * The structured record for `event`, chosen by name rather than by position.
+ * The entitlement gate (#489) also writes a JSON warning on the create paths,
+ * so an index-based assertion here would be pinning call ordering rather than
+ * the usage-limit record it means to check.
+ */
+function findWarnEvent(
+  warn: { mock: { calls: unknown[][] } },
+  event: string,
+): Record<string, unknown> | undefined {
+  return warn.mock.calls
+    .map((call) => {
+      try {
+        return JSON.parse(String(call[0])) as Record<string, unknown>;
+      } catch {
+        return undefined;
+      }
+    })
+    .find((record) => record?.event === event);
+}
+
 describe('minimal API route table', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1095,7 +1116,7 @@ describe('minimal API route table', () => {
     // nothing and this would catch it.
     expect(createProduct).toHaveBeenNthCalledWith(1, 'org_123', expect.anything(), 500);
     expect(createProduct).toHaveBeenNthCalledWith(2, 'org_123', expect.anything(), UNLIMITED_CAP);
-    expect(JSON.parse(warn.mock.calls[0][0] as string)).toEqual({
+    expect(findWarnEvent(warn, 'usage_limit_reached')).toEqual({
       event: 'usage_limit_reached',
       resource: 'SKU',
       organizationId: 'org_123',
@@ -1129,7 +1150,7 @@ describe('minimal API route table', () => {
 
     expect(response?.status).toBe(201);
     expect(createInventoryItem).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+    expect(findWarnEvent(warn, 'usage_limit_reached')).toMatchObject({
       event: 'usage_limit_reached',
       resource: 'active expiry item',
       enforced: false,
@@ -1155,7 +1176,7 @@ describe('minimal API route table', () => {
 
     // The log is not a substitute for the refusal, it accompanies it -- so the
     // enforced flag is the only difference between the two states.
-    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({
+    expect(findWarnEvent(warn, 'usage_limit_reached')).toMatchObject({
       event: 'usage_limit_reached',
       enforced: true,
     });

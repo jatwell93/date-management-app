@@ -23,6 +23,7 @@ export interface Env {
   FRONTEND_URL?: string; // Frontend URL for CORS + Clerk authorizedParties
   CATALOGUE_QUEUE_ENABLED?: string;
   USAGE_LIMITS_ENFORCE?: string; // "true" to refuse over-cap writes; default off (measure only)
+  SUBSCRIPTION_GATE_ENFORCE?: string; // "true" to refuse creation for a lapsed subscription; default off (measure only)
   ENTERPRISE_MAX_SKUS?: string;
   ENTERPRISE_MAX_ACTIVE_EXPIRIES?: string;
   ENTERPRISE_MAX_FILE_SIZE?: string;

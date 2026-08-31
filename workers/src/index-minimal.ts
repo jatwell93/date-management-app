@@ -42,6 +42,11 @@ import {
   UNLIMITED_CAP,
   type LaunchTier,
 } from './utils/usage-limits';
+import {
+  deriveSubscriptionAccess,
+  isSubscriptionGateEnabled,
+  type SubscriptionAccessRow,
+} from './subscription-status';
 import { handleWorkerUploadRoute } from './upload/upload-router';
 import {
   resolveBootstrapApiRoute,
@@ -852,25 +857,163 @@ async function authenticateApiRequest(
     return clerkResult;
   }
 
+  return resolveAuthenticatedUser(request, db, clerkResult.clerkUserId, env, requestOrigin);
+}
+
+/**
+ * Everything `authenticateApiRequest` does after the Clerk token verifies: the
+ * user lookup, and the organization entitlement gate.
+ *
+ * Exported so the gate can be exercised against real SQL. Token verification is
+ * covered separately in `clerk/request-authentication.test.ts`; splitting here
+ * means the database half can be tested against an actual Postgres rather than
+ * asserted about — a joined query is exactly the kind of code that passes a
+ * hand-built-row unit test and fails in production on a column alias.
+ */
+export async function resolveAuthenticatedUser(
+  request: Request,
+  db: Database,
+  clerkUserId: string,
+  env: Env,
+  requestOrigin: string,
+): Promise<
+  { userId: number; organizationId: string; clerkUserId: string; role: string } | Response
+> {
+  // The organization and subscription columns ride along on the user lookup
+  // rather than costing two more round trips. The join to subscription_tiers is
+  // only safe because migration 0012 made organization_id unique there (#472);
+  // before that a second row would have multiplied this result, which is why
+  // every other reader still says ORDER BY created_at DESC LIMIT 1.
   const rows = await db.sql`
-    SELECT id,
-           organization_id as "organizationId",
-           role
-    FROM users
-    WHERE clerk_user_id = ${clerkResult.clerkUserId}
-      AND deleted_at IS NULL
+    SELECT u.id,
+           u.organization_id as "organizationId",
+           u.role,
+           o.is_creation_locked as "isCreationLocked",
+           s.id as "subscriptionId",
+           s.status,
+           s.tier_level,
+           s.trial_end_date,
+           s.current_period_end,
+           s.cancel_at_period_end,
+           s.past_due_since
+    FROM users u
+    LEFT JOIN organizations o ON o.id = u.organization_id
+    LEFT JOIN subscription_tiers s ON s.organization_id = u.organization_id
+    WHERE u.clerk_user_id = ${clerkUserId}
+      AND u.deleted_at IS NULL
     LIMIT 1
   `;
   if (!rows[0]) {
     return errorResponse('User has not completed organization bootstrap', 401, env, requestOrigin);
   }
 
+  const organizationId = String(rows[0].organizationId);
+  const gate = checkOrganizationEntitlement(request, rows[0], organizationId, env, requestOrigin);
+  if (gate) {
+    return gate;
+  }
+
   return {
     userId: Number(rows[0].id),
-    organizationId: String(rows[0].organizationId),
-    clerkUserId: clerkResult.clerkUserId,
+    organizationId,
+    clerkUserId,
     role: String(rows[0].role || 'team_member'),
   };
+}
+
+/**
+ * Refuses creation for an organization that is creation-locked or whose
+ * subscription has lapsed. Returns a 403 to short-circuit on, or `null`.
+ *
+ * **Creation only, deliberately.** Reads and edits of existing data stay open in
+ * every lapsed state — including a cancellation past its paid-through window,
+ * where Express rejects the request outright. That divergence is a product
+ * decision recorded in task 3.1.k: one rule for every lapse reason, and a
+ * customer never loses access to data they already own over a billing state.
+ *
+ * The two triggers are one control from opposite directions. `is_creation_locked`
+ * is a stored flag Express's webhook and dunning paths set on an over-limit
+ * downgrade; the derived lapse is the same conclusion reached from dates, for
+ * the transitions no Worker writer performs yet (#489).
+ *
+ * Gated by `SUBSCRIPTION_GATE_ENFORCE`, default off: every decision is logged in
+ * both flag states and only the refusal itself is withheld, so what gets turned
+ * on later is exactly what the measure-only period counted.
+ */
+function checkOrganizationEntitlement(
+  request: Request,
+  row: Record<string, unknown>,
+  organizationId: string,
+  env: Env,
+  requestOrigin: string,
+): Response | null {
+  // A LEFT JOIN that matches nothing yields a row of NULLs, not the absence of
+  // a row, so the join key has to say which it is. Without this an organization
+  // with no subscription reports "unrecognized-status" instead of the missing
+  // row it actually has, and the alert names the wrong problem.
+  const subscription = row.subscriptionId == null ? null : (row as SubscriptionAccessRow);
+  const access = deriveSubscriptionAccess(subscription);
+  if (request.method !== 'POST') {
+    // Anomalies describe a standing state rather than an event, so they are
+    // reported where the entitlement decision is actually made instead of once
+    // per read for as long as the organization stays in that state.
+    return null;
+  }
+
+  if (access.anomaly) {
+    console.warn(
+      JSON.stringify({
+        event: 'subscription_state_anomaly',
+        anomaly: access.anomaly,
+        organizationId,
+        status: typeof row.status === 'string' ? row.status : null,
+      }),
+    );
+  }
+
+  // The stored lock and the derived lapse are one control from two directions,
+  // so one flag covers both: neither has ever refused a request on this
+  // backend, and measure-only has to measure the whole gate to be worth
+  // anything. The lock is checked first because it names a different remedy.
+  const refusal =
+    row.isCreationLocked === true
+      ? {
+          reason: 'creation-locked' as const,
+          message:
+            'Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation.',
+        }
+      : access.lapsed
+        ? {
+            reason: access.reason,
+            message:
+              'Your subscription is no longer active, so new records cannot be created. Existing data stays available. Renew or upgrade to re-enable creation.',
+          }
+        : null;
+
+  if (!refusal) {
+    return null;
+  }
+
+  const enforced = isSubscriptionGateEnabled(env);
+  console.warn(
+    JSON.stringify({
+      event: 'subscription_gate_blocked',
+      reason: refusal.reason,
+      organizationId,
+      enforced,
+    }),
+  );
+
+  if (!enforced) {
+    return null;
+  }
+
+  return jsonResponse(
+    { error: refusal.message, locked: true, reason: refusal.reason, retryable: false },
+    403,
+    env,
+    requestOrigin,
+  );
 }
 
 /**
@@ -4180,18 +4323,31 @@ async function enforceStorageLimit(
   return null;
 }
 
-async function getOrganizationLaunchTier(
+/**
+ * The tier to enforce limits against — the stored tier while the subscription
+ * holds, `free` once it has lapsed (#489).
+ *
+ * Degrading here rather than at each call site is what makes the rule reach
+ * every quota at once: interactive creates, queued catalogue imports and the
+ * storage cap all resolve their tier through this function.
+ */
+export async function getOrganizationLaunchTier(
   organizationId: string,
   db: Database,
 ): Promise<LaunchTier> {
   const rows = await db.sql`
-    SELECT tier_level
+    SELECT tier_level,
+           status,
+           trial_end_date,
+           current_period_end,
+           cancel_at_period_end,
+           past_due_since
     FROM subscription_tiers
     WHERE organization_id = ${organizationId}
     ORDER BY created_at DESC
     LIMIT 1
   `;
-  return normalizeLaunchTier(rows[0]?.tier_level);
+  return deriveSubscriptionAccess(rows[0] as SubscriptionAccessRow | undefined).effectiveTier;
 }
 
 function getTierFileSizeLimit(tier: LaunchTier, env: Env): number {
