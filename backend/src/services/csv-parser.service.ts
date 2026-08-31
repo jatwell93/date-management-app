@@ -198,9 +198,6 @@ const EXPIRY_COLUMN_ALTERNATIVES = {
   ],
 } as const;
 
-// Characters that could indicate CSV injection attempts
-const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r'];
-
 // ============================================================================
 // CSV Parser Service
 // ============================================================================
