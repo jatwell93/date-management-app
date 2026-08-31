@@ -1,3 +1,5 @@
+import { escapeSpreadsheetFormula } from '../../../shared/domain/csv-injection';
+
 export type ProductCatalogRow = {
   sku: string;
   name: string;
@@ -90,9 +92,14 @@ export function parseProductCatalogRow(
   row: string[],
   columnIndexes: { sku: number; name: number; barcode: number; cost: number; retail?: number },
 ): ProductCatalogRow | null {
-  const sku = (row[columnIndexes.sku] || '').trim();
-  const name = (row[columnIndexes.name] || '').trim();
-  const barcode = (row[columnIndexes.barcode] || '').trim();
+  // Escaped after trimming, exactly as Express does (#473): the trim is what
+  // collapses the leading-tab and leading-CR evasions into a bare formula, so
+  // escaping first would leave a tab-prefixed formula stored as a live one.
+  // Cost and retail are not escaped because they never reach storage as text —
+  // parseCost returns a number or the row is rejected.
+  const sku = escapeSpreadsheetFormula((row[columnIndexes.sku] || '').trim());
+  const name = escapeSpreadsheetFormula((row[columnIndexes.name] || '').trim());
+  const barcode = escapeSpreadsheetFormula((row[columnIndexes.barcode] || '').trim());
   const costPrice = parseCost((row[columnIndexes.cost] || '').trim());
 
   if (!sku || !name || !barcode || costPrice === null) {

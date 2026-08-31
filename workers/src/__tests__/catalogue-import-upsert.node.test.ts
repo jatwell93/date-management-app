@@ -142,9 +142,7 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
       `SELECT barcode, kind FROM catalogue_corrections WHERE organization_id = $1`,
       [ORG],
     );
-    expect(corrections.rows).toEqual([
-      { barcode: 'RETIRED-BARCODE', kind: 'UNMATCHED' },
-    ]);
+    expect(corrections.rows).toEqual([{ barcode: 'RETIRED-BARCODE', kind: 'UNMATCHED' }]);
   });
 
   it('enriches by barcode then wholesaler SKU, reuses org brands, and records true misses', async () => {
@@ -429,5 +427,37 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     expect(upload.rows_updated).toBe(0);
     expect((await getProduct(ORG, 'S1'))?.updated_at).toEqual(before1?.updated_at);
     expect((await getProduct(ORG, 'S2'))?.updated_at).toEqual(before2?.updated_at);
+  });
+});
+
+describe('catalogue import stores escaped spreadsheet formulas (#473)', () => {
+  // The parser unit tests in `../upload/csv-injection.test.ts` prove the rule;
+  // this one proves the escaped value survives the whole queued import and is
+  // what actually lands in the table. Storage is the vulnerability — an export
+  // elsewhere is only the trigger — so the assertion has to be on the row.
+  it('persists sku, name, and barcode apostrophe-escaped, all the way to products', async () => {
+    await harness.pg.query(
+      `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,
+      [ORG],
+    );
+    const csv = [
+      'SKU,Name,Barcode,Cost',
+      '=SKU_FORMULA,+NAME_FORMULA,@BARCODE_FORMULA,12.99',
+      'SAFE-SKU,Safe Product,123456789,3.50',
+      '',
+    ].join('\n');
+    const { env } = makeEnv(csv);
+
+    await processCatalogueImportJob(await insertUpload(), env, harness.db);
+
+    const rows = await harness.pg.query(
+      `SELECT sku, name, barcode FROM products WHERE organization_id = $1 ORDER BY sku`,
+      [ORG],
+    );
+    expect(rows.rows).toEqual([
+      { sku: "'=SKU_FORMULA", name: "'+NAME_FORMULA", barcode: "'@BARCODE_FORMULA" },
+      { sku: 'SAFE-SKU', name: 'Safe Product', barcode: '123456789' },
+    ]);
+    expect(await countProducts(ORG)).toBe(2);
   });
 });

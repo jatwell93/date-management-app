@@ -1463,7 +1463,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             violation against Postgres. Harmless today (Express is SQLite-only and 0012 does not touch
             the dev schema; Express against Postgres has never been a running configuration), but the
             Worker's Stripe handler must **update the organization's row**, not insert a second one.
-      - [ ] 3.1.c **Restore the CSV formula-injection control lost at cutover.** **Tracked as #473** — the
+      - [x] 3.1.c **Restore the CSV formula-injection control lost at cutover.** **Tracked as #473** — the
             control is already gone from the production Workers path, so this is not gated on the
             retirement. Express sanitizes
             spreadsheet-formula payloads at ingestion for `sku`, `name` and `barcode`
@@ -1476,6 +1476,32 @@ equivalent, a relocated home, or an explicit retirement decision.
             the same service. Apply to all three fields in one change: per-field asymmetry (sanitize
             `name`, forget `sku`) is the exact shape that produced #466. Source rows:
             `services/csv-injection.test.ts:43/137`.
+            <br>**DONE (2026-08-31).** The rule now lives once, in
+            `shared/domain/csv-injection.ts` (`escapeSpreadsheetFormula` + `CSV_INJECTION_PREFIXES`),
+            and both backends call it: Express's `pureSanitizeValue` is a one-line delegate (its local
+            copy of the prefix list is deleted), and the Worker escapes after `.trim()` at
+            `upload/catalogue-parser.ts` (sku, name, barcode) and `upload/expiry-parser.ts`
+            (sku, itemDescription, department).
+            <br>**Scope widened by one path, deliberately.** The issue names only the catalogue
+            parser, but Express escapes in `validateExpiryRowStrictly` too, and the Worker's expiry
+            import auto-creates products and store areas from the file's own text — so the same
+            control was lost on that path as well. Fixing one and not the other would reproduce the
+            per-field asymmetry the issue exists to prevent. Cost and retail are deliberately *not*
+            escaped: `parseCost` returns a number or the row is rejected, so neither can ever be
+            stored as text; a test asserts that rather than leaving it as an assumption.
+            <br>**Evidence.** `workers/src/upload/csv-injection.test.ts` (17 cases) ports the twelve
+            Express cases — all six prefixes, DDE, hyperlink, multi-cell, escape-once, the four
+            safe-value/precision cases — and adds the expiry path. Two real-SQL tests assert the
+            *stored* row rather than the parser's return: in
+            `__tests__/catalogue-import-upsert.node.test.ts` (products) and
+            `__tests__/expiry-import.node.test.ts` (products + store_areas). Mutation-verified with
+            five mutations — no-op escape, expiry left unescaped, catalogue sku left unescaped
+            (the #466 asymmetry shape), escape-before-trim, `-` dropped from the prefix list — each
+            failing exactly the intended tests and no others; the no-op mutation fails precisely the
+            two persistence tests in the pglite files and nothing else in them.
+            <br>The `worker-shaped-rewrite` rows at `audit/2.2-test-manifest-part4.md:624-635` are
+            satisfied by this change; Phase 3.2 should treat them as landed rather than re-porting
+            them. The manifest itself is unchanged (row counts and citations still verify).
       - [ ] 3.1.d **Six of the eight credit-claim endpoints the frontend calls have no Worker route**
             (Finding 6). **This work is already specified — do not re-plan it here.** The change
             `openspec/changes/add-workers-credit-claim-write-handlers` covers it in full, carried

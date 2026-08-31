@@ -30,6 +30,7 @@ import { InventoryRepository } from '../repositories/inventory.repository';
 import { ProductRepository } from '../repositories/product.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 import { StoreAreaRepository } from '../repositories/store-area.repository';
+import { escapeSpreadsheetFormula } from '../../../shared/domain/csv-injection';
 
 // ============================================================================
 // Types & Interfaces
@@ -826,15 +827,11 @@ function pureValidateRequiredField(
   return null;
 }
 
+// The escaping rule itself is shared with the Worker ingestion path so the two
+// backends cannot drift (shared/domain/csv-injection.ts). This wrapper keeps the
+// local `pure*` naming used by the rest of this file's helpers.
 function pureSanitizeValue(value: string): string {
-  let sanitized = value;
-  for (const prefix of CSV_INJECTION_PREFIXES) {
-    if (sanitized.startsWith(prefix)) {
-      sanitized = "'" + sanitized;
-      break;
-    }
-  }
-  return sanitized;
+  return escapeSpreadsheetFormula(value);
 }
 
 function pureHasInvalidLetterMixing(value: string): boolean {
