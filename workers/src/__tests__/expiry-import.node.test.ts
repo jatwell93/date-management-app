@@ -88,9 +88,7 @@ describe('processExpiryListUpload', () => {
 
   it('merges duplicate SKU+date rows within the same file (first wins)', async () => {
     const csv =
-      'SKU,Used-By Date,Department\n' +
-      '1001,12/12/26,Vitamins\n' +
-      '1001,12/12/26,Skincare\n';
+      'SKU,Used-By Date,Department\n' + '1001,12/12/26,Vitamins\n' + '1001,12/12/26,Skincare\n';
 
     const summary = await processExpiryListUpload(toBuffer(csv), ORG, harness.db);
 
@@ -137,5 +135,30 @@ describe('processExpiryListUpload', () => {
 
     expect(summary.errors).toEqual([]);
     expect(summary.importedCount).toBe(1);
+  });
+});
+
+describe('expiry import stores escaped spreadsheet formulas (#473)', () => {
+  // The expiry path auto-creates products and store areas from the file's own
+  // text, so an unescaped formula lands in `products.name` and `store_areas.name`
+  // just as surely as it would through the catalogue import.
+  it('escapes sku, item description, and department in the rows it creates', async () => {
+    const csv =
+      'SKU,Item Description,Used-By Date,Department\n' +
+      '=SKU_FORMULA,+NAME_FORMULA,12/12/26,@DEPT_FORMULA\n';
+
+    const summary = await processExpiryListUpload(toBuffer(csv), ORG, harness.db);
+
+    expect(summary.errorCount).toBe(0);
+    expect(summary.importedCount).toBe(1);
+
+    const products = await harness.pg.query(`SELECT sku, name FROM products`);
+    expect(products.rows[0]).toMatchObject({
+      sku: "'=SKU_FORMULA",
+      name: "'+NAME_FORMULA",
+    });
+
+    const areas = await harness.pg.query(`SELECT name FROM store_areas`);
+    expect(areas.rows.map((r) => (r as { name: string }).name)).toEqual(["'@DEPT_FORMULA"]);
   });
 });

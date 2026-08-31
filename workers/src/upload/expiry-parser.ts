@@ -1,3 +1,4 @@
+import { escapeSpreadsheetFormula } from '../../../shared/domain/csv-injection';
 import { findHeaderIndex, normalizeHeader } from './catalogue-parser';
 import { parseExpiryImportDate } from './expiry-date-parser';
 
@@ -73,15 +74,27 @@ function cellValue(record: string[], index: number): string {
   return index >= 0 ? (record[index] || '').trim() : '';
 }
 
+/**
+ * Trimmed cell text, escaped against spreadsheet-formula injection (#473).
+ *
+ * The expiry import persists sku, itemDescription and department as product and
+ * store-area names — the same three fields Express escapes in
+ * validateExpiryRowStrictly. The used-by date deliberately does not go through
+ * here: it is parsed into an ISO date rather than stored as the file's text.
+ */
+function freeTextCellValue(record: string[], index: number): string {
+  return escapeSpreadsheetFormula(cellValue(record, index));
+}
+
 function validateExpiryRecord(
   record: string[],
   rowNumber: number,
   indexes: ExpiryHeaderIndexes,
 ): { row?: ValidatedExpiryRow; error?: string } {
-  const sku = cellValue(record, indexes.sku);
+  const sku = freeTextCellValue(record, indexes.sku);
   const usedByInput = cellValue(record, indexes.usedByDate);
-  const itemDescription = cellValue(record, indexes.itemDescription);
-  const departmentRaw = cellValue(record, indexes.department);
+  const itemDescription = freeTextCellValue(record, indexes.itemDescription);
+  const departmentRaw = freeTextCellValue(record, indexes.department);
 
   if (!sku) {
     return { error: `Row ${rowNumber}: SKU is required and cannot be empty` };
