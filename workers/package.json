@@ -32,7 +32,7 @@
   "license": "MIT",
   "dependencies": {
     "@clerk/backend": "^3.8.4",
-    "@cloudflare/workers-types": "^4.20260627.1",
+    "@cloudflare/workers-types": "^5.20260818.1",
     "@neondatabase/serverless": "^1.1.0",
     "@sentry/cloudflare": "^10.62.0",
     "jose": "^6.2.3"
