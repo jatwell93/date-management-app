@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload status artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: migration-status-${{ inputs.deployment_sha }}
           path: migration-status.txt
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload preflight artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: migration-preflight-${{ inputs.deployment_sha }}
           path: migration-preflight.txt
@@ -178,7 +178,7 @@ jobs:
 
       - name: Upload PITR evidence
         if: always() && inputs.mode == 'full'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pitr-evidence-${{ inputs.deployment_sha }}
           path: |
@@ -196,7 +196,7 @@ jobs:
 
       - name: Upload apply artifact
         if: always() && inputs.mode == 'full'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: migration-apply-${{ inputs.deployment_sha }}
           path: migration-apply.txt
@@ -212,7 +212,7 @@ jobs:
 
       - name: Upload seed artifact
         if: always() && inputs.mode == 'full'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: migration-seed-${{ inputs.deployment_sha }}
           path: migration-seed.txt
@@ -230,7 +230,7 @@ jobs:
 
       - name: Upload verify artifact
         if: always() && inputs.mode == 'full'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: migration-verify-${{ inputs.deployment_sha }}
           path: migration-verify.txt
