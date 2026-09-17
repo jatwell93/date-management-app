@@ -81,6 +81,10 @@
 #   DRILL_ROLE         Role to connect as (default: neondb_owner — the schema
 #                      owner, the same identity migrate:verify asserts).
 #   PITR_MAX_AGE_HOURS Max age of an existing snapshot before one is created.
+#   RESTORE_READY_ATTEMPTS / RESTORE_READY_SLEEP
+#                      How long to wait for a just-created snapshot to become
+#                      restorable (default 20 attempts, 15s apart = 5 minutes).
+#                      Neon answers HTTP 423 "snapshot not ready" until then.
 #   DRILL_OPERATOR     Name recorded as "Responsible operator" in the evidence
 #                      file — the accountability clause of task 1.9. Defaults to
 #                      `git config user.name`, then "unrecorded".
@@ -92,6 +96,11 @@ set -euo pipefail
 NEON_PROJECT_ID="${NEON_PROJECT_ID:-dawn-darkness-22587117}"
 NEON_BRANCH="${NEON_BRANCH:-production}"
 DRILL_ROLE="${DRILL_ROLE:-neondb_owner}"
+# How long to keep retrying a restore that Neon rejects with "snapshot not
+# ready". 20 x 15s = 5 minutes, an order of magnitude above the sub-minute wait
+# observed in practice, and still far below the restore poll's own deadline.
+RESTORE_READY_ATTEMPTS="${RESTORE_READY_ATTEMPTS:-20}"
+RESTORE_READY_SLEEP="${RESTORE_READY_SLEEP:-15}"
 NEON_API_BASE="https://console.neon.tech/api/v2"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -454,22 +463,66 @@ step "1b. Restore the recovery point into a new branch"
 # The body is built with jq rather than interpolated into a string: DRILL_BRANCH
 # is timestamp-derived today, but a hand-built JSON literal is one --name-style
 # change away from emitting malformed JSON.
+#
+# A snapshot created moments ago is not immediately restorable: Neon returns
+# HTTP 423 {"message":"snapshot not ready"} until it has finished materializing.
+# Only 423 is retried — every other failure still aborts on the first response,
+# because "not ready yet" is the one restore failure that resolves by waiting.
+#
+# This path became reachable when --replace-snapshot made create-then-restore
+# within a single run the free-plan norm (the quota holds one snapshot, so the
+# drill must delete and recreate before it can restore). Before that the
+# snapshot always pre-existed from an earlier run and was long since ready,
+# which is why a drill that had worked for months failed the first time the
+# quota path ran. Observed 2026-09-17: created 02:58:27Z, restore rejected 423
+# seconds later, ready well inside a minute.
 RESTORE_RC=0
 RESTORE_ISSUED=1
-RESTORE_RESPONSE="$(curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request POST \
-  -H "Authorization: Bearer ${NEON_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg name "$DRILL_BRANCH" '{name:$name,finalize_restore:false}')" \
-  "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${SNAPSHOT_ID}/restore")" || RESTORE_RC=$?
+RESTORE_ATTEMPT=1
+while :; do
+  RESTORE_RC=0
+  # %{http_code} is appended on its own line so the status is available without
+  # giving up --fail-with-body: curl exit 22 alone cannot distinguish a
+  # retryable 423 from a fatal 404 or 401.
+  RESTORE_RAW="$(curl --fail-with-body --silent --show-error "${CURL_TIMEOUTS[@]}" --request POST \
+    --write-out '\n%{http_code}' \
+    -H "Authorization: Bearer ${NEON_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -nc --arg name "$DRILL_BRANCH" '{name:$name,finalize_restore:false}')" \
+    "${NEON_API_BASE}/projects/${NEON_PROJECT_ID}/snapshots/${SNAPSHOT_ID}/restore")" || RESTORE_RC=$?
+  # Split the trailing status line back off, leaving RESTORE_RESPONSE as the
+  # bare JSON body the operation poller consumes.
+  RESTORE_CODE="${RESTORE_RAW##*$'\n'}"
+  RESTORE_RESPONSE="${RESTORE_RAW%$'\n'*}"
+
+  [ "$RESTORE_RC" -eq 0 ] && break
+
+  if [ "$RESTORE_CODE" = "423" ] && [ "$RESTORE_ATTEMPT" -lt "$RESTORE_READY_ATTEMPTS" ]; then
+    say "Snapshot not ready yet (HTTP 423); waiting ${RESTORE_READY_SLEEP}s (attempt ${RESTORE_ATTEMPT}/${RESTORE_READY_ATTEMPTS})."
+    RESTORE_ATTEMPT=$((RESTORE_ATTEMPT + 1))
+    sleep "$RESTORE_READY_SLEEP"
+    continue
+  fi
+  break
+done
 if [ "$RESTORE_RC" -ne 0 ]; then
-  say "Restore call FAILED (curl exit ${RESTORE_RC}). Neon API said:"
+  say "Restore call FAILED (curl exit ${RESTORE_RC}, HTTP ${RESTORE_CODE}). Neon API said:"
   printf '%s\n' "$RESTORE_RESPONSE" | tee -a "$EVIDENCE_FILE"
   # RESTORE_ISSUED is set, so cleanup resolves the branch by name and removes it
   # if Neon accepted the restore before the response was lost.
+  if [ "$RESTORE_CODE" = "423" ]; then
+    say "Snapshot still not ready after ${RESTORE_READY_ATTEMPTS} attempts."
+    say "Re-run with --use-existing-snapshot to restore the snapshot just created,"
+    say "or raise RESTORE_READY_ATTEMPTS / RESTORE_READY_SLEEP."
+  fi
   echo "::error::Restore call failed. Aborting." >&2
   exit 1
 fi
-say "Restore call accepted:  yes"
+if [ "$RESTORE_ATTEMPT" -gt 1 ]; then
+  say "Restore call accepted:  yes (after ${RESTORE_ATTEMPT} attempts waiting for the snapshot)"
+else
+  say "Restore call accepted:  yes"
+fi
 
 step "1b. Poll restore operations to a terminal state"
 # Delegated to scripts/neon-poll-operations.js. A Bash `while read` loop on the
