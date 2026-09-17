@@ -121,6 +121,12 @@ jobs:
       - name: Compile TypeScript
         run: npm run compile
 
+      # Runs in BOTH modes, so a PR preview exercises them too. These three
+      # scripts gate and mutate production recovery points, and until now their
+      # tests ran nowhere in CI — present, passing locally, and not a gate.
+      - name: Test the Neon helper scripts
+        run: npm run test:neon-scripts
+
       # ── Step 1: status (read-only ledger check) ──────────────────────
       - name: Run migrate:status (read-only ledger check)
         env:
@@ -156,6 +162,44 @@ jobs:
       # ── Steps 3–6: full mode only (production) ────────────────────────
       # In validate mode (PR previews), the workflow ends here — no
       # mutations touch the shared dev database.
+
+      # Create the recovery point this deploy would roll back to, immediately
+      # before the readiness gate that requires one.
+      #
+      # The gate's 2h freshness threshold was written for the operator flow: a
+      # human runs scripts/pitr-drill.sh, then dispatches minutes later. With
+      # PRODUCTION_AUTO_DEPLOY_ENABLED on, GitHub decides when to deploy and
+      # nobody is present to prepare a snapshot, so every routine merge would
+      # fail the gate on a stale one. Creating it here restores the assumption
+      # the threshold was built on, and makes the recovery point strictly
+      # fresher than an operator could manage by hand.
+      #
+      # This is NOT the drill. scripts/pitr-drill.sh proves that a restore
+      # actually yields a serviceable database and remains an operator gate;
+      # this only creates the point a rollback returns to.
+      #
+      # It runs BEFORE the readiness check rather than replacing it: the check
+      # independently asserts the snapshot is really there and that the
+      # project's retention window has not been reduced. A creation step that
+      # quietly no-ops would otherwise be indistinguishable from a real one.
+      - name: Create Neon recovery point
+        if: inputs.mode == 'full'
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ inputs.neon_project_id }}
+          NEON_BRANCH: ${{ inputs.neon_branch }}
+          SNAPSHOT_NAME: pre-migration-${{ inputs.deployment_sha }}
+        run: node scripts/create-neon-snapshot.js > snapshot-evidence.json 2> snapshot-create.stderr
+
+      - name: Upload recovery point evidence
+        if: always() && inputs.mode == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-evidence-${{ inputs.deployment_sha }}
+          path: |
+            snapshot-evidence.json
+            snapshot-create.stderr
+          retention-days: 30
 
       - name: Check Neon PITR readiness
         if: inputs.mode == 'full'
