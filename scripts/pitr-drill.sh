@@ -494,6 +494,11 @@ while :; do
   # bare JSON body the operation poller consumes.
   RESTORE_CODE="${RESTORE_RAW##*$'\n'}"
   RESTORE_RESPONSE="${RESTORE_RAW%$'\n'*}"
+  # A refused connection or a timeout still emits a status line ("000"), so the
+  # only way to reach here empty is curl being killed before it wrote anything
+  # — a SIGKILL, or the runner tearing the job down. Name that case rather than
+  # printing "HTTP )." in the banner an operator reads during an incident.
+  : "${RESTORE_CODE:=no-response}"
 
   [ "$RESTORE_RC" -eq 0 ] && break
 
@@ -512,7 +517,18 @@ if [ "$RESTORE_RC" -ne 0 ]; then
   # if Neon accepted the restore before the response was lost.
   if [ "$RESTORE_CODE" = "423" ]; then
     say "Snapshot still not ready after ${RESTORE_READY_ATTEMPTS} attempts."
-    say "Re-run with --use-existing-snapshot to restore the snapshot just created,"
+    if [ "$USE_EXISTING" -eq 0 ]; then
+      # A recovery point WAS created by this run; it just is not restorable yet.
+      # Re-running plainly would create another one (and on the free plan delete
+      # this one), so point at the snapshot already in hand.
+      say "Re-run with --use-existing-snapshot to restore the snapshot just created,"
+    else
+      # Already restoring an existing snapshot, so --use-existing-snapshot is
+      # not the advice — it re-selects the same not-ready snapshot. Creating a
+      # fresh one is not the advice either: on the free plan that needs
+      # --replace-snapshot and would face the same materialization wait.
+      say "Wait and re-run the same command; the selected snapshot is still materializing,"
+    fi
     say "or raise RESTORE_READY_ATTEMPTS / RESTORE_READY_SLEEP."
   fi
   echo "::error::Restore call failed. Aborting." >&2
