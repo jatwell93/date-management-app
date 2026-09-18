@@ -105,9 +105,16 @@ test('422 quota: evicts the oldest snapshot for the branch, then retries once', 
 });
 
 test('a non-quota failure never deletes a restore point', async () => {
+  // Listing and delete are routed so an eviction is possible here; otherwise the
+  // listing throws, the catch absorbs it, and a "delete on any failure" bug
+  // would look identical to correct behaviour.
   const fetchImpl = makeFetch({
     [BRANCHES_URL]: BRANCH_OK,
     [SNAPSHOT_URL('pre-migration-test')]: { status: 401, body: 'unauthorized' },
+    [SNAPSHOTS_URL]: {
+      snapshots: [{ id: 'snap-oldest', created_at: '2026-07-01T00:00:00Z', branch_id: BRANCH_ID }],
+    },
+    [`${BASE}/snapshots/snap-oldest`]: { deleted: true },
   });
   assert.equal(await run(fetchImpl), 1);
   assert.equal(
@@ -124,6 +131,90 @@ test('SNAPSHOT_REPLACE=false leaves the quota alone and fails closed', async () 
   });
   assert.equal(await run(fetchImpl, { ...ENV, SNAPSHOT_REPLACE: 'false' }), 1);
   assert.equal(fetchImpl.calls.filter((c) => c.method === 'DELETE').length, 0);
+});
+
+test('409 is NOT treated as a full quota and never evicts', async () => {
+  // The listing and the delete are routed and WOULD succeed, so if 409 were
+  // treated as a full quota this test would see a real eviction. Without them
+  // the listing throws and the catch hides the difference.
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL]: BRANCH_OK,
+    [SNAPSHOT_URL('pre-migration-test')]: { status: 409, body: 'conflict' },
+    [SNAPSHOTS_URL]: {
+      snapshots: [{ id: 'snap-oldest', created_at: '2026-07-01T00:00:00Z', branch_id: BRANCH_ID }],
+    },
+    [`${BASE}/snapshots/snap-oldest`]: { deleted: true },
+  });
+  assert.equal(await run(fetchImpl), 1);
+  assert.equal(
+    fetchImpl.calls.filter((c) => c.method === 'DELETE').length,
+    0,
+    'a conflict is not evidence of a full quota; evicting would destroy a valid restore point',
+  );
+});
+
+test('refuses to evict another branch snapshot unattended, and still writes evidence', async () => {
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL]: BRANCH_OK,
+    [SNAPSHOT_URL('pre-migration-test')]: { status: 422, body: 'quota exceeded' },
+    [SNAPSHOTS_URL]: {
+      snapshots: [
+        { id: 'other-branch-snap', created_at: '2026-07-01T00:00:00Z', branch_id: 'br-dev' },
+      ],
+    },
+  });
+  const out = [];
+  assert.equal(
+    await main(ENV, {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => out.push(s) },
+      stderr: sink(),
+    }),
+    1,
+  );
+  assert.equal(fetchImpl.calls.filter((c) => c.method === 'DELETE').length, 0);
+  const evidence = JSON.parse(out.join(''));
+  assert.equal(evidence.created, false);
+  assert.equal(evidence.status, 422, 'the original failed-attempt status must survive');
+});
+
+test('SNAPSHOT_REPLACE_FOREIGN=true allows the cross-branch eviction', async () => {
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL]: BRANCH_OK,
+    [SNAPSHOT_URL('pre-migration-test')]: (n) =>
+      n === 1 ? { status: 422, body: 'quota exceeded' } : { snapshot: { id: 'snap-new' } },
+    [SNAPSHOTS_URL]: {
+      snapshots: [
+        { id: 'other-branch-snap', created_at: '2026-07-01T00:00:00Z', branch_id: 'br-dev' },
+      ],
+    },
+    [`${BASE}/snapshots/other-branch-snap`]: { deleted: true },
+  });
+  assert.equal(await run(fetchImpl, { ...ENV, SNAPSHOT_REPLACE_FOREIGN: 'true' }), 0);
+  assert.equal(fetchImpl.calls.filter((c) => c.method === 'DELETE').length, 1);
+});
+
+test('a failing snapshot listing still writes the original failed attempt as evidence', async () => {
+  // The listing endpoint is absent from the routes, so listSnapshots throws.
+  const fetchImpl = makeFetch({
+    [BRANCHES_URL]: BRANCH_OK,
+    [SNAPSHOT_URL('pre-migration-test')]: { status: 422, body: 'quota exceeded' },
+  });
+  const out = [];
+  assert.equal(
+    await main(ENV, {
+      fetch: fetchImpl,
+      now: () => NOW,
+      stdout: { write: (s) => out.push(s) },
+      stderr: sink(),
+    }),
+    1,
+    'must fail closed rather than throw',
+  );
+  const evidence = JSON.parse(out.join(''));
+  assert.equal(evidence.status, 422, 'the known failure must not be replaced by "could not run"');
+  assert.equal(evidence.evicted, null);
 });
 
 test('fails closed when the branch does not exist', async () => {

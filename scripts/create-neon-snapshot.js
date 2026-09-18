@@ -35,6 +35,10 @@
  *                    branch name, not the Git branch `main`).
  *   SNAPSHOT_NAME    Recovery point name (default: pre-migration-<UTC stamp>).
  *   SNAPSHOT_REPLACE "true" to reclaim the quota slot on 422 (default: true).
+ *   SNAPSHOT_REPLACE_FOREIGN
+ *                    "true" to allow evicting a snapshot belonging to ANOTHER
+ *                    branch when it holds the only slot (default: false — the
+ *                    run fails closed instead, so a human decides).
  *
  * Exit codes: 0 — a recovery point exists. 1 — creation failed (the deploy must
  * not proceed: migrate:apply would run with nothing to roll back to).
@@ -154,7 +158,15 @@ async function deleteSnapshot(projectId, snapshotId, apiKey, fetchFn) {
  * rollback target at the moment something has already gone wrong.
  */
 function isQuotaExhausted(status) {
-  return status === 422 || status === 409;
+  // 422 ONLY, and deliberately so. It is the status Neon actually returns for a
+  // full quota — documented in pitr-drill.sh:69 and observed live on 2026-09-17.
+  // 409 was included here speculatively and has been removed: nothing shows this
+  // endpoint uses it for quota, and a conflict status plausibly means something
+  // else entirely (a concurrent operation from an overlapping deploy). Treating
+  // that as "quota full" would delete a valid restore point and then still fail
+  // to create the new one — destroying the rollback target for a reason that was
+  // never about the quota.
+  return status === 422;
 }
 
 /**
@@ -166,19 +178,51 @@ function isQuotaExhausted(status) {
  * @returns {Promise<{attempt: {ok: boolean; status: number; body: string}, evicted: object | null}>}
  */
 async function createWithQuotaRecovery(projectId, branch, name, apiKey, fetchFn, options) {
-  const { replace, stderr, branchName } = options;
+  const { replace, allowForeignEvict, stderr, branchName } = options;
   const attempt = await createSnapshot(projectId, branch.id, name, apiKey, fetchFn);
   if (attempt.ok || !replace || !isQuotaExhausted(attempt.status)) {
     return { attempt, evicted: null };
   }
 
-  const victim = pickSnapshotToEvict(await listSnapshots(projectId, apiKey, fetchFn), branch.id);
+  // The listing is caught rather than allowed to propagate. main() writes the
+  // evidence document to stdout, which the workflow uploads with `if: always()`
+  // as the audit artifact; a throw from here would leave that file empty and
+  // replace an already-known failed-attempt status and body with a generic
+  // "could not run". Returning the original attempt keeps the artifact complete
+  // and still fails closed. Same reasoning as check-neon-pitr.js:368-371.
+  let victim = null;
+  try {
+    victim = pickSnapshotToEvict(await listSnapshots(projectId, apiKey, fetchFn), branch.id);
+  } catch (error) {
+    stderr.write(
+      `::warning::Creation failed (HTTP ${attempt.status}) and the quota-recovery listing also failed: ` +
+        `${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return { attempt, evicted: null };
+  }
   if (!victim) return { attempt, evicted: null };
 
+  if (victim.foreign && !allowForeignEvict) {
+    // Fail closed: the quota is per-project, so the slot can be held by ANOTHER
+    // branch's only manual restore point. pitr-drill.sh performs this same
+    // fallback, but an operator is watching and can abort. Here nobody is —
+    // that is the entire premise of this script — so deleting someone else's
+    // recovery point unattended, announced only by an annotation no one reads,
+    // is not a decision this pipeline should make. Reclaiming the previous
+    // deploy's own slot on this branch stays automatic.
+    stderr.write(
+      `::error::Quota is full and no snapshot exists for branch "${branchName}". The only ` +
+        `reclaimable slot is held by ${victim.id} (created ${victim.created_at}) on another branch. ` +
+        `Refusing to delete it unattended: delete it deliberately, or set ` +
+        `SNAPSHOT_REPLACE_FOREIGN=true for this run.\n`,
+    );
+    return { attempt, evicted: null };
+  }
   if (victim.foreign) {
     stderr.write(
       `::warning::Quota is full and no snapshot exists for branch "${branchName}"; ` +
-        `evicting the oldest snapshot in the PROJECT instead (${victim.id}, created ${victim.created_at}).\n`,
+        `SNAPSHOT_REPLACE_FOREIGN is set, so the oldest snapshot in the PROJECT is being ` +
+        `evicted instead (${victim.id}, created ${victim.created_at}).\n`,
     );
   }
   await deleteSnapshot(projectId, victim.id, apiKey, fetchFn);
@@ -215,6 +259,9 @@ async function main(env, deps) {
   // Defaults ON: the free plan is the only configuration this project runs, and
   // there a quota failure is the expected first response, not an anomaly.
   const replace = (env.SNAPSHOT_REPLACE || 'true') === 'true';
+  // Defaults OFF, unlike SNAPSHOT_REPLACE: evicting THIS branch's previous
+  // recovery point is routine, evicting another branch's only one is not.
+  const allowForeignEvict = (env.SNAPSHOT_REPLACE_FOREIGN || 'false') === 'true';
 
   const branch = await resolveBranch(projectId, branchName, apiKey, fetchImpl);
   if (!branch) {
@@ -230,7 +277,7 @@ async function main(env, deps) {
     snapshotName,
     apiKey,
     fetchImpl,
-    { replace, stderr, branchName },
+    { replace, allowForeignEvict, stderr, branchName },
   );
 
   const evidence = {
