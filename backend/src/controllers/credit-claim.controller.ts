@@ -6,9 +6,7 @@ import {
   type BuildClaimInput,
   type ClaimOutcome,
 } from '../services/credit-claim.service';
-
-const OPEN_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
-const SETTLED_STATUSES = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED'];
+import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../../shared/domain/credit-claim';
 
 export class CreditClaimController {
   constructor(private serviceFactory: (orgId?: string) => CreditClaimService) {}
@@ -21,7 +19,11 @@ export class CreditClaimController {
     try {
       const view = req.query.view;
       const statuses =
-        view === 'open' ? OPEN_STATUSES : view === 'settled' ? SETTLED_STATUSES : undefined;
+        view === 'open'
+          ? [...OPEN_CLAIM_STATUSES]
+          : view === 'settled'
+            ? [...SETTLED_CLAIM_STATUSES]
+            : undefined;
       res.json(await this.getService(req).listClaims(statuses));
     } catch (error) {
       next(error);

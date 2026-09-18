@@ -1520,19 +1520,29 @@ equivalent, a relocated home, or an explicit retirement decision.
             `database.credit-claim.conformance.node.test.ts` seed data), so no claim, line, photo or
             event is ever created; and unmatched `/api/` paths 404 at `index-minimal.ts:431`. The
             `credit_claim_photos` table is read at `database.ts:2075` and written nowhere.
-            <br>**First establish which origin production's frontend resolves against**
-            (`frontend/src/lib/api.service.ts:1-4` uses a single base URL for every call); that
-            determines whether the write side is a live outage or a latent one, and the audit
-            deliberately does not assert either. That question is not in the credit-claim change and
-            belongs here.
-            <br>Two test properties to carry into that change's task 4.2, recorded from the Express
+            <br>**ANSWERED 2026-09-19: it is the Worker, so this is a live outage, not a latent
+            one.** `.github/workflows/pages-deploy.yml:197-216` hard-fails the production frontend
+            build when `REACT_APP_API_URL` / `REACT_APP_API_BASE_URL` is empty *or* matches a
+            dev/preview/tunnel host, with the error text naming the prod Worker as the required
+            target; `frontend/src/lib/api.service.ts:1-4` derives the single `API_BASE_URL` every
+            call uses from exactly those two variables. So the deployed frontend cannot be pointing
+            at Express: the six missing routes 404 in production today. The only thing keeping this
+            from being user-visible is that the app has no active users yet — which makes it a
+            blocker for the in-store trial, not merely for Phase 4. (The audit asserted neither on
+            purpose, and the question was not in the credit-claim change, which is why it parked
+            here.) **This row stays open until that change lands** — answering the question does not
+            close the gap.
+            <br>**Carried 2026-09-19 into `add-workers-credit-claim-write-handlers` task 4.2**, with
+            the exact assertions each must make: two test properties recorded from the Express
             tests this manifest retires and not currently named there: the claim creator comes from
             the verified JWT and never the request body
             (`controllers/credit-claim.controller.test.ts:65`), and a photo upload with no file is
             rejected before the service is invoked (`:79`) — the same reject-before-work ordering
-            `handleUploadDirect` already gets right at `index-minimal.ts:3600-3611`.
-      - [ ] 3.1.e **Hoist the credit-claim status partition into `shared/`.** `index-minimal.ts:192-193`
-            re-declares `OPEN_CREDIT_CLAIM_STATUSES` and `SETTLED_CREDIT_CLAIM_STATUSES` as local
+            `handleUploadDirect` already gets right (now `index-minimal.ts:3787-3789`; the audit's
+            `3600-3611` has since drifted).
+      - [x] 3.1.e **Hoist the credit-claim status partition into `shared/`. DONE 2026-09-19.**
+            `index-minimal.ts:208-209` (the audit's `192-193`, drifted)
+            re-declared `OPEN_CREDIT_CLAIM_STATUSES` and `SETTLED_CREDIT_CLAIM_STATUSES` as local
             literals, duplicating `SETTLED_CLAIM_STATUSES` in `shared/domain/credit-claim.ts:25` — a
             module whose own header states it exists so "both backends must agree on the claim status
             vocabulary" (golden rule 5). The lists match today and nothing enforces that they keep
@@ -1543,6 +1553,41 @@ equivalent, a relocated home, or an explicit retirement decision.
             partitions from shared and pin them with a conformance test. Small, and it unblocks the
             `?view=settled` and no-`view` rows in Part 4 being written against the shared export
             rather than a third copy of the strings.
+            <br>**Shipped.** There were in fact **three** copies, not two: the audit named the Worker
+            pair, but `backend/src/controllers/credit-claim.controller.ts:10-11` held its own
+            `OPEN_STATUSES` / `SETTLED_STATUSES`. `shared/domain/credit-claim.ts` now exports
+            `OPEN_CLAIM_STATUSES` (`as const satisfies readonly CreditClaimStatus[]`, same shape as
+            its siblings) and both backends read it — so "both backends must agree" is now structural
+            rather than coincidental. The doc comment names the `CHASEABLE` trap in place.
+            <br>Pinned by three cases in `backend/src/tests/unit/credit-claim.test.ts`: the two
+            partitions are disjoint and their union is exactly `CREDIT_CLAIM_STATUSES`;
+            `isSettledClaimStatus` agrees with both lists for every status in the vocabulary; and
+            `CHASEABLE` is a *proper* subset of `OPEN`, with the two statuses they disagree on
+            (`DRAFT`, `SENDING`) named, so widening `CHASEABLE` has to come here and say so.
+            <br>**Mutation-verified, two mutations.** (1) Dropping `'SENDING'` from the shared
+            `OPEN_CLAIM_STATUSES` failed exactly five tests and no others: all three new cases, plus
+            **both** consumers' existing route tests — `minimal-api-routes.test.ts:692` (Worker) and
+            `credit-claim.controller.test.ts:36` (Express). That those two moved is the evidence the
+            hoist is real and not a parallel fourth copy. (2) Widening `CHASEABLE` until it equalled
+            `OPEN` failed exactly two: the pre-existing `classifies chaseable statuses` and the new
+            proper-subset case. Worth recording that the `isFollowUpDue` tests did **not** catch
+            mutation (2), even though widening `CHASEABLE` is precisely what would start chasing
+            drafts — so the new case is the only guard on that behaviour.
+            <br>**Review outcome.** A reviewer held that a status added to `CREDIT_CLAIM_STATUSES`
+            but to neither partition would vanish from both views with no test failing. The premise
+            is wrong — mutation-tested by adding `'DISPUTED'` to the vocabulary alone, which fails
+            two of the three new cases (the union check and the `isSettledClaimStatus` agreement
+            loop). Their *remedy* was taken anyway, for a reason they did not give: the pin lives in
+            `backend/src/tests/unit/credit-claim.test.ts`, and Express's retirement is liable to
+            sweep that file away with the rest of `backend/`. `shared/domain/credit-claim.ts` now
+            carries a type-level `AssertTrue<CreditClaimStatus extends OpenOrSettledStatus>`, so the
+            same mistake fails at `tsc` in whichever package compiles first, inside the module that
+            owns the guarantee. Verified both ways: with `'DISPUTED'` unplaced the workers typecheck
+            reports `TS2344: Type 'false' does not satisfy the constraint 'true'` at the guard; clean
+            once placed. Disjointness is not expressible as a type and stays test-only.
+            <br>Note for Phase 3.2: the `?view=settled` and no-`view` rows still have no Worker test
+            (`minimal-api-routes.test.ts:682` covers `?view=open` only); write them against the
+            shared export.
       - [ ] 3.1.f **Reconcile the two test-bypass predicates before deleting Express** (Finding 7).
             `middleware/auth.middleware.ts:129` and `middleware/clerk-auth.middleware.ts:79` both gate
             on `NODE_ENV === 'test'` **and** `TEST_AUTH_BYPASS === 'true'`; `utils/auth-bypass.ts:11`
