@@ -1588,7 +1588,8 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>Note for Phase 3.2: the `?view=settled` and no-`view` rows still have no Worker test
             (`minimal-api-routes.test.ts:682` covers `?view=open` only); write them against the
             shared export.
-      - [ ] 3.1.f **Reconcile the two test-bypass predicates before deleting Express** (Finding 7).
+      - [x] 3.1.f **Reconcile the two test-bypass predicates before deleting Express** (Finding 7).
+            **DONE 2026-09-19.**
             `middleware/auth.middleware.ts:129` and `middleware/clerk-auth.middleware.ts:79` both gate
             on `NODE_ENV === 'test'` **and** `TEST_AUTH_BYPASS === 'true'`; `utils/auth-bypass.ts:11`
             uses **or**. That helper backs `getOrganizationId(organizationId?)` (`:18-28`), which
@@ -1605,6 +1606,42 @@ equivalent, a relocated home, or an explicit retirement decision.
             Cheapest correct fix is to change the `||` to `&&` and let the missing-org case throw. No
             Worker counterpart exists or should be introduced: `index-minimal.ts:3352` is the sole
             assignment of `organizationId` and it reads the verified JWT with no fallback branch.
+            <br>**Shipped.** `utils/auth-bypass.ts:11` is now `&&`, matching both middleware guards,
+            and the helper was renamed `isTestEnvironment` → `isTestAuthBypassEnabled`. The rename is
+            part of the fix rather than tidying: `NODE_ENV === 'test' || TEST_AUTH_BYPASS` is a
+            *correct* implementation of the question the old name asks, so the name is what invites
+            the next person to re-broaden it. The callers need "is the bypass on?", not "are we in a
+            test?". `getOrganizationId` now throws in every case except a fully-enabled bypass.
+            <br>**The row under-counted the blast radius by one.** A ninth consumer takes its whole
+            tenant scope from the helper and is not in the list above: `user.service.ts:22`. Same
+            shape as the third partition copy found in 3.1.e — an inventory assembled by grepping one
+            symptom misses the site that spells it differently.
+            <br>**The existing test codified the vulnerability.** `auth-bypass-safety.test.ts:21-25`
+            asserted `isTestEnvironment()` is `true` under `NODE_ENV=production` with
+            `TEST_AUTH_BYPASS=true` — precisely the cell this task closes. A green suite was evidence
+            *for* the bug. That file is rewritten: the two cells that used to expect the loose answer
+            now expect the tight one, and a four-cell matrix drives `clerkAuth` directly and asserts
+            the middleware bypasses **exactly** when the helper says it should.
+            <br>**Mutation-verified, two mutations.** (1) Restore `||` in the helper → 7 failures,
+            exactly the intended set (2 helper cells, 2 matrix cells, 2 `getOrganizationId` cells, 1
+            `InventoryService` cell); nothing else in the suite moved. (2) Leave the helper correct
+            and loosen the *middleware* guard (`clerk-auth.middleware.ts:79` → `||`) → exactly the 2
+            matrix cells fail, which is the evidence the matrix drives the middleware rather than
+            re-asserting the helper against itself. Worth recording: under mutation 2 the whole of
+            `clerk-auth.middleware.test.ts` (8 tests) **still passed**. It cannot detect its own guard
+            drifting open, because every non-bypass test there sets `NODE_ENV=production` *and*
+            `TEST_AUTH_BYPASS=false`, a cell that is false under both `&&` and `||`. The new matrix is
+            the only thing guarding that middleware's predicate.
+            <br>**Recorded, deliberately not fixed here:** `subscription.service.ts:147` is a fourth
+            predicate of the same *shape* but a different concern —
+            `TEST_AUTH_BYPASS === 'true' || JEST_WORKER_ID !== undefined` decides whether production
+            without `STRIPE_SECRET_KEY` fails fast. Two things are wrong with it: `JEST_WORKER_ID` has
+            been dead since the Vitest migration (Vitest sets `VITEST_WORKER_ID`), and the surviving
+            half means a deployed process with the flag set silently gets a placeholder Stripe key
+            instead of the intended hard failure. It is left alone on purpose: it is billing config
+            rather than tenant scope, `createStripeClient` has **no test at all**, and whether
+            production should hard-fail without a Stripe key is a product call. Fixing it means
+            writing the first test for that guard, which is its own unit of work.
       - [ ] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
             (Finding 8). Express records authorization events through `OrgAuditService.emit`
             (`backend/src/services/org-audit.service.ts:20`) into
