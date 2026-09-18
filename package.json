@@ -76,7 +76,7 @@
     "wrangler": "4.131.0"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "^7.9.1",
     "pg": "8.22.0",
     "prisma": "^6.19.3"
   }
