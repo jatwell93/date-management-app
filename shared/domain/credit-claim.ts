@@ -44,6 +44,24 @@ export const OPEN_CLAIM_STATUSES = [
   'ACKNOWLEDGED',
 ] as const satisfies readonly CreditClaimStatus[];
 
+/**
+ * Compile-time half of the partition guarantee: every status in the vocabulary
+ * must appear in one of the two lists. `satisfies` above already stops a status
+ * appearing in a list but not the vocabulary, so together these pin coverage in
+ * both directions. Adding a status to `CREDIT_CLAIM_STATUSES` and forgetting to
+ * place it fails here, at `tsc`, in whichever package compiles first — rather
+ * than only in a backend test that Express's retirement will eventually take
+ * with it. Disjointness is not expressible this way and stays pinned by
+ * `backend/src/tests/unit/credit-claim.test.ts`.
+ */
+type AssertTrue<T extends true> = T;
+type OpenOrSettledStatus =
+  | (typeof OPEN_CLAIM_STATUSES)[number]
+  | (typeof SETTLED_CLAIM_STATUSES)[number];
+type _EveryStatusIsOpenOrSettled = AssertTrue<
+  CreditClaimStatus extends OpenOrSettledStatus ? true : false
+>;
+
 /** Statuses that are still open with the supplier and may be followed up. */
 export const CHASEABLE_CLAIM_STATUSES = [
   'SENT',

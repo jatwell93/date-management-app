@@ -1573,6 +1573,18 @@ equivalent, a relocated home, or an explicit retirement decision.
             proper-subset case. Worth recording that the `isFollowUpDue` tests did **not** catch
             mutation (2), even though widening `CHASEABLE` is precisely what would start chasing
             drafts — so the new case is the only guard on that behaviour.
+            <br>**Review outcome.** A reviewer held that a status added to `CREDIT_CLAIM_STATUSES`
+            but to neither partition would vanish from both views with no test failing. The premise
+            is wrong — mutation-tested by adding `'DISPUTED'` to the vocabulary alone, which fails
+            two of the three new cases (the union check and the `isSettledClaimStatus` agreement
+            loop). Their *remedy* was taken anyway, for a reason they did not give: the pin lives in
+            `backend/src/tests/unit/credit-claim.test.ts`, and Express's retirement is liable to
+            sweep that file away with the rest of `backend/`. `shared/domain/credit-claim.ts` now
+            carries a type-level `AssertTrue<CreditClaimStatus extends OpenOrSettledStatus>`, so the
+            same mistake fails at `tsc` in whichever package compiles first, inside the module that
+            owns the guarantee. Verified both ways: with `'DISPUTED'` unplaced the workers typecheck
+            reports `TS2344: Type 'false' does not satisfy the constraint 'true'` at the guard; clean
+            once placed. Disjointness is not expressible as a type and stays test-only.
             <br>Note for Phase 3.2: the `?view=settled` and no-`view` rows still have no Worker test
             (`minimal-api-routes.test.ts:682` covers `?view=open` only); write them against the
             shared export.
