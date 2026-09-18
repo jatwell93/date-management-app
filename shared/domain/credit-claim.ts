@@ -29,6 +29,21 @@ export const SETTLED_CLAIM_STATUSES = [
   'CANCELLED',
 ] as const satisfies readonly CreditClaimStatus[];
 
+/**
+ * Statuses where the claim is not yet resolved: the `?view=open` partition, and
+ * the exact complement of `SETTLED_CLAIM_STATUSES`.
+ *
+ * Not to be confused with `CHASEABLE_CLAIM_STATUSES` below, which is a *proper
+ * subset* — a claim still in `DRAFT` or `SENDING` is open but has nothing to
+ * chase. Filtering an open view by the chaseable list silently hides drafts.
+ */
+export const OPEN_CLAIM_STATUSES = [
+  'DRAFT',
+  'SENDING',
+  'SENT',
+  'ACKNOWLEDGED',
+] as const satisfies readonly CreditClaimStatus[];
+
 /** Statuses that are still open with the supplier and may be followed up. */
 export const CHASEABLE_CLAIM_STATUSES = [
   'SENT',

@@ -4,6 +4,10 @@ import {
   isFollowUpDue,
   isSettledClaimStatus,
   isChaseableClaimStatus,
+  CREDIT_CLAIM_STATUSES,
+  OPEN_CLAIM_STATUSES,
+  SETTLED_CLAIM_STATUSES,
+  CHASEABLE_CLAIM_STATUSES,
   rollupClaimablePool,
   rollupRecoveryReport,
   type ClaimableWriteOffRow,
@@ -63,6 +67,45 @@ describe('credit-claim shared domain', () => {
       expect(isChaseableClaimStatus('DRAFT')).toBe(false);
       expect(isChaseableClaimStatus('SENDING')).toBe(false);
       expect(isChaseableClaimStatus('CREDITED')).toBe(false);
+    });
+  });
+
+  // Conformance pin for the `?view=open|settled` partition, which both backends
+  // now read from here rather than re-declaring (task 3.1.e). The lists agreeing
+  // is not enough: the failure this guards against is a future reader reaching
+  // for the similarly-named CHASEABLE list, which is a *proper* subset and would
+  // silently drop DRAFT/SENDING claims out of the open view.
+  describe('open/settled partition', () => {
+    it('splits the whole status vocabulary in two, with nothing shared and nothing missing', () => {
+      const open = [...OPEN_CLAIM_STATUSES] as string[];
+      const settled = [...SETTLED_CLAIM_STATUSES] as string[];
+
+      expect(open.filter((status) => settled.includes(status))).toEqual([]);
+      expect([...open, ...settled].sort()).toEqual([...CREDIT_CLAIM_STATUSES].sort());
+    });
+
+    it('agrees with isSettledClaimStatus for every status in the vocabulary', () => {
+      for (const status of CREDIT_CLAIM_STATUSES) {
+        expect(isSettledClaimStatus(status)).toBe(
+          (SETTLED_CLAIM_STATUSES as readonly string[]).includes(status),
+        );
+        expect(isSettledClaimStatus(status)).toBe(
+          !(OPEN_CLAIM_STATUSES as readonly string[]).includes(status),
+        );
+      }
+    });
+
+    it('keeps CHASEABLE a strictly smaller subset of OPEN, never a synonym for it', () => {
+      const open = OPEN_CLAIM_STATUSES as readonly string[];
+      for (const status of CHASEABLE_CLAIM_STATUSES) {
+        expect(open).toContain(status);
+      }
+      expect(CHASEABLE_CLAIM_STATUSES.length).toBeLessThan(OPEN_CLAIM_STATUSES.length);
+      // The statuses the two partitions disagree on, named so a widening of
+      // CHASEABLE has to come here and say so.
+      expect(
+        open.filter((status) => !(CHASEABLE_CLAIM_STATUSES as readonly string[]).includes(status)),
+      ).toEqual(['DRAFT', 'SENDING']);
     });
   });
 

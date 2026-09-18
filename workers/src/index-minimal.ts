@@ -89,6 +89,7 @@ import {
   type MarkdownMatrixSet,
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
+import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import { isPlatformAdminUser as isSharedPlatformAdminUser } from '../../shared/domain/platform-catalogue';
 import {
   isCreditType,
@@ -205,8 +206,6 @@ const RE_SUPPLIER_CREDIT_SUPPLIER = /^\/api\/supplier-credits\/suppliers\/\d+$/;
 const RE_SUPPLIER_CREDIT_SUPPLIER_POLICY = /^\/api\/supplier-credits\/suppliers\/\d+\/policy$/;
 const RE_SUPPLIER_CREDIT_DISPOSE = /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/;
 const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
-const OPEN_CREDIT_CLAIM_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
-const SETTLED_CREDIT_CLAIM_STATUSES = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED'];
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
@@ -2357,9 +2356,9 @@ async function handleListCreditClaims(request: Request, db: Database, env: Env):
   const view = new URL(request.url).searchParams.get('view');
   const statuses =
     view === 'open'
-      ? OPEN_CREDIT_CLAIM_STATUSES
+      ? [...OPEN_CLAIM_STATUSES]
       : view === 'settled'
-        ? SETTLED_CREDIT_CLAIM_STATUSES
+        ? [...SETTLED_CLAIM_STATUSES]
         : undefined;
   const claims = await db.listCreditClaims(auth.organizationId, statuses);
   return jsonResponse(claims, 200, env);
