@@ -23,6 +23,27 @@ const ENV = {
  * count so a test can make the same URL fail then succeed, which is the whole
  * shape of the quota-eviction path.
  */
+const failWith = (status, body) => ({
+  ok: false,
+  status,
+  text: async () => body,
+  json: async () => ({}),
+});
+
+const succeedWith = (payload) => ({
+  ok: true,
+  status: 200,
+  json: async () => payload,
+  text: async () => JSON.stringify(payload),
+});
+
+/** Resolve one route entry to a Response-alike. */
+function respond(entry) {
+  if (!entry) return failWith(404, 'not found');
+  if (entry.status && entry.status >= 400) return failWith(entry.status, entry.body || '');
+  return succeedWith(entry);
+}
+
 function makeFetch(routes) {
   const calls = [];
   const counts = new Map();
@@ -30,25 +51,8 @@ function makeFetch(routes) {
     calls.push({ url, method: init?.method || 'GET' });
     const n = (counts.get(url) || 0) + 1;
     counts.set(url, n);
-    let entry = routes[url];
-    if (typeof entry === 'function') entry = entry(n);
-    if (!entry) {
-      return { ok: false, status: 404, text: async () => 'not found', json: async () => ({}) };
-    }
-    if (entry.status && entry.status >= 400) {
-      return {
-        ok: false,
-        status: entry.status,
-        text: async () => entry.body || '',
-        json: async () => ({}),
-      };
-    }
-    return {
-      ok: true,
-      status: 200,
-      json: async () => entry,
-      text: async () => JSON.stringify(entry),
-    };
+    const route = routes[url];
+    return respond(typeof route === 'function' ? route(n) : route);
   };
   fn.calls = calls;
   return fn;

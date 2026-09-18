@@ -146,6 +146,53 @@ async function deleteSnapshot(projectId, snapshotId, apiKey, fetchFn) {
   }
 }
 
+/**
+ * Is this the API's way of saying the snapshot quota is full?
+ *
+ * Only these statuses are worth evicting a restore point for. A 401 or a 404 is
+ * not fixed by deleting one, and deleting one to find that out would destroy the
+ * rollback target at the moment something has already gone wrong.
+ */
+function isQuotaExhausted(status) {
+  return status === 422 || status === 409;
+}
+
+/**
+ * Create the recovery point, reclaiming a quota slot if that is what blocked it.
+ *
+ * Eviction is attempted only AFTER a creation failure and only for a quota
+ * status, so it is a no-op on a paid plan with slots free.
+ *
+ * @returns {Promise<{attempt: {ok: boolean; status: number; body: string}, evicted: object | null}>}
+ */
+async function createWithQuotaRecovery(projectId, branch, name, apiKey, fetchFn, options) {
+  const { replace, stderr, branchName } = options;
+  const attempt = await createSnapshot(projectId, branch.id, name, apiKey, fetchFn);
+  if (attempt.ok || !replace || !isQuotaExhausted(attempt.status)) {
+    return { attempt, evicted: null };
+  }
+
+  const victim = pickSnapshotToEvict(await listSnapshots(projectId, apiKey, fetchFn), branch.id);
+  if (!victim) return { attempt, evicted: null };
+
+  if (victim.foreign) {
+    stderr.write(
+      `::warning::Quota is full and no snapshot exists for branch "${branchName}"; ` +
+        `evicting the oldest snapshot in the PROJECT instead (${victim.id}, created ${victim.created_at}).\n`,
+    );
+  }
+  await deleteSnapshot(projectId, victim.id, apiKey, fetchFn);
+  return {
+    attempt: await createSnapshot(projectId, branch.id, name, apiKey, fetchFn),
+    evicted: {
+      id: victim.id,
+      name: victim.name || null,
+      createdAt: victim.created_at || null,
+      foreign: victim.foreign,
+    },
+  };
+}
+
 /** Default recovery point name: pre-migration-<UTC stamp>, matching pitr-drill.sh. */
 function defaultSnapshotName(now) {
   const iso = now.toISOString();
@@ -177,46 +224,24 @@ async function main(env, deps) {
     return 1;
   }
 
+  const { attempt, evicted } = await createWithQuotaRecovery(
+    projectId,
+    branch,
+    snapshotName,
+    apiKey,
+    fetchImpl,
+    { replace, stderr, branchName },
+  );
+
   const evidence = {
     projectId,
     branch: { name: branch.name, id: branch.id },
     snapshotName,
     replaceRequested: replace,
-    evicted: null,
-    created: false,
+    evicted,
+    created: attempt.ok,
+    status: attempt.status,
   };
-
-  let attempt = await createSnapshot(projectId, branch.id, snapshotName, apiKey, fetchImpl);
-
-  if (!attempt.ok && replace) {
-    // Quota recovery. Only a full-quota response is worth evicting for; a 401 or
-    // a 404 is not fixed by deleting a restore point, and deleting one to find
-    // that out would be destructive for no reason.
-    const quotaExhausted = attempt.status === 422 || attempt.status === 409;
-    if (quotaExhausted) {
-      const snapshots = await listSnapshots(projectId, apiKey, fetchImpl);
-      const victim = pickSnapshotToEvict(snapshots, branch.id);
-      if (victim) {
-        if (victim.foreign) {
-          stderr.write(
-            `::warning::Quota is full and no snapshot exists for branch "${branchName}"; ` +
-              `evicting the oldest snapshot in the PROJECT instead (${victim.id}, created ${victim.created_at}).\n`,
-          );
-        }
-        await deleteSnapshot(projectId, victim.id, apiKey, fetchImpl);
-        evidence.evicted = {
-          id: victim.id,
-          name: victim.name || null,
-          createdAt: victim.created_at || null,
-          foreign: victim.foreign,
-        };
-        attempt = await createSnapshot(projectId, branch.id, snapshotName, apiKey, fetchImpl);
-      }
-    }
-  }
-
-  evidence.created = attempt.ok;
-  evidence.status = attempt.status;
   stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
 
   if (!attempt.ok) {
@@ -229,7 +254,7 @@ async function main(env, deps) {
 
   stderr.write(
     `[OK] Recovery point "${snapshotName}" created for branch "${branchName}"` +
-      `${evidence.evicted ? ` (reclaimed the slot held by ${evidence.evicted.id})` : ''}.\n`,
+      `${evicted ? ` (reclaimed the slot held by ${evicted.id})` : ''}.\n`,
   );
   return 0;
 }
@@ -237,6 +262,8 @@ async function main(env, deps) {
 module.exports = {
   resolveBranch,
   createSnapshot,
+  createWithQuotaRecovery,
+  isQuotaExhausted,
   listSnapshots,
   pickSnapshotToEvict,
   deleteSnapshot,
