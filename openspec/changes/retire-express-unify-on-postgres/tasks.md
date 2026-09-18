@@ -1565,7 +1565,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             `CHASEABLE` is a *proper* subset of `OPEN`, with the two statuses they disagree on
             (`DRAFT`, `SENDING`) named, so widening `CHASEABLE` has to come here and say so.
             <br>**Mutation-verified, two mutations.** (1) Dropping `'SENDING'` from the shared
-            `OPEN_CLAIM_STATUSES` failed exactly four tests and no others: all three new cases, plus
+            `OPEN_CLAIM_STATUSES` failed exactly five tests and no others: all three new cases, plus
             **both** consumers' existing route tests — `minimal-api-routes.test.ts:692` (Worker) and
             `credit-claim.controller.test.ts:36` (Express). That those two moved is the evidence the
             hoist is real and not a parallel fourth copy. (2) Widening `CHASEABLE` until it equalled
