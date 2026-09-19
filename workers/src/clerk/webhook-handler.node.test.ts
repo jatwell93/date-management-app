@@ -222,6 +222,56 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
       });
     });
 
+    it('grants no role, and stays retryable, when the audit table is missing', async () => {
+      await deliver(
+        'msg_seed3',
+        userCreatedEvent({
+          clerkUserId: 'user_missing',
+          email: 'm@acme.test',
+          clerkOrgId: 'org_clerk_m',
+          role: 'org:member',
+        }),
+      );
+      const before = await sql`SELECT role FROM users WHERE clerk_user_id = 'user_missing'`;
+
+      await sql`ALTER TABLE org_audit_log RENAME TO org_audit_log_hidden`;
+      let response: Response;
+      try {
+        response = await deliver(
+          'msg_membership_missing',
+          membershipCreatedEvent({
+            clerkUserId: 'user_missing',
+            email: 'm@acme.test',
+            clerkOrgId: 'org_clerk_m',
+            role: 'org:admin',
+          }),
+        );
+      } finally {
+        await sql`ALTER TABLE org_audit_log_hidden RENAME TO org_audit_log`;
+      }
+
+      // Fail-closed, and it needs no status-code special case to get there: the
+      // role UPDATE and the audit INSERT are one statement, so a missing table
+      // means neither runs. Nothing is granted unaudited.
+      const after = await sql`SELECT role FROM users WHERE clerk_user_id = 'user_missing'`;
+      expect(after[0].role).toBe(before[0].role);
+
+      // Non-2xx, so Svix retries — which is the *wanted* outcome here, unlike on
+      // the HTTP paths. There is no human reading this response; the migration
+      // gets applied and the retry then lands the grant together with its audit
+      // row. Review proposed returning 503 instead for consistency, but 503 in
+      // this handler already means "a sibling holds the claim, retry shortly"
+      // (the in_flight branch), and Svix retries on any non-2xx regardless — so
+      // the change would alter nothing except overload an existing signal.
+      expect(response.status).toBeGreaterThanOrEqual(500);
+
+      // The claim is released rather than stranded, so the retry re-drives
+      // immediately instead of waiting out the staleness window.
+      const marked = await sql`
+        SELECT id FROM clerk_webhook_events WHERE id = 'msg_membership_missing'`;
+      expect(marked).toHaveLength(0);
+    });
+
     it('writes nothing when a membership delivery repeats the same role', async () => {
       await deliver(
         'msg_seed2',
