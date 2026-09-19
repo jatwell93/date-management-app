@@ -29,8 +29,10 @@ import {
 import {
   applyRateLimitHeaders,
   checkRateLimit,
+  getClientIp,
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
+import { ORG_AUDIT_EVENT_TYPES, ORG_AUDIT_TRIGGERS } from '../../shared/domain/org-audit';
 import {
   LAUNCH_TIER_USER_LIMITS,
   normalizeLaunchTier,
@@ -177,6 +179,28 @@ function isUniqueViolation(error: unknown): boolean {
 // organization_markdown_config table (#338) not yet applied to the live Neon DB.
 // Detecting it lets callers degrade to cost-only defaults instead of surfacing
 // a raw NeonDbError to the user.
+/**
+ * Response for a role grant that cannot be audited because `org_audit_log`
+ * (migration 0013) has not been applied to this database.
+ *
+ * **Fails closed on purpose.** The obvious-looking alternative — swallow the
+ * missing-table error and let the role change succeed unaudited — would
+ * reintroduce exactly the orphan-admin case the atomic CTE exists to rule out,
+ * and would do it silently, at the one moment the operator has least visibility.
+ * A grant that cannot be recorded does not happen.
+ *
+ * This mirrors the markdown-config precedent, where the *read* paths degrade to
+ * defaults so a page still renders but the *write* path returns an actionable
+ * 503 rather than proceeding (`markdownSchemaMissingResponse`).
+ */
+function auditSchemaMissingResponse(env: Env): Response {
+  return errorResponse(
+    'Role changes cannot be recorded yet. The database migration for the organization audit trail (0013_org_audit_log) has not been applied — please contact your administrator.',
+    503,
+    env,
+  );
+}
+
 function isMissingSchemaError(error: unknown): boolean {
   const hasMissingCode = (value: unknown): boolean =>
     !!value &&
@@ -2847,12 +2871,22 @@ async function handleListUsers(request: Request, db: Database, env: Env): Promis
 }
 
 /**
- * POST /api/users — creates a team member user record in the caller's org.
- * Signup is managed by Clerk; this endpoint exists for legacy local user
- * creation and is intentionally limited: it only allows an admin to
- * pre-provision a username/role placeholder. Clerk user linkage happens
- * later when the user signs in via Clerk and the bootstrap route links
- * the Clerk ID.
+ * POST /api/users — creates a user record in the caller's org. Signup is managed
+ * by Clerk; this endpoint exists for legacy local user creation and lets an
+ * admin pre-provision a username/role placeholder.
+ *
+ * "Intentionally limited" understates the role: `isValidRole` admits `admin`, so
+ * this mints a new admin as readily as `PUT /api/users/:id` promotes an existing
+ * one. Both are audited (`trigger: 'admin-create'` here).
+ *
+ * It does **not** link to Clerk later, despite what this comment claimed before
+ * task 3.1.g: the placeholder is inserted with a NULL email and NULL
+ * clerk_user_id, while `upsertClerkUser` conflicts on `clerk_user_id` (NULL
+ * never conflicts, so bootstrap inserts a *separate* row) and its email fallback
+ * matches on `LOWER(email)`, which a NULL email never satisfies. A placeholder
+ * created here and a Clerk sign-in by the same person produce two user rows.
+ * Recorded rather than fixed — the reconciliation is its own change, and
+ * `backend/` is being retired around it.
  */
 async function handleCreateLegacyUser(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
@@ -2895,17 +2929,62 @@ async function handleCreateLegacyUser(request: Request, db: Database, env: Env):
       );
     }
 
+    // The role is admin-chosen and `isValidRole` admits 'admin', so this is a
+    // grant of privilege and belongs in the audit trail. The row is written by a
+    // data-modifying CTE inside the same statement as the INSERT for the reason
+    // the promotion path uses one: Neon's HTTP driver has no transaction, and a
+    // created admin with no record of who created them is the failure this
+    // exists to prevent. Unlike a promotion there is no previous role, so
+    // `old_role` is NULL rather than a value the row once held.
     const rows = await db.sql`
-      INSERT INTO users (organization_id, username, role, created_at, updated_at)
-      VALUES (${auth.organizationId}, ${username}, ${requestedRole}, NOW(), NOW())
-      RETURNING id, email, username, role,
-                clerk_user_id as "clerkUserId",
-                created_at::text as "createdAt"
+      WITH created AS (
+        INSERT INTO users (organization_id, username, role, created_at, updated_at)
+        VALUES (${auth.organizationId}, ${username}, ${requestedRole}, NOW(), NOW())
+        RETURNING id, email, username, role, clerk_user_id, created_at
+      ),
+      audited AS (
+        INSERT INTO org_audit_log (
+          organization_id,
+          event_type,
+          actor_user_id,
+          actor_organization_id,
+          target_user_id,
+          target_organization_id,
+          old_role,
+          new_role,
+          ip_address,
+          metadata,
+          created_at
+        )
+        SELECT ${auth.organizationId},
+               ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
+               ${auth.userId},
+               ${auth.organizationId},
+               created.id,
+               ${auth.organizationId},
+               NULL,
+               created.role,
+               ${getClientIp(request)},
+               ${JSON.stringify({ trigger: ORG_AUDIT_TRIGGERS.ADMIN_CREATE })},
+               NOW()
+        FROM created
+        RETURNING 1
+      )
+      SELECT id, email, username, role,
+             clerk_user_id as "clerkUserId",
+             created_at::text as "createdAt"
+      FROM created
     `;
     return jsonResponse(rows[0], 201, env);
   } catch (error) {
     if (isUniqueViolation(error)) {
       return errorResponse('User with this username already exists', 409, env);
+    }
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'handleCreateLegacyUser: org_audit_log missing — apply Neon migration 0013_org_audit_log. Refusing to create the user rather than granting a role unaudited.',
+      );
+      return auditSchemaMissingResponse(env);
     }
     console.error('handleCreateLegacyUser error:', error);
     return errorResponse('Internal server error', 500, env);
@@ -2949,11 +3028,29 @@ async function handleUpdateUser(
     );
   }
 
-  const updated = await db.updateUserRole(auth.organizationId, id, body.role);
+  let updated;
+  try {
+    updated = await db.updateUserRole(auth.organizationId, id, body.role, {
+      userId: auth.userId,
+      ipAddress: getClientIp(request),
+    });
+  } catch (error) {
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'handleUpdateUser: org_audit_log missing — apply Neon migration 0013_org_audit_log. Refusing the role change rather than performing it unaudited.',
+      );
+      return auditSchemaMissingResponse(env);
+    }
+    throw error;
+  }
   if (!updated) {
     return errorResponse('User not found', 404, env);
   }
-  return jsonResponse(updated, 200, env);
+
+  // `previousRole` exists to populate the audit trail, not to be published: the
+  // response shape stays exactly what it was before the trail was added.
+  const { previousRole: _previousRole, ...user } = updated;
+  return jsonResponse(user, 200, env);
 }
 
 /**

@@ -22,7 +22,14 @@ applied.
 
 The history is a set of `NNNN_name.up.sql` / `NNNN_name.down.sql` pairs plus
 `database/migrations/manifest.json`, which is the declaration of intent for each migration.
-`0000_baseline` through `0012_webhook_idempotency_guards` are installed today.
+`0000_baseline` through `0013_org_audit_log` are installed today.
+
+A migration must be **replayable over its own result**. The documented forward-fix recovery path
+unstamps every migration above the one being fixed and re-applies them against the existing schema,
+because the runner requires applied migrations to be a contiguous prefix — so a bare `CREATE TABLE`
+or `ADD COLUMN` breaks recovery for every later migration, not just its own. Use `IF NOT EXISTS`, and
+declare foreign keys inline inside `CREATE TABLE` (Postgres has no `ADD CONSTRAINT IF NOT EXISTS`).
+`src/database/migrations/e2e.test.ts` exercises this.
 
 Each manifest entry declares an exact key set — `id`, `forward`, `transaction`, `compatibility`,
 `dataLoss`, `recovery`, `backfill`, `contract` — and the loader rejects anything else

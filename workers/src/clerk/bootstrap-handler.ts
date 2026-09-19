@@ -7,9 +7,16 @@ import {
   deriveUsername,
   ensureTrialSubscription,
   findOrCreateOrganization,
+  insertOrgAuditLog,
   sanitizeSlug,
   upsertClerkUser,
+  type SqlClient,
 } from './clerk-persistence';
+import { getClientIp } from '../utils/minimal-rate-limit';
+import {
+  ORG_AUDIT_EVENT_TYPES,
+  ORG_AUDIT_TRIGGERS,
+} from '../../../shared/domain/org-audit';
 import { isPlatformAdminUser } from '../../../shared/domain/platform-catalogue';
 
 interface ClerkSessionClaims {
@@ -335,6 +342,16 @@ export async function handleOrganizationBootstrap(
     return errorResponse('Failed to bootstrap organization membership', 500, env, requestOrigin);
   }
 
+  await recordBootstrapRoleAssignment(sql, {
+    organizationId,
+    userId: Number(bootstrappedUser[0].id),
+    role: normalizeBootstrapRole(String(bootstrappedUser[0].role)),
+    isFirstAdmin,
+    isNewOrg,
+    clerkMembershipRole: body.clerkMembershipRole ?? authResult.organizationRole ?? null,
+    ipAddress: getClientIp(request),
+  });
+
   return jsonResponse(
     {
       userId: Number(bootstrappedUser[0].id),
@@ -352,4 +369,55 @@ export async function handleOrganizationBootstrap(
     env,
     requestOrigin,
   );
+}
+
+/**
+ * Record the role this bootstrap assigned, in `org_audit_log` (migration 0013).
+ *
+ * **Deliberately non-blocking**, unlike the promotion path in `handleUpdateUser`,
+ * which writes its audit row in the same statement as the role change. The
+ * asymmetry is the point:
+ *
+ *   * This entry is a *self*-assignment — actor and target are the same user, at
+ *     account creation — and is therefore reconstructible after the fact from
+ *     `users.role` and `users.created_at`. Losing one is recoverable.
+ *   * Failing here would otherwise fail a user's very first sign-in, locking them
+ *     out of the product entirely to protect a record that is already derivable.
+ *
+ * A deliberate promotion is neither self-evident nor reconstructible, so that one
+ * is made atomic instead. Express also swallowed this failure
+ * (`org-bootstrap.service.ts:165`), so behaviour is unchanged at the cutover.
+ */
+async function recordBootstrapRoleAssignment(
+  sql: SqlClient,
+  details: {
+    organizationId: string;
+    userId: number;
+    role: BootstrapRoleValue;
+    isFirstAdmin: boolean;
+    isNewOrg: boolean;
+    clerkMembershipRole: string | null;
+    ipAddress: string;
+  },
+): Promise<void> {
+  try {
+    await insertOrgAuditLog(sql, {
+      organizationId: details.organizationId,
+      eventType: ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED,
+      actorUserId: details.userId,
+      actorOrganizationId: details.organizationId,
+      targetUserId: details.userId,
+      targetOrganizationId: details.organizationId,
+      newRole: details.role,
+      ipAddress: details.ipAddress,
+      metadata: {
+        trigger: ORG_AUDIT_TRIGGERS.BOOTSTRAP,
+        isFirstAdmin: details.isFirstAdmin,
+        isNewOrg: details.isNewOrg,
+        clerkMembershipRole: details.clerkMembershipRole,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to record bootstrap role assignment:', error);
+  }
 }

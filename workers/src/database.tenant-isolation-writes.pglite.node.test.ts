@@ -51,6 +51,14 @@ import { isReferentialError } from './tenant-references';
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';
 
+/**
+ * Actor context for `updateUserRole`, which since migration 0013 writes its
+ * `org_audit_log` entry in the same statement as the role change. The values are
+ * incidental to isolation — what matters here is that a refused cross-tenant
+ * change writes no audit row at all.
+ */
+const ACTOR = { userId: 1, ipAddress: '203.0.113.7' };
+
 function makeDb() {
   return createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
 }
@@ -302,11 +310,19 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
 
       // Privilege escalation across tenants: granting yourself admin in someone
       // else's organization.
-      const result = await db.updateUserRole(ORG, foreignUserId, 'admin');
+      const result = await db.updateUserRole(ORG, foreignUserId, 'admin', ACTOR);
       expect(result).toBeNull();
 
       const rows = await sql`SELECT role FROM users WHERE id = ${foreignUserId}`;
       expect(rows[0].role).toBe('member');
+
+      // The role change and its audit row are one statement, so a refused
+      // escalation must leave no trace either. Asserting the absence matters:
+      // an audit row naming a foreign user as the target would itself be a
+      // cross-tenant write, and it would be written into whichever organization
+      // the attacker named.
+      const audit = await sql`SELECT id FROM org_audit_log`;
+      expect(audit).toHaveLength(0);
     });
 
     it("refuses to soft-delete another organization's user", async () => {
@@ -322,7 +338,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
     it("still updates and soft-deletes the caller's own user", async () => {
       const db = makeDb();
 
-      expect(await db.updateUserRole(ORG, ownUserId, 'admin')).not.toBeNull();
+      expect(await db.updateUserRole(ORG, ownUserId, 'admin', ACTOR)).not.toBeNull();
       expect(await db.softDeleteUser(ORG, ownUserId)).toBe(true);
 
       const rows = await sql`SELECT role, deleted_at FROM users WHERE id = ${ownUserId}`;

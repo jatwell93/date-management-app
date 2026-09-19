@@ -172,6 +172,64 @@ production credentials.
 - **THEN** tests do not continue against dirty state
 - **AND** the required CI check fails
 
+### Requirement: Role grants are recorded in an audit trail
+
+Every path that gives a user a role SHALL append a `role_assigned` row to `org_audit_log` naming the
+actor, the target, the previous role (NULL where none existed), and the new role. A deliberate grant
+— one user setting another user's role, whether by creating that user or by changing an existing one
+— SHALL be recorded atomically with the grant itself, so no interleaving exists in which a user holds
+a role with no record of who gave it. The automatic self-assignment at first bootstrap MAY be
+recorded best-effort, because it is reconstructible from `users.role` and `users.created_at` and a
+failure there would otherwise block a user's first sign-in.
+
+Each row SHALL identify which path produced it, so a self-assignment cannot be mistaken for a
+deliberate grant.
+
+The trail SHALL be verified against real PostgreSQL. A test whose assertion is reachable only
+conditionally does not satisfy this requirement.
+
+#### Scenario: An admin changes another user's role
+
+- **GIVEN** an authenticated admin and a user in the same organization
+- **WHEN** the admin changes that user's role
+- **THEN** one `role_assigned` row records the acting admin as actor and the changed user as target
+- **AND** `old_role` is the value the row held before the change, not a value re-read afterwards
+- **AND** the role is unchanged if the audit row cannot be written
+
+#### Scenario: An admin creates a user holding a privileged role
+
+- **GIVEN** an authenticated admin
+- **WHEN** they create a user and choose that user's role
+- **THEN** one `role_assigned` row records the acting admin as actor, the created user as target, and
+  a NULL previous role
+- **AND** no user is created if the audit row cannot be written
+
+#### Scenario: A request does not change a role
+
+- **GIVEN** a role-change request that names the role the user already holds
+- **WHEN** it is applied
+- **THEN** no audit row is written, because nothing was authorized
+
+#### Scenario: A role arrives from the identity provider
+
+- **GIVEN** a signed membership webhook carrying a role for a known user
+- **WHEN** that role differs from the one the user holds
+- **THEN** a `role_assigned` row records the transition with no local actor
+- **AND** a delivery carrying the role the user already holds writes no row
+
+#### Scenario: The audit table has not been migrated
+
+- **GIVEN** a database where `org_audit_log` does not exist
+- **WHEN** any deliberate grant is attempted
+- **THEN** the grant is refused with an actionable error naming the missing migration
+- **AND** no role is granted unaudited
+
+#### Scenario: A role change names a user in another organization
+
+- **GIVEN** a caller authenticated for one organization
+- **WHEN** the request names a user belonging to a different organization
+- **THEN** no role changes and no audit row is written for either organization
+
 ### Requirement: Backend retirement is manifest-gated
 
 The Express backend SHALL NOT be deleted until source-derived manifests account for every mounted and
