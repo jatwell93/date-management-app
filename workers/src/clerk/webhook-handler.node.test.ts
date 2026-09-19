@@ -92,6 +92,23 @@ function userCreatedEvent(options: {
   };
 }
 
+/** An `organizationMembership.created` payload — Clerk's own role-grant path. */
+function membershipCreatedEvent(options: {
+  clerkUserId: string;
+  email: string;
+  clerkOrgId: string;
+  role: string;
+}): Record<string, unknown> {
+  return {
+    type: 'organizationMembership.created',
+    data: {
+      role: options.role,
+      public_user_data: { user_id: options.clerkUserId, identifier: options.email },
+      organization: { id: options.clerkOrgId, name: 'Acme', slug: 'acme' },
+    },
+  };
+}
+
 /** Build the signed request a Svix delivery of `event` under `eventId` produces. */
 async function deliver(eventId: string, event: Record<string, unknown>): Promise<Response> {
   const rawBody = JSON.stringify(event);
@@ -130,9 +147,108 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
   beforeEach(async () => {
     vi.mocked(neon).mockClear();
     await sql`DELETE FROM clerk_webhook_events`;
+    await sql`DELETE FROM org_audit_log`;
     await sql`DELETE FROM subscription_tiers`;
     await sql`DELETE FROM users`;
     await sql`DELETE FROM organizations`;
+  });
+
+  /**
+   * Organization RBAC audit trail, webhook arm (migration 0013).
+   *
+   * Review caught that the trail's first cut audited three HTTP paths while
+   * Clerk's own membership UI — which is how an org admin actually promotes
+   * someone in a Clerk-managed org — reached the database through this webhook
+   * and wrote a role with no entry at all.
+   */
+  describe('organization RBAC audit trail', () => {
+    const audit = async () =>
+      (await sql`
+        SELECT actor_user_id, target_user_id, old_role, new_role, metadata
+        FROM org_audit_log
+        ORDER BY id`) as unknown as {
+        actor_user_id: number | null;
+        target_user_id: number | null;
+        old_role: string | null;
+        new_role: string | null;
+        metadata: string | null;
+      }[];
+
+    it('records a role change arriving from Clerk membership', async () => {
+      await deliver(
+        'msg_seed',
+        userCreatedEvent({
+          clerkUserId: 'user_promote',
+          email: 'p@acme.test',
+          clerkOrgId: 'org_clerk_p',
+          role: 'org:member',
+        }),
+      );
+      await sql`DELETE FROM org_audit_log`;
+
+      const response = await deliver(
+        'msg_membership',
+        membershipCreatedEvent({
+          clerkUserId: 'user_promote',
+          email: 'p@acme.test',
+          clerkOrgId: 'org_clerk_p',
+          role: 'org:admin',
+        }),
+      );
+      expect(response.status).toBe(200);
+
+      const rows = await audit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        // NOT 'team_member' → 'admin'. `mapClerkRole` maps org:admin to
+        // 'Manager' and everything else to 'Team Member' — neither of which is
+        // in ROLES_PROD/ROLES_DEV, and `canManageUsers` compares against
+        // lowercase 'manager', so it rejects 'Manager'. Meanwhile the bootstrap
+        // path's `normalizeBootstrapRole` maps the same org:admin to 'admin'.
+        // The trail records what was actually written to users.role rather than
+        // a tidied-up version, because normalizing here would hide the
+        // divergence instead of surfacing it. Pre-existing and out of scope for
+        // 3.1.g; tracked as #517. The values below are pinned to the defect,
+        // and this assertion is what will fail loudly when it is fixed.
+        old_role: 'Team Member',
+        new_role: 'Manager',
+        // No local actor: the grant was made inside Clerk by someone this
+        // database has no user id for. NULL is the honest value, not a bug.
+        actor_user_id: null,
+      });
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'clerk-webhook',
+        clerkOrganizationRole: 'org:admin',
+      });
+    });
+
+    it('writes nothing when a membership delivery repeats the same role', async () => {
+      await deliver(
+        'msg_seed2',
+        userCreatedEvent({
+          clerkUserId: 'user_same',
+          email: 's@acme.test',
+          clerkOrgId: 'org_clerk_s',
+          role: 'org:admin',
+        }),
+      );
+      await sql`DELETE FROM org_audit_log`;
+
+      await deliver(
+        'msg_membership_same',
+        membershipCreatedEvent({
+          clerkUserId: 'user_same',
+          email: 's@acme.test',
+          clerkOrgId: 'org_clerk_s',
+          role: 'org:admin',
+        }),
+      );
+
+      // Clerk redelivers membership events on unrelated profile edits. Without
+      // the no-op suppression the trail would fill with entries that record no
+      // authorization change at all.
+      expect(await audit()).toHaveLength(0);
+    });
   });
 
   const countUsers = async (clerkUserId: string): Promise<number> => {

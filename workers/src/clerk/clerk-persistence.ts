@@ -1,5 +1,9 @@
 import type { Database } from '../database';
-import type { OrgAuditEntry } from '../../../shared/domain/org-audit';
+import {
+  ORG_AUDIT_EVENT_TYPES,
+  ORG_AUDIT_TRIGGERS,
+  type OrgAuditEntry,
+} from '../../../shared/domain/org-audit';
 
 export type SqlClient = Database['sql'];
 
@@ -353,15 +357,66 @@ export async function processClerkWebhookEvent(
       const organizationId = await findOrCreateOrganization(sql, organizationPayload, identifier);
       const role = mapClerkRole(data.role);
 
+      // Clerk's membership UI is a real grant path: an org admin flipping
+      // someone to admin there reaches the database only through this delivery.
+      // Audited on the same terms as the HTTP paths, in one statement, with the
+      // audit row suppressed when the role did not actually change — otherwise
+      // every membership redelivery would append an entry. `actor_user_id` is
+      // NULL because the grant was made in Clerk by someone this database has no
+      // id for; `metadata.clerkOrganizationRole` keeps the raw value Clerk sent,
+      // since mapClerkRole() is lossy.
+      const auditMetadata = JSON.stringify({
+        trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
+        clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
+      });
       const updated = await sql`
-        UPDATE users
-        SET
-          organization_id = ${organizationId},
-          role = ${role},
-          deleted_at = NULL,
-          updated_at = NOW()
-        WHERE clerk_user_id = ${clerkUserId}
-        RETURNING id
+        WITH prev AS (
+          SELECT id, role
+          FROM users
+          WHERE clerk_user_id = ${clerkUserId}
+          FOR UPDATE
+        ),
+        changed AS (
+          UPDATE users
+          SET
+            organization_id = ${organizationId},
+            role = ${role},
+            deleted_at = NULL,
+            updated_at = NOW()
+          FROM prev
+          WHERE users.id = prev.id
+          RETURNING users.id, users.role, prev.role AS previous_role
+        ),
+        audited AS (
+          INSERT INTO org_audit_log (
+            organization_id,
+            event_type,
+            actor_user_id,
+            actor_organization_id,
+            target_user_id,
+            target_organization_id,
+            old_role,
+            new_role,
+            ip_address,
+            metadata,
+            created_at
+          )
+          SELECT ${organizationId},
+                 ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
+                 NULL,
+                 ${organizationId},
+                 changed.id,
+                 ${organizationId},
+                 changed.previous_role,
+                 changed.role,
+                 NULL,
+                 ${auditMetadata},
+                 NOW()
+          FROM changed
+          WHERE changed.previous_role IS DISTINCT FROM changed.role
+          RETURNING 1
+        )
+        SELECT id FROM changed
       `;
 
       if (updated.length === 0 && identifier) {

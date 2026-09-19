@@ -210,6 +210,20 @@ conditionally does not satisfy this requirement.
 - **WHEN** it is applied
 - **THEN** no audit row is written, because nothing was authorized
 
+#### Scenario: A role arrives from the identity provider
+
+- **GIVEN** a signed membership webhook carrying a role for a known user
+- **WHEN** that role differs from the one the user holds
+- **THEN** a `role_assigned` row records the transition with no local actor
+- **AND** a delivery carrying the role the user already holds writes no row
+
+#### Scenario: The audit table has not been migrated
+
+- **GIVEN** a database where `org_audit_log` does not exist
+- **WHEN** any deliberate grant is attempted
+- **THEN** the grant is refused with an actionable error naming the missing migration
+- **AND** no role is granted unaudited
+
 #### Scenario: A role change names a user in another organization
 
 - **GIVEN** a caller authenticated for one organization

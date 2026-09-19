@@ -179,6 +179,28 @@ function isUniqueViolation(error: unknown): boolean {
 // organization_markdown_config table (#338) not yet applied to the live Neon DB.
 // Detecting it lets callers degrade to cost-only defaults instead of surfacing
 // a raw NeonDbError to the user.
+/**
+ * Response for a role grant that cannot be audited because `org_audit_log`
+ * (migration 0013) has not been applied to this database.
+ *
+ * **Fails closed on purpose.** The obvious-looking alternative — swallow the
+ * missing-table error and let the role change succeed unaudited — would
+ * reintroduce exactly the orphan-admin case the atomic CTE exists to rule out,
+ * and would do it silently, at the one moment the operator has least visibility.
+ * A grant that cannot be recorded does not happen.
+ *
+ * This mirrors the markdown-config precedent, where the *read* paths degrade to
+ * defaults so a page still renders but the *write* path returns an actionable
+ * 503 rather than proceeding (`markdownSchemaMissingResponse`).
+ */
+function auditSchemaMissingResponse(env: Env): Response {
+  return errorResponse(
+    'Role changes cannot be recorded yet. The database migration for the organization audit trail (0013_org_audit_log) has not been applied — please contact your administrator.',
+    503,
+    env,
+  );
+}
+
 function isMissingSchemaError(error: unknown): boolean {
   const hasMissingCode = (value: unknown): boolean =>
     !!value &&
@@ -2958,6 +2980,12 @@ async function handleCreateLegacyUser(request: Request, db: Database, env: Env):
     if (isUniqueViolation(error)) {
       return errorResponse('User with this username already exists', 409, env);
     }
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'handleCreateLegacyUser: org_audit_log missing — apply Neon migration 0013_org_audit_log. Refusing to create the user rather than granting a role unaudited.',
+      );
+      return auditSchemaMissingResponse(env);
+    }
     console.error('handleCreateLegacyUser error:', error);
     return errorResponse('Internal server error', 500, env);
   }
@@ -3000,10 +3028,21 @@ async function handleUpdateUser(
     );
   }
 
-  const updated = await db.updateUserRole(auth.organizationId, id, body.role, {
-    userId: auth.userId,
-    ipAddress: getClientIp(request),
-  });
+  let updated;
+  try {
+    updated = await db.updateUserRole(auth.organizationId, id, body.role, {
+      userId: auth.userId,
+      ipAddress: getClientIp(request),
+    });
+  } catch (error) {
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'handleUpdateUser: org_audit_log missing — apply Neon migration 0013_org_audit_log. Refusing the role change rather than performing it unaudited.',
+      );
+      return auditSchemaMissingResponse(env);
+    }
+    throw error;
+  }
   if (!updated) {
     return errorResponse('User not found', 404, env);
   }

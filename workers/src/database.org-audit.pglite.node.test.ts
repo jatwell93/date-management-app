@@ -291,20 +291,25 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
       });
     });
 
-    it('creates no user when the audit row cannot be written', async () => {
+    it('creates no user when the audit table is missing, and says why', async () => {
       await seedActingAdmin();
       await sql`ALTER TABLE org_audit_log RENAME TO org_audit_log_hidden`;
-      let status: number;
+      let response: Response;
       try {
-        status = (await postUser('admin', 'clerk-acting-admin')).status;
+        response = await postUser('admin', 'clerk-acting-admin');
       } finally {
         await sql`ALTER TABLE org_audit_log_hidden RENAME TO org_audit_log`;
       }
 
+      // Fails closed, and says which migration is missing rather than leaking a
+      // raw driver error as a 500. Review proposed swallowing this and creating
+      // the user unaudited; that would reintroduce the orphan admin the atomic
+      // statement exists to prevent, so the failure is deliberate.
+      expect(response.status).toBe(503);
+      expect(await response.text()).toContain('0013_org_audit_log');
+
       // Mutation check: moving the audit INSERT out of the CTE leaves a created
-      // admin behind with no record of who created them — the exact failure the
-      // single statement rules out. The handler's catch turns it into a 500.
-      expect(status).toBe(500);
+      // admin behind with no record of who created them.
       const created = await sql`SELECT id FROM users WHERE username = 'new-admin'`;
       expect(created).toHaveLength(0);
     });

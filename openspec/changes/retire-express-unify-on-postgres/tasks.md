@@ -1812,6 +1812,46 @@ equivalent, a relocated home, or an explicit retirement decision.
             endpoint exposes the trail on either backend. That is unchanged from Express and out of
             scope here, but it means the trail's value today is forensic (query the table directly),
             not operational. **Tracked as #515.**
+            <br>**Bot review round — two legitimate, two rebutted, one escalated.**
+            <br>*Legitimate, fixed:* (a) moving the tenant predicates into the `prev` CTE
+            **weakened a guard that already existed** — the `UPDATE`'s only qualifier became
+            `users.id = prev.id`, and Postgres re-checks an `UPDATE`'s own qualifiers against the
+            updated row version (EvalPlanQual), so a concurrent membership move or soft-delete would
+            still match. `organization_id` and `deleted_at IS NULL` are back on the `UPDATE`.
+            (b) `prev` was an unlocked snapshot read, so a stale `old_role` could be recorded and the
+            no-op suppression could fire against a value that was already gone; `prev` now takes
+            `FOR UPDATE`. Both races are unreproducible under pglite (one connection, serialised), so
+            these are reasoned, not test-proven, and the code says so rather than implying coverage.
+            <br>*Legitimate, fixed — a fourth grant path:* the **Clerk webhook** is a real grant
+            surface. `organizationMembership.created` writes `users.role` directly, and Clerk's
+            membership UI is how an org admin actually promotes someone. Now audited on the same
+            terms (`trigger: 'clerk-webhook'`, `actor_user_id` NULL because the grant was made in
+            Clerk by someone this database has no id for, no-op suppressed so redeliveries do not
+            flood the table). **That is the enumeration being wrong a second time** — hence the
+            vocabulary now points at `ORG_AUDIT_TRIGGERS` as the list and names its one deliberate
+            exclusion (`user.created`/`user.updated` sync, which is a state sync rather than a grant
+            and would double-write against the membership event).
+            <br>*Rebutted:* Sentry called the missing-table 500 a bug and proposed swallowing
+            `42P01` so the write "succeeds without writing to the audit log". The observation is
+            right and the remedy inverts the property: it reintroduces exactly the orphan-admin case
+            mutations 3 and 6 exist to rule out, silently, at the moment with least visibility. Its
+            own cited precedent argues against it — of the three `isMissingSchemaError` sites, the
+            two *read* paths degrade to defaults but the *write* path returns an actionable 503
+            (`index-minimal.ts:3608`). Both grant paths now follow that: **fail closed with a 503
+            naming migration 0013**, mutation-verified (mutation 10 applies Sentry's version and the
+            test fails 500-vs-503).
+            <br>*Escalated — #517, and the most serious thing this task surfaced.* Pinning the
+            webhook audit row exposed that the Worker has **two role normalizers that disagree**:
+            `normalizeBootstrapRole` maps `org:admin` → `'admin'`, while `mapClerkRole`
+            (`clerk-persistence.ts:26`) maps it → `'Manager'`, which is in neither `ROLES_PROD` nor
+            `ROLES_DEV` and which `canManageUsers` rejects (it compares lowercase `'manager'`).
+            Since `organizationMembership.created` overwrites the role unconditionally, **a
+            bootstrapped admin is silently downgraded out of admin by a routine webhook
+            redelivery** and then gets 403s adding staff. Pre-existing, live, and squarely in the
+            store-trial blast radius. Not fixed here — it changes authorization behaviour and needs a
+            backfill of existing non-canonical rows. The audit trail records the raw stored value
+            rather than a tidied one, precisely so the divergence surfaces; the webhook test pins
+            `'Team Member'`/`'Manager'` and is written to **fail when #517 is fixed**.
       - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because

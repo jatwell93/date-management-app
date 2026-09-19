@@ -14,10 +14,10 @@
 
 export const ORG_AUDIT_EVENT_TYPES = {
   /**
-   * A user was given a role. Three live paths reach this, all of them audited:
-   * first bootstrap, an admin creating a user via `POST /api/users`, and an
-   * admin changing an existing user's role via `PUT /api/users/:id`. See
-   * ORG_AUDIT_TRIGGERS, which is what tells them apart once the rows are stored.
+   * A user was given a role. See ORG_AUDIT_TRIGGERS for the paths that emit it
+   * and, just as importantly, the one that deliberately does not — this
+   * enumeration has been wrong twice by being read as exhaustive, so treat
+   * ORG_AUDIT_TRIGGERS as the list and keep it honest.
    */
   ROLE_ASSIGNED: 'role_assigned',
   /** Reserved. Had no emitter on either backend — see LIVE_ORG_AUDIT_EVENT_TYPES. */
@@ -60,15 +60,28 @@ export const LIVE_ORG_AUDIT_EVENT_TYPES: readonly OrgAuditEventType[] = [
  *     username-only placeholder with no Clerk id, so it is a grant of privilege
  *     that no later event re-states.
  *   * `admin-update` — one admin deliberately changing an existing user's role.
+ *   * `clerk-webhook` — an `organizationMembership.created`/`.updated` delivery
+ *     carrying a role from Clerk's own membership UI. There is no local actor,
+ *     so `actor_user_id` is NULL; the grant was made in Clerk by someone this
+ *     database does not know about.
  *
- * The last two are the ones with the compliance argument: `users.role` and
+ * All but `bootstrap` have the compliance argument: `users.role` and
  * `users.created_at` can tell you a user holds admin, but never *who* granted
- * it. Neither Express nor the Worker recorded either before migration 0013.
+ * it. Neither Express nor the Worker recorded any of them before migration 0013.
+ *
+ * **Known exclusion — `user.created` / `user.updated` webhooks.**
+ * `syncClerkUserFromEvent` also writes a role, via `upsertClerkUser`. It is not
+ * audited, because it is a *sync* of Clerk's current state rather than a grant:
+ * every profile edit redelivers it, so auditing it unconditionally would bury
+ * real grants, and auditing it conditionally would double-write against the
+ * membership event that carries the same transition. Tracked separately; do not
+ * "fix" it by adding a writer without settling that semantics question first.
  */
 export const ORG_AUDIT_TRIGGERS = {
   BOOTSTRAP: 'bootstrap',
   ADMIN_CREATE: 'admin-create',
   ADMIN_UPDATE: 'admin-update',
+  CLERK_WEBHOOK: 'clerk-webhook',
 } as const;
 
 export type OrgAuditTrigger = (typeof ORG_AUDIT_TRIGGERS)[keyof typeof ORG_AUDIT_TRIGGERS];
