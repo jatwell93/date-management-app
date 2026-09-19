@@ -28,7 +28,7 @@ describe('CSV Upload Functionality Tests', () => {
     enrichmentRepository = { enrichImportedProduct: vi.fn(async () => undefined) };
     productService = new ProductService(
       mockPrisma as unknown as PrismaClient,
-      undefined,
+      'default-org',
       undefined,
       undefined,
       enrichmentRepository as SupplierCreditRepository,
@@ -280,7 +280,7 @@ describe('CSV Upload Error Handling', () => {
       },
       $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
-    productService = new ProductService(mockPrisma as unknown as PrismaClient);
+    productService = new ProductService(mockPrisma as unknown as PrismaClient, 'default-org');
   });
 
   it('should return errors for missing required fields', async () => {
@@ -388,7 +388,7 @@ describe('Comprehensive CSV Processing Tests', () => {
       },
       $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
-    productService = new ProductService(mockPrisma as unknown as PrismaClient);
+    productService = new ProductService(mockPrisma as unknown as PrismaClient, 'default-org');
   });
 
   it('should process CSV with various currency formats', async () => {

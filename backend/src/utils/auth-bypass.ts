@@ -33,5 +33,8 @@ export const getOrganizationId = (organizationId?: string): string => {
     return TEST_AUTH_BYPASS_ORG_ID;
   }
 
-  throw new Error('Organization ID is required in production environments');
+  throw new Error(
+    'Organization ID is required unless the test auth bypass is enabled ' +
+      '(NODE_ENV=test and TEST_AUTH_BYPASS=true)',
+  );
 };

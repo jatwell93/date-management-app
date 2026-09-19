@@ -2,11 +2,31 @@ import { ServiceProvider } from '../../services/service-provider';
 import { PrismaClient } from '@prisma/client';
 
 describe('ServiceProvider - Constructor Fix', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalTestAuthBypass = process.env.TEST_AUTH_BYPASS;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.TEST_AUTH_BYPASS = originalTestAuthBypass;
+  });
+
   describe('Config Object Constructor', () => {
-    it('should use default values when no config provided', () => {
+    // The org-less default comes from the test auth bypass, not from the constructor, so
+    // these two set the environment rather than inheriting it. Under the production-shaped
+    // Neon config (`tests/setup-neon-env.ts:4-5`) the bypass is off and this must throw.
+    it('should use default values when no config provided and the bypass is enabled', () => {
+      process.env.NODE_ENV = 'test';
+      process.env.TEST_AUTH_BYPASS = 'true';
       const provider = new ServiceProvider();
       expect(provider).toBeDefined();
-      // Should not throw
+    });
+
+    it('should refuse to default the tenant when the bypass is off', () => {
+      process.env.NODE_ENV = 'production';
+      process.env.TEST_AUTH_BYPASS = 'true';
+      expect(() => new ServiceProvider()).toThrow(
+        'Organization ID is required unless the test auth bypass is enabled',
+      );
     });
 
     it('should accept organizationId in config', () => {
@@ -16,12 +36,15 @@ describe('ServiceProvider - Constructor Fix', () => {
 
     it('should accept custom prisma client', () => {
       const mockPrisma = {} as PrismaClient;
-      const provider = new ServiceProvider({ prisma: mockPrisma });
+      const provider = new ServiceProvider({ organizationId: 'test-org', prisma: mockPrisma });
       expect(provider).toBeDefined();
     });
 
     it('should accept custom storage provider', () => {
-      const provider = new ServiceProvider({ storageProvider: {} as any });
+      const provider = new ServiceProvider({
+        organizationId: 'test-org',
+        storageProvider: {} as any,
+      });
       expect(provider).toBeDefined();
     });
 

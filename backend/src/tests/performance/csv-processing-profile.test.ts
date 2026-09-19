@@ -75,6 +75,7 @@ describe('CSV Processing Performance Profile', () => {
     mockUpdate.mockResolvedValue({ id: 1 });
 
     parser = new CSVParserService(mockPrisma, {
+      organizationId: 'test-org',
       batchSize: 100,
       progressInterval: 500,
     });

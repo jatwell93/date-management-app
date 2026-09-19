@@ -47,7 +47,7 @@ describe('CSV Parser Edge Cases', () => {
     (mockPrisma.product.findFirst as jest.Mock).mockResolvedValue(null);
     (mockPrisma.product.create as jest.Mock).mockResolvedValue({ id: 1 });
     (mockPrisma.product.update as jest.Mock).mockResolvedValue({ id: 1 });
-    parser = new CSVParserService(mockPrisma, { batchSize: 10 });
+    parser = new CSVParserService(mockPrisma, { organizationId: 'test-org', batchSize: 10 });
   });
 
   describe('Empty File Handling', () => {

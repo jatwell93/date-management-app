@@ -1,4 +1,13 @@
 import type { Response, NextFunction } from 'express';
+
+// `authenticateToken`'s rejection path tracks an analytics event, which would reach the
+// database. The matrix below only cares whether the bypass branch was taken, so stub it.
+vi.mock('../../services/analytics.service', () => ({
+  AnalyticsService: { getInstance: () => ({ trackEvent: vi.fn() }) },
+  AnalyticsEventType: { USER_LOGOUT: 'USER_LOGOUT' },
+}));
+
+import { authenticateToken, AuthRequest } from '../../middleware/auth.middleware';
 import { clerkAuth, ClerkAuthRequest } from '../../middleware/clerk-auth.middleware';
 import { InventoryService } from '../../services/inventory.service';
 import { getOrganizationId, isTestAuthBypassEnabled } from '../../utils/auth-bypass';
@@ -77,6 +86,38 @@ describe('Auth Bypass Safety', () => {
         expect(req.auth?.userId).toBe(middlewareBypassed ? 'user_test_123' : undefined);
       },
     );
+
+    it.each(matrix)(
+      'authenticateToken bypasses exactly when isTestAuthBypassEnabled says so (NODE_ENV=$nodeEnv, TEST_AUTH_BYPASS=$flag)',
+      async ({ nodeEnv, flag }) => {
+        process.env.NODE_ENV = nodeEnv;
+        if (flag === undefined) {
+          delete process.env.TEST_AUTH_BYPASS;
+        } else {
+          process.env.TEST_AUTH_BYPASS = flag;
+        }
+
+        // Same construction as above: no token, so `next` is reachable only via bypass.
+        const req = {
+          headers: {},
+          get: () => undefined,
+          path: '/x',
+          method: 'GET',
+        } as unknown as AuthRequest;
+        const res = {
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn().mockReturnThis(),
+        } as unknown as Response;
+        const next = vi.fn() as unknown as NextFunction;
+
+        await authenticateToken(req, res, next);
+
+        const middlewareBypassed =
+          (next as unknown as ReturnType<typeof vi.fn>).mock.calls.length > 0;
+        expect(middlewareBypassed).toBe(isTestAuthBypassEnabled());
+        expect(req.organizationId).toBe(middlewareBypassed ? 'default-org' : undefined);
+      },
+    );
   });
 
   describe('getOrganizationId', () => {
@@ -96,7 +137,7 @@ describe('Auth Bypass Safety', () => {
       process.env.NODE_ENV = 'test';
       delete process.env.TEST_AUTH_BYPASS;
       expect(() => getOrganizationId()).toThrow(
-        'Organization ID is required in production environments',
+        'Organization ID is required unless the test auth bypass is enabled',
       );
     });
 
@@ -106,7 +147,7 @@ describe('Auth Bypass Safety', () => {
       process.env.NODE_ENV = 'production';
       process.env.TEST_AUTH_BYPASS = 'true';
       expect(() => getOrganizationId()).toThrow(
-        'Organization ID is required in production environments',
+        'Organization ID is required unless the test auth bypass is enabled',
       );
     });
 
@@ -114,7 +155,7 @@ describe('Auth Bypass Safety', () => {
       process.env.NODE_ENV = 'production';
       process.env.TEST_AUTH_BYPASS = 'false';
       expect(() => getOrganizationId()).toThrow(
-        'Organization ID is required in production environments',
+        'Organization ID is required unless the test auth bypass is enabled',
       );
     });
   });
@@ -136,7 +177,7 @@ describe('Auth Bypass Safety', () => {
       process.env.NODE_ENV = 'production';
       process.env.TEST_AUTH_BYPASS = 'true';
       expect(() => new InventoryService()).toThrow(
-        'Organization ID is required in production environments',
+        'Organization ID is required unless the test auth bypass is enabled',
       );
     });
 
@@ -144,7 +185,7 @@ describe('Auth Bypass Safety', () => {
       process.env.NODE_ENV = 'production';
       process.env.TEST_AUTH_BYPASS = 'false';
       expect(() => new InventoryService()).toThrow(
-        'Organization ID is required in production environments',
+        'Organization ID is required unless the test auth bypass is enabled',
       );
     });
   });

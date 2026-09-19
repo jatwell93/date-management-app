@@ -1,0 +1,56 @@
+name: OpenSpec Audit Manifest
+
+# `npm run test:audit-manifest` verifies the task 2.2 test manifests under
+# `openspec/changes/retire-express-unify-on-postgres/audit/`: that every cited
+# test path exists, that no "none found" is unqualified, that no equivalence
+# rests on a test that cannot fail, and that no section under-covers the file it
+# cites.
+#
+# It ran in no workflow until this file existed, and the cost of that was
+# visible the day it was written: `main` was already failing the check. PR #513
+# added three test cases to `backend/src/tests/unit/credit-claim.test.ts`
+# without the matching manifest rows (21 rows for 24 cases), and nothing
+# reported it. The check is only useful if something runs it.
+#
+# Unlike backend-test.yml and workers-test.yml there is no `changes` job and no
+# `gate` job. Those exist because their test suites are expensive enough to want
+# skipping on unrelated PRs, which then requires the skipped-job-counts-as-
+# success dance. This check needs no install step at all — the scripts use only
+# node builtins — and finishes in seconds, so it simply always runs. That makes
+# the job itself safe to mark as a required check.
+#
+# Manifest rows cite test files across `backend/`, `workers/` and `shared/`, so
+# a change in any of them can invalidate a row. That is the other reason not to
+# filter by path: the file that breaks a manifest row is usually not the
+# manifest.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('openspec-audit-pr-{0}', github.ref) || format('openspec-audit-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Verify audit manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # No `npm ci`: scripts/check-audit-columns.js and
+      # scripts/verify-audit-manifest.js require only node:fs and node:path.
+      # Adding an install here would trade seconds for minutes and pull the
+      # whole dependency tree into a check that needs none of it.
+      - name: Verify audit manifests
+        run: npm run test:audit-manifest

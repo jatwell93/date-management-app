@@ -44,7 +44,7 @@ describe('XLSX Upload Functionality Tests', () => {
     });
 
     // Initialize service with mocked Prisma
-    productService = new ProductService(mockPrisma);
+    productService = new ProductService(mockPrisma, 'default-org');
 
     const buildMockProduct = (args: any) => {
       const now = new Date();

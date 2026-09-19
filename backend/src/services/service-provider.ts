@@ -61,12 +61,27 @@ export class ServiceProvider {
     return new ServiceProvider({ organizationId: TEST_AUTH_BYPASS_ORG_ID, ...config });
   }
 
+  /**
+   * Injects clients for tests. It has no production callers — every live site
+   * builds `new ServiceProvider({ organizationId })` with an explicit tenant
+   * (`dashboard.controller.ts:36`, `report.controller.ts:141`,
+   * `upload.controller.ts:238`) — so it defaults the tenant the same way
+   * `forTesting` does, rather than reaching the env-dependent fallback in
+   * `getOrganizationId` with `organizationId` undefined. That fallback is off
+   * outside `NODE_ENV=test`, which includes the production-shaped Neon test
+   * config (`tests/setup-neon-env.ts:4-5`).
+   */
   static withClients(
     prisma: PrismaClient,
     storageProvider?: StorageProvider,
     config?: Omit<ServiceProviderConfig, 'prisma' | 'storageProvider'>,
   ): ServiceProvider {
-    return new ServiceProvider({ prisma, storageProvider, ...config });
+    return new ServiceProvider({
+      organizationId: TEST_AUTH_BYPASS_ORG_ID,
+      prisma,
+      storageProvider,
+      ...config,
+    });
   }
 
   getAuthService(): AuthService {
