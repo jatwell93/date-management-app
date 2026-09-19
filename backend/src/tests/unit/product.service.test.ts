@@ -500,8 +500,16 @@ describe('ProductService with organizationId', () => {
     });
 
     it('should use default organizationId when none provided', () => {
-      // This tests the getOrganizationId fallback behavior
+      // This tests the getOrganizationId fallback, which needs BOTH halves of the test
+      // auth bypass. Set them rather than inheriting: the Neon config runs the same file
+      // with NODE_ENV=production, where the fallback is (correctly) unavailable.
+      const previousNodeEnv = process.env.NODE_ENV;
+      const previousBypass = process.env.TEST_AUTH_BYPASS;
+      process.env.NODE_ENV = 'test';
+      process.env.TEST_AUTH_BYPASS = 'true';
       const defaultService = new ProductService(mockPrisma);
+      process.env.NODE_ENV = previousNodeEnv;
+      process.env.TEST_AUTH_BYPASS = previousBypass;
 
       mockPrisma.product.findMany.mockResolvedValue([]);
       defaultService.getAllProducts();

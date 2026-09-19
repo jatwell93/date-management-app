@@ -46,7 +46,7 @@ describe('Prisma-based Services Integration', () => {
     });
 
     it('should create InventoryService with default client when none provided', () => {
-      const service = new InventoryService();
+      const service = new InventoryService('test-org');
       expect(service).toBeInstanceOf(InventoryService);
     });
 
@@ -56,17 +56,17 @@ describe('Prisma-based Services Integration', () => {
     });
 
     it('should create StoreAreaService with default client when none provided', () => {
-      const service = new StoreAreaService();
+      const service = new StoreAreaService('test-org');
       expect(service).toBeInstanceOf(StoreAreaService);
     });
 
     it('should create ProductService with injected PrismaClient', () => {
-      const service = new ProductService(prisma);
+      const service = new ProductService(prisma, 'test-org');
       expect(service).toBeInstanceOf(ProductService);
     });
 
     it('should create ProductService with default client when none provided', () => {
-      const service = new ProductService();
+      const service = new ProductService(undefined, 'test-org');
       expect(service).toBeInstanceOf(ProductService);
     });
   });
@@ -103,7 +103,7 @@ describe('Prisma-based Services Integration', () => {
     });
 
     it('ProductService.getAllProducts should be a function returning Promise', () => {
-      const service = new ProductService(prisma);
+      const service = new ProductService(prisma, 'test-org');
       expect(typeof service.getAllProducts).toBe('function');
     });
   });

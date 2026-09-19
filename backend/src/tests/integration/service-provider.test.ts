@@ -217,7 +217,10 @@ describe('ServiceProvider Integration Tests', () => {
 
     it('should accept custom storage provider for testing', () => {
       const customStorage = new MockStorageProvider();
-      const customProvider = new ServiceProvider({ storageProvider: customStorage });
+      const customProvider = new ServiceProvider({
+        organizationId: 'test-org',
+        storageProvider: customStorage,
+      });
 
       const uploadService = customProvider.getUploadService();
       expect(uploadService).toBeDefined();

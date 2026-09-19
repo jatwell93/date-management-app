@@ -10,6 +10,10 @@ import { getDiContainer } from '../di/container';
 import { UserRepository } from '../repositories/user.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 import { getAuthorizedParties } from '../utils/authorized-parties';
+import {
+  isTestAuthBypassEnabled,
+  TEST_AUTH_BYPASS_ORG_ID as SHARED_TEST_AUTH_BYPASS_ORG_ID,
+} from '../utils/auth-bypass';
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -75,7 +79,10 @@ const subscriptionCache = new Map<
   { subscription: CachedSubscription; timestamp: number }
 >();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-export const TEST_AUTH_BYPASS_ORG_ID = 'default-org';
+// Re-exported from `utils/auth-bypass` rather than redeclared: this module used to
+// carry its own copy of the literal, so the two could drift the same way the bypass
+// predicates did.
+export const TEST_AUTH_BYPASS_ORG_ID = SHARED_TEST_AUTH_BYPASS_ORG_ID;
 
 async function checkCanceledAccess(subscription: SubscriptionTier): Promise<boolean> {
   const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
@@ -125,8 +132,10 @@ async function getCachedOrFetchSubscription(
 }
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  // Test environment bypass
-  if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
+  // Test environment bypass. Calls the shared predicate rather than inlining it, so
+  // this guard and `getOrganizationId`'s cannot drift apart again (they did: the
+  // helper was `||` while both middlewares were `&&`).
+  if (isTestAuthBypassEnabled()) {
     return setTestAuthContext(req, next);
   }
 

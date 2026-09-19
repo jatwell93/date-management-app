@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { createClerkClient, verifyToken } from '@clerk/backend';
 import { envConfig } from '../config/environment';
 import { getAuthorizedParties } from '../utils/authorized-parties';
+import { isTestAuthBypassEnabled } from '../utils/auth-bypass';
 
 /**
  * Clerk JWT Token Claims
@@ -75,8 +76,9 @@ async function resolveClerkIdentity(decoded: ClerkTokenPayload): Promise<ClerkUs
  * Usage: router.get('/protected', clerkAuth, yourController)
  */
 export const clerkAuth = async (req: ClerkAuthRequest, res: Response, next: NextFunction) => {
-  // Test bypass for unit tests
-  if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
+  // Test bypass for unit tests. Shares the predicate with `auth.middleware.ts` and
+  // `getOrganizationId` so there is one definition to get right, not three.
+  if (isTestAuthBypassEnabled()) {
     req.auth = {
       userId: 'user_test_123',
       email: 'test@example.com',

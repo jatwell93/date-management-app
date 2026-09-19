@@ -66,6 +66,7 @@ describe('CSVParserService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     parser = new CSVParserService(mockPrisma, {
+      organizationId: 'test-org',
       batchSize: 2, // Small batch for testing
       progressInterval: 2,
     });
@@ -116,17 +117,18 @@ describe('CSVParserService', () => {
 
   describe('Constructor and DI', () => {
     it('should create instance with injected PrismaClient', () => {
-      const service = new CSVParserService(mockPrisma);
+      const service = new CSVParserService(mockPrisma, { organizationId: 'test-org' });
       expect(service).toBeInstanceOf(CSVParserService);
     });
 
     it('should create instance with default options', () => {
-      const service = new CSVParserService(mockPrisma);
+      const service = new CSVParserService(mockPrisma, { organizationId: 'test-org' });
       expect(service).toBeInstanceOf(CSVParserService);
     });
 
     it('should accept custom options', () => {
       const service = new CSVParserService(mockPrisma, {
+        organizationId: 'test-org',
         batchSize: 50,
         progressInterval: 500,
         maxFileSize: 5 * 1024 * 1024,
@@ -572,6 +574,7 @@ describe('CSVParserService', () => {
   describe('File Size Validation', () => {
     it('should reject files exceeding max size', async () => {
       const smallParser = new CSVParserService(mockPrisma, {
+        organizationId: 'test-org',
         maxFileSize: 100, // Very small limit
       });
 

@@ -1588,7 +1588,8 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>Note for Phase 3.2: the `?view=settled` and no-`view` rows still have no Worker test
             (`minimal-api-routes.test.ts:682` covers `?view=open` only); write them against the
             shared export.
-      - [ ] 3.1.f **Reconcile the two test-bypass predicates before deleting Express** (Finding 7).
+      - [x] 3.1.f **Reconcile the two test-bypass predicates before deleting Express** (Finding 7).
+            **DONE 2026-09-19.**
             `middleware/auth.middleware.ts:129` and `middleware/clerk-auth.middleware.ts:79` both gate
             on `NODE_ENV === 'test'` **and** `TEST_AUTH_BYPASS === 'true'`; `utils/auth-bypass.ts:11`
             uses **or**. That helper backs `getOrganizationId(organizationId?)` (`:18-28`), which
@@ -1605,6 +1606,108 @@ equivalent, a relocated home, or an explicit retirement decision.
             Cheapest correct fix is to change the `||` to `&&` and let the missing-org case throw. No
             Worker counterpart exists or should be introduced: `index-minimal.ts:3352` is the sole
             assignment of `organizationId` and it reads the verified JWT with no fallback branch.
+            <br>**Shipped.** `utils/auth-bypass.ts:11` is now `&&`, matching both middleware guards,
+            and the helper was renamed `isTestEnvironment` → `isTestAuthBypassEnabled`. The rename is
+            part of the fix rather than tidying: `NODE_ENV === 'test' || TEST_AUTH_BYPASS` is a
+            *correct* implementation of the question the old name asks, so the name is what invites
+            the next person to re-broaden it. The callers need "is the bypass on?", not "are we in a
+            test?". `getOrganizationId` now throws in every case except a fully-enabled bypass.
+            <br>**The row under-counted the blast radius by one.** A ninth consumer takes its whole
+            tenant scope from the helper and is not in the list above: `user.service.ts:22`. Same
+            shape as the third partition copy found in 3.1.e — an inventory assembled by grepping one
+            symptom misses the site that spells it differently.
+            <br>**The existing test codified the vulnerability.** `auth-bypass-safety.test.ts:21-25`
+            asserted `isTestEnvironment()` is `true` under `NODE_ENV=production` with
+            `TEST_AUTH_BYPASS=true` — precisely the cell this task closes. A green suite was evidence
+            *for* the bug. That file is rewritten: the two cells that used to expect the loose answer
+            now expect the tight one, and a four-cell matrix drives `clerkAuth` directly and asserts
+            the middleware bypasses **exactly** when the helper says it should.
+            <br>**Mutation-verified, two mutations.** (1) Restore `||` in the helper → 7 failures,
+            exactly the intended set (2 helper cells, 2 matrix cells, 2 `getOrganizationId` cells, 1
+            `InventoryService` cell); nothing else in the suite moved. (2) Leave the helper correct
+            and loosen the *middleware* guard (`clerk-auth.middleware.ts:79` → `||`) → exactly the 2
+            matrix cells fail, which is the evidence the matrix drives the middleware rather than
+            re-asserting the helper against itself. Worth recording: under mutation 2 the whole of
+            `clerk-auth.middleware.test.ts` (8 tests) **still passed**. It cannot detect its own guard
+            drifting open, because every non-bypass test there sets `NODE_ENV=production` *and*
+            `TEST_AUTH_BYPASS=false`, a cell that is false under both `&&` and `||`. The new matrix is
+            the only thing guarding that middleware's predicate.
+            <br>**Recorded, deliberately not fixed here:** `subscription.service.ts:147` is a fourth
+            predicate of the same *shape* but a different concern —
+            `TEST_AUTH_BYPASS === 'true' || JEST_WORKER_ID !== undefined` decides whether production
+            without `STRIPE_SECRET_KEY` fails fast. Two things are wrong with it: `JEST_WORKER_ID` has
+            been dead since the Vitest migration (Vitest sets `VITEST_WORKER_ID`), and the surviving
+            half means a deployed process with the flag set silently gets a placeholder Stripe key
+            instead of the intended hard failure. It is left alone on purpose: it is billing config
+            rather than tenant scope, `createStripeClient` has **no test at all**, and whether
+            production should hard-fail without a Stripe key is a product call. Fixing it means
+            writing the first test for that guard, which is its own unit of work.
+            <br>**Review outcome (PR #514).** Three reviewer findings, all three correct; the first
+            was blocking and the first-pass fix was wrong to ship without it.
+            <br>1. **The predicate had a supported in-repo consumer, not just a hypothetical
+            deployment mistake.** `tests/setup-neon-env.ts:4-5` sets `NODE_ENV=production` **and**
+            `TEST_AUTH_BYPASS=true`, and `vitest.config.neon.ts:33` includes `src/tests/**/*.test.ts`
+            — so the Neon/production-shape suite *is* the cell this task closes, and every org-less
+            service construction under it would now throw. Flipping that file to `NODE_ENV=test` was
+            considered and rejected: the variable is load-bearing there for `database-factory.ts:33`,
+            `storage-factory.ts:33`, `upload.service.ts:85`, `database.ts:40` (SSL), `cors` and
+            `url-validator`, which is the entire point of that config. A separate test-only bypass
+            signal was also rejected — it is a second door into the thing being closed. The fix is
+            for the tests to stop leaning on the fallback: `ServiceProvider.withClients` now defaults
+            the tenant explicitly the way `forTesting` already did (it has **zero** production
+            callers — `dashboard.controller.ts:36`, `report.controller.ts:141` and
+            `upload.controller.ts:238` all pass an explicit org), and the remaining sites across nine
+            test files pass one. The two tests whose actual subject *is* the fallback
+            (`service-provider-constructor.test.ts`, `product.service.test.ts:503`) now set the
+            environment they need instead of inheriting it.
+            <br>*Generalisation worth keeping:* a guard that is too loose usually has a real consumer
+            of the looseness, and finding that consumer is the work. The `||` survived because
+            something depended on it.
+            <br>*Method worth keeping:* grep found 19 candidate sites; a throwaway vitest config that
+            reproduced **only the auth cell** of `setup-neon-env.ts` over the normal SQLite suite
+            immediately failed 4 more, because `new ServiceProvider({ prisma })` and
+            `new ServiceProvider({ storageProvider })` are org-less too and match no `()` pattern. A
+            second pass on that shim found the whole `CSVParserService` class of sites
+            (`csv-parser.service.ts:224` uses `options.organizationId ?? getOrganizationId()`).
+            Executing the environment beat enumerating the syntax. The shim is not retained: forcing
+            `NODE_ENV=production` over the full suite produces ~190 unrelated failures (auth no
+            longer bypasses, storage factory demands R2, db factory wants Postgres), so it is a probe
+            for mock-based unit files, not a gate. The real gate is the Neon suite, which needs a
+            live database and **runs in no workflow** — see the note below.
+            <br>2. **The agreement matrix only covered `clerkAuth`.** Taken, but via the reviewer's
+            stronger alternative: both middleware guards now **call** `isTestAuthBypassEnabled()`
+            rather than inlining the predicate, so drift is impossible by construction instead of
+            merely detected. `authenticateToken` was added to the matrix as well (with
+            `AnalyticsService` stubbed — its rejection path tracks an event that reaches the
+            database). `auth.middleware.ts:78` also carried its own copy of the
+            `TEST_AUTH_BYPASS_ORG_ID` literal; it now re-exports the shared one.
+            <br>*Consequence worth stating, because it changes what the matrix proves:* once both
+            guards call the shared helper, loosening the helper no longer moves the matrix — the
+            middlewares loosen with it and still agree. Re-running mutation 1 after the refactor
+            fails 6 cases, all of them *value* assertions (helper cells, `getOrganizationId`,
+            `ServiceProvider`), and none of the 8 matrix cells. The matrix now proves **agreement**,
+            which is a different property from **tightness**, and both are needed. Verified with a
+            third mutation: inline `||` back into `auth.middleware.ts:129` so it stops calling the
+            helper, and the 2 `authenticateToken` matrix cells fail as intended. That mutation also
+            trips 10 pre-existing cases in `auth.middleware.test.ts`, which — unlike
+            `clerk-auth.middleware.test.ts` — leaves `NODE_ENV` at `test` while setting the flag to
+            `false`, so a disjunction does flip its rejection cases. The blindness recorded above is
+            specific to the Clerk suite, which sets `NODE_ENV=production` as well.
+            <br>3. **The error message still said "in production environments"** when the throw now
+            also fires in a test process with the flag unset. Reworded to name the actual
+            requirement, with the five assertions updated.
+            <br>**Follow-up not taken here — the Neon suite runs in no workflow.** No workflow
+            references `test:prod` or `vitest.config.neon.ts`, which is why this defect reached
+            review rather than CI: `test:backend:diff` uses the default config, where both halves of
+            the predicate are true and nothing was visible. That suite needs a live Neon branch and a
+            Prisma schema swap, so wiring it up is its own change, with the same shape of argument as
+            `workers-test.yml` (Finding: a suite nothing runs is a suite that is already broken).
+            <br>**Recorded, pre-existing, not caused by this change:** two *production* call sites
+            construct services org-less and therefore already threw in any real deployment —
+            `migrations/006-update-markdown-statuses.migration.ts:13` (`new InventoryService()`) and
+            `csv-parser.service.ts:1058` (`getCSVParser` → `new CSVParserService(undefined, options)`).
+            Under the old `||` they would have worked only in a process with the flag set, which is
+            the misconfiguration itself. Both are legacy SQLite-era paths that Phase 4 deletes.
       - [ ] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
             (Finding 8). Express records authorization events through `OrgAuditService.emit`
             (`backend/src/services/org-audit.service.ts:20`) into
