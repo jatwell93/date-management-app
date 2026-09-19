@@ -174,12 +174,16 @@ production credentials.
 
 ### Requirement: Role grants are recorded in an audit trail
 
-Every change to a user's role SHALL append a `role_assigned` row to `org_audit_log` naming the actor,
-the target, the previous role, and the new role. A deliberate grant — one user changing another
-user's role — SHALL be recorded atomically with the change itself, so no interleaving exists in which
-the role changes without a record. The automatic self-assignment at first bootstrap MAY be recorded
-best-effort, because it is reconstructible from `users.role` and `users.created_at` and a failure
-there would otherwise block a user's first sign-in.
+Every path that gives a user a role SHALL append a `role_assigned` row to `org_audit_log` naming the
+actor, the target, the previous role (NULL where none existed), and the new role. A deliberate grant
+— one user setting another user's role, whether by creating that user or by changing an existing one
+— SHALL be recorded atomically with the grant itself, so no interleaving exists in which a user holds
+a role with no record of who gave it. The automatic self-assignment at first bootstrap MAY be
+recorded best-effort, because it is reconstructible from `users.role` and `users.created_at` and a
+failure there would otherwise block a user's first sign-in.
+
+Each row SHALL identify which path produced it, so a self-assignment cannot be mistaken for a
+deliberate grant.
 
 The trail SHALL be verified against real PostgreSQL. A test whose assertion is reachable only
 conditionally does not satisfy this requirement.
@@ -191,6 +195,14 @@ conditionally does not satisfy this requirement.
 - **THEN** one `role_assigned` row records the acting admin as actor and the changed user as target
 - **AND** `old_role` is the value the row held before the change, not a value re-read afterwards
 - **AND** the role is unchanged if the audit row cannot be written
+
+#### Scenario: An admin creates a user holding a privileged role
+
+- **GIVEN** an authenticated admin
+- **WHEN** they create a user and choose that user's role
+- **THEN** one `role_assigned` row records the acting admin as actor, the created user as target, and
+  a NULL previous role
+- **AND** no user is created if the audit row cannot be written
 
 #### Scenario: A request does not change a role
 

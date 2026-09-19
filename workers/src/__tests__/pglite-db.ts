@@ -213,6 +213,24 @@ const SCHEMA_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
+  -- Per-organization usage counters and tier caps. handleCreateLegacyUser reads
+  -- this before inserting a user, so the table has to exist even though nothing
+  -- increments the counters (limits that read these rows never fire in practice).
+  -- Shape mirrors 0000_baseline.up.sql:84.
+  CREATE TABLE organization_usage (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    active_users INTEGER NOT NULL DEFAULT 0,
+    max_users INTEGER NOT NULL,
+    total_skus INTEGER NOT NULL DEFAULT 0,
+    max_skus INTEGER NOT NULL,
+    total_inventory_items INTEGER NOT NULL DEFAULT 0,
+    max_inventory_items INTEGER,
+    storage_used_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
   -- Organization RBAC audit trail (migration 0013). Distinct from audit_log,
   -- which records inventory events: this one records authorization events —
   -- who was granted which role, by whom, and by what path. The FK to

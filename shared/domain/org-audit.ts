@@ -13,7 +13,12 @@
 // stored values stay comparable across the cutover.
 
 export const ORG_AUDIT_EVENT_TYPES = {
-  /** A user was given a role: at first bootstrap, or by an admin via PUT /api/users/:id. */
+  /**
+   * A user was given a role. Three live paths reach this, all of them audited:
+   * first bootstrap, an admin creating a user via `POST /api/users`, and an
+   * admin changing an existing user's role via `PUT /api/users/:id`. See
+   * ORG_AUDIT_TRIGGERS, which is what tells them apart once the rows are stored.
+   */
   ROLE_ASSIGNED: 'role_assigned',
   /** Reserved. Had no emitter on either backend — see LIVE_ORG_AUDIT_EVENT_TYPES. */
   ROLE_REMOVED: 'role_removed',
@@ -50,13 +55,19 @@ export const LIVE_ORG_AUDIT_EVENT_TYPES: readonly OrgAuditEventType[] = [
  *
  *   * `bootstrap` — the automatic self-assignment at account creation. Actor and
  *     target are the same user, and the row is reconstructible from `users`.
- *   * `admin-update` — one admin deliberately changing another user's role. Not
- *     reconstructible from anything else, and the entry with the actual
- *     compliance argument. Neither Express nor the Worker recorded it before
- *     migration 0013.
+ *   * `admin-create` — an admin pre-provisioning a user through `POST /api/users`
+ *     with a role of their choosing, `admin` included. The created row is a
+ *     username-only placeholder with no Clerk id, so it is a grant of privilege
+ *     that no later event re-states.
+ *   * `admin-update` — one admin deliberately changing an existing user's role.
+ *
+ * The last two are the ones with the compliance argument: `users.role` and
+ * `users.created_at` can tell you a user holds admin, but never *who* granted
+ * it. Neither Express nor the Worker recorded either before migration 0013.
  */
 export const ORG_AUDIT_TRIGGERS = {
   BOOTSTRAP: 'bootstrap',
+  ADMIN_CREATE: 'admin-create',
   ADMIN_UPDATE: 'admin-update',
 } as const;
 

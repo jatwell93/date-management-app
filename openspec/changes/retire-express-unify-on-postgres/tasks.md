@@ -1785,10 +1785,33 @@ equivalent, a relocated home, or an explicit retirement decision.
             inline (Postgres has no `ADD CONSTRAINT IF NOT EXISTS`). The comment at `e2e.test.ts:678`
             now states this as a constraint on every future migration rather than an accident of the
             ones written so far. `adding-a-migration-checklist` should gain it as a seventh item.
-            <br>**Still not read by anything.** Rebuilding the writer does not build a reader; no
+            <br>**Review found a third grant path, and the first pass missed it.**
+            `POST /api/users` (`handleCreateLegacyUser`, `index-minimal.ts:2858`) lets an admin
+            *create* a user at a chosen role, and `isValidRole` is `ROLES_DEV.has(role)`, which
+            admits `admin` — so it mints a new admin as readily as `PUT` promotes an existing one,
+            and it was writing nothing. Now audited on the same terms (`trigger: 'admin-create'`,
+            `old_role` NULL since no prior role existed, atomic CTE, mutation-verified twice: the
+            naive follow-up INSERT leaves an orphan admin with no record and exactly one test
+            catches it). **This is the row's own "audit rows systematically under-count" lesson
+            landing on this task's own inventory** — grepping the promotion path found two emitters
+            where there were three.
+            <br>*The reviewer's second claim did not hold and was not acted on.* It said the
+            placeholder later links to Clerk and gets a row mislabelled `trigger: 'bootstrap'`.
+            It cannot: the placeholder is inserted with NULL email and NULL `clerk_user_id`, while
+            `upsertClerkUser` conflicts on `clerk_user_id` (NULL never conflicts → bootstrap inserts
+            a *separate* row) and its fallback matches `LOWER(email)`, which NULL never satisfies. A
+            placeholder and a later Clerk sign-in by the same person produce **two user rows**. The
+            doc comment at `index-minimal.ts:2853` asserting linkage was therefore wrong; corrected
+            in place. The row-duplication itself is recorded, not fixed — reconciliation is its own
+            change and `backend/` is being retired around it. Diagnosis right, mechanism wrong;
+            judged separately, per the 3.1.e/3.1.f precedent.
+            <br>**Harness gap found doing it:** `workers/src/__tests__/pglite-db.ts` had no
+            `organization_usage` table, because no node test had ever reached a handler that reads
+            the tier cap. Added from `0000_baseline.up.sql:84`.
+            <br>**Still not read by anything.** Rebuilding the writers does not build a reader; no
             endpoint exposes the trail on either backend. That is unchanged from Express and out of
             scope here, but it means the trail's value today is forensic (query the table directly),
-            not operational.
+            not operational. **Tracked as #515.**
       - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because
