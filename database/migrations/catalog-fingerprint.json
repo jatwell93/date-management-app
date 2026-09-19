@@ -17,6 +17,7 @@
     "master_catalogue_entries",
     "metrics_snapshots",
     "migrations",
+    "org_audit_log",
     "organization_invites",
     "organization_markdown_config",
     "organization_usage",
@@ -1130,6 +1131,97 @@
     {
       "table": "migrations",
       "name": "applied_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "id",
+      "type": "integer",
+      "not_null": true,
+      "default": "nextval('org_audit_log_id_seq'::regclass)"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "organization_id",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "event_type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "actor_user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "actor_organization_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "target_user_id",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "target_organization_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "old_role",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "new_role",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "invite_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "ip_address",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "metadata",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "created_at",
       "type": "timestamp(3) without time zone",
       "not_null": true,
       "default": "CURRENT_TIMESTAMP"
@@ -2924,6 +3016,62 @@
       "predicate": null
     },
     {
+      "table": "org_audit_log",
+      "name": "org_audit_log_actor_user_id_idx",
+      "definition": "CREATE INDEX org_audit_log_actor_user_id_idx ON public.org_audit_log USING btree (actor_user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_created_at_idx",
+      "definition": "CREATE INDEX org_audit_log_created_at_idx ON public.org_audit_log USING btree (created_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_event_type_idx",
+      "definition": "CREATE INDEX org_audit_log_event_type_idx ON public.org_audit_log USING btree (event_type)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_invite_id_idx",
+      "definition": "CREATE INDEX org_audit_log_invite_id_idx ON public.org_audit_log USING btree (invite_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_organization_id_idx",
+      "definition": "CREATE INDEX org_audit_log_organization_id_idx ON public.org_audit_log USING btree (organization_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_pkey",
+      "definition": "CREATE UNIQUE INDEX org_audit_log_pkey ON public.org_audit_log USING btree (id)",
+      "unique": true,
+      "primary": true,
+      "predicate": null
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_target_user_id_idx",
+      "definition": "CREATE INDEX org_audit_log_target_user_id_idx ON public.org_audit_log USING btree (target_user_id)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
       "table": "organization_invites",
       "name": "organization_invites_email_idx",
       "definition": "CREATE INDEX organization_invites_email_idx ON public.organization_invites USING btree (email)",
@@ -4506,6 +4654,42 @@
     {
       "table": "migrations",
       "name": "migrations_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_created_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_event_type_not_null",
+      "type": "n",
+      "definition": "NOT NULL event_type"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_organization_id_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_organization_id_not_null",
+      "type": "n",
+      "definition": "NOT NULL organization_id"
+    },
+    {
+      "table": "org_audit_log",
+      "name": "org_audit_log_pkey",
       "type": "p",
       "definition": "PRIMARY KEY (id)"
     },

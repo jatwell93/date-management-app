@@ -29,6 +29,7 @@ import {
 import {
   applyRateLimitHeaders,
   checkRateLimit,
+  getClientIp,
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
 import {
@@ -2949,11 +2950,18 @@ async function handleUpdateUser(
     );
   }
 
-  const updated = await db.updateUserRole(auth.organizationId, id, body.role);
+  const updated = await db.updateUserRole(auth.organizationId, id, body.role, {
+    userId: auth.userId,
+    ipAddress: getClientIp(request),
+  });
   if (!updated) {
     return errorResponse('User not found', 404, env);
   }
-  return jsonResponse(updated, 200, env);
+
+  // `previousRole` exists to populate the audit trail, not to be published: the
+  // response shape stays exactly what it was before the trail was added.
+  const { previousRole: _previousRole, ...user } = updated;
+  return jsonResponse(user, 200, env);
 }
 
 /**

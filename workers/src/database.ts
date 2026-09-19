@@ -17,6 +17,7 @@ import {
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
+import { ORG_AUDIT_EVENT_TYPES, ORG_AUDIT_TRIGGERS } from '../../shared/domain/org-audit';
 import type { CreditType } from '../../shared/domain/supplier-policy';
 import {
   buildCatalogueProvenanceResponse,
@@ -313,7 +314,8 @@ export interface Database {
     organizationId: string,
     userId: number,
     role: string,
-  ): Promise<UserListItem | null>;
+    actor: RoleChangeActor,
+  ): Promise<UserRoleChange | null>;
   softDeleteUser(organizationId: string, userId: number): Promise<boolean>;
 }
 
@@ -710,6 +712,22 @@ export interface UserListItem {
   role: string;
   clerkUserId: string | null;
   createdAt: string;
+}
+
+/** Who is performing a role change, for the `org_audit_log` entry it produces. */
+export interface RoleChangeActor {
+  userId: number;
+  ipAddress: string | null;
+}
+
+/**
+ * A completed role change. `previousRole` is read in the same statement that
+ * performs the update, so it is the value the row actually held — not a value
+ * re-read afterwards, which a concurrent change could have already replaced.
+ * It is internal to the audit trail and must not be returned to API callers.
+ */
+export interface UserRoleChange extends UserListItem {
+  previousRole: string;
 }
 
 export interface ExpiredItemTransaction {
@@ -3052,22 +3070,98 @@ export function createWorkersDatabase(env: Env): Database {
       `) as UserListItem[];
     },
 
+    /**
+     * Change a user's role and record it in `org_audit_log` in **one statement**.
+     *
+     * The audit row is a data-modifying CTE rather than a follow-up INSERT
+     * because Neon's HTTP driver has no transaction: two statements would allow
+     * the role to change while the audit write fails, and for the one event with
+     * a real compliance argument — an admin deliberately promoting another user —
+     * a silently missing row is worse than a failed request. Postgres executes a
+     * data-modifying CTE exactly once and to completion whether or not the
+     * primary query reads its output, so `audited` runs even though nothing
+     * selects from it.
+     *
+     * `prev` supplies the pre-update role, which `UPDATE ... RETURNING` cannot:
+     * every sub-statement of one statement reads the same snapshot, so the
+     * self-join sees the row as it was. That also makes the recorded `old_role`
+     * immune to a concurrent change between a read and a write.
+     *
+     * Tenant scoping is unchanged: `organization_id` is in `prev`'s predicate, so
+     * a caller cannot reach another organization's user, and the audit row is
+     * written against the caller's own organization.
+     */
     async updateUserRole(
       organizationId: string,
       userId: number,
       role: string,
-    ): Promise<UserListItem | null> {
+      actor: RoleChangeActor,
+    ): Promise<UserRoleChange | null> {
+      const metadata = JSON.stringify({ trigger: ORG_AUDIT_TRIGGERS.ADMIN_UPDATE });
       const rows = await sql`
-        UPDATE users
-        SET role = ${role}, updated_at = NOW()
-        WHERE id = ${userId}
-          AND organization_id = ${organizationId}
-          AND deleted_at IS NULL
-        RETURNING id, email, username, role,
-                  clerk_user_id as "clerkUserId",
-                  created_at::text as "createdAt"
+        WITH prev AS (
+          SELECT id, role
+          FROM users
+          WHERE id = ${userId}
+            AND organization_id = ${organizationId}
+            AND deleted_at IS NULL
+        ),
+        updated AS (
+          UPDATE users
+          SET role = ${role}, updated_at = NOW()
+          FROM prev
+          WHERE users.id = prev.id
+          RETURNING users.id,
+                    users.email,
+                    users.username,
+                    users.role,
+                    users.clerk_user_id,
+                    users.created_at,
+                    prev.role AS previous_role
+        ),
+        audited AS (
+          INSERT INTO org_audit_log (
+            organization_id,
+            event_type,
+            actor_user_id,
+            actor_organization_id,
+            target_user_id,
+            target_organization_id,
+            old_role,
+            new_role,
+            ip_address,
+            metadata,
+            created_at
+          )
+          SELECT ${organizationId},
+                 ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
+                 ${actor.userId},
+                 ${organizationId},
+                 updated.id,
+                 ${organizationId},
+                 updated.previous_role,
+                 updated.role,
+                 ${actor.ipAddress},
+                 ${metadata},
+                 NOW()
+          FROM updated
+          -- A request that re-asserts the role a user already has changed
+          -- nothing, so it is not an authorization event. Recording it would
+          -- pad the trail with entries that cannot be told apart from real
+          -- grants without comparing old_role to new_role on every read.
+          WHERE updated.previous_role IS DISTINCT FROM updated.role
+          RETURNING 1
+        )
+        SELECT id,
+               email,
+               username,
+               role,
+               clerk_user_id as "clerkUserId",
+               created_at::text as "createdAt",
+               previous_role as "previousRole"
+        FROM updated
       `;
-      return (rows[0] as UserListItem) || null;
+      return (rows[0] as UserRoleChange) || null;
     },
 
     async softDeleteUser(organizationId: string, userId: number): Promise<boolean> {

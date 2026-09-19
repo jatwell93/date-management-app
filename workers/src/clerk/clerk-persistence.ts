@@ -1,4 +1,5 @@
 import type { Database } from '../database';
+import type { OrgAuditEntry } from '../../../shared/domain/org-audit';
 
 export type SqlClient = Database['sql'];
 
@@ -553,5 +554,48 @@ export async function releaseClerkWebhookEventClaim(
     DELETE FROM clerk_webhook_events
     WHERE id = ${eventId}
       AND completed_at IS NULL
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Organization RBAC audit trail (migration 0013)
+// ---------------------------------------------------------------------------
+
+/**
+ * Append one row to the organization RBAC audit trail.
+ *
+ * `metadata` is stored as a JSON string rather than `jsonb` because that is the
+ * column the Express lineage defined and this table is its port; widening it is
+ * a separate migration, not a silent divergence.
+ */
+export async function insertOrgAuditLog(sql: SqlClient, entry: OrgAuditEntry): Promise<void> {
+  await sql`
+    INSERT INTO org_audit_log (
+      organization_id,
+      event_type,
+      actor_user_id,
+      actor_organization_id,
+      target_user_id,
+      target_organization_id,
+      old_role,
+      new_role,
+      invite_id,
+      ip_address,
+      metadata,
+      created_at
+    ) VALUES (
+      ${entry.organizationId},
+      ${entry.eventType},
+      ${entry.actorUserId ?? null},
+      ${entry.actorOrganizationId ?? null},
+      ${entry.targetUserId ?? null},
+      ${entry.targetOrganizationId ?? null},
+      ${entry.oldRole ?? null},
+      ${entry.newRole ?? null},
+      ${entry.inviteId ?? null},
+      ${entry.ipAddress ?? null},
+      ${entry.metadata ? JSON.stringify(entry.metadata) : null},
+      NOW()
+    )
   `;
 }

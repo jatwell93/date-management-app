@@ -15,7 +15,12 @@ export function createInMemoryRateLimitStore(): InMemoryRateLimitStore {
 
 export const inMemoryRateLimitStore = createInMemoryRateLimitStore();
 
-function getClientIp(request: Request): string {
+/**
+ * Best-effort client IP. Exported because the organization RBAC audit trail
+ * records it too (`org_audit_log.ip_address`) and a second spelling of this
+ * header precedence would be a silent way for the two to disagree.
+ */
+export function getClientIp(request: Request): string {
   return (
     request.headers.get('CF-Connecting-IP') ||
     request.headers.get('X-Forwarded-For')?.split(',')[0].trim() ||

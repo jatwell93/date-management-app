@@ -213,6 +213,28 @@ const SCHEMA_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
+  -- Organization RBAC audit trail (migration 0013). Distinct from audit_log,
+  -- which records inventory events: this one records authorization events —
+  -- who was granted which role, by whom, and by what path. The FK to
+  -- organizations is deliberately included (production has ON DELETE CASCADE),
+  -- so a test that writes an audit row for an unseeded organization fails here
+  -- exactly as it would in production rather than silently succeeding.
+  CREATE TABLE org_audit_log (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    actor_user_id INTEGER,
+    actor_organization_id TEXT,
+    target_user_id INTEGER,
+    target_organization_id TEXT,
+    old_role TEXT,
+    new_role TEXT,
+    invite_id TEXT,
+    ip_address TEXT,
+    metadata TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
   CREATE TABLE expired_item_transactions (
     id SERIAL PRIMARY KEY,
     organization_id TEXT NOT NULL,

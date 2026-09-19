@@ -1708,7 +1708,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             `csv-parser.service.ts:1058` (`getCSVParser` → `new CSVParserService(undefined, options)`).
             Under the old `||` they would have worked only in a process with the flag set, which is
             the misconfiguration itself. Both are legacy SQLite-era paths that Phase 4 deletes.
-      - [ ] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
+      - [x] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
             (Finding 8). Express records authorization events through `OrgAuditService.emit`
             (`backend/src/services/org-audit.service.ts:20`) into
             `backend/src/repositories/org-audit.repository.ts:25`, writing the Prisma model
@@ -1734,6 +1734,61 @@ equivalent, a relocated home, or an explicit retirement decision.
             with an `else` that merely `console.warn`s, because the write is swallowed by SQLite's
             interactive transaction lock. A replacement must be tested against real SQL (pglite,
             `npm run test:db`) or it will be equally unfalsifiable.
+            <br>**DONE — decision: rebuild, and close the gap the Express trail left.** Three facts
+            re-derived while sizing this changed the decision the row proposed, so they are recorded
+            before it.
+            <br>1. **The trail is write-only.** `findByOrganization`
+            (`org-audit.repository.ts:44`) and `OrgAuditService.getByOrganization` have **zero**
+            production callers — no route, report or export reads `org_audit_log`. Only unit tests
+            call them.
+            <br>2. **`ROLE_REMOVED` has no emitter either**, on either backend. The live vocabulary
+            is one event, as the row says, but the reserved set is five, not four.
+            <br>3. **The event with the compliance argument was audited by neither backend.** The
+            row frames what Phase 4 deletes as "the record of who was granted admin and by what
+            path". What Express actually records is `role_assigned` at bootstrap, where actor and
+            target are *the same user* — an automatic self-assignment, derivable from `users.role`
+            and `users.created_at`. A human deliberately promoting another user goes through
+            `PUT /api/users/:id`, which is unaudited in **both** implementations (Express
+            `user.routes.ts:47` → its controller never touches `OrgAuditService`; Worker
+            `index-minimal.ts:2916` → `db.updateUserRole` and return). So a faithful port would have
+            rebuilt the derivable half and preserved the blind spot.
+            <br>**Built:** migration `0013_org_audit_log` (six artifacts per
+            `adding-a-migration-checklist`, plus the e2e probe renumbered `0013`→`0014`), the shared
+            vocabulary in `shared/domain/org-audit.ts`, and **two** writers — bootstrap
+            (`clerk/bootstrap-handler.ts`, `recordBootstrapRoleAssignment`) and the promotion path
+            (`database.ts`, `updateUserRole`).
+            <br>**The two writers are deliberately asymmetric.** The promotion path writes its audit
+            row in a data-modifying CTE *inside the same statement* as the `UPDATE`, because Neon's
+            HTTP driver has no transaction (same constraint as 3.1.h) and for the non-derivable
+            event a silently missing row is worse than a failed request. A `prev` CTE supplies
+            `old_role` from the pre-update snapshot, which `UPDATE ... RETURNING` cannot give and
+            which a post-update re-read would get wrong under concurrency. Bootstrap stays
+            fire-and-forget, as Express had it: its entry is derivable, and failing there would lock
+            a user out of their first sign-in to protect a record you can reconstruct.
+            <br>**Invite events: columns yes, writers no.** `invite_id` and the `target_*` columns
+            ship so a re-enabled `ENABLE_CUSTOM_ORG_INVITES` needs only a writer, not another
+            six-artifact migration. `LIVE_ORG_AUDIT_EVENT_TYPES` states the emitted subset as data so
+            a writer added without updating it fails a test rather than leaving the constant a quiet
+            lie about the table's contents.
+            <br>**Mutation-verified, five mutations** (`database.org-audit.pglite.node.test.ts`,
+            `clerk/bootstrap-handler.node.test.ts`, both under `npm run test:db`): dropping the
+            no-op-suppression `WHERE`, reading `old_role` post-update, **splitting the CTE into a
+            follow-up INSERT**, removing the bootstrap writer, and making the bootstrap swallow
+            blocking. The third is the one that matters — the naive two-statement implementation
+            passes **five of six** tests, leaving a user promoted to `admin` with no audit row, and
+            exactly one assertion catches it.
+            <br>**Found while doing it:** this migration series carries an **unstated idempotency
+            contract**. The documented forward-fix recovery path (`e2e.test.ts:653`) unstamps every
+            migration above the one being fixed and replays them *over the existing schema*, since
+            the runner requires applied migrations to be a contiguous prefix. A bare `CREATE TABLE`
+            fails there. 0013 therefore uses `IF NOT EXISTS` throughout and declares its foreign key
+            inline (Postgres has no `ADD CONSTRAINT IF NOT EXISTS`). The comment at `e2e.test.ts:678`
+            now states this as a constraint on every future migration rather than an accident of the
+            ones written so far. `adding-a-migration-checklist` should gain it as a seventh item.
+            <br>**Still not read by anything.** Rebuilding the writer does not build a reader; no
+            endpoint exposes the trail on either backend. That is unchanged from Express and out of
+            scope here, but it means the trail's value today is forensic (query the table directly),
+            not operational.
       - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because

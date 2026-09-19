@@ -172,6 +172,38 @@ production credentials.
 - **THEN** tests do not continue against dirty state
 - **AND** the required CI check fails
 
+### Requirement: Role grants are recorded in an audit trail
+
+Every change to a user's role SHALL append a `role_assigned` row to `org_audit_log` naming the actor,
+the target, the previous role, and the new role. A deliberate grant — one user changing another
+user's role — SHALL be recorded atomically with the change itself, so no interleaving exists in which
+the role changes without a record. The automatic self-assignment at first bootstrap MAY be recorded
+best-effort, because it is reconstructible from `users.role` and `users.created_at` and a failure
+there would otherwise block a user's first sign-in.
+
+The trail SHALL be verified against real PostgreSQL. A test whose assertion is reachable only
+conditionally does not satisfy this requirement.
+
+#### Scenario: An admin changes another user's role
+
+- **GIVEN** an authenticated admin and a user in the same organization
+- **WHEN** the admin changes that user's role
+- **THEN** one `role_assigned` row records the acting admin as actor and the changed user as target
+- **AND** `old_role` is the value the row held before the change, not a value re-read afterwards
+- **AND** the role is unchanged if the audit row cannot be written
+
+#### Scenario: A request does not change a role
+
+- **GIVEN** a role-change request that names the role the user already holds
+- **WHEN** it is applied
+- **THEN** no audit row is written, because nothing was authorized
+
+#### Scenario: A role change names a user in another organization
+
+- **GIVEN** a caller authenticated for one organization
+- **WHEN** the request names a user belonging to a different organization
+- **THEN** no role changes and no audit row is written for either organization
+
 ### Requirement: Backend retirement is manifest-gated
 
 The Express backend SHALL NOT be deleted until source-derived manifests account for every mounted and
