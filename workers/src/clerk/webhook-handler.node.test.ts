@@ -92,6 +92,23 @@ function userCreatedEvent(options: {
   };
 }
 
+/** An `organizationMembership.created` payload — Clerk's own role-grant path. */
+function membershipCreatedEvent(options: {
+  clerkUserId: string;
+  email: string;
+  clerkOrgId: string;
+  role: string;
+}): Record<string, unknown> {
+  return {
+    type: 'organizationMembership.created',
+    data: {
+      role: options.role,
+      public_user_data: { user_id: options.clerkUserId, identifier: options.email },
+      organization: { id: options.clerkOrgId, name: 'Acme', slug: 'acme' },
+    },
+  };
+}
+
 /** Build the signed request a Svix delivery of `event` under `eventId` produces. */
 async function deliver(eventId: string, event: Record<string, unknown>): Promise<Response> {
   const rawBody = JSON.stringify(event);
@@ -130,9 +147,264 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
   beforeEach(async () => {
     vi.mocked(neon).mockClear();
     await sql`DELETE FROM clerk_webhook_events`;
+    await sql`DELETE FROM org_audit_log`;
     await sql`DELETE FROM subscription_tiers`;
     await sql`DELETE FROM users`;
     await sql`DELETE FROM organizations`;
+  });
+
+  /**
+   * Organization RBAC audit trail, webhook arm (migration 0013).
+   *
+   * Review caught that the trail's first cut audited three HTTP paths while
+   * Clerk's own membership UI — which is how an org admin actually promotes
+   * someone in a Clerk-managed org — reached the database through this webhook
+   * and wrote a role with no entry at all.
+   */
+  describe('organization RBAC audit trail', () => {
+    const audit = async () =>
+      (await sql`
+        SELECT actor_user_id, target_user_id, old_role, new_role, metadata
+        FROM org_audit_log
+        ORDER BY id`) as unknown as {
+        actor_user_id: number | null;
+        target_user_id: number | null;
+        old_role: string | null;
+        new_role: string | null;
+        metadata: string | null;
+      }[];
+
+    it('records a role change arriving from Clerk membership', async () => {
+      await deliver(
+        'msg_seed',
+        userCreatedEvent({
+          clerkUserId: 'user_promote',
+          email: 'p@acme.test',
+          clerkOrgId: 'org_clerk_p',
+          role: 'org:member',
+        }),
+      );
+      await sql`DELETE FROM org_audit_log`;
+
+      const response = await deliver(
+        'msg_membership',
+        membershipCreatedEvent({
+          clerkUserId: 'user_promote',
+          email: 'p@acme.test',
+          clerkOrgId: 'org_clerk_p',
+          role: 'org:admin',
+        }),
+      );
+      expect(response.status).toBe(200);
+
+      const rows = await audit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        // NOT 'team_member' → 'admin'. `mapClerkRole` maps org:admin to
+        // 'Manager' and everything else to 'Team Member' — neither of which is
+        // in ROLES_PROD/ROLES_DEV, and `canManageUsers` compares against
+        // lowercase 'manager', so it rejects 'Manager'. Meanwhile the bootstrap
+        // path's `normalizeBootstrapRole` maps the same org:admin to 'admin'.
+        // The trail records what was actually written to users.role rather than
+        // a tidied-up version, because normalizing here would hide the
+        // divergence instead of surfacing it. Pre-existing and out of scope for
+        // 3.1.g; tracked as #517. The values below are pinned to the defect,
+        // and this assertion is what will fail loudly when it is fixed.
+        old_role: 'Team Member',
+        new_role: 'Manager',
+        // No local actor: the grant was made inside Clerk by someone this
+        // database has no user id for. NULL is the honest value, not a bug.
+        actor_user_id: null,
+      });
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'clerk-webhook',
+        clerkOrganizationRole: 'org:admin',
+      });
+    });
+
+    it('records the grant when membership arrives before the user exists', async () => {
+      // Out-of-order delivery, and also the ordinary flow for someone added to
+      // an organization in Clerk before they ever sign in: there is no users row
+      // yet, so this delivery *creates* the member and grants the role. An
+      // earlier cut updated first and created through a separate
+      // `upsertClerkUser` fallback, leaving exactly this first grant unaudited.
+      const response = await deliver(
+        'msg_membership_first',
+        membershipCreatedEvent({
+          clerkUserId: 'user_unseen',
+          email: 'unseen@acme.test',
+          clerkOrgId: 'org_clerk_u',
+          role: 'org:admin',
+        }),
+      );
+      expect(response.status).toBe(200);
+
+      const created = await sql`SELECT id, role FROM users WHERE clerk_user_id = 'user_unseen'`;
+      expect(created).toHaveLength(1);
+
+      const rows = await audit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        target_user_id: Number(created[0].id),
+        // No predecessor: the user did not exist. NULL here is what separates a
+        // grant-on-create from a promotion, exactly as on the admin-create path.
+        old_role: null,
+        new_role: String(created[0].role),
+        actor_user_id: null,
+      });
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'clerk-webhook',
+        clerkOrganizationRole: 'org:admin',
+      });
+    });
+
+    it('names the user when the grant re-links an existing address', async () => {
+      // Reaches `upsertClerkUser`'s 23505-on-email re-link, which happens when
+      // the same address arrives under a new Clerk identity (deleted and
+      // recreated in Clerk). This branch was structurally unreachable in tests
+      // until `users_email_key` was added to the harness, which is why the gap
+      // it contained survived two review rounds.
+      // The foreign row is seeded FIRST, deliberately. An unscoped lookup
+      // returns both rows and takes whichever the heap yields first, so a
+      // foreign row created *after* the real one would still leave the
+      // assertion passing by luck — the first version of this test did exactly
+      // that and survived the mutation that removes the organization scope.
+      // Seeding it first makes the wrong row the one an unscoped query reads.
+      await sql`
+        INSERT INTO organizations (id, name, slug, updated_at)
+        VALUES ('org-foreign-relink', 'Foreign', 'foreign-relink', NOW())`;
+      await sql`
+        INSERT INTO users (organization_id, clerk_user_id, email, username, role, updated_at)
+        VALUES ('org-foreign-relink', 'clerk_foreign', 'RELINK@acme.test', 'foreign', 'admin', NOW())`;
+
+      await deliver(
+        'msg_relink_seed',
+        userCreatedEvent({
+          clerkUserId: 'clerk_old_identity',
+          email: 'relink@acme.test',
+          clerkOrgId: 'org_clerk_relink',
+          role: 'org:member',
+        }),
+      );
+      const seeded = await sql`
+        SELECT id, role, organization_id FROM users WHERE clerk_user_id = 'clerk_old_identity'`;
+      expect(seeded).toHaveLength(1);
+      // The two rows must genuinely disagree, or the scoping assertion proves
+      // nothing regardless of ordering.
+      expect(String(seeded[0].role)).not.toBe('admin');
+      await sql`DELETE FROM org_audit_log`;
+
+      const response = await deliver(
+        'msg_relink',
+        membershipCreatedEvent({
+          clerkUserId: 'clerk_new_identity',
+          email: 'relink@acme.test',
+          clerkOrgId: 'org_clerk_relink',
+          role: 'org:admin',
+        }),
+      );
+      expect(response.status).toBe(200);
+
+      const rows = await audit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        // The whole point: the row names whose role changed. Omitting it left a
+        // record that a role moved in some organization, for nobody in
+        // particular.
+        target_user_id: Number(seeded[0].id),
+        // Read from the caller's own organization, not the foreign row that
+        // shares the address and holds 'admin'.
+        old_role: String(seeded[0].role),
+        new_role: 'Manager',
+      });
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'clerk-webhook',
+        relinkedByEmail: true,
+      });
+
+      // The foreign row is untouched — assert identity, not just counts.
+      const foreign = await sql`
+        SELECT role, clerk_user_id FROM users WHERE organization_id = 'org-foreign-relink'`;
+      expect(foreign[0]).toMatchObject({ role: 'admin', clerk_user_id: 'clerk_foreign' });
+    });
+
+    it('grants no role, and stays retryable, when the audit table is missing', async () => {
+      await deliver(
+        'msg_seed3',
+        userCreatedEvent({
+          clerkUserId: 'user_missing',
+          email: 'm@acme.test',
+          clerkOrgId: 'org_clerk_m',
+          role: 'org:member',
+        }),
+      );
+      const before = await sql`SELECT role FROM users WHERE clerk_user_id = 'user_missing'`;
+
+      await sql`ALTER TABLE org_audit_log RENAME TO org_audit_log_hidden`;
+      let response: Response;
+      try {
+        response = await deliver(
+          'msg_membership_missing',
+          membershipCreatedEvent({
+            clerkUserId: 'user_missing',
+            email: 'm@acme.test',
+            clerkOrgId: 'org_clerk_m',
+            role: 'org:admin',
+          }),
+        );
+      } finally {
+        await sql`ALTER TABLE org_audit_log_hidden RENAME TO org_audit_log`;
+      }
+
+      // Fail-closed, and it needs no status-code special case to get there: the
+      // role UPDATE and the audit INSERT are one statement, so a missing table
+      // means neither runs. Nothing is granted unaudited.
+      const after = await sql`SELECT role FROM users WHERE clerk_user_id = 'user_missing'`;
+      expect(after[0].role).toBe(before[0].role);
+
+      // Non-2xx, so Svix retries — which is the *wanted* outcome here, unlike on
+      // the HTTP paths. There is no human reading this response; the migration
+      // gets applied and the retry then lands the grant together with its audit
+      // row. Review proposed returning 503 instead for consistency, but 503 in
+      // this handler already means "a sibling holds the claim, retry shortly"
+      // (the in_flight branch), and Svix retries on any non-2xx regardless — so
+      // the change would alter nothing except overload an existing signal.
+      expect(response.status).toBeGreaterThanOrEqual(500);
+
+      // The claim is released rather than stranded, so the retry re-drives
+      // immediately instead of waiting out the staleness window.
+      const marked = await sql`
+        SELECT id FROM clerk_webhook_events WHERE id = 'msg_membership_missing'`;
+      expect(marked).toHaveLength(0);
+    });
+
+    it('writes nothing when a membership delivery repeats the same role', async () => {
+      await deliver(
+        'msg_seed2',
+        userCreatedEvent({
+          clerkUserId: 'user_same',
+          email: 's@acme.test',
+          clerkOrgId: 'org_clerk_s',
+          role: 'org:admin',
+        }),
+      );
+      await sql`DELETE FROM org_audit_log`;
+
+      await deliver(
+        'msg_membership_same',
+        membershipCreatedEvent({
+          clerkUserId: 'user_same',
+          email: 's@acme.test',
+          clerkOrgId: 'org_clerk_s',
+          role: 'org:admin',
+        }),
+      );
+
+      // Clerk redelivers membership events on unrelated profile edits. Without
+      // the no-op suppression the trail would fill with entries that record no
+      // authorization change at all.
+      expect(await audit()).toHaveLength(0);
+    });
   });
 
   const countUsers = async (clerkUserId: string): Promise<number> => {

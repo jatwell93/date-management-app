@@ -1,4 +1,9 @@
 import type { Database } from '../database';
+import {
+  ORG_AUDIT_EVENT_TYPES,
+  ORG_AUDIT_TRIGGERS,
+  type OrgAuditEntry,
+} from '../../../shared/domain/org-audit';
 
 export type SqlClient = Database['sql'];
 
@@ -352,25 +357,171 @@ export async function processClerkWebhookEvent(
       const organizationId = await findOrCreateOrganization(sql, organizationPayload, identifier);
       const role = mapClerkRole(data.role);
 
-      const updated = await sql`
-        UPDATE users
-        SET
-          organization_id = ${organizationId},
-          role = ${role},
-          deleted_at = NULL,
-          updated_at = NOW()
-        WHERE clerk_user_id = ${clerkUserId}
-        RETURNING id
+      // Clerk's membership UI is a real grant path: an org admin flipping
+      // someone to admin there reaches the database only through this delivery.
+      // Audited on the same terms as the HTTP paths, in one statement, with the
+      // audit row suppressed when the role did not actually change — otherwise
+      // every membership redelivery would append an entry. `actor_user_id` is
+      // NULL because the grant was made in Clerk by someone this database has no
+      // id for; `metadata.clerkOrganizationRole` keeps the raw value Clerk sent,
+      // since mapClerkRole() is lossy.
+      //
+      // The statement is an **upsert**, not an update, because a membership
+      // event routinely arrives for a user who has no row yet: adding someone to
+      // an organization in Clerk before they ever sign in is the normal way a
+      // member is created, and Svix gives no ordering guarantee against
+      // `user.created`. An earlier cut updated first and created through a
+      // separate `upsertClerkUser` fallback, which left exactly that first grant
+      // — often the one that mints the member — unaudited. A NULL `previous_role`
+      // is DISTINCT FROM any role, so a creation always audits with `old_role`
+      // NULL, and the same suppression still covers a redelivery.
+      //
+      // **`prev` deliberately takes no `FOR UPDATE`,** unlike the promotion path
+      // in `database.ts`. A locking read in a CTE returns *no rows* when an
+      // independent data-modifying CTE in the same statement touches the same
+      // row: the locking read follows the update chain to a version written by
+      // the same command, which is invisible to it. The promotion path is
+      // unaffected because its `UPDATE ... FROM prev` depends on `prev`, forcing
+      // it to be evaluated first; this `INSERT ... ON CONFLICT` does not, so
+      // adding the lock here silently made every `old_role` NULL — a trail that
+      // looks populated and records nothing. Serialisation instead comes from
+      // `ON CONFLICT DO UPDATE`, which takes its own row lock; `old_role` is
+      // read from the statement snapshot, so two deliveries racing on one user
+      // can in principle both record the same predecessor. Acceptable here:
+      // Clerk is the source of truth for the resulting role, deliveries are
+      // retried, and the alternative is an always-NULL column.
+      const auditMetadata = JSON.stringify({
+        trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
+        clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
+      });
+      const username = identifier
+        ? sanitizeSlug(identifier.split('@')[0], `user-${Date.now().toString(36)}`)
+        : null;
+
+      const auditedMembershipWrite = async (): Promise<Record<string, unknown>[]> => sql`
+        WITH prev AS (
+          SELECT id, role
+          FROM users
+          WHERE clerk_user_id = ${clerkUserId}
+        ),
+        changed AS (
+          INSERT INTO users (
+            organization_id,
+            clerk_user_id,
+            email,
+            username,
+            role,
+            created_at,
+            updated_at
+          ) VALUES (
+            ${organizationId},
+            ${clerkUserId},
+            ${identifier},
+            ${username},
+            ${role},
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (clerk_user_id)
+          DO UPDATE SET
+            organization_id = EXCLUDED.organization_id,
+            email = COALESCE(EXCLUDED.email, users.email),
+            username = COALESCE(EXCLUDED.username, users.username),
+            role = EXCLUDED.role,
+            deleted_at = NULL,
+            updated_at = NOW()
+          RETURNING id, role, (SELECT role FROM prev) AS previous_role
+        ),
+        audited AS (
+          INSERT INTO org_audit_log (
+            organization_id,
+            event_type,
+            actor_user_id,
+            actor_organization_id,
+            target_user_id,
+            target_organization_id,
+            old_role,
+            new_role,
+            ip_address,
+            metadata,
+            created_at
+          )
+          SELECT ${organizationId},
+                 ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
+                 NULL,
+                 ${organizationId},
+                 changed.id,
+                 ${organizationId},
+                 changed.previous_role,
+                 changed.role,
+                 NULL,
+                 ${auditMetadata},
+                 NOW()
+          FROM changed
+          WHERE changed.previous_role IS DISTINCT FROM changed.role
+          RETURNING 1
+        )
+        SELECT id FROM changed
       `;
 
-      if (updated.length === 0 && identifier) {
+      try {
+        await auditedMembershipWrite();
+      } catch (error) {
+        // `users_email_key` is UNIQUE in production, so an identifier already
+        // held by a row with a *different* clerk_user_id collides on the email
+        // index rather than the clerk one, and `ON CONFLICT (clerk_user_id)`
+        // cannot absorb it. `upsertClerkUser` owns that re-link, so delegate
+        // rather than restate it here, then record the grant.
+        //
+        // This tail is the one place in the trail that is not atomic: a failure
+        // between the re-link and the audit insert leaves the role set with no
+        // row, and the retry then sees an unchanged role and suppresses. It is
+        // accepted rather than hidden because closing it means duplicating
+        // upsertClerkUser's conflict handling inside a CTE, and the collision it
+        // covers needs an email reused across two Clerk identities.
+        if ((error as { code?: string }).code !== '23505' || !identifier) {
+          throw error;
+        }
+
+        // Scoped to the organization, matching the predicate of the UPDATE this
+        // mirrors (`upsertClerkUser`'s email re-link). Without the scope this
+        // could read a *different tenant's* row holding the same address and
+        // write that role into this organization's trail as `old_role`.
+        const before = await sql`
+          SELECT role
+          FROM users
+          WHERE organization_id = ${organizationId}
+            AND LOWER(email) = LOWER(${identifier})`;
         await upsertClerkUser(sql, {
           clerkUserId,
           organizationId,
           role,
           email: identifier,
-          username: sanitizeSlug(identifier.split('@')[0], `user-${Date.now().toString(36)}`),
+          username,
         });
+        // Read back by clerk id rather than reusing the pre-re-link lookup: the
+        // re-link is what makes this row the one the event is about, so this is
+        // the only identifier guaranteed to name it. A row that records a role
+        // transition without naming whose it was is not an audit record.
+        const relinked = await sql`
+          SELECT id FROM users WHERE clerk_user_id = ${clerkUserId}`;
+        const previousRole = before[0] ? String(before[0].role) : null;
+        if (previousRole !== role) {
+          await insertOrgAuditLog(sql, {
+            organizationId,
+            eventType: ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED,
+            actorOrganizationId: organizationId,
+            targetUserId: relinked[0] ? Number(relinked[0].id) : null,
+            targetOrganizationId: organizationId,
+            oldRole: previousRole,
+            newRole: role,
+            metadata: {
+              trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
+              clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
+              relinkedByEmail: true,
+            },
+          });
+        }
       }
 
       await ensureTrialSubscription(sql, organizationId);
@@ -553,5 +704,48 @@ export async function releaseClerkWebhookEventClaim(
     DELETE FROM clerk_webhook_events
     WHERE id = ${eventId}
       AND completed_at IS NULL
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Organization RBAC audit trail (migration 0013)
+// ---------------------------------------------------------------------------
+
+/**
+ * Append one row to the organization RBAC audit trail.
+ *
+ * `metadata` is stored as a JSON string rather than `jsonb` because that is the
+ * column the Express lineage defined and this table is its port; widening it is
+ * a separate migration, not a silent divergence.
+ */
+export async function insertOrgAuditLog(sql: SqlClient, entry: OrgAuditEntry): Promise<void> {
+  await sql`
+    INSERT INTO org_audit_log (
+      organization_id,
+      event_type,
+      actor_user_id,
+      actor_organization_id,
+      target_user_id,
+      target_organization_id,
+      old_role,
+      new_role,
+      invite_id,
+      ip_address,
+      metadata,
+      created_at
+    ) VALUES (
+      ${entry.organizationId},
+      ${entry.eventType},
+      ${entry.actorUserId ?? null},
+      ${entry.actorOrganizationId ?? null},
+      ${entry.targetUserId ?? null},
+      ${entry.targetOrganizationId ?? null},
+      ${entry.oldRole ?? null},
+      ${entry.newRole ?? null},
+      ${entry.inviteId ?? null},
+      ${entry.ipAddress ?? null},
+      ${entry.metadata ? JSON.stringify(entry.metadata) : null},
+      NOW()
+    )
   `;
 }

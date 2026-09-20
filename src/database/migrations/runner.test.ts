@@ -88,6 +88,7 @@ test('loads the relocated authoritative repository history', async () => {
       '0010',
       '0011',
       '0012',
+      '0013',
     ],
   );
   assert.equal(

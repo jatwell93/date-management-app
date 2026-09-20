@@ -1708,7 +1708,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             `csv-parser.service.ts:1058` (`getCSVParser` → `new CSVParserService(undefined, options)`).
             Under the old `||` they would have worked only in a process with the flag set, which is
             the misconfiguration itself. Both are legacy SQLite-era paths that Phase 4 deletes.
-      - [ ] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
+      - [x] 3.1.g **The organization RBAC audit trail has no Postgres table and no Worker writer**
             (Finding 8). Express records authorization events through `OrgAuditService.emit`
             (`backend/src/services/org-audit.service.ts:20`) into
             `backend/src/repositories/org-audit.repository.ts:25`, writing the Prisma model
@@ -1734,6 +1734,166 @@ equivalent, a relocated home, or an explicit retirement decision.
             with an `else` that merely `console.warn`s, because the write is swallowed by SQLite's
             interactive transaction lock. A replacement must be tested against real SQL (pglite,
             `npm run test:db`) or it will be equally unfalsifiable.
+            <br>**DONE — decision: rebuild, and close the gap the Express trail left.** Three facts
+            re-derived while sizing this changed the decision the row proposed, so they are recorded
+            before it.
+            <br>1. **The trail is write-only.** `findByOrganization`
+            (`org-audit.repository.ts:44`) and `OrgAuditService.getByOrganization` have **zero**
+            production callers — no route, report or export reads `org_audit_log`. Only unit tests
+            call them.
+            <br>2. **`ROLE_REMOVED` has no emitter either**, on either backend. The live vocabulary
+            is one event, as the row says, but the reserved set is five, not four.
+            <br>3. **The event with the compliance argument was audited by neither backend.** The
+            row frames what Phase 4 deletes as "the record of who was granted admin and by what
+            path". What Express actually records is `role_assigned` at bootstrap, where actor and
+            target are *the same user* — an automatic self-assignment, derivable from `users.role`
+            and `users.created_at`. A human deliberately promoting another user goes through
+            `PUT /api/users/:id`, which is unaudited in **both** implementations (Express
+            `user.routes.ts:47` → its controller never touches `OrgAuditService`; Worker
+            `index-minimal.ts:2916` → `db.updateUserRole` and return). So a faithful port would have
+            rebuilt the derivable half and preserved the blind spot.
+            <br>**Built:** migration `0013_org_audit_log` (six artifacts per
+            `adding-a-migration-checklist`, plus the e2e probe renumbered `0013`→`0014`), the shared
+            vocabulary in `shared/domain/org-audit.ts`, and **two** writers — bootstrap
+            (`clerk/bootstrap-handler.ts`, `recordBootstrapRoleAssignment`) and the promotion path
+            (`database.ts`, `updateUserRole`).
+            <br>**The two writers are deliberately asymmetric.** The promotion path writes its audit
+            row in a data-modifying CTE *inside the same statement* as the `UPDATE`, because Neon's
+            HTTP driver has no transaction (same constraint as 3.1.h) and for the non-derivable
+            event a silently missing row is worse than a failed request. A `prev` CTE supplies
+            `old_role` from the pre-update snapshot, which `UPDATE ... RETURNING` cannot give and
+            which a post-update re-read would get wrong under concurrency. Bootstrap stays
+            fire-and-forget, as Express had it: its entry is derivable, and failing there would lock
+            a user out of their first sign-in to protect a record you can reconstruct.
+            <br>**Invite events: columns yes, writers no.** `invite_id` and the `target_*` columns
+            ship so a re-enabled `ENABLE_CUSTOM_ORG_INVITES` needs only a writer, not another
+            six-artifact migration. `LIVE_ORG_AUDIT_EVENT_TYPES` states the emitted subset as data so
+            a writer added without updating it fails a test rather than leaving the constant a quiet
+            lie about the table's contents.
+            <br>**Mutation-verified, five mutations** (`database.org-audit.pglite.node.test.ts`,
+            `clerk/bootstrap-handler.node.test.ts`, both under `npm run test:db`): dropping the
+            no-op-suppression `WHERE`, reading `old_role` post-update, **splitting the CTE into a
+            follow-up INSERT**, removing the bootstrap writer, and making the bootstrap swallow
+            blocking. The third is the one that matters — the naive two-statement implementation
+            passes **five of six** tests, leaving a user promoted to `admin` with no audit row, and
+            exactly one assertion catches it.
+            <br>**Found while doing it:** this migration series carries an **unstated idempotency
+            contract**. The documented forward-fix recovery path (`e2e.test.ts:653`) unstamps every
+            migration above the one being fixed and replays them *over the existing schema*, since
+            the runner requires applied migrations to be a contiguous prefix. A bare `CREATE TABLE`
+            fails there. 0013 therefore uses `IF NOT EXISTS` throughout and declares its foreign key
+            inline (Postgres has no `ADD CONSTRAINT IF NOT EXISTS`). The comment at `e2e.test.ts:678`
+            now states this as a constraint on every future migration rather than an accident of the
+            ones written so far. `adding-a-migration-checklist` should gain it as a seventh item.
+            <br>**Review found a third grant path, and the first pass missed it.**
+            `POST /api/users` (`handleCreateLegacyUser`, `index-minimal.ts:2858`) lets an admin
+            *create* a user at a chosen role, and `isValidRole` is `ROLES_DEV.has(role)`, which
+            admits `admin` — so it mints a new admin as readily as `PUT` promotes an existing one,
+            and it was writing nothing. Now audited on the same terms (`trigger: 'admin-create'`,
+            `old_role` NULL since no prior role existed, atomic CTE, mutation-verified twice: the
+            naive follow-up INSERT leaves an orphan admin with no record and exactly one test
+            catches it). **This is the row's own "audit rows systematically under-count" lesson
+            landing on this task's own inventory** — grepping the promotion path found two emitters
+            where there were three.
+            <br>*The reviewer's second claim did not hold and was not acted on.* It said the
+            placeholder later links to Clerk and gets a row mislabelled `trigger: 'bootstrap'`.
+            It cannot: the placeholder is inserted with NULL email and NULL `clerk_user_id`, while
+            `upsertClerkUser` conflicts on `clerk_user_id` (NULL never conflicts → bootstrap inserts
+            a *separate* row) and its fallback matches `LOWER(email)`, which NULL never satisfies. A
+            placeholder and a later Clerk sign-in by the same person produce **two user rows**. The
+            doc comment at `index-minimal.ts:2853` asserting linkage was therefore wrong; corrected
+            in place. The row-duplication itself is recorded, not fixed — reconciliation is its own
+            change and `backend/` is being retired around it. Diagnosis right, mechanism wrong;
+            judged separately, per the 3.1.e/3.1.f precedent.
+            <br>**Harness gap found doing it:** `workers/src/__tests__/pglite-db.ts` had no
+            `organization_usage` table, because no node test had ever reached a handler that reads
+            the tier cap. Added from `0000_baseline.up.sql:84`.
+            <br>**Still not read by anything.** Rebuilding the writers does not build a reader; no
+            endpoint exposes the trail on either backend. That is unchanged from Express and out of
+            scope here, but it means the trail's value today is forensic (query the table directly),
+            not operational. **Tracked as #515.**
+            <br>**Bot review round — two legitimate, two rebutted, one escalated.**
+            <br>*Legitimate, fixed:* (a) moving the tenant predicates into the `prev` CTE
+            **weakened a guard that already existed** — the `UPDATE`'s only qualifier became
+            `users.id = prev.id`, and Postgres re-checks an `UPDATE`'s own qualifiers against the
+            updated row version (EvalPlanQual), so a concurrent membership move or soft-delete would
+            still match. `organization_id` and `deleted_at IS NULL` are back on the `UPDATE`.
+            (b) `prev` was an unlocked snapshot read, so a stale `old_role` could be recorded and the
+            no-op suppression could fire against a value that was already gone; `prev` now takes
+            `FOR UPDATE`. Both races are unreproducible under pglite (one connection, serialised), so
+            these are reasoned, not test-proven, and the code says so rather than implying coverage.
+            <br>*Legitimate, fixed — a fourth grant path:* the **Clerk webhook** is a real grant
+            surface. `organizationMembership.created` writes `users.role` directly, and Clerk's
+            membership UI is how an org admin actually promotes someone. Now audited on the same
+            terms (`trigger: 'clerk-webhook'`, `actor_user_id` NULL because the grant was made in
+            Clerk by someone this database has no id for, no-op suppressed so redeliveries do not
+            flood the table). **That is the enumeration being wrong a second time** — hence the
+            vocabulary now points at `ORG_AUDIT_TRIGGERS` as the list and names its one deliberate
+            exclusion (`user.created`/`user.updated` sync, which is a state sync rather than a grant
+            and would double-write against the membership event).
+            <br>*Rebutted:* Sentry called the missing-table 500 a bug and proposed swallowing
+            `42P01` so the write "succeeds without writing to the audit log". The observation is
+            right and the remedy inverts the property: it reintroduces exactly the orphan-admin case
+            mutations 3 and 6 exist to rule out, silently, at the moment with least visibility. Its
+            own cited precedent argues against it — of the three `isMissingSchemaError` sites, the
+            two *read* paths degrade to defaults but the *write* path returns an actionable 503
+            (`index-minimal.ts:3608`). Both grant paths now follow that: **fail closed with a 503
+            naming migration 0013**, mutation-verified (mutation 10 applies Sentry's version and the
+            test fails 500-vs-503).
+            <br>*Second review pass, one more real gap in the path just added:* the membership
+            handler updated an existing user and created a missing one through a separate
+            `upsertClerkUser` fallback — and only the update was audited. Since adding someone to
+            an organization in Clerk before they first sign in is the ordinary way a member
+            appears, that fallback is usually the **first** thing that happens for them, so the
+            grant that mints the member was the one going unrecorded. Rewritten as a single
+            `INSERT ... ON CONFLICT (clerk_user_id) DO UPDATE` carrying the audit CTE, so create
+            and update are audited by the same statement (`old_role` NULL on create, since NULL is
+            DISTINCT FROM any role). Mutation 12 restores the reported shape and the new
+            out-of-order test fails with an empty trail.
+            <br>**That rewrite exposed a Postgres behaviour worth recording: `FOR UPDATE` in a CTE
+            returns *no rows* when an independent data-modifying CTE in the same statement touches
+            the same row** — the locking read follows the update chain to a version written by
+            the same command, which is invisible to it. Confirmed with an isolated probe (identical
+            statements, locking clause the only difference: `previous_role` is the real value
+            without it and NULL with it). It is ordering-dependent, which is why the promotion path
+            is unaffected — its `UPDATE ... FROM prev` *depends* on `prev`, forcing evaluation
+            first, and its tests assert real `old_role` chains. The membership statement therefore
+            takes no lock and says why; serialisation comes from `ON CONFLICT DO UPDATE`'s own row
+            lock. Had the existing test not pinned concrete values this would have shipped as a
+            permanently NULL `old_role` — a trail that looks populated and records nothing.
+            <br>*Harness gap that hid it:* production has `users_email_key` UNIQUE
+            (`0000_baseline.up.sql:403`); the pglite harness created only the clerk-id index, so
+            `upsertClerkUser`'s 23505-on-email re-link branch was structurally unreachable in
+            tests. Added.
+            <br>*Third review pass — the non-atomic re-link tail had two defects, one
+            unnamed.* Review flagged that the email re-link omitted `targetUserId`, leaving
+            `target_user_id` NULL: a row saying a role moved in some organization, for nobody in
+            particular. Correct, and the spec requires the target. Reading it also found the
+            neighbouring `before` lookup was `WHERE LOWER(email) = ...` with **no organization
+            scope**, while the `UPDATE` it mirrors is scoped to `organization_id` — so `old_role`
+            could be read from another tenant's row sharing the address. Same shape as #462/#466:
+            a sibling query that disagrees with the one beside it. Both fixed; the id is now read
+            back by `clerk_user_id` after the re-link, which is the only identifier guaranteed to
+            name the row the event is about.
+            <br>**The first version of that test was green and proved nothing.** It seeded the
+            foreign row *after* the real one, so an unscoped lookup returned both and happened to
+            take the right one first — mutation 14 (remove the organization scope) passed. Seeding
+            the foreign row first makes the wrong row the one an unscoped query reads, and the
+            mutation then fails with `old_role: 'admin'`, the foreign organization's value in this
+            organization's trail. Recorded because the test was written *by* someone applying the
+            mutate-or-it-is-not-evidence rule and still needed the mutation to catch it.
+            <br>*Escalated — #517, and the most serious thing this task surfaced.* Pinning the
+            webhook audit row exposed that the Worker has **two role normalizers that disagree**:
+            `normalizeBootstrapRole` maps `org:admin` → `'admin'`, while `mapClerkRole`
+            (`clerk-persistence.ts:26`) maps it → `'Manager'`, which is in neither `ROLES_PROD` nor
+            `ROLES_DEV` and which `canManageUsers` rejects (it compares lowercase `'manager'`).
+            Since `organizationMembership.created` overwrites the role unconditionally, **a
+            bootstrapped admin is silently downgraded out of admin by a routine webhook
+            redelivery** and then gets 403s adding staff. Pre-existing, live, and squarely in the
+            store-trial blast radius. Not fixed here — it changes authorization behaviour and needs a
+            backfill of existing non-canonical rows. The audit trail records the raw stored value
+            rather than a tidied one, precisely so the divergence surfaces; the webhook test pins
+            `'Team Member'`/`'Manager'` and is written to **fail when #517 is fixed**.
       - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because
