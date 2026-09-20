@@ -222,6 +222,42 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
       });
     });
 
+    it('records the grant when membership arrives before the user exists', async () => {
+      // Out-of-order delivery, and also the ordinary flow for someone added to
+      // an organization in Clerk before they ever sign in: there is no users row
+      // yet, so this delivery *creates* the member and grants the role. An
+      // earlier cut updated first and created through a separate
+      // `upsertClerkUser` fallback, leaving exactly this first grant unaudited.
+      const response = await deliver(
+        'msg_membership_first',
+        membershipCreatedEvent({
+          clerkUserId: 'user_unseen',
+          email: 'unseen@acme.test',
+          clerkOrgId: 'org_clerk_u',
+          role: 'org:admin',
+        }),
+      );
+      expect(response.status).toBe(200);
+
+      const created = await sql`SELECT id, role FROM users WHERE clerk_user_id = 'user_unseen'`;
+      expect(created).toHaveLength(1);
+
+      const rows = await audit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        target_user_id: Number(created[0].id),
+        // No predecessor: the user did not exist. NULL here is what separates a
+        // grant-on-create from a promotion, exactly as on the admin-create path.
+        old_role: null,
+        new_role: String(created[0].role),
+        actor_user_id: null,
+      });
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'clerk-webhook',
+        clerkOrganizationRole: 'org:admin',
+      });
+    });
+
     it('grants no role, and stays retryable, when the audit table is missing', async () => {
       await deliver(
         'msg_seed3',

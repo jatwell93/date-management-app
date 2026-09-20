@@ -1840,6 +1840,31 @@ equivalent, a relocated home, or an explicit retirement decision.
             (`index-minimal.ts:3608`). Both grant paths now follow that: **fail closed with a 503
             naming migration 0013**, mutation-verified (mutation 10 applies Sentry's version and the
             test fails 500-vs-503).
+            <br>*Second review pass, one more real gap in the path just added:* the membership
+            handler updated an existing user and created a missing one through a separate
+            `upsertClerkUser` fallback — and only the update was audited. Since adding someone to
+            an organization in Clerk before they first sign in is the ordinary way a member
+            appears, that fallback is usually the **first** thing that happens for them, so the
+            grant that mints the member was the one going unrecorded. Rewritten as a single
+            `INSERT ... ON CONFLICT (clerk_user_id) DO UPDATE` carrying the audit CTE, so create
+            and update are audited by the same statement (`old_role` NULL on create, since NULL is
+            DISTINCT FROM any role). Mutation 12 restores the reported shape and the new
+            out-of-order test fails with an empty trail.
+            <br>**That rewrite exposed a Postgres behaviour worth recording: `FOR UPDATE` in a CTE
+            returns *no rows* when an independent data-modifying CTE in the same statement touches
+            the same row** — the locking read follows the update chain to a version written by
+            the same command, which is invisible to it. Confirmed with an isolated probe (identical
+            statements, locking clause the only difference: `previous_role` is the real value
+            without it and NULL with it). It is ordering-dependent, which is why the promotion path
+            is unaffected — its `UPDATE ... FROM prev` *depends* on `prev`, forcing evaluation
+            first, and its tests assert real `old_role` chains. The membership statement therefore
+            takes no lock and says why; serialisation comes from `ON CONFLICT DO UPDATE`'s own row
+            lock. Had the existing test not pinned concrete values this would have shipped as a
+            permanently NULL `old_role` — a trail that looks populated and records nothing.
+            <br>*Harness gap that hid it:* production has `users_email_key` UNIQUE
+            (`0000_baseline.up.sql:403`); the pglite harness created only the clerk-id index, so
+            `upsertClerkUser`'s 23505-on-email re-link branch was structurally unreachable in
+            tests. Added.
             <br>*Escalated — #517, and the most serious thing this task surfaced.* Pinning the
             webhook audit row exposed that the Worker has **two role normalizers that disagree**:
             `normalizeBootstrapRole` maps `org:admin` → `'admin'`, while `mapClerkRole`

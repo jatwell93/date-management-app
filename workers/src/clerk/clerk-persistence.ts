@@ -365,27 +365,72 @@ export async function processClerkWebhookEvent(
       // NULL because the grant was made in Clerk by someone this database has no
       // id for; `metadata.clerkOrganizationRole` keeps the raw value Clerk sent,
       // since mapClerkRole() is lossy.
+      //
+      // The statement is an **upsert**, not an update, because a membership
+      // event routinely arrives for a user who has no row yet: adding someone to
+      // an organization in Clerk before they ever sign in is the normal way a
+      // member is created, and Svix gives no ordering guarantee against
+      // `user.created`. An earlier cut updated first and created through a
+      // separate `upsertClerkUser` fallback, which left exactly that first grant
+      // — often the one that mints the member — unaudited. A NULL `previous_role`
+      // is DISTINCT FROM any role, so a creation always audits with `old_role`
+      // NULL, and the same suppression still covers a redelivery.
+      //
+      // **`prev` deliberately takes no `FOR UPDATE`,** unlike the promotion path
+      // in `database.ts`. A locking read in a CTE returns *no rows* when an
+      // independent data-modifying CTE in the same statement touches the same
+      // row: the locking read follows the update chain to a version written by
+      // the same command, which is invisible to it. The promotion path is
+      // unaffected because its `UPDATE ... FROM prev` depends on `prev`, forcing
+      // it to be evaluated first; this `INSERT ... ON CONFLICT` does not, so
+      // adding the lock here silently made every `old_role` NULL — a trail that
+      // looks populated and records nothing. Serialisation instead comes from
+      // `ON CONFLICT DO UPDATE`, which takes its own row lock; `old_role` is
+      // read from the statement snapshot, so two deliveries racing on one user
+      // can in principle both record the same predecessor. Acceptable here:
+      // Clerk is the source of truth for the resulting role, deliveries are
+      // retried, and the alternative is an always-NULL column.
       const auditMetadata = JSON.stringify({
         trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
         clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
       });
-      const updated = await sql`
+      const username = identifier
+        ? sanitizeSlug(identifier.split('@')[0], `user-${Date.now().toString(36)}`)
+        : null;
+
+      const auditedMembershipWrite = async (): Promise<Record<string, unknown>[]> => sql`
         WITH prev AS (
           SELECT id, role
           FROM users
           WHERE clerk_user_id = ${clerkUserId}
-          FOR UPDATE
         ),
         changed AS (
-          UPDATE users
-          SET
-            organization_id = ${organizationId},
-            role = ${role},
+          INSERT INTO users (
+            organization_id,
+            clerk_user_id,
+            email,
+            username,
+            role,
+            created_at,
+            updated_at
+          ) VALUES (
+            ${organizationId},
+            ${clerkUserId},
+            ${identifier},
+            ${username},
+            ${role},
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (clerk_user_id)
+          DO UPDATE SET
+            organization_id = EXCLUDED.organization_id,
+            email = COALESCE(EXCLUDED.email, users.email),
+            username = COALESCE(EXCLUDED.username, users.username),
+            role = EXCLUDED.role,
             deleted_at = NULL,
             updated_at = NOW()
-          FROM prev
-          WHERE users.id = prev.id
-          RETURNING users.id, users.role, prev.role AS previous_role
+          RETURNING id, role, (SELECT role FROM prev) AS previous_role
         ),
         audited AS (
           INSERT INTO org_audit_log (
@@ -419,14 +464,50 @@ export async function processClerkWebhookEvent(
         SELECT id FROM changed
       `;
 
-      if (updated.length === 0 && identifier) {
+      try {
+        await auditedMembershipWrite();
+      } catch (error) {
+        // `users_email_key` is UNIQUE in production, so an identifier already
+        // held by a row with a *different* clerk_user_id collides on the email
+        // index rather than the clerk one, and `ON CONFLICT (clerk_user_id)`
+        // cannot absorb it. `upsertClerkUser` owns that re-link, so delegate
+        // rather than restate it here, then record the grant.
+        //
+        // This tail is the one place in the trail that is not atomic: a failure
+        // between the re-link and the audit insert leaves the role set with no
+        // row, and the retry then sees an unchanged role and suppresses. It is
+        // accepted rather than hidden because closing it means duplicating
+        // upsertClerkUser's conflict handling inside a CTE, and the collision it
+        // covers needs an email reused across two Clerk identities.
+        if ((error as { code?: string }).code !== '23505' || !identifier) {
+          throw error;
+        }
+
+        const before = await sql`
+          SELECT role FROM users WHERE LOWER(email) = LOWER(${identifier})`;
         await upsertClerkUser(sql, {
           clerkUserId,
           organizationId,
           role,
           email: identifier,
-          username: sanitizeSlug(identifier.split('@')[0], `user-${Date.now().toString(36)}`),
+          username,
         });
+        const previousRole = before[0] ? String(before[0].role) : null;
+        if (previousRole !== role) {
+          await insertOrgAuditLog(sql, {
+            organizationId,
+            eventType: ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED,
+            actorOrganizationId: organizationId,
+            targetOrganizationId: organizationId,
+            oldRole: previousRole,
+            newRole: role,
+            metadata: {
+              trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
+              clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
+              relinkedByEmail: true,
+            },
+          });
+        }
       }
 
       await ensureTrialSubscription(sql, organizationId);

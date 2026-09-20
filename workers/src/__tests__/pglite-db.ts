@@ -128,6 +128,11 @@ const SCHEMA_SQL = `
   );
 
   CREATE UNIQUE INDEX users_clerk_user_id_key ON users (clerk_user_id);
+  -- Production has this too (0000_baseline.up.sql:403). Without it here,
+  -- upsertClerkUser's 23505-on-email re-link branch could never fire in a test,
+  -- so the whole branch was structurally unreachable. NULL emails do not
+  -- collide, so placeholder rows are unaffected.
+  CREATE UNIQUE INDEX users_email_key ON users (email);
 
   CREATE TABLE store_areas (
     id SERIAL PRIMARY KEY,
