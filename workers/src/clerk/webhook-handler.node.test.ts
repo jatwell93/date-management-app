@@ -258,6 +258,76 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
       });
     });
 
+    it('names the user when the grant re-links an existing address', async () => {
+      // Reaches `upsertClerkUser`'s 23505-on-email re-link, which happens when
+      // the same address arrives under a new Clerk identity (deleted and
+      // recreated in Clerk). This branch was structurally unreachable in tests
+      // until `users_email_key` was added to the harness, which is why the gap
+      // it contained survived two review rounds.
+      // The foreign row is seeded FIRST, deliberately. An unscoped lookup
+      // returns both rows and takes whichever the heap yields first, so a
+      // foreign row created *after* the real one would still leave the
+      // assertion passing by luck — the first version of this test did exactly
+      // that and survived the mutation that removes the organization scope.
+      // Seeding it first makes the wrong row the one an unscoped query reads.
+      await sql`
+        INSERT INTO organizations (id, name, slug, updated_at)
+        VALUES ('org-foreign-relink', 'Foreign', 'foreign-relink', NOW())`;
+      await sql`
+        INSERT INTO users (organization_id, clerk_user_id, email, username, role, updated_at)
+        VALUES ('org-foreign-relink', 'clerk_foreign', 'RELINK@acme.test', 'foreign', 'admin', NOW())`;
+
+      await deliver(
+        'msg_relink_seed',
+        userCreatedEvent({
+          clerkUserId: 'clerk_old_identity',
+          email: 'relink@acme.test',
+          clerkOrgId: 'org_clerk_relink',
+          role: 'org:member',
+        }),
+      );
+      const seeded = await sql`
+        SELECT id, role, organization_id FROM users WHERE clerk_user_id = 'clerk_old_identity'`;
+      expect(seeded).toHaveLength(1);
+      // The two rows must genuinely disagree, or the scoping assertion proves
+      // nothing regardless of ordering.
+      expect(String(seeded[0].role)).not.toBe('admin');
+      await sql`DELETE FROM org_audit_log`;
+
+      const response = await deliver(
+        'msg_relink',
+        membershipCreatedEvent({
+          clerkUserId: 'clerk_new_identity',
+          email: 'relink@acme.test',
+          clerkOrgId: 'org_clerk_relink',
+          role: 'org:admin',
+        }),
+      );
+      expect(response.status).toBe(200);
+
+      const rows = await audit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        // The whole point: the row names whose role changed. Omitting it left a
+        // record that a role moved in some organization, for nobody in
+        // particular.
+        target_user_id: Number(seeded[0].id),
+        // Read from the caller's own organization, not the foreign row that
+        // shares the address and holds 'admin'.
+        old_role: String(seeded[0].role),
+        new_role: 'Manager',
+      });
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'clerk-webhook',
+        relinkedByEmail: true,
+      });
+
+      // The foreign row is untouched — assert identity, not just counts.
+      const foreign = await sql`
+        SELECT role, clerk_user_id FROM users WHERE organization_id = 'org-foreign-relink'`;
+      expect(foreign[0]).toMatchObject({ role: 'admin', clerk_user_id: 'clerk_foreign' });
+    });
+
     it('grants no role, and stays retryable, when the audit table is missing', async () => {
       await deliver(
         'msg_seed3',

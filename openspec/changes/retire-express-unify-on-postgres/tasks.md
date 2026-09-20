@@ -1865,6 +1865,23 @@ equivalent, a relocated home, or an explicit retirement decision.
             (`0000_baseline.up.sql:403`); the pglite harness created only the clerk-id index, so
             `upsertClerkUser`'s 23505-on-email re-link branch was structurally unreachable in
             tests. Added.
+            <br>*Third review pass — the non-atomic re-link tail had two defects, one
+            unnamed.* Review flagged that the email re-link omitted `targetUserId`, leaving
+            `target_user_id` NULL: a row saying a role moved in some organization, for nobody in
+            particular. Correct, and the spec requires the target. Reading it also found the
+            neighbouring `before` lookup was `WHERE LOWER(email) = ...` with **no organization
+            scope**, while the `UPDATE` it mirrors is scoped to `organization_id` — so `old_role`
+            could be read from another tenant's row sharing the address. Same shape as #462/#466:
+            a sibling query that disagrees with the one beside it. Both fixed; the id is now read
+            back by `clerk_user_id` after the re-link, which is the only identifier guaranteed to
+            name the row the event is about.
+            <br>**The first version of that test was green and proved nothing.** It seeded the
+            foreign row *after* the real one, so an unscoped lookup returned both and happened to
+            take the right one first — mutation 14 (remove the organization scope) passed. Seeding
+            the foreign row first makes the wrong row the one an unscoped query reads, and the
+            mutation then fails with `old_role: 'admin'`, the foreign organization's value in this
+            organization's trail. Recorded because the test was written *by* someone applying the
+            mutate-or-it-is-not-evidence rule and still needed the mutation to catch it.
             <br>*Escalated — #517, and the most serious thing this task surfaced.* Pinning the
             webhook audit row exposed that the Worker has **two role normalizers that disagree**:
             `normalizeBootstrapRole` maps `org:admin` → `'admin'`, while `mapClerkRole`

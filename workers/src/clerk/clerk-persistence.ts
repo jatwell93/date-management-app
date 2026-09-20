@@ -483,8 +483,15 @@ export async function processClerkWebhookEvent(
           throw error;
         }
 
+        // Scoped to the organization, matching the predicate of the UPDATE this
+        // mirrors (`upsertClerkUser`'s email re-link). Without the scope this
+        // could read a *different tenant's* row holding the same address and
+        // write that role into this organization's trail as `old_role`.
         const before = await sql`
-          SELECT role FROM users WHERE LOWER(email) = LOWER(${identifier})`;
+          SELECT role
+          FROM users
+          WHERE organization_id = ${organizationId}
+            AND LOWER(email) = LOWER(${identifier})`;
         await upsertClerkUser(sql, {
           clerkUserId,
           organizationId,
@@ -492,12 +499,19 @@ export async function processClerkWebhookEvent(
           email: identifier,
           username,
         });
+        // Read back by clerk id rather than reusing the pre-re-link lookup: the
+        // re-link is what makes this row the one the event is about, so this is
+        // the only identifier guaranteed to name it. A row that records a role
+        // transition without naming whose it was is not an audit record.
+        const relinked = await sql`
+          SELECT id FROM users WHERE clerk_user_id = ${clerkUserId}`;
         const previousRole = before[0] ? String(before[0].role) : null;
         if (previousRole !== role) {
           await insertOrgAuditLog(sql, {
             organizationId,
             eventType: ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED,
             actorOrganizationId: organizationId,
+            targetUserId: relinked[0] ? Number(relinked[0].id) : null,
             targetOrganizationId: organizationId,
             oldRole: previousRole,
             newRole: role,
