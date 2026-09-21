@@ -2041,8 +2041,8 @@ equivalent, a relocated home, or an explicit retirement decision.
             job to *move* — rehoming these is rebuilding a capability that is already not working,
             which is a different estimate and a different test burden.
             <br>**Blast radius, stated so the sequencing is judged on facts:** no scheduled job in
-            this system runs against the production database today. Express has no deploy workflow
-            in `.github/workflows/` — only Pages and Workers — so `SchedulerService.initialize`
+            this system runs against the production database today. Express has no backend deploy workflow
+            in `.github/workflows/`; the only deploy workflows are Pages and Workers — so `SchedulerService.initialize`
             (`backend/src/index.ts:204`) runs only wherever the PM2 config points it, against
             SQLite, and the Worker has no timer at all. Cutover therefore removes **no** working
             scheduled behaviour, which is why this row closes as a sequencing record rather than
