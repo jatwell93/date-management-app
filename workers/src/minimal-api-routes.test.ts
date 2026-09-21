@@ -1400,7 +1400,19 @@ describe('minimal API route table', () => {
     expect(response?.status).toBe(409);
   });
 
-  it('creates default organization usage with production-required timestamps', async () => {
+  /**
+   * Replaces a case that asserted this endpoint's seed INSERT carried
+   * `created_at` / `updated_at` / `NOW()`. Task 3.1.j(a) deleted the seed: the
+   * row it wrote was literal zeros with `max_users` 1 and `max_skus` 500 for
+   * every organization regardless of tier, and after 3.1.a moved this response
+   * onto live counts its only remaining reader was the seat gate — which now
+   * counts live and resolves its cap from the tier too.
+   *
+   * Asserting the absence rather than deleting the case outright: reinstating
+   * the seed would reinstate a row whose one possible effect is to mis-cap a
+   * ten-seat professional trial at one seat.
+   */
+  it('writes nothing to organization_usage', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithRows = createAuthenticatedOrgDatabase(
       { 'FROM organization_usage': [] },
@@ -1414,13 +1426,7 @@ describe('minimal API route table', () => {
 
     expect(response?.status).toBe(200);
     const sqlCalls = vi.mocked(dbWithRows.sql).mock.calls.map(([strings]) => strings.join(' '));
-    const insertUsageQuery = sqlCalls.find((query) =>
-      query.includes('INSERT INTO organization_usage'),
-    );
-
-    expect(insertUsageQuery).toContain('created_at');
-    expect(insertUsageQuery).toContain('updated_at');
-    expect(insertUsageQuery).toContain('NOW()');
+    expect(sqlCalls.some((query) => query.includes('organization_usage'))).toBe(false);
   });
   it.each(['/api/subscription/current', '/api/organization/usage'])(
     'dispatches %s to auth instead of returning route-not-found',

@@ -21,7 +21,7 @@
  * Runs under `vitest.node.config.mts` (`*.node.test.ts`, `npm run test:db`)
  * because pglite is WASM and needs a Node runtime.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
@@ -220,7 +220,11 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
   describe('admin creating a user with a chosen role', () => {
     const ENV = {} as Env;
 
-    const postUser = async (role: string, actorClerkId: string): Promise<Response> => {
+    const postUser = async (
+      role: string,
+      actorClerkId: string,
+      env: Env = ENV,
+    ): Promise<Response> => {
       const route = MINIMAL_API_ROUTES.find(
         ([method, pattern]) => method === 'POST' && pattern === '/api/users',
       );
@@ -237,18 +241,28 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
         headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.44' },
         body: JSON.stringify({ username: `new-${role}`, role }),
       });
-      return handler(request, makeDb(), ENV);
+      return handler(request, makeDb(), env);
     };
 
-    /** An admin who can actually be resolved by `resolveAuthenticatedUser`. */
-    const seedActingAdmin = async (): Promise<number> => {
+    /**
+     * An admin who can actually be resolved by `resolveAuthenticatedUser`.
+     *
+     * The tier is `professional` — what `ensureTrialSubscription` actually
+     * writes (`clerk/clerk-persistence.ts:113`) — rather than the `pro` this
+     * seeded before task 3.1.j(a). `pro` is not a value `normalizeLaunchTier`
+     * recognises, so it fell through to `free`, and these tests were silently
+     * running a ten-seat trial at the one-seat cap. That mattered for nothing
+     * while no seat cap existed; it would have quietly changed what the cases
+     * below exercise now that one does.
+     */
+    const seedActingAdmin = async (tierLevel = 'professional'): Promise<number> => {
       const rows = await sql`
         INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
         VALUES (${ORG}, 'clerk-acting-admin', 'boss', 'boss@a.test', 'admin', NOW())
         RETURNING id`;
       await sql`
         INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
-        VALUES (${ORG}, 'pro', 'active', NOW())`;
+        VALUES (${ORG}, ${tierLevel}, 'active', NOW())`;
       return Number(rows[0].id);
     };
 
@@ -312,6 +326,144 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
       // admin behind with no record of who created them.
       const created = await sql`SELECT id FROM users WHERE username = 'new-admin'`;
       expect(created).toHaveLength(0);
+    });
+
+    /**
+     * Seat cap (task 3.1.j(a)).
+     *
+     * These live beside the audit cases rather than in
+     * `database.usage-limits.pglite.node.test.ts` because the property that
+     * needs real SQL is the *interaction*: the cap is a `WHERE` on the `created`
+     * CTE, and the audit INSERT selects `FROM created`, so a refused seat must
+     * also record no role grant. A mocked client cannot show that — it would
+     * return whatever the test told it to for both statements, which are in
+     * fact one statement. A seat refusal that still wrote `role_assigned` would
+     * read, in the compliance trail, as an admin who was created.
+     *
+     * `ORG` holds two users before every case here: `target` from the outer
+     * `beforeEach`, and the acting admin.
+     */
+    describe('seat cap', () => {
+      const ENFORCING = { USAGE_LIMITS_ENFORCE: 'true' } as Env;
+
+      const countUsers = async (organizationId: string): Promise<number> => {
+        const rows = await sql`
+          SELECT COUNT(*)::int AS count FROM users WHERE organization_id = ${organizationId}`;
+        return Number(rows[0].count);
+      };
+
+      let warn: ReturnType<typeof vi.spyOn>;
+      beforeEach(() => {
+        warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      });
+      afterEach(() => {
+        warn.mockRestore();
+      });
+
+      const limitEvents = (): Array<Record<string, unknown>> =>
+        (warn.mock.calls as unknown[][])
+          .map((call): Record<string, unknown> => {
+            try {
+              return JSON.parse(String(call[0])) as Record<string, unknown>;
+            } catch {
+              return {};
+            }
+          })
+          // Selected by name, not by position: the entitlement gate (#489) also
+          // writes a JSON warning on this path, so an index would pin call
+          // ordering rather than the usage-limit record.
+          .filter((event) => event.event === 'usage_limit_reached');
+
+      it('refuses the seat and records no role grant when the cap is reached', async () => {
+        await seedActingAdmin('free');
+        expect(await countUsers(ORG)).toBe(2);
+
+        const response = await postUser('team_member', 'clerk-acting-admin', ENFORCING);
+
+        expect(response.status).toBe(402);
+        await expect(response.json()).resolves.toMatchObject({
+          error: 'User limit reached for your subscription tier (max 1)',
+          limit: 1,
+          retryable: false,
+        });
+
+        // Mutation check: defeating the `WHERE (SELECT COUNT(*) ...) < cap`
+        // clause (replaced with `WHERE 1 = 1`) fails both of these.
+        //
+        // The audit assertion is not redundant with the user count. It is the
+        // one that fails if the audit INSERT is ever lifted out of the CTE into
+        // a follow-up statement: the cap would still stop the user row, and a
+        // `role_assigned` entry would appear for a user who was never created.
+        // Neither assertion distinguishes this implementation from a
+        // read-then-insert pre-check, which is a race, not an observable — see
+        // the soft-cap note on `createProduct` in `database.ts`.
+        expect(await countUsers(ORG)).toBe(2);
+        expect(await readAudit()).toHaveLength(0);
+
+        expect(limitEvents()).toEqual([
+          {
+            event: 'usage_limit_reached',
+            resource: 'User',
+            organizationId: ORG,
+            tier: 'free',
+            limit: 1,
+            enforced: true,
+          },
+        ]);
+      });
+
+      it('creates the user once, with one audit row, when enforcement is off', async () => {
+        await seedActingAdmin('free');
+
+        const response = await postUser('team_member', 'clerk-acting-admin');
+        expect(response.status).toBe(201);
+
+        // The capped attempt inserted nothing and the uncapped retry inserted
+        // once. Two audit rows here would mean the first attempt's `audited`
+        // CTE ran anyway — the failure mode that makes the retry a second write
+        // rather than the only one.
+        expect(await countUsers(ORG)).toBe(3);
+        expect(await readAudit()).toHaveLength(1);
+
+        expect(limitEvents()).toEqual([
+          {
+            event: 'usage_limit_reached',
+            resource: 'User',
+            organizationId: ORG,
+            tier: 'free',
+            limit: 1,
+            enforced: false,
+          },
+        ]);
+      });
+
+      it('admits the seat when the tier allows it, with enforcement on', async () => {
+        await seedActingAdmin('professional');
+
+        const response = await postUser('team_member', 'clerk-acting-admin', ENFORCING);
+
+        expect(response.status).toBe(201);
+        expect(await countUsers(ORG)).toBe(3);
+        expect(await readAudit()).toHaveLength(1);
+        expect(limitEvents()).toEqual([]);
+      });
+
+      it('counts only the acting organization towards the cap', async () => {
+        await seedActingAdmin('starter');
+        for (let i = 0; i < 50; i += 1) {
+          await sql`
+            INSERT INTO users (organization_id, username, email, role, updated_at)
+            VALUES (${OTHER_ORG}, ${'other-' + i}, ${'other-' + i + '@b.test'}, 'team_member', NOW())`;
+        }
+
+        // Mutation check: dropping `WHERE organization_id = ...` from the
+        // counting sub-select makes this a 402 — one tenant's headcount would
+        // consume another's seats.
+        const response = await postUser('team_member', 'clerk-acting-admin', ENFORCING);
+
+        expect(response.status).toBe(201);
+        expect(await countUsers(ORG)).toBe(3);
+      });
     });
   });
 
