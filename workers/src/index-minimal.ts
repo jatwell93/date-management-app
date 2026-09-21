@@ -3301,8 +3301,15 @@ const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow)
 // literal zeros and never maintained (task 3.1.a): the endpoint reported 0 of
 // N for every organization, so the dashboard bars sat empty and the frontend's
 // 80% UsageWarning (frontend/src/components/UsageWarning.tsx) could never
-// trigger. `users.current` is now accurate too, though the user limit itself
-// is still not enforced on either backend -- see the 3.1.a note in tasks.md.
+// trigger.
+//
+// The `users` limit is enforced as of task 3.1.j(a), behind
+// `USAGE_LIMITS_ENFORCE` like the other three, and `resolveMaxUsers` is the
+// same function the gate resolves its cap from -- so a caller is refused
+// against the number this endpoint shows them. Enforcement covers the
+// admin-initiated path (`POST /api/users`) only; see `insertOrganizationUser`
+// in `database.ts` for why Clerk-driven membership is deliberately not
+// refused, and what that costs.
 const mapOrganizationUsageResponse = (
   counts: UsageCounts,
   storageUsedBytes: number,

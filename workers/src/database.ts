@@ -860,6 +860,25 @@ async function applyUserRoleChange(
  * it is a condition to settle before turning the flag on, since "delete a user
  * to free a seat" would not work.
  *
+ * **This is not the only path that creates a seat, and the other one is
+ * deliberately left uncapped.** `upsertClerkUser`
+ * (`clerk/clerk-persistence.ts`) inserts a user row on
+ * `organizationMembership.created`, which is the normal way a member is minted:
+ * an org admin adds someone in Clerk's own UI before they ever sign in.
+ * Refusing that delivery would leave the person a member in Clerk with no row
+ * here — the identity provider and the database silently disagreeing, which is
+ * the failure mode 3.1.k already decided against when it ruled that a dropped
+ * webhook must not become a lockout. Svix would also simply retry it.
+ *
+ * So the contract is narrow on purpose: **the cap governs admin-initiated seat
+ * creation through the API, not membership granted in Clerk.** An organization
+ * can therefore exceed its tier through Clerk's UI and then be refused at this
+ * endpoint, which looks arbitrary from the outside. That is the second
+ * condition to settle before `USAGE_LIMITS_ENFORCE` goes on: making seats a
+ * real commercial limit means enforcing at the Clerk side or reconciling
+ * afterwards, and that is a product decision rather than a gate on this
+ * statement.
+ *
  * Zero rows back means the cap was reached; a failed insert throws instead, so
  * the caller cannot confuse the two.
  */

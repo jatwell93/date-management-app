@@ -2124,9 +2124,13 @@ equivalent, a relocated home, or an explicit retirement decision.
             own usage screen shows them. It sits behind `USAGE_LIMITS_ENFORCE` (default **off**,
             the same flag and default as the other three caps) and logs `usage_limit_reached` with
             `enforced` in both flag states, so the measure-only period counts exactly what flipping
-            the flag would refuse. The 402 body is byte-identical to the one this endpoint has
-            always returned, `User limit reached for your subscription tier (max N)`; only the
-            number is now the tier's rather than a seeded `1`.
+            the flag would refuse. The 402 **message** is unchanged —
+            `User limit reached for your subscription tier (max N)`, with only the number now the
+            tier's rather than a seeded `1`. The **envelope** is not: `usageLimitResponse` adds
+            `limit` and `retryable` to the `{ error }` that `errorResponse` returned, which aligns
+            this refusal with the other three caps. That is additive and no frontend code matches on
+            either field, but an earlier draft of this row and of PR #520 claimed the body was
+            byte-identical, which was wrong — corrected after Copilot caught it.
             <br>**The seeding INSERT is deleted.** Nothing in `workers/src` reads
             `organization_usage` any more. Existing rows are left in place — deleting data is a
             migration with its own review, and a table nothing reads is inert. Dropping it belongs
@@ -2136,7 +2140,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             counts users live and adds pending invites. Its `checkUsageLimit('max_users')` middleware
             reads the same dead counter this one did. The Worker has no invite table, so the
             pending-invite term is not dropped deliberately — there is nothing to add.
-            <br>**Three limits on the guarantee, all deliberate, and the reason the flag stays
+            <br>**Four limits on the guarantee, all deliberate, and the reason the flag stays
             off.** (i) The cap is **soft under concurrency** for the reason `createProduct`
             documents: each statement is its own implicit transaction under READ COMMITTED, so two
             creates racing at limit-1 can both see room. (ii) A seat is a `users` row, not a person —
@@ -2148,9 +2152,20 @@ equivalent, a relocated home, or an explicit retirement decision.
             (`backend/src/repositories/user.repository.ts:67`, no `deletedAt` filter) — but
             `listUsers` **does** exclude them, so a soft-deleted user is invisible in the UI while
             still holding a seat.
-            <br>(iii) is the one that becomes customer-visible the moment `USAGE_LIMITS_ENFORCE`
-            is turned on, because "delete a user to free a seat" is the first thing an organization
-            at its cap will try. It is deliberately **not** fixed here: the repair is to exclude
+            <br>**(iv) The cap governs admin-initiated seat creation only, by deliberate
+            narrowing.** `upsertClerkUser` (`workers/src/clerk/clerk-persistence.ts`) inserts a user
+            row on `organizationMembership.created`, and that is the normal way a member is minted —
+            an org admin adds someone in Clerk's own UI before they ever sign in. It is left
+            uncapped: refusing the delivery would leave the person a member in Clerk with no row
+            here, which is the identity-provider/database divergence 3.1.k already ruled against
+            when it decided a dropped webhook must not become a lockout, and Svix would retry it
+            regardless. The consequence is real and stated rather than hidden — an organization can
+            exceed its tier through Clerk and then be refused at `POST /api/users`, which looks
+            arbitrary from outside. Making seats a real commercial limit means enforcing at the
+            Clerk side or reconciling afterwards; that is a product decision, not a gate on this
+            statement. Raised by Copilot on PR #520 and confirmed against the code.
+            <br>(iii) and (iv) are the two that become customer-visible the moment `USAGE_LIMITS_ENFORCE`
+            is turned on. It is deliberately **not** fixed here — for (iii), the repair is to exclude
             `deleted_at IS NOT NULL` from both the cap and `getUsageCounts`, and changing
             `getUsageCounts` changes a number the dashboard displays. That is one product decision
             taken on purpose, not a side effect of this row. **Recorded as a precondition on the
