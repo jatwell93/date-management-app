@@ -1979,7 +1979,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             it is visible to whoever next reads the check rather than only to whoever reads this file.
             <br>**#474 stays open** as the standing record, now carrying the CAS design above so a
             future decision starts from the rejected alternatives rather than re-deriving them.
-      - [ ] 3.1.i **The Worker has no scheduled-job capability at all** (Finding 9). Verified rather
+      - [x] 3.1.i **The Worker has no scheduled-job capability at all** (Finding 9). Verified rather
             than assumed: `workers/src/index-minimal.ts:274` exports
             `Sentry.withSentry(…, { fetch, queue })` — a search for `async scheduled` or a
             `scheduled(` handler in that file returns **zero** matches, and the only non-`fetch` entry
@@ -1996,6 +1996,75 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>One consequence worth stating plainly for the trial path: until `downgradeExpiredTrials`
             has a home, **expired trials never lose their entitlements**. That is the mirror image of
             #471 — one leaks capacity by never enforcing a limit, this one by never revoking a grant.
+            <br>**That consequence no longer holds — see the disposition below.** The sentence
+            above is kept as written because it was true when recorded; 3.1.k's date-derived
+            entitlement gate overtook it on 2026-08-31. Do not act on it in isolation.
+            <br>**VERIFIED AND CLOSED (2026-09-21). The finding stands, narrowed twice. No code
+            changes belong to this row** — the `scheduled()` dispatcher and the Cron Trigger
+            declarations are 3.3's deliverable, and this row exists only to state the capability gap
+            and sequence the work that depends on it.
+            <br>**Re-verified today, with the drifted references corrected.** The default export is
+            at `workers/src/index-minimal.ts:313` (not `:274`) and `queue` at `:506` (not `:467`);
+            the shape is unchanged. A search for `async scheduled` or `scheduled(` across
+            `workers/src`, excluding tests, still returns **zero** matches, and `workers/wrangler.toml`
+            still declares no `[triggers]` and no `crons` in either environment. The gap is real
+            today, not merely as recorded.
+            <br>**Narrowing 1 — what is missing is time-based invocation, not scheduling in
+            general.** 2.3 established this as Finding 9-R and it is written up against 3.3: Queues
+            exist and are configured in both environments (producers `workers/wrangler.toml:55`
+            and `:123`, consumers `:59` and `:127` — also drifted from the numbers 3.3 cited, and
+            corrected there), carrying retries, a retry delay, bounded concurrency and a
+            dead-letter queue. So the destination is empty only for the eleven Cron Trigger rows;
+            the three per-recipient email sends have somewhere to go now.
+            <br>**Narrowing 2 — the trial consequence above is superseded, and the residual scope
+            is much smaller than the row claims.** 3.1.k's `deriveSubscriptionAccess`
+            (`workers/src/subscription-status.ts:112`) returns `effectiveTier: 'free'` for a
+            `trialing` row whose `trial_end_date` has passed, and `getOrganizationLaunchTier`
+            (`workers/src/index-minimal.ts:4446`) reads that **effective** tier with **no flag check** — only
+            the 403 refusal in `checkOrganizationEntitlement` sits behind `SUBSCRIPTION_GATE_ENFORCE`.
+            So an expired trial already resolves every quota at free-tier limits on every request,
+            with no cron and with the flag off. What `downgradeExpiredTrials` still solely owns is
+            (i) **persisting** the downgrade into `subscription_tiers` (`status`, `tier_level`,
+            `stripe_subscription_id = null`), (ii) the `trial_expired` row in the trial-event table,
+            and (iii) the reminder and downgrade-warning emails. Entitlement revocation — the part
+            that had the blast radius — is no longer waiting on a Cron Trigger.
+            <br>**One further defect found while verifying, which 3.3 should not carry across.** Two
+            of the four registrations in `SchedulerService.initialize` are **split-brain**: the
+            markdown recalculation enumerates its worklist from **SQLite** — `getDb()` opens
+            `better-sqlite3` at `backend/src/database.ts:57`, and the job reads `organizations` and
+            `inventory_items` through it (`backend/src/services/scheduler.service.ts:81`, `backend/src/services/scheduler.service.ts:97`) — while the
+            `InventoryService` it then drives writes through **Prisma/Postgres**
+            (`backend/src/services/inventory.service.ts:84`). The two have been separate stores since the
+            Postgres cutover, so the job's worklist does not describe the database it writes to.
+            <br>**And it fails in the strongest sense of silently: it reports success.** With no
+            organizations in the SQLite worklist, `successRate` is hardcoded to `'100'`
+            (`backend/src/services/scheduler.service.ts:153`), the failure branch at `:162` never
+            runs because nothing failed, and `:177` logs "Completed scheduled markdown updates for
+            all organizations." A job that did nothing and a job that did everything correctly emit
+            the same lines. So 3.3 owes the rebuilt job an explicit empty-worklist assertion and an
+            alert on it, rather than a port of this reporting — recorded here because the defect
+            is invisible to exactly the signal an operator would check.
+            The backup job has the same shape and 2.4(c) already records it as a reimplementation
+            rather than a relocation; the markdown job was not so recorded, and is now. Neither is a
+            job to *move* — rehoming these is rebuilding a capability that is already not working,
+            which is a different estimate and a different test burden.
+            <br>**Blast radius, stated so the sequencing is judged on facts:** no scheduled job in
+            this system runs against the production database today. Express has no backend deploy workflow
+            in `.github/workflows/`; the only deploy workflows are Pages and Workers — so `SchedulerService.initialize`
+            (`backend/src/index.ts:204`) runs only wherever the PM2 config points it, against
+            SQLite, and the Worker has no timer at all. Cutover therefore removes **no** working
+            scheduled behaviour, which is why this row closes as a sequencing record rather than
+            blocking anything.
+            <br>**No test, and none is owed.** This row asserts the absence of a runtime capability
+            and the state of two config files; the evidence is the searches above, which are
+            reproducible and which 3.3's first commit will invalidate by construction when it adds
+            the dispatcher. A test asserting "no `scheduled` export exists" would have to be deleted
+            by the very task it is meant to sequence.
+            <br>**Sequencing, unchanged in direction and sharpened in degree.** 3.3 stays blocked on
+            the dispatcher for its Cron Trigger rows; 3.1.k already recorded that status gating is
+            not among them; and the trial path is no longer an argument for urgency, because its
+            entitlement half is already enforced without a cron. What the missing timer still costs
+            is persistence, audit events and customer emails — not access control.
       - [ ] 3.1.j **Two subscription rows must be sequenced against #471, not merely queued behind it.**
             Both come out of `services/subscription.service.test.ts` and neither is safe to leave to
             whoever implements enforcement.
@@ -2120,8 +2189,8 @@ equivalent, a relocated home, or an explicit retirement decision.
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
       **Sequencing correction from 2.3 (Finding 9-R).** Finding 9 recorded that the Worker has "no
       scheduled-job capability at all". Half of that is now refined: **Queues already exist and are
-      configured in both environments** — `workers/wrangler.toml:49`/`:115` (producers) and
-      `:53`/`:119` (consumers), carrying `max_retries = 5`, `retry_delay = 30`, `max_concurrency = 1`
+      configured in both environments** — `workers/wrangler.toml:55`/`:123` (producers) and
+      `:59`/`:127` (consumers; line numbers re-verified 2026-09-21 by 3.1.i), carrying `max_retries = 5`, `retry_delay = 30`, `max_concurrency = 1`
       and a `dead_letter_queue`. Only Cron Triggers are absent (no `[triggers]`, no `crons`, and zero
       `scheduled` matches in `workers/src/index-minimal.ts`).
       <br>So this task splits, and the halves are not equally blocked. The three per-recipient email
