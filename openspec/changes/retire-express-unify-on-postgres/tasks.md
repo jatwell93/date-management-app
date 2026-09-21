@@ -2032,9 +2032,9 @@ equivalent, a relocated home, or an explicit retirement decision.
             of the four registrations in `SchedulerService.initialize` are **split-brain**: the
             markdown recalculation enumerates its worklist from **SQLite** — `getDb()` opens
             `better-sqlite3` at `backend/src/database.ts:57`, and the job reads `organizations` and
-            `inventory_items` through it (`services/scheduler.service.ts:81`, `:97`) — while the
+            `inventory_items` through it (`backend/src/services/scheduler.service.ts:81`, `backend/src/services/scheduler.service.ts:97`) — while the
             `InventoryService` it then drives writes through **Prisma/Postgres**
-            (`services/inventory.service.ts:84`). The two have been separate stores since the
+            (`backend/src/services/inventory.service.ts:84`). The two have been separate stores since the
             Postgres cutover, so the job's worklist does not describe the database it writes to.
             The backup job has the same shape and 2.4(c) already records it as a reimplementation
             rather than a relocation; the markdown job was not so recorded, and is now. Neither is a
