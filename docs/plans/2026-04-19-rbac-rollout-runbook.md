@@ -43,14 +43,21 @@ them, and nothing re-applies the migration on its own. Once the deploy finishes,
 confirm it found nothing left:
 
 ```sql
-SELECT COUNT(*) FROM users
-WHERE role NOT IN ('admin', 'manager', 'team_member');
+SELECT role, COUNT(*) FROM users
+WHERE role NOT IN ('admin', 'manager', 'team_member')
+GROUP BY role;
 ```
 
-**Expected: 0.** If it is not zero, re-apply 0014's statements (they are idempotent —
-a clean replay updates zero rows) and re-check. The rows to look for are `'Manager'`,
-which is the one that costs an administrator their privileges rather than merely
-looking untidy.
+**Expected: no rows.** Group by `role` rather than counting, because the two possible
+causes need different responses and a bare count cannot tell them apart:
+
+| Rows returned | Meaning | Action |
+|---|---|---|
+| `'Manager'`, `'Team Member'`, `Staff`, `member`, `MANAGER`, `org:*`… | A delivery landed in the deploy window and re-wrote them after 0014 passed over | **Re-apply 0014's statements** — idempotent, so a clean replay updates zero rows — then re-check |
+| `Admin`, `ADMIN`, `owner`, `org:admin` | Deliberately preserved by 0014 | **Do nothing.** Re-running the migration will not change them, by design — see the header of `0014_normalize_user_roles.up.sql`. They resolve correctly at runtime because every gate normalizes before comparing |
+
+`'Manager'` is the row that matters most: it is the one that costs an administrator
+their privileges rather than merely looking untidy.
 
 ---
 

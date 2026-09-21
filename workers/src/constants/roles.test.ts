@@ -148,6 +148,38 @@ describe('the shared alias table', () => {
   });
 
   /**
+   * Keys inherited from `Object.prototype`, which a plain object literal would
+   * have answered with a *function* rather than falling through to the default:
+   * `{}['constructor']` is truthy, so `?? ROLES.TEAM_MEMBER` never fires and
+   * `normalizeRole` would hand a function to a database write or an
+   * authorization comparison.
+   *
+   * Every one of the four copies this table replaced had that shape. None were
+   * reachable by an attacker — Clerk payloads and JWT claims are signed — but
+   * that is a property of today's callers, not of the table, and the function's
+   * declared return type said `RoleValue` regardless. Raised by Copilot on
+   * PR #521.
+   */
+  it('has a null prototype, so no lookup can inherit one', () => {
+    expect(Object.getPrototypeOf(ROLE_ALIASES)).toBeNull();
+    // The assertion that actually bites: on a plain literal each of these is a
+    // function, and `?? ROLES.TEAM_MEMBER` never fires because a function is
+    // truthy.
+    for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
+      expect((ROLE_ALIASES as Record<string, unknown>)[key]).toBeUndefined();
+    }
+  });
+
+  it.each([['constructor'], ['toString'], ['valueOf'], ['hasOwnProperty'], ['__proto__']])(
+    'returns team_member for the inherited key %j rather than a function',
+    (key) => {
+      const result = normalizeRole(key);
+      expect(typeof result).toBe('string');
+      expect(result).toBe(ROLES.TEAM_MEMBER);
+    },
+  );
+
+  /**
    * The set of spellings that reach admin, asserted as data. This is what stops
    * a later edit from adding a loose match — a `toLowerCase()` or a
    * `startsWith` — that would grant administrator on a near miss, and it makes

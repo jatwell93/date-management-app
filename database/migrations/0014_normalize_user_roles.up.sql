@@ -62,10 +62,18 @@
 -- their next membership event arrives under the new code.
 --
 -- The idempotency above is what makes the remedy cheap: once the deploy
--- completes, either re-run this backfill or confirm nothing is left with
+-- completes, confirm nothing is left with
 --
---   SELECT COUNT(*) FROM users
---   WHERE role NOT IN ('admin', 'manager', 'team_member');
+--   SELECT role, COUNT(*) FROM users
+--   WHERE role NOT IN ('admin', 'manager', 'team_member')
+--   GROUP BY role;
+--
+-- Grouped rather than counted on purpose. A bare COUNT cannot reach zero if any
+-- row holds one of the privileged aliases this migration deliberately preserves
+-- ('Admin', 'ADMIN', 'owner', 'org:admin') -- it would tell an operator to
+-- re-run a migration that by design will not change them. Grouping separates
+-- the two cases: the spellings above mean re-apply this file; the preserved
+-- aliases mean do nothing.
 --
 -- That step is in docs/plans/2026-04-19-rbac-rollout-runbook.md.
 

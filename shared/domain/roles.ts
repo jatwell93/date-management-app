@@ -72,7 +72,18 @@ export const CANONICAL_ROLES: readonly RoleValue[] = [
  * `normalizeRole(normalizeRole(x)) === normalizeRole(x)` for every input. The
  * 0014 backfill relies on that: it can be replayed over its own result.
  */
-export const ROLE_ALIASES: Record<string, RoleValue> = {
+/**
+ * Built on a **null prototype** so a lookup cannot inherit from
+ * `Object.prototype`. On a plain object literal, `ROLE_ALIASES['constructor']`
+ * returns a *function* — truthy, so `?? ROLES.TEAM_MEMBER` never fires — and
+ * `normalizeRole` would hand that function onward to a database write or an
+ * authorization comparison. `toString`, `valueOf`, `hasOwnProperty` and
+ * `__proto__` behave the same way. Every one of the four copies this module
+ * replaced had that shape; none of them were reachable by an attacker, since
+ * Clerk payloads and JWT claims are signed, but "not currently reachable" is a
+ * property of the callers, not of the table.
+ */
+export const ROLE_ALIASES: Record<string, RoleValue> = Object.assign(Object.create(null), {
   owner: ROLES.ADMIN,
   admin: ROLES.ADMIN,
   Admin: ROLES.ADMIN,
@@ -92,7 +103,7 @@ export const ROLE_ALIASES: Record<string, RoleValue> = {
   staff: ROLES.TEAM_MEMBER,
   'org:member': ROLES.TEAM_MEMBER,
   'org:team_member': ROLES.TEAM_MEMBER,
-};
+});
 
 /**
  * Normalize any role string to a canonical value.
@@ -101,6 +112,14 @@ export const ROLE_ALIASES: Record<string, RoleValue> = {
  * and deliberately not an exception: this runs on webhook payloads and on
  * stored rows, where throwing would turn an unfamiliar spelling into a failed
  * delivery or a 500 rather than a safe demotion.
+ *
+ * Totality rests entirely on `ROLE_ALIASES` having a null prototype: an unknown
+ * key yields `undefined`, so the `??` fires. An earlier cut of this fix also
+ * validated the looked-up value here, which read as prudent and was in fact
+ * untestable — with the null prototype in place no input can reach that branch,
+ * so removing either guard alone left every test passing and neither was
+ * evidence for the other. One mechanism, pinned by a test that fails when it is
+ * removed, is worth more than two that alibi each other.
  */
 export function normalizeRole(role: string | null | undefined): RoleValue {
   if (typeof role !== 'string' || role === '') return ROLES.TEAM_MEMBER;
