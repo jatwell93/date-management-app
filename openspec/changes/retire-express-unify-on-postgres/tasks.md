@@ -1894,7 +1894,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             backfill of existing non-canonical rows. The audit trail records the raw stored value
             rather than a tidied one, precisely so the divergence surfaces; the webhook test pins
             `'Team Member'`/`'Manager'` and is written to **fail when #517 is fixed**.
-      - [ ] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
+      - [x] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because
             Phase 3.2 will otherwise write a test that codifies it. The `isFirstAdmin` decision is
@@ -1909,6 +1909,71 @@ equivalent, a relocated home, or an explicit retirement decision.
             caller's own organization, no cross-tenant reach. Either accept it explicitly, or close it
             with a partial unique index (`WHERE role = 'admin' AND deleted_at IS NULL`) or a
             conditional single-statement insert, since Neon has no `$transaction`.
+            <br>**DECIDED (2026-09-21): accepted explicitly, no code change to the decision itself.**
+            The row's description of the race is accurate and stands. What did not survive
+            investigation are **both remedies it proposes** — each was evaluated and rejected on its
+            own merits, which is why acceptance is a conclusion here rather than a deferral.
+            <br>**(1) A conditional single-statement insert does not close this race.** The
+            data-modifying-CTE technique 3.1.g used four times solves *atomicity* — the audit row
+            lands if and only if the user write lands — not *isolation*. Postgres takes a snapshot at
+            statement start, and two concurrent bootstraps insert **different** `clerk_user_id`s, so
+            they contend on no common row and take no common lock: both evaluate an
+            `EXISTS (… role = 'admin' …)` subquery against a snapshot predating the other's
+            uncommitted insert, both resolve it false, and both write `'admin'`. It compresses the
+            window from two round-trips to one and leaves the defect intact. Recorded because the
+            pattern is genuinely the right answer three rows above this one and the wrong answer
+            here, and the difference is not visible from the shape of the SQL.
+            <br>**(2) A partial unique index would forbid a capability the product supports.**
+            `WHERE role = 'admin' AND deleted_at IS NULL` closes the race absolutely, but it also
+            makes a second admin impossible **anywhere**, by any path — and two paths deliberately
+            mint one: `POST /api/users` validates through `isValidRole`
+            (`workers/src/index-minimal.ts:2901`), which admits `admin`, and `PUT /api/users/:id`
+            does the same at `:3023`. The comment at `:2879` states the intent outright ("mints a new
+            admin as readily as `PUT /api/users/:id` promotes an existing one"). Trading a supported
+            authorization capability for a race is the larger behaviour change of the two.
+            <br>**(3) The only mechanism that actually closes it costs a migration and a second
+            behaviour change.** A compare-and-swap claim — a nullable
+            `organizations.bootstrap_admin_claimed_at`, taken by
+            `UPDATE … WHERE id = $org AND bootstrap_admin_claimed_at IS NULL RETURNING` — does work
+            where the conditional insert does not, because a single-row `UPDATE` re-evaluates its own
+            qualifier against the updated row version (EvalPlanQual), so the loser blocks, re-reads
+            the committed row and matches zero rows. It is correct and it preserves multi-admin. It
+            was still rejected for this change: it costs migration 0014 with the full eight-artifact
+            checklist and the series' unstated idempotency contract, and it removes a fallback that
+            currently exists — today an organization whose only admin is soft-deleted grants admin to
+            the next person to bootstrap, and under a one-shot claim column it never would. Trading a
+            live self-heal for a race needs a better reason than this race supplies.
+            <br>**Why acceptance is defensible on the merits, not merely cheaper.** The outcome is an
+            extra `admin` **inside the caller's own organization**, which is a state that organization
+            can already reach deliberately through either endpoint above; there is no cross-tenant
+            reach, and the unique indexes that make bootstrap idempotent
+            (`users_clerk_user_id_key`, `organizations_clerk_organization_id_key`) are untouched by
+            it. Triggering it requires two people to complete a *first* sign-in against one
+            organization with no active admin inside the same few milliseconds. It is pre-existing in
+            **both** implementations — Express reads its admin at
+            `backend/src/services/org-bootstrap.service.ts:100` and opens its `$transaction` at
+            `:116`, so the check sits outside it exactly as the Worker's does — so accepting changes
+            nothing at the cutover and closing it would be new behaviour introduced by a retirement.
+            <br>**Sequencing against #517 is moot under this disposition.** The #517 hazard was
+            specific to remedy (2): `mapClerkRole` (`clerk/clerk-persistence.ts:26`) writes
+            `'Manager'` for `org:admin`, so a partial unique index on `role = 'admin'` would not see
+            webhook-written rows, and #517's eventual backfill toward canonical values would then
+            **fail the index** on any organization holding two of them. No index is being added, and
+            the accepted path reads `role = 'admin'` exactly as it does today, so 3.1.h imposes no
+            ordering on #517. #517 remains live, unrelated to concurrency, and the more urgent of the
+            two.
+            <br>**No test, deliberately, and this is the load-bearing part of the disposition.** The
+            race is not reproducible under the pglite harness, which serialises these tests on a
+            single connection — the same limitation already recorded against `applyUserRoleChange`
+            (`workers/src/database.ts`), whose concurrency reasoning is likewise argued rather than
+            test-proven. Any test written here would be green because the harness cannot fail it,
+            which is the precise anti-pattern this change has hit before. **Phase 3.2 must not write
+            one**: a passing concurrency assertion over this code path would codify the accepted
+            defect as intended behaviour while proving nothing about it. The acceptance is recorded
+            in prose at the decision point (`workers/src/clerk/bootstrap-handler.ts:309`) instead, so
+            it is visible to whoever next reads the check rather than only to whoever reads this file.
+            <br>**#474 stays open** as the standing record, now carrying the CAS design above so a
+            future decision starts from the rejected alternatives rather than re-deriving them.
       - [ ] 3.1.i **The Worker has no scheduled-job capability at all** (Finding 9). Verified rather
             than assumed: `workers/src/index-minimal.ts:274` exports
             `Sentry.withSentry(…, { fetch, queue })` — a search for `async scheduled` or a
