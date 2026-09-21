@@ -1909,6 +1909,11 @@ equivalent, a relocated home, or an explicit retirement decision.
             caller's own organization, no cross-tenant reach. Either accept it explicitly, or close it
             with a partial unique index (`WHERE role = 'admin' AND deleted_at IS NULL`) or a
             conditional single-statement insert, since Neon has no `$transaction`.
+            <br>**Both of those remedies were evaluated and rejected — see the disposition below.**
+            The sentence above is the task as originally written and is kept verbatim, because what
+            it proposed is part of the record: the conditional single-statement insert **does not
+            close this race at all**, and that is the most useful thing 3.1.h established. Do not act
+            on that sentence in isolation.
             <br>**DECIDED (2026-09-21): accepted explicitly, no code change to the decision itself.**
             The row's description of the race is accurate and stands. What did not survive
             investigation are **both remedies it proposes** — each was evaluated and rejected on its
