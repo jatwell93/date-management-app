@@ -32,7 +32,6 @@ import {
   getClientIp,
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
-import { ORG_AUDIT_EVENT_TYPES, ORG_AUDIT_TRIGGERS } from '../../shared/domain/org-audit';
 import {
   normalizeLaunchTier,
   parsePositiveIntEnv,
@@ -2924,69 +2923,20 @@ async function handleCreateLegacyUser(request: Request, db: Database, env: Env):
     const maxUsers = resolveMaxUsers(tier);
     const enforced = isUsageEnforcementEnabled(env);
 
-    // The role is admin-chosen and `isValidRole` admits 'admin', so this is a
-    // grant of privilege and belongs in the audit trail. The row is written by a
-    // data-modifying CTE inside the same statement as the INSERT for the reason
-    // the promotion path uses one: Neon's HTTP driver has no transaction, and a
-    // created admin with no record of who created them is the failure this
-    // exists to prevent. Unlike a promotion there is no previous role, so
-    // `old_role` is NULL rather than a value the row once held.
-    //
-    // The cap rides inside that same statement rather than in front of it, for
-    // the reason `createProduct` gives: a read-then-insert can go stale across
-    // a round trip this driver cannot wrap in a transaction. It is still a soft
-    // cap — two creates racing at limit-1 can both see room — and `audited`
-    // selects `FROM created`, so a capped attempt writes no audit row either.
-    // That last property is why this is covered on pglite and not only against
-    // a mocked client: a seat refusal that still recorded a role grant would
-    // read as an admin being created.
-    const insertUser = async (cap: number): Promise<Record<string, unknown> | null> => {
-      const rows = await db.sql`
-        WITH created AS (
-          INSERT INTO users (organization_id, username, role, created_at, updated_at)
-          SELECT ${auth.organizationId}, ${username}, ${requestedRole}, NOW(), NOW()
-          WHERE (
-            SELECT COUNT(*) FROM users WHERE organization_id = ${auth.organizationId}
-          ) < ${cap}
-          RETURNING id, email, username, role, clerk_user_id, created_at
-        ),
-        audited AS (
-          INSERT INTO org_audit_log (
-            organization_id,
-            event_type,
-            actor_user_id,
-            actor_organization_id,
-            target_user_id,
-            target_organization_id,
-            old_role,
-            new_role,
-            ip_address,
-            metadata,
-            created_at
-          )
-          SELECT ${auth.organizationId},
-                 ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
-                 ${auth.userId},
-                 ${auth.organizationId},
-                 created.id,
-                 ${auth.organizationId},
-                 NULL,
-                 created.role,
-                 ${getClientIp(request)},
-                 ${JSON.stringify({ trigger: ORG_AUDIT_TRIGGERS.ADMIN_CREATE })},
-                 NOW()
-          FROM created
-          RETURNING 1
-        )
-        SELECT id, email, username, role,
-               clerk_user_id as "clerkUserId",
-               created_at::text as "createdAt"
-        FROM created
-      `;
-      return (rows[0] as Record<string, unknown>) ?? null;
-    };
+    // The statement itself lives in `database.ts` as `insertOrganizationUser`,
+    // beside `applyUserRoleChange` — the other path that grants a role — and
+    // carries the reasoning for both the single-statement audit CTE and the cap
+    // riding inside it rather than in front of it.
+    const actor = { userId: auth.userId, ipAddress: getClientIp(request) };
+    const newUser = (seatCap: number) =>
+      db.createOrganizationUser(auth.organizationId, {
+        username,
+        role: requestedRole,
+        seatCap,
+        actor,
+      });
 
-    let created = await insertUser(maxUsers);
+    let created = await newUser(maxUsers);
     if (!created) {
       logUsageLimitReached({
         resource: 'User',
@@ -3001,7 +2951,7 @@ async function handleCreateLegacyUser(request: Request, db: Database, env: Env):
       // Measure-only: re-run the same statement with the cap lifted. The first
       // attempt inserted nothing — neither the user nor the audit row — so this
       // is the only write, not a second one.
-      created = await insertUser(UNLIMITED_CAP);
+      created = await newUser(UNLIMITED_CAP);
       if (!created) {
         console.error('handleCreateLegacyUser: uncapped retry inserted no row');
         return errorResponse('Internal server error', 500, env);

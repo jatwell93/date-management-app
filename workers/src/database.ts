@@ -310,6 +310,10 @@ export interface Database {
 
   // Users CRUD
   listUsers(organizationId: string): Promise<UserListItem[]>;
+  createOrganizationUser(
+    organizationId: string,
+    data: { username: string | null; role: string; seatCap: number; actor: RoleChangeActor },
+  ): Promise<UserListItem | null>;
   updateUserRole(
     organizationId: string,
     userId: number,
@@ -826,6 +830,94 @@ async function applyUserRoleChange(
     FROM updated
   `;
   return (rows[0] as UserRoleChange) || null;
+}
+
+/**
+ * Create a user with an admin-chosen role, subject to the tier's seat cap, and
+ * record the grant in `org_audit_log` — **one statement**, for the same reason
+ * `applyUserRoleChange` is one: Neon's HTTP driver has no transaction, and a
+ * created admin with no record of who created them is the failure the audit
+ * trail exists to prevent. Unlike a promotion there is no previous role, so
+ * `old_role` is NULL rather than a value the row once held.
+ *
+ * The seat cap is a `WHERE` on the `created` CTE rather than a read in front of
+ * the statement, for the reason `createProduct` gives: a read-then-insert goes
+ * stale across a round trip this driver cannot wrap in a transaction. It is
+ * still a **soft cap** — each statement snapshots at statement start under READ
+ * COMMITTED, so two creates racing at limit-1 can both see room.
+ *
+ * Because `audited` selects `FROM created`, a capped attempt writes no audit
+ * row either. That coupling is the property worth holding: a seat refusal that
+ * still recorded `role_assigned` would read, in the compliance trail, as an
+ * admin who was created.
+ *
+ * **The count includes soft-deleted users**, matching `getUsageCounts` (so the
+ * cap and the usage screen agree) and Express's `countByOrganization`
+ * (`backend/src/repositories/user.repository.ts:67`, which also omits any
+ * `deletedAt` filter). `listUsers` does exclude them, so a soft-deleted user is
+ * invisible in the UI while still holding a seat. That is pre-existing parity,
+ * not a regression, and it is inert while `USAGE_LIMITS_ENFORCE` is off — but
+ * it is a condition to settle before turning the flag on, since "delete a user
+ * to free a seat" would not work.
+ *
+ * Zero rows back means the cap was reached; a failed insert throws instead, so
+ * the caller cannot confuse the two.
+ */
+async function insertOrganizationUser(
+  sql: NeonQueryFunction<false, false>,
+  args: {
+    organizationId: string;
+    username: string | null;
+    role: string;
+    seatCap: number;
+    actor: RoleChangeActor;
+  },
+): Promise<UserListItem | null> {
+  const { organizationId, username, role, seatCap, actor } = args;
+  const metadata = JSON.stringify({ trigger: ORG_AUDIT_TRIGGERS.ADMIN_CREATE });
+  const rows = await sql`
+    WITH created AS (
+      INSERT INTO users (organization_id, username, role, created_at, updated_at)
+      SELECT ${organizationId}, ${username}, ${role}, NOW(), NOW()
+      WHERE (
+        SELECT COUNT(*) FROM users WHERE organization_id = ${organizationId}
+      ) < ${seatCap}
+      RETURNING id, email, username, role, clerk_user_id, created_at
+    ),
+    audited AS (
+      INSERT INTO org_audit_log (
+        organization_id,
+        event_type,
+        actor_user_id,
+        actor_organization_id,
+        target_user_id,
+        target_organization_id,
+        old_role,
+        new_role,
+        ip_address,
+        metadata,
+        created_at
+      )
+      SELECT ${organizationId},
+             ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
+             ${actor.userId},
+             ${organizationId},
+             created.id,
+             ${organizationId},
+             NULL,
+             created.role,
+             ${actor.ipAddress},
+             ${metadata},
+             NOW()
+      FROM created
+      RETURNING 1
+    )
+    SELECT id, email, username, role,
+           clerk_user_id as "clerkUserId",
+           created_at::text as "createdAt"
+    FROM created
+  `;
+  return (rows[0] as UserListItem) || null;
 }
 
 /** Who is performing a role change, for the `org_audit_log` entry it produces. */
@@ -3182,6 +3274,17 @@ export function createWorkersDatabase(env: Env): Database {
           AND deleted_at IS NULL
         ORDER BY created_at ASC
       `) as UserListItem[];
+    },
+
+    /**
+     * Create a user with a chosen role, capped at the tier's seats and audited
+     * in the same statement. See `insertOrganizationUser`.
+     */
+    async createOrganizationUser(
+      organizationId: string,
+      data: { username: string | null; role: string; seatCap: number; actor: RoleChangeActor },
+    ): Promise<UserListItem | null> {
+      return insertOrganizationUser(sql, { organizationId, ...data });
     },
 
     /**

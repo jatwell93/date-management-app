@@ -2136,13 +2136,32 @@ equivalent, a relocated home, or an explicit retirement decision.
             counts users live and adds pending invites. Its `checkUsageLimit('max_users')` middleware
             reads the same dead counter this one did. The Worker has no invite table, so the
             pending-invite term is not dropped deliberately — there is nothing to add.
-            <br>**Two limits on the guarantee, both deliberate.** The cap is **soft under
-            concurrency** for the reason `createProduct` documents: each statement is its own
-            implicit transaction under READ COMMITTED, so two creates racing at limit-1 can both see
-            room. And a seat is a `users` row, not a person — the placeholder/Clerk duplication
-            recorded in `handleCreateLegacyUser`'s own doc comment means one person can hold two.
-            Both are reasons to read the measure-only logs before flipping the flag, not reasons to
-            keep counting a column nothing maintains.
+            <br>**Three limits on the guarantee, all deliberate, and the reason the flag stays
+            off.** (i) The cap is **soft under concurrency** for the reason `createProduct`
+            documents: each statement is its own implicit transaction under READ COMMITTED, so two
+            creates racing at limit-1 can both see room. (ii) A seat is a `users` row, not a person —
+            the placeholder/Clerk duplication recorded in `handleCreateLegacyUser`'s own doc comment
+            means one person can hold two. (iii) **The count includes soft-deleted users**, so
+            deleting a user does not free a seat. That is parity, not a regression: `getUsageCounts`
+            counts them too (which is why the cap and the usage screen still agree) and so does
+            Express's `countByOrganization`
+            (`backend/src/repositories/user.repository.ts:67`, no `deletedAt` filter) — but
+            `listUsers` **does** exclude them, so a soft-deleted user is invisible in the UI while
+            still holding a seat.
+            <br>(iii) is the one that becomes customer-visible the moment `USAGE_LIMITS_ENFORCE`
+            is turned on, because "delete a user to free a seat" is the first thing an organization
+            at its cap will try. It is deliberately **not** fixed here: the repair is to exclude
+            `deleted_at IS NOT NULL` from both the cap and `getUsageCounts`, and changing
+            `getUsageCounts` changes a number the dashboard displays. That is one product decision
+            taken on purpose, not a side effect of this row. **Recorded as a precondition on the
+            flag flip**, alongside reading the measure-only `usage_limit_reached` logs. None of the
+            three is a reason to keep counting a column nothing maintains.
+            <br>**Where the statement lives.** `insertOrganizationUser` in
+            `workers/src/database.ts`, beside `applyUserRoleChange` — the other path that grants a
+            role — rather than inline in the handler, which is where the pre-existing version sat.
+            CodeScene flagged `handleCreateLegacyUser` as a Complex Method on the first push; moving
+            the statement to where its sibling already lives is the fix that was owed anyway, and
+            the handler is now a cap resolution, two calls and the measure-only branch.
             <br>**Evidence: four real-SQL cases on pglite** in
             `workers/src/database.org-audit.pglite.node.test.ts`, driven through the route table so
             the statement under test is the one the endpoint runs. They live beside the audit cases
