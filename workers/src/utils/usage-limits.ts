@@ -64,14 +64,22 @@ export const LAUNCH_TIER_LIMITS: Record<
  * Seat caps, mirroring `TIER_LIMITS.max_users` in
  * `shared/types/subscription.ts`.
  *
- * **Reported, not enforced.** No seat limit is enforced on either backend:
- * Express's `checkUsageLimit('max_users')` and this Worker's
- * `handleCreateLegacyUser` both compare against
- * `organization_usage.active_users`, which is written as a literal `0` and
- * incremented nowhere in the repo, so both compare `0 >= max` and never fire.
- * Task 3.1.a scoped that out as parity rather than a migration regression; it
- * is recorded in tasks.md as a pre-existing defect. These values exist so the
- * usage endpoint can show a real denominator next to a real count.
+ * **Enforced by counting live users, as of task 3.1.j(a).** Before that they
+ * were reported and not enforced, and the reason is worth keeping: both
+ * backends compared against `organization_usage.active_users`, which is
+ * written as a literal `0` and incremented nowhere in the repo, so both
+ * compared `0 >= max` and never fired. The Worker's copy of that read also
+ * took its *denominator* from the same row — `max_users`, seeded as a literal
+ * `1` for every organization regardless of tier — so the one way the gate
+ * could ever have started firing was to cap a ten-seat professional trial at
+ * one seat. Repairing the counter would have shipped that; the row is gone and
+ * the cap now comes from this table via `resolveMaxUsers`.
+ *
+ * Express enforces seats the same way on the path where it works at all —
+ * `ensureWithinUserLimit` (`backend/src/services/organization-invite.service.ts:286`)
+ * counts users live and adds pending invites. This Worker has no invite table,
+ * so the count is users alone; the pending-invite term is not dropped
+ * deliberately, there is simply nothing to add.
  */
 export const LAUNCH_TIER_USER_LIMITS: Record<LaunchTier, number> = {
   free: 1,
@@ -141,6 +149,17 @@ export function resolveMaxActiveExpiries(tier: LaunchTier, env: Env): number {
   return tier === 'enterprise'
     ? parsePositiveIntEnv(env.ENTERPRISE_MAX_ACTIVE_EXPIRIES, fallback)
     : fallback;
+}
+
+/**
+ * Seat cap for a tier. No env override exists for seats, so this is a lookup
+ * rather than a resolver — it is a function anyway so that the gate in
+ * `handleCreateLegacyUser` and the denominator reported by
+ * `GET /api/organization/usage` cannot drift onto different expressions of the
+ * same number.
+ */
+export function resolveMaxUsers(tier: LaunchTier): number {
+  return LAUNCH_TIER_USER_LIMITS[tier];
 }
 
 /** Storage cap in bytes for a tier. No env override exists for storage. */

@@ -2065,7 +2065,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             not among them; and the trial path is no longer an argument for urgency, because its
             entitlement half is already enforced without a cron. What the missing timer still costs
             is persistence, audit events and customer emails — not access control.
-      - [ ] 3.1.j **Two subscription rows must be sequenced against #471, not merely queued behind it.**
+      - [x] 3.1.j **Two subscription rows must be sequenced against #471, not merely queued behind it.**
             Both come out of `services/subscription.service.test.ts` and neither is safe to leave to
             whoever implements enforcement.
             <br>**(a) Trial organizations are seeded with free-tier limits, so #471 must not ship
@@ -2094,6 +2094,107 @@ equivalent, a relocated home, or an explicit retirement decision.
             what the row asked for: it judges entitlement on dates the trial path already writes, so
             `ensureTrialSubscription`'s Stripe-less rows are entitled for exactly as long as their
             `trial_end_date` allows. **(a) remains open** and still gates #471 enforcement.
+            <br>**(a) is now DONE too (2026-09-21), in code. The sentence above is kept as written
+            because it was true when recorded.** The row's diagnosis holds and its sequencing
+            instruction was the load-bearing part, but two details need correcting before the
+            disposition makes sense.
+            <br>**Correction 1 — the trial *subscription* is not seeded at free tier.**
+            `ensureTrialSubscription` writes `tier_level 'professional'`
+            (`workers/src/clerk/clerk-persistence.ts:113`), which is parity with Express's
+            `buildTrialSubscriptionSetup`. The mis-seeding was confined to `organization_usage`:
+            literal zeros with `max_users` 1 and `max_skus` 500 for every organization regardless of
+            tier, written on a usage **read** rather than at trial creation.
+            <br>**Correction 2 — #471 is CLOSED, and closing it did not ship the hazard.** 3.1.a put
+            SKU, active-expiry and storage enforcement on live counts with caps resolved from the
+            tier (`workers/src/utils/usage-limits.ts`), so none of those three ever consulted the
+            mis-seeded row. That left the seat gate in `handleCreateLegacyUser` as its **only**
+            remaining reader, which is the whole of what (a) still gated.
+            <br>**The hazard, stated precisely, because it is subtler than "wrong limits are
+            stored".** The gate could never refuse anything: it compared
+            `organization_usage.active_users`, a literal `0` incremented nowhere, against
+            `max_users`. But its **denominator came from the same row**. So the obvious repair —
+            maintain `active_users`, which is exactly what #471's own "what a fix has to hold" item
+            2 asked for — would have been the change that switched the gate on **and** capped every
+            ten-seat professional trial at one seat, in one step. A counter that reads zero is inert
+            in a way that hides what it is measured against.
+            <br>**Shipped.** The seat cap now counts live `users` rows for the acting organization
+            inside the same statement that inserts the new one, with the cap from
+            `resolveMaxUsers(tier)` — the same function that supplies the denominator
+            `GET /api/organization/usage` displays, so a caller is refused against the number their
+            own usage screen shows them. It sits behind `USAGE_LIMITS_ENFORCE` (default **off**,
+            the same flag and default as the other three caps) and logs `usage_limit_reached` with
+            `enforced` in both flag states, so the measure-only period counts exactly what flipping
+            the flag would refuse. The 402 **message** is unchanged —
+            `User limit reached for your subscription tier (max N)`, with only the number now the
+            tier's rather than a seeded `1`. The **envelope** is not: `usageLimitResponse` adds
+            `limit` and `retryable` to the `{ error }` that `errorResponse` returned, which aligns
+            this refusal with the other three caps. That is additive and no frontend code matches on
+            either field, but an earlier draft of this row and of PR #520 claimed the body was
+            byte-identical, which was wrong — corrected after Copilot caught it.
+            <br>**The seeding INSERT is deleted.** Nothing in `workers/src` reads
+            `organization_usage` any more. Existing rows are left in place — deleting data is a
+            migration with its own review, and a table nothing reads is inert. Dropping it belongs
+            to Phase 4 with the rest of the Express-era schema.
+            <br>**Parity note.** Express enforces seats on exactly one path that works:
+            `ensureWithinUserLimit` (`backend/src/services/organization-invite.service.ts:286`)
+            counts users live and adds pending invites. Its `checkUsageLimit('max_users')` middleware
+            reads the same dead counter this one did. The Worker has no invite table, so the
+            pending-invite term is not dropped deliberately — there is nothing to add.
+            <br>**Four limits on the guarantee, all deliberate, and the reason the flag stays
+            off.** (i) The cap is **soft under concurrency** for the reason `createProduct`
+            documents: each statement is its own implicit transaction under READ COMMITTED, so two
+            creates racing at limit-1 can both see room. (ii) A seat is a `users` row, not a person —
+            the placeholder/Clerk duplication recorded in `handleCreateLegacyUser`'s own doc comment
+            means one person can hold two. (iii) **The count includes soft-deleted users**, so
+            deleting a user does not free a seat. That is parity, not a regression: `getUsageCounts`
+            counts them too (which is why the cap and the usage screen still agree) and so does
+            Express's `countByOrganization`
+            (`backend/src/repositories/user.repository.ts:67`, no `deletedAt` filter) — but
+            `listUsers` **does** exclude them, so a soft-deleted user is invisible in the UI while
+            still holding a seat.
+            <br>**(iv) The cap governs admin-initiated seat creation only, by deliberate
+            narrowing.** `upsertClerkUser` (`workers/src/clerk/clerk-persistence.ts`) inserts a user
+            row on `organizationMembership.created`, and that is the normal way a member is minted —
+            an org admin adds someone in Clerk's own UI before they ever sign in. It is left
+            uncapped: refusing the delivery would leave the person a member in Clerk with no row
+            here, which is the identity-provider/database divergence 3.1.k already ruled against
+            when it decided a dropped webhook must not become a lockout, and Svix would retry it
+            regardless. The consequence is real and stated rather than hidden — an organization can
+            exceed its tier through Clerk and then be refused at `POST /api/users`, which looks
+            arbitrary from outside. Making seats a real commercial limit means enforcing at the
+            Clerk side or reconciling afterwards; that is a product decision, not a gate on this
+            statement. Raised by Copilot on PR #520 and confirmed against the code.
+            <br>(iii) and (iv) are the two that become customer-visible the moment `USAGE_LIMITS_ENFORCE`
+            is turned on. It is deliberately **not** fixed here — for (iii), the repair is to exclude
+            `deleted_at IS NOT NULL` from both the cap and `getUsageCounts`, and changing
+            `getUsageCounts` changes a number the dashboard displays. That is one product decision
+            taken on purpose, not a side effect of this row. **Recorded as a precondition on the
+            flag flip**, alongside reading the measure-only `usage_limit_reached` logs. None of the
+            three is a reason to keep counting a column nothing maintains.
+            <br>**Where the statement lives.** `insertOrganizationUser` in
+            `workers/src/database.ts`, beside `applyUserRoleChange` — the other path that grants a
+            role — rather than inline in the handler, which is where the pre-existing version sat.
+            CodeScene flagged `handleCreateLegacyUser` as a Complex Method on the first push; moving
+            the statement to where its sibling already lives is the fix that was owed anyway, and
+            the handler is now a cap resolution, two calls and the measure-only branch.
+            <br>**Evidence: four real-SQL cases on pglite** in
+            `workers/src/database.org-audit.pglite.node.test.ts`, driven through the route table so
+            the statement under test is the one the endpoint runs. They live beside the audit cases
+            because the property that needs real SQL is the interaction: the cap is a `WHERE` on the
+            `created` CTE and the audit INSERT selects `FROM created`, so a refused seat must record
+            no role grant — a seat refusal that still wrote `role_assigned` would read, in the
+            compliance trail, as an admin who was created. **Four mutations**, each failing exactly
+            the intended cases and nothing else: cap clause defeated (2 cases), counting sub-select
+            unscoped from the organization (1), flag ignored in each direction (1 each).
+            <br>**Two test corrections rather than accommodations.** The fixture in that file seeded
+            `tier_level 'pro'`, which `normalizeLaunchTier` does not recognise and silently folds to
+            `free` — so those cases had been running a ten-seat trial at the one-seat cap, harmless
+            while no seat cap existed and misleading the moment one does; it now seeds
+            `professional`, the value `ensureTrialSubscription` actually writes. And
+            `minimal-api-routes.test.ts`'s "creates default organization usage with
+            production-required timestamps" asserted the deleted seed's columns; it is replaced by
+            a case asserting the endpoint writes nothing to `organization_usage` at all, so
+            reinstating the seed fails rather than passing silently.
       - [x] 3.1.k **Decide the cancellation grace period explicitly.** Express's `isAccessActive`
             consults Stripe and keeps a cancelled customer inside the period they have paid for
             (`subscription.service.test.ts:745`, `:771`). The Worker's `validateOrganizationStatus`

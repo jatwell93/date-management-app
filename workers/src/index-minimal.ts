@@ -32,14 +32,13 @@ import {
   getClientIp,
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
-import { ORG_AUDIT_EVENT_TYPES, ORG_AUDIT_TRIGGERS } from '../../shared/domain/org-audit';
 import {
-  LAUNCH_TIER_USER_LIMITS,
   normalizeLaunchTier,
   parsePositiveIntEnv,
   isUsageEnforcementEnabled,
   resolveMaxActiveExpiries,
   resolveMaxSkus,
+  resolveMaxUsers,
   resolveStorageLimitBytes,
   UNLIMITED_CAP,
   type LaunchTier,
@@ -2908,74 +2907,57 @@ async function handleCreateLegacyUser(request: Request, db: Database, env: Env):
   const username = typeof body.username === 'string' ? body.username : null;
 
   try {
-    // Enforce tier max_users limit before insert. Source of truth is the
-    // backend TIER_LIMITS constant (MEMORY[26ef5121]); we replicate the
-    // numeric cap inline here because Workers doesn't import the backend
-    // module. If unset/null, treat as unlimited.
-    const usageRows = await db.sql`
-      SELECT
-        ou.active_users::int as "activeUsers",
-        ou.max_users::int as "maxUsers"
-      FROM organization_usage ou
-      WHERE ou.organization_id = ${auth.organizationId}
-      LIMIT 1
-    `;
-    const usage = usageRows[0];
-    if (usage && usage.maxUsers !== null && usage.activeUsers >= usage.maxUsers) {
-      return errorResponse(
-        `User limit reached for your subscription tier (max ${usage.maxUsers})`,
-        402,
-        env,
-      );
-    }
+    // Seat cap, resolved from the tier and applied by counting live rows.
+    //
+    // This replaces a read of `organization_usage.active_users` / `.max_users`
+    // (task 3.1.j(a)). That read could not refuse anything — `active_users` is
+    // written as a literal `0` and incremented nowhere — but it was not merely
+    // inert: its denominator came from the same row, seeded as a literal `1`
+    // for every organization whatever their tier. So the only way it could
+    // have begun working was to cap a ten-seat professional trial at one seat.
+    // The seeded row is gone with this change; the cap now comes from
+    // `resolveMaxUsers`, and the count is the same `COUNT(*) FROM users` that
+    // `getUsageCounts` reports, so a caller is refused against the number
+    // their own usage screen shows them.
+    const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+    const maxUsers = resolveMaxUsers(tier);
+    const enforced = isUsageEnforcementEnabled(env);
 
-    // The role is admin-chosen and `isValidRole` admits 'admin', so this is a
-    // grant of privilege and belongs in the audit trail. The row is written by a
-    // data-modifying CTE inside the same statement as the INSERT for the reason
-    // the promotion path uses one: Neon's HTTP driver has no transaction, and a
-    // created admin with no record of who created them is the failure this
-    // exists to prevent. Unlike a promotion there is no previous role, so
-    // `old_role` is NULL rather than a value the row once held.
-    const rows = await db.sql`
-      WITH created AS (
-        INSERT INTO users (organization_id, username, role, created_at, updated_at)
-        VALUES (${auth.organizationId}, ${username}, ${requestedRole}, NOW(), NOW())
-        RETURNING id, email, username, role, clerk_user_id, created_at
-      ),
-      audited AS (
-        INSERT INTO org_audit_log (
-          organization_id,
-          event_type,
-          actor_user_id,
-          actor_organization_id,
-          target_user_id,
-          target_organization_id,
-          old_role,
-          new_role,
-          ip_address,
-          metadata,
-          created_at
-        )
-        SELECT ${auth.organizationId},
-               ${ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED},
-               ${auth.userId},
-               ${auth.organizationId},
-               created.id,
-               ${auth.organizationId},
-               NULL,
-               created.role,
-               ${getClientIp(request)},
-               ${JSON.stringify({ trigger: ORG_AUDIT_TRIGGERS.ADMIN_CREATE })},
-               NOW()
-        FROM created
-        RETURNING 1
-      )
-      SELECT id, email, username, role,
-             clerk_user_id as "clerkUserId",
-             created_at::text as "createdAt"
-      FROM created
-    `;
-    return jsonResponse(rows[0], 201, env);
+    // The statement itself lives in `database.ts` as `insertOrganizationUser`,
+    // beside `applyUserRoleChange` — the other path that grants a role — and
+    // carries the reasoning for both the single-statement audit CTE and the cap
+    // riding inside it rather than in front of it.
+    const actor = { userId: auth.userId, ipAddress: getClientIp(request) };
+    const newUser = (seatCap: number) =>
+      db.createOrganizationUser(auth.organizationId, {
+        username,
+        role: requestedRole,
+        seatCap,
+        actor,
+      });
+
+    let created = await newUser(maxUsers);
+    if (!created) {
+      logUsageLimitReached({
+        resource: 'User',
+        organizationId: auth.organizationId,
+        tier,
+        limit: maxUsers,
+        enforced,
+      });
+      if (enforced) {
+        return usageLimitResponse('User', maxUsers, env);
+      }
+      // Measure-only: re-run the same statement with the cap lifted. The first
+      // attempt inserted nothing — neither the user nor the audit row — so this
+      // is the only write, not a second one.
+      created = await newUser(UNLIMITED_CAP);
+      if (!created) {
+        console.error('handleCreateLegacyUser: uncapped retry inserted no row');
+        return errorResponse('Internal server error', 500, env);
+      }
+    }
+    return jsonResponse(created, 201, env);
   } catch (error) {
     if (isUniqueViolation(error)) {
       return errorResponse('User with this username already exists', 409, env);
@@ -3319,8 +3301,15 @@ const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow)
 // literal zeros and never maintained (task 3.1.a): the endpoint reported 0 of
 // N for every organization, so the dashboard bars sat empty and the frontend's
 // 80% UsageWarning (frontend/src/components/UsageWarning.tsx) could never
-// trigger. `users.current` is now accurate too, though the user limit itself
-// is still not enforced on either backend -- see the 3.1.a note in tasks.md.
+// trigger.
+//
+// The `users` limit is enforced as of task 3.1.j(a), behind
+// `USAGE_LIMITS_ENFORCE` like the other three, and `resolveMaxUsers` is the
+// same function the gate resolves its cap from -- so a caller is refused
+// against the number this endpoint shows them. Enforcement covers the
+// admin-initiated path (`POST /api/users`) only; see `insertOrganizationUser`
+// in `database.ts` for why Clerk-driven membership is deliberately not
+// refused, and what that costs.
 const mapOrganizationUsageResponse = (
   counts: UsageCounts,
   storageUsedBytes: number,
@@ -3333,7 +3322,7 @@ const mapOrganizationUsageResponse = (
   },
   users: {
     current: counts.users,
-    limit: LAUNCH_TIER_USER_LIMITS[tier],
+    limit: resolveMaxUsers(tier),
   },
   storage: {
     current: storageUsedBytes,
@@ -3392,35 +3381,18 @@ async function handleGetOrganizationUsage(
     return auth;
   }
 
-  // NOTE: this GET still seeds `organization_usage`, and nothing on this path
-  // reads it any more -- 3.1.a moved the response onto live counts precisely
-  // because these columns are written once as literal zeros and maintained
-  // nowhere. The hardcoded free-tier values below (max_users 1, max_skus 500)
-  // are seeded for every org regardless of tier, which is the mis-seeding
-  // hazard task 3.1.j(a) tracks.
+  // This GET used to seed an `organization_usage` row on every read — literal
+  // zeros with `max_users` 1 and `max_skus` 500 for every organization
+  // regardless of tier. Task 3.1.a had already moved this response onto live
+  // counts, leaving the seat gate in `handleCreateLegacyUser` as the row's one
+  // remaining reader, and 3.1.j(a) has now moved that gate onto live counts and
+  // `resolveMaxUsers` as well. Nothing in `workers/src` reads the table any
+  // more, so seeding it wrote a row whose only possible effect was to mis-cap a
+  // professional trial at one seat if the counter were ever repaired.
   //
-  // It is left in place rather than removed here because the row's one
-  // remaining reader is the seat gate in `handleCreateLegacyUser`
-  // (`active_users`, always 0, so it never fires). Removing the seed and that
-  // gate together is 3.1.j(a)'s job; removing the seed alone would leave the
-  // gate reading a row that may not exist, and that is an auth-adjacent path
-  // whose fate is an owner decision, not a tidy-up.
-  await db.sql`
-    INSERT INTO organization_usage (
-      organization_id,
-      active_users,
-      max_users,
-      total_skus,
-      max_skus,
-      total_inventory_items,
-      max_inventory_items,
-      storage_used_bytes,
-      created_at,
-      updated_at
-    )
-    VALUES (${auth.organizationId}, 0, 1, 0, 500, 0, 500, 0, NOW(), NOW())
-    ON CONFLICT (organization_id) DO NOTHING
-  `;
+  // Existing rows are left in place rather than dropped here: deleting data is
+  // a migration with its own review, and a table nothing reads is inert. The
+  // table itself outliving its readers is recorded against Phase 4.
 
   const tier = await getOrganizationLaunchTier(auth.organizationId, db);
   const [counts, storageUsedBytes] = await Promise.all([
