@@ -2020,7 +2020,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             is much smaller than the row claims.** 3.1.k's `deriveSubscriptionAccess`
             (`workers/src/subscription-status.ts:112`) returns `effectiveTier: 'free'` for a
             `trialing` row whose `trial_end_date` has passed, and `getOrganizationLaunchTier`
-            (`index-minimal.ts:4446`) reads that **effective** tier with **no flag check** — only
+            (`workers/src/index-minimal.ts:4446`) reads that **effective** tier with **no flag check** — only
             the 403 refusal in `checkOrganizationEntitlement` sits behind `SUBSCRIPTION_GATE_ENFORCE`.
             So an expired trial already resolves every quota at free-tier limits on every request,
             with no cron and with the flag off. What `downgradeExpiredTrials` still solely owns is
