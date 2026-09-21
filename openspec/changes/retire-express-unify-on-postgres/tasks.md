@@ -2036,6 +2036,14 @@ equivalent, a relocated home, or an explicit retirement decision.
             `InventoryService` it then drives writes through **Prisma/Postgres**
             (`backend/src/services/inventory.service.ts:84`). The two have been separate stores since the
             Postgres cutover, so the job's worklist does not describe the database it writes to.
+            <br>**And it fails in the strongest sense of silently: it reports success.** With no
+            organizations in the SQLite worklist, `successRate` is hardcoded to `'100'`
+            (`backend/src/services/scheduler.service.ts:153`), the failure branch at `:162` never
+            runs because nothing failed, and `:177` logs "Completed scheduled markdown updates for
+            all organizations." A job that did nothing and a job that did everything correctly emit
+            the same lines. So 3.3 owes the rebuilt job an explicit empty-worklist assertion and an
+            alert on it, rather than a port of this reporting — recorded here because the defect
+            is invisible to exactly the signal an operator would check.
             The backup job has the same shape and 2.4(c) already records it as a reimplementation
             rather than a relocation; the markdown job was not so recorded, and is now. Neither is a
             job to *move* — rehoming these is rebuilding a capability that is already not working,
