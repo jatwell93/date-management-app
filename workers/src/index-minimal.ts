@@ -136,11 +136,20 @@ function isValidRole(role: string): boolean {
  */
 function canManageUsers(role: string | undefined): boolean {
   if (!role) return false;
-  if (role === 'admin') return true;
+  // Normalized rather than compared raw (issue #517). The raw comparison was
+  // half of that defect: the Clerk webhook stored `'Manager'`, and
+  // `'Manager' !== 'manager'` refused user management to an actual admin with a
+  // 403 that named no cause. Nothing writes a non-canonical role now and
+  // migration 0014 rewrites the rows that hold one, but normalizing here means
+  // a row that slips through — an unmigrated database, a path added later —
+  // degrades to the role it plainly means instead of matching nothing at all.
+  // The sibling gates at `:1789`, `:1897` and `:2003` already normalize.
+  const normalized = normalizeRole(role);
+  if (normalized === ROLES.ADMIN) return true;
   // 'manager' is dev-only. We don't have env here so we conservatively allow
   // it; the role itself does not exist in production Clerk so this branch is
   // unreachable in prod.
-  return role === 'manager';
+  return normalized === ROLES.MANAGER;
 }
 
 /** Parse a path-segment into a positive integer or return null. */

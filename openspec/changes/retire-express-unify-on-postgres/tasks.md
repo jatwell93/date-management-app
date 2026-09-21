@@ -1894,6 +1894,49 @@ equivalent, a relocated home, or an explicit retirement decision.
             backfill of existing non-canonical rows. The audit trail records the raw stored value
             rather than a tidied one, precisely so the divergence surfaces; the webhook test pins
             `'Team Member'`/`'Manager'` and is written to **fail when #517 is fixed**.
+            <br>**#517 is now FIXED (2026-09-21), and that pinned assertion has been flipped to
+            the canonical values — the alarm fired as designed.** Recorded here rather than in a new
+            row because this is where the finding was escalated from.
+            <br>**Root cause was wider than two normalizers.** There were **four** copies of the
+            role vocabulary — `backend/src/constants/roles.ts`, `workers/src/constants/roles.ts`,
+            `frontend/src/constants/roles.ts`, and the two ad-hoc ladders inside the Worker's Clerk
+            handlers. Three carried the comment *"Keep in sync with backend/src/constants/roles.ts"*
+            and none of them were: the Worker's table omitted `owner`, so the same Clerk role
+            normalized to `admin` through the bootstrap path and to `team_member` through the
+            webhook. A comment asking humans to keep four tables identical is not a mechanism.
+            `shared/domain/roles.ts` is now the mechanism; the package copies re-export it.
+            <br>**The backfill decision, which is the subtle part.** Migration 0014 splits
+            `'Manager'` on `clerk_user_id`. `mapClerkRole` produced that spelling **only** for
+            Clerk's `admin`/`org:admin`, so a Clerk-originated row holding it belongs to an
+            administrator and becomes `'admin'` — mapping it to `'manager'` instead would have left
+            the reported bug unfixed, because the three supplier-policy gates normalize before
+            comparing and would still refuse them. A row with **no** `clerk_user_id` predates Clerk,
+            where the spelling meant an actual manager, and takes the least-privilege reading. That
+            the live Express create route cannot produce the title-case spelling today is what makes
+            the split safe rather than a guess: it validates
+            `z.enum(['admin','manager','team_member'])` (`backend/src/schemas/index.ts:32`), and the
+            middleware that accepted `'Manager'` (`validateUserInput`) is referenced only by its own
+            test.
+            <br>**One deliberate behaviour change beyond the defect, flagged rather than buried:**
+            `owner` now normalizes to `admin` on every Worker path, where the Worker's own table
+            previously treated it as unrecognised. This is not a widening of who can reach admin —
+            `normalizeBootstrapRole` already granted it for that spelling, so the privilege was
+            always one page load away — but it does mean the two paths now agree, which is the
+            point. The Worker's role test had pinned the old behaviour by grouping `owner` with
+            `superuser` and `org:billing`; it was a known spelling this copy had omitted, not an
+            unknown one, and the test now says so.
+            <br>**Evidence.** Six real-SQL pglite cases run the **actual 0014 file** rather than a
+            paraphrase of it, because `test:migrations:e2e` proves the migration applies and
+            replays but never looks at what the rows become. Five mutations, each failing exactly
+            the intended cases: the legacy mapper restored (2), `owner` dropped from the shared
+            table (2), `canManageUsers` comparing raw again (1), the backfill losing its
+            `clerk_user_id` split (1), and the backfill widened to rewrite every row (2). The full
+            migration series suite (95) and the real-Postgres e2e suite (8) both pass with the
+            synthetic interruption probe renumbered to 0015.
+            <br>**Residual, recorded not fixed:** `frontend/src/constants/roles.ts` is still a
+            fourth copy. It carries display labels the other packages do not need and sits outside
+            the defect path — no authorization decision is made there — so hoisting it is a tidy-up
+            for its own change rather than a condition of this one.
       - [x] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because

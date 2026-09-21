@@ -235,7 +235,7 @@ async function getColumnType(
 // Tests
 // ---------------------------------------------------------------------------
 
-test('e2e: fresh install — empty DB → apply 0000→0013 → verify passes', async () => {
+test('e2e: fresh install — empty DB → apply 0000→0014 → verify passes', async () => {
   const client = await createClient();
   try {
     await resetSchema(client);
@@ -259,6 +259,7 @@ test('e2e: fresh install — empty DB → apply 0000→0013 → verify passes', 
       '0011',
       '0012',
       '0013',
+      '0014',
     ]);
     assert.deepEqual(result.alreadyApplied, []);
 
@@ -271,7 +272,7 @@ test('e2e: fresh install — empty DB → apply 0000→0013 → verify passes', 
   }
 });
 
-test('e2e: existing-schema adoption — pre-shape 0000→0009 → adopt at 0009 → apply 0010+0011+0012+0013 → verify passes', async () => {
+test('e2e: existing-schema adoption — pre-shape 0000→0009 → adopt at 0009 → apply 0010+0011+0012+0013+0014 → verify passes', async () => {
   const client = await createClient();
   try {
     await resetSchema(client);
@@ -307,13 +308,13 @@ test('e2e: existing-schema adoption — pre-shape 0000→0009 → adopt at 0009 
     });
     assert.equal(applyReport.canAdopt, true, `Adoption should succeed:\n${applyReport.report}`);
 
-    // Now run the normal apply — it should see 0010, 0011, 0012 and 0013 as pending
+    // Now run the normal apply — it should see 0010, 0011, 0012, 0013 and 0014 as pending
     // and apply all three.
     const fullHistory = await loadMigrationHistory(HISTORY_DIR);
     const result = await applyPendingMigrations(client, fullHistory, {
       deploymentSha: TEST_DEPLOYMENT_SHA,
     });
-    assert.deepEqual(result.applied, ['0010', '0011', '0012', '0013']);
+    assert.deepEqual(result.applied, ['0010', '0011', '0012', '0013', '0014']);
     assert.deepEqual(result.alreadyApplied, [
       '0000',
       '0001',
@@ -371,7 +372,7 @@ test('e2e: concurrent invocation refusal — advisory lock held → runner refus
 
 /**
  * Build a temp migration history that is a copy of the real history plus one
- * extra migration `0014` marked `transaction: forbidden`. Its single
+ * extra migration `0015` marked `transaction: forbidden`. Its single
  * `CREATE UNIQUE INDEX CONCURRENTLY` statement targets duplicate data, so
  * PostgreSQL fails the build but deliberately leaves an invalid index behind.
  * This is a real partial catalog state produced by a non-transactional DDL
@@ -398,8 +399,8 @@ async function buildTempHistoryWithFailingNonTxMigration(): Promise<{
   };
   const probeTable = 'e2e_interruption_probe';
   const probeIndex = 'e2e_interruption_probe_value_idx';
-  const upFile = `0014_${probeTable}.up.sql`;
-  const downFile = `0014_${probeTable}.down.sql`;
+  const upFile = `0015_${probeTable}.up.sql`;
+  const downFile = `0015_${probeTable}.down.sql`;
 
   const failingUpSql = `CREATE UNIQUE INDEX CONCURRENTLY ${probeIndex} ON ${probeTable} (value);`;
   const downSql = `DROP INDEX CONCURRENTLY IF EXISTS ${probeIndex};`;
@@ -408,7 +409,7 @@ async function buildTempHistoryWithFailingNonTxMigration(): Promise<{
   await writeFile(path.join(dir, downFile), downSql);
 
   manifest.migrations.push({
-    id: '0014',
+    id: '0015',
     forward: upFile,
     transaction: 'forbidden',
     compatibility: 'expand',
@@ -434,7 +435,7 @@ test('e2e: interruption/recovery — failed concurrent index → resume refused 
   try {
     await resetSchema(client);
 
-    // 1. Apply the real history 0000→0013 (all transactional, all succeed).
+    // 1. Apply the real history 0000→0014 (all transactional, all succeed).
     const realHistory = await loadMigrationHistory(HISTORY_DIR);
     await applyPendingMigrations(client, realHistory, { deploymentSha: TEST_DEPLOYMENT_SHA });
 
@@ -447,7 +448,7 @@ test('e2e: interruption/recovery — failed concurrent index → resume refused 
     await client.query(`INSERT INTO ${temp.probeTable} (value) VALUES (1), (1)`);
     const tempHistory = await loadMigrationHistory(temp.dir);
 
-    // 3. Apply the temp history. The runner sees 0014 as pending, calls
+    // 3. Apply the temp history. The runner sees 0015 as pending, calls
     //    applyNonTransactional, writes 'applying', runs the SQL, and the
     //    concurrent unique-index build fails. The ledger stays at 'applying'.
     await assert.rejects(
@@ -466,19 +467,19 @@ test('e2e: interruption/recovery — failed concurrent index → resume refused 
     );
     assert.equal((invalidIndex.rows[0] as { indisvalid?: boolean }).indisvalid, false);
 
-    // 5. The ledger row for 0014 is stuck at 'applying'.
-    const ledgerRow = await client.query("SELECT state FROM schema_migrations WHERE id = '0014'");
+    // 5. The ledger row for 0015 is stuck at 'applying'.
+    const ledgerRow = await client.query("SELECT state FROM schema_migrations WHERE id = '0015'");
     assert.equal((ledgerRow.rows[0] as { state: string }).state, 'applying');
 
     // 6. Resume must be refused — validateLedger detects the interrupted state.
     await assert.rejects(
       applyPendingMigrations(client, tempHistory, { deploymentSha: TEST_DEPLOYMENT_SHA }),
-      /Migration 0014 was interrupted outside a transaction; repair it explicitly before resuming/,
+      /Migration 0015 was interrupted outside a transaction; repair it explicitly before resuming/,
     );
 
     // 7. Status reports the interrupted migration.
     const statusBefore = await getMigrationStatus(client, temp.dir);
-    assert.deepEqual(statusBefore.interrupted, ['0014']);
+    assert.deepEqual(statusBefore.interrupted, ['0015']);
 
     // 8. Explicit repair — the documented operator path:
     //    a) roll back the partial DDL (drop the invalid index),
@@ -487,18 +488,18 @@ test('e2e: interruption/recovery — failed concurrent index → resume refused 
     //       third statement),
     //    d) re-apply.
     await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${temp.probeIndex}`);
-    await client.query("DELETE FROM schema_migrations WHERE id = '0014'");
+    await client.query("DELETE FROM schema_migrations WHERE id = '0015'");
     await writeFile(
       path.join(temp.dir, temp.upFile),
       `CREATE INDEX CONCURRENTLY ${temp.probeIndex} ON ${temp.probeTable} (value);`,
     );
 
-    // Re-load the history after rewriting 0014's up.sql (the checksum changes).
+    // Re-load the history after rewriting 0015's up.sql (the checksum changes).
     const fixedHistory = await loadMigrationHistory(temp.dir);
     const result = await applyPendingMigrations(client, fixedHistory, {
       deploymentSha: TEST_DEPLOYMENT_SHA,
     });
-    assert.deepEqual(result.applied, ['0014']);
+    assert.deepEqual(result.applied, ['0015']);
 
     // 9. The repaired index is valid and the ledger is healthy.
     const indexAfter = await client.query(
@@ -509,7 +510,7 @@ test('e2e: interruption/recovery — failed concurrent index → resume refused 
       [temp.probeIndex],
     );
     assert.equal((indexAfter.rows[0] as { indisvalid?: boolean }).indisvalid, true);
-    const ledgerAfter = await client.query("SELECT state FROM schema_migrations WHERE id = '0014'");
+    const ledgerAfter = await client.query("SELECT state FROM schema_migrations WHERE id = '0015'");
     assert.equal((ledgerAfter.rows[0] as { state: string }).state, 'applied');
 
     const statusAfter = await getMigrationStatus(client, temp.dir);
@@ -651,7 +652,7 @@ test('e2e: guarded down migration refuses bigint storage limits before an explic
   }
 });
 
-test('e2e: forward fix — re-apply 0010+0011+0012+0013 and reseed after guarded down → verify passes', async () => {
+test('e2e: forward fix — re-apply 0010+0011+0012+0013+0014 and reseed after guarded down → verify passes', async () => {
   const client = await createClient();
   try {
     await resetSchema(client);
@@ -676,20 +677,21 @@ test('e2e: forward fix — re-apply 0010+0011+0012+0013 and reseed after guarded
     // 0010 must be unstamped too — the runner requires applied migrations to be
     // a contiguous prefix, so it cannot re-run 0010 while a later id stays
     // stamped above the gap. That means this list grows with the history: it is
-    // 0011, 0012 and 0013 today. All are idempotent when re-applied
+    // 0011, 0012, 0013 and 0014 today. All are idempotent when re-applied
     // (`ADD COLUMN IF NOT EXISTS`, 0012's `DROP CONSTRAINT IF EXISTS` before its
-    // `ADD CONSTRAINT`, and 0013's `CREATE TABLE/INDEX IF NOT EXISTS`), so
+    // `ADD CONSTRAINT`, 0013's `CREATE TABLE/INDEX IF NOT EXISTS`, and 0014's spelling-matched
+    // UPDATEs), so
     // replaying them over the existing schema is a safe no-op. That is a real
     // constraint on every migration added after this point, not an accident of
     // the ones written so far.
     await client.query(
-      "DELETE FROM schema_migrations WHERE id IN ('0010', '0011', '0012', '0013')",
+      "DELETE FROM schema_migrations WHERE id IN ('0010', '0011', '0012', '0013', '0014')",
     );
 
     const result = await applyPendingMigrations(client, history, {
       deploymentSha: TEST_DEPLOYMENT_SHA,
     });
-    assert.deepEqual(result.applied, ['0010', '0011', '0012', '0013']);
+    assert.deepEqual(result.applied, ['0010', '0011', '0012', '0013', '0014']);
     await seedTierFeatureFlags(client);
 
     // The column is bigint again.

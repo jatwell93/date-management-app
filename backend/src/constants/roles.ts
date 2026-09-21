@@ -1,5 +1,10 @@
 /**
- * Canonical organization role constants and permission matrix.
+ * Organization role permissions for Express.
+ *
+ * The **vocabulary and the normalizer now live in `shared/domain/roles.ts`** and
+ * are re-exported here so existing importers are unchanged. They were moved
+ * because three files carried a copy under the instruction "keep in sync" and
+ * the copies had drifted — see that module and issue #517.
  *
  * Production Clerk plan supports: admin, team_member
  * Dev Clerk also has: manager (optional, not available in production until plan upgrade)
@@ -8,14 +13,18 @@
  * External inputs (Clerk membership roles, legacy DB values) are normalized
  * at the ingress boundary via `normalizeRole()`.
  */
+import { ROLES, type RoleValue } from '../../../shared/domain/roles';
 
-export const ROLES = {
-  ADMIN: 'admin',
-  MANAGER: 'manager',
-  TEAM_MEMBER: 'team_member',
-} as const;
+export {
+  ROLES,
+  CANONICAL_ROLES,
+  normalizeRole,
+  isCanonicalRole,
+} from '../../../shared/domain/roles';
+export type { RoleValue } from '../../../shared/domain/roles';
 
-export type RoleValue = (typeof ROLES)[keyof typeof ROLES];
+/** Historical name for the shared alias table. */
+export { ROLE_ALIASES as LEGACY_ROLE_MAP } from '../../../shared/domain/roles';
 
 /** Numeric hierarchy for comparison (higher = more privilege). */
 export const ROLE_HIERARCHY: Record<RoleValue, number> = {
@@ -72,45 +81,8 @@ export const AUDIT_EVENT_TYPES = {
 
 export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[keyof typeof AUDIT_EVENT_TYPES];
 
-/**
- * Maps legacy / external role strings to canonical enum values.
- * Used at ingress boundaries: Clerk webhook payloads, token decoding, backfill scripts.
- */
-export const LEGACY_ROLE_MAP: Record<string, RoleValue> = {
-  owner: ROLES.ADMIN,
-  admin: ROLES.ADMIN,
-  Admin: ROLES.ADMIN,
-  ADMIN: ROLES.ADMIN,
-  'org:admin': ROLES.ADMIN,
-  manager: ROLES.MANAGER,
-  Manager: ROLES.MANAGER,
-  MANAGER: ROLES.MANAGER,
-  'org:manager': ROLES.MANAGER,
-  member: ROLES.TEAM_MEMBER,
-  team_member: ROLES.TEAM_MEMBER,
-  'team-member': ROLES.TEAM_MEMBER,
-  'Team Member': ROLES.TEAM_MEMBER,
-  Team_Member: ROLES.TEAM_MEMBER,
-  TEAM_MEMBER: ROLES.TEAM_MEMBER,
-  Staff: ROLES.TEAM_MEMBER,
-  staff: ROLES.TEAM_MEMBER,
-  'org:member': ROLES.TEAM_MEMBER,
-  'org:team_member': ROLES.TEAM_MEMBER,
-};
-
-/**
- * Normalize any role string to a canonical RoleValue.
- * Unknown / null values default to team_member (least privilege).
- */
-export function normalizeRole(role: string | null | undefined): RoleValue {
-  if (!role) return ROLES.TEAM_MEMBER;
-  return LEGACY_ROLE_MAP[role] ?? ROLES.TEAM_MEMBER;
-}
-
-/** Type guard: is the string a valid canonical role? */
-export function isValidRole(role: string): role is RoleValue {
-  return (Object.values(ROLES) as string[]).includes(role);
-}
+/** Type guard: is the string a valid canonical role? Alias for `isCanonicalRole`. */
+export { isCanonicalRole as isValidRole } from '../../../shared/domain/roles';
 
 /** Check if a given role has a specific permission. */
 export function hasPermission(role: RoleValue, permission: PermissionValue): boolean {

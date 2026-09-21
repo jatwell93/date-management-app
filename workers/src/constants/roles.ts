@@ -1,17 +1,32 @@
 /**
- * Canonical organization role constants — Workers re-export.
+ * Worker-side role constants.
  *
- * Keep in sync with backend/src/constants/roles.ts.
- * Only the subset needed by Workers authorization is included here.
+ * The vocabulary and the normalizer are **re-exported from
+ * `shared/domain/roles.ts`**, not restated here. This file used to carry its own
+ * copy under the instruction "Keep in sync with backend/src/constants/roles.ts",
+ * and it was not in sync — the copy omitted `owner`, so the same Clerk role
+ * normalized to `admin` through the bootstrap path and to `team_member` here.
+ * Issue #517 is what that class of drift costs.
+ *
+ * What remains below is genuinely Worker-specific: the upload permission.
  */
+export {
+  ROLES,
+  CANONICAL_ROLES,
+  ROLE_ALIASES,
+  normalizeRole,
+  isCanonicalRole,
+} from '../../../shared/domain/roles';
+export type { RoleValue } from '../../../shared/domain/roles';
 
-export const ROLES = {
-  ADMIN: 'admin',
-  MANAGER: 'manager',
-  TEAM_MEMBER: 'team_member',
-} as const;
+import { ROLES, type RoleValue } from '../../../shared/domain/roles';
 
-export type RoleValue = (typeof ROLES)[keyof typeof ROLES];
+/**
+ * Retained alias for the shared table. Named for Clerk because that is this
+ * Worker's only ingress, but the table also covers the Express-era database
+ * spellings — see `shared/domain/roles.ts`.
+ */
+export { ROLE_ALIASES as CLERK_ROLE_MAP } from '../../../shared/domain/roles';
 
 export const PERMISSIONS = {
   UPLOAD_FILES: 'upload_files',
@@ -22,37 +37,6 @@ export type PermissionValue = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 /** Roles that are allowed to upload files. */
 export const UPLOAD_ALLOWED_ROLES: readonly RoleValue[] = [ROLES.ADMIN, ROLES.MANAGER];
-
-/**
- * Maps Clerk membership role strings to canonical role values.
- * Used when extracting org_role from JWT claims.
- */
-export const CLERK_ROLE_MAP: Record<string, RoleValue> = {
-  'org:admin': ROLES.ADMIN,
-  admin: ROLES.ADMIN,
-  Admin: ROLES.ADMIN,
-  ADMIN: ROLES.ADMIN,
-  'org:manager': ROLES.MANAGER,
-  manager: ROLES.MANAGER,
-  Manager: ROLES.MANAGER,
-  MANAGER: ROLES.MANAGER,
-  'org:member': ROLES.TEAM_MEMBER,
-  'org:team_member': ROLES.TEAM_MEMBER,
-  team_member: ROLES.TEAM_MEMBER,
-  Team_Member: ROLES.TEAM_MEMBER,
-  TEAM_MEMBER: ROLES.TEAM_MEMBER,
-  'team-member': ROLES.TEAM_MEMBER,
-  'Team Member': ROLES.TEAM_MEMBER,
-  member: ROLES.TEAM_MEMBER,
-  Staff: ROLES.TEAM_MEMBER,
-  staff: ROLES.TEAM_MEMBER,
-};
-
-/** Normalize any role string to a canonical RoleValue. Defaults to team_member. */
-export function normalizeRole(role: string | null | undefined): RoleValue {
-  if (!role) return ROLES.TEAM_MEMBER;
-  return CLERK_ROLE_MAP[role] ?? ROLES.TEAM_MEMBER;
-}
 
 /** Check if the role is allowed to upload files. */
 export function canUpload(role: RoleValue): boolean {
