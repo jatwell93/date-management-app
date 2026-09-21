@@ -32,13 +32,42 @@
 --     meant an actual manager, and it is normalized to 'manager' -- the least
 --     privilege reading, and no grant this database did not already record.
 --
--- 'Team Member' needs no such split: it carries no privilege either way.
+-- 'Team Member' needs no such split: it carries no privilege either way, and
+-- the same statement sweeps up every other no-privilege spelling in
+-- shared/domain/roles.ts (ROLE_ALIASES) so none is left behind. users.role is
+-- free TEXT with no CHECK constraint, so a residual non-canonical row would
+-- never be rejected or flagged -- it would simply sit there.
+--
+-- The privileged aliases -- 'Admin', 'ADMIN', 'owner', 'org:admin' -- are
+-- deliberately NOT rewritten. No writer in this repo has ever produced them, so
+-- a row holding one is hypothetical, and promoting it would be a grant made on
+-- the strength of a spelling rather than a normalization. Every authorization
+-- gate normalizes before comparing (the #517 fix did that too), so such a row
+-- still resolves to the role it means without this migration touching it.
 --
 -- IDEMPOTENT by construction. Each statement matches only the non-canonical
 -- spelling it replaces, so a replay over its own result updates zero rows.
 -- That matters because the documented forward-fix recovery path unstamps every
 -- migration above the one being fixed and re-applies them against the existing
 -- schema.
+--
+-- DEPLOY ORDER -- read this before assuming one run is enough. In
+-- .github/workflows/workers-deploy.yml the deploy job declares
+-- `needs: [migration-prep-production]`, so this migration is applied BEFORE the
+-- fixed Worker ships. For that window the old mapClerkRole is still live, and
+-- organizationMembership.created overwrites users.role unconditionally -- so a
+-- Clerk redelivery landing between the apply and the deploy re-writes
+-- 'Manager' after this backfill has already passed over it, and nothing
+-- re-applies this file on its own. The affected admin is broken again until
+-- their next membership event arrives under the new code.
+--
+-- The idempotency above is what makes the remedy cheap: once the deploy
+-- completes, either re-run this backfill or confirm nothing is left with
+--
+--   SELECT COUNT(*) FROM users
+--   WHERE role NOT IN ('admin', 'manager', 'team_member');
+--
+-- That step is in docs/plans/2026-04-19-rbac-rollout-runbook.md.
 
 UPDATE users
 SET role = 'admin', updated_at = NOW()
@@ -51,5 +80,19 @@ WHERE role = 'Manager'
   AND clerk_user_id IS NULL;
 
 UPDATE users
+SET role = 'manager', updated_at = NOW()
+WHERE role IN ('MANAGER', 'org:manager');
+
+UPDATE users
 SET role = 'team_member', updated_at = NOW()
-WHERE role = 'Team Member';
+WHERE role IN (
+  'Team Member',
+  'Team_Member',
+  'TEAM_MEMBER',
+  'team-member',
+  'member',
+  'Staff',
+  'staff',
+  'org:member',
+  'org:team_member'
+);

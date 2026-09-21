@@ -14,7 +14,13 @@
  * redelivery therefore silently downgraded an admin out of admin (issue #517).
  *
  * A comment asking humans to keep four tables identical is not a mechanism.
- * This module is the mechanism; the others re-export it.
+ * This module is the mechanism, and all three package copies — Express, the
+ * Worker and the frontend — now re-export it rather than restating it.
+ *
+ * One restatement survives on purpose: `backend/scripts/backfill-canonical-roles.js`
+ * is CommonJS run by bare `node`, so it cannot import this module, and its
+ * retirement is task 3.4's call rather than this change's. Its table is
+ * annotated there with what it must mirror and why it cannot simply import.
  *
  * **Least privilege on the way in.** An unrecognized spelling normalizes to
  * `team_member`, never to a privileged role. That is why the alias table is
@@ -52,8 +58,15 @@ export const CANONICAL_ROLES: readonly RoleValue[] = [
  *     validates `z.enum(['admin','manager','team_member'])`
  *     (`backend/src/schemas/index.ts:32`), and the middleware that accepted the
  *     title-case pair (`validateUserInput`) is referenced only by its own test.
- *     They are kept because stored rows may still hold them until migration
- *     0014 has run everywhere.
+ *
+ *     Migration 0014 rewrites the spellings a path actually wrote (`'Manager'`,
+ *     `'Team Member'`) plus every other no-privilege variant. It deliberately
+ *     does **not** rewrite the privileged aliases — `Admin`, `ADMIN`, `owner`,
+ *     `org:admin` — because no writer in this repo has produced them, and
+ *     promoting a row on the strength of a spelling is a grant rather than a
+ *     normalization. They stay readable here instead, which is sufficient:
+ *     every authorization gate normalizes before comparing, so a row holding
+ *     one still resolves to the role it means.
  *
  * Canonical values map to themselves, so `normalizeRole` is idempotent —
  * `normalizeRole(normalizeRole(x)) === normalizeRole(x)` for every input. The

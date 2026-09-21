@@ -22,6 +22,7 @@
       "@shared/markdown-credit-context": ["../shared/domain/markdown-credit-context.ts"],
       "@shared/supplier-policy": ["../shared/domain/supplier-policy.ts"],
       "@shared/catalogue-review": ["../shared/domain/catalogue-review.ts"],
+      "@shared/roles": ["../shared/domain/roles.ts"],
       "@/*": ["./src/*"]
     }
   },
@@ -31,6 +32,7 @@
     "../shared/domain/markdown.ts",
     "../shared/domain/markdown-credit-context.ts",
     "../shared/domain/supplier-policy.ts",
-    "../shared/domain/catalogue-review.ts"
+    "../shared/domain/catalogue-review.ts",
+    "../shared/domain/roles.ts"
   ]
 }

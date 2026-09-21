@@ -23,6 +23,37 @@
 
 ### Purpose
 
+> **Superseded by migration 0014 for the `User` table (issue #517).**
+> `database/migrations/0014_normalize_user_roles.up.sql` performs this
+> normalization transactionally, inside the migration ledger, with tests. Prefer
+> it. The steps below remain for the `OrganizationInvite` table, which 0014 does
+> not touch, and as the manual fallback described in "After the Worker deploy"
+> immediately below.
+
+### After the Worker deploy — required, not optional
+
+`.github/workflows/workers-deploy.yml` runs `migration-prep-production` **before**
+`deploy-production` (`needs: [migration-prep-production]`). So 0014 applies while the
+previous Worker is still serving, and that Worker's `mapClerkRole` still writes
+`'Manager'` / `'Team Member'` — overwriting `users.role` unconditionally on every
+`organizationMembership.created`, redeliveries included.
+
+A Clerk delivery landing in that window re-breaks a user *after* 0014 has passed over
+them, and nothing re-applies the migration on its own. Once the deploy finishes,
+confirm it found nothing left:
+
+```sql
+SELECT COUNT(*) FROM users
+WHERE role NOT IN ('admin', 'manager', 'team_member');
+```
+
+**Expected: 0.** If it is not zero, re-apply 0014's statements (they are idempotent —
+a clean replay updates zero rows) and re-check. The rows to look for are `'Manager'`,
+which is the one that costs an administrator their privileges rather than merely
+looking untidy.
+
+---
+
 Normalize any legacy role values (`Manager`, `owner`, `Staff`, etc.) in the `User` and `OrganizationInvite` tables to canonical values (`admin`, `manager`, `team_member`). The script is idempotent — safe to run multiple times.
 
 ### Step 1 — Dry Run (no writes)

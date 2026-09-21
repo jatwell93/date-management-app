@@ -99,6 +99,60 @@ describe('migration 0014 — normalize non-canonical user roles (real SQL)', () 
     expect(await roleOf('legacy-member')).toBe('team_member');
   });
 
+  /**
+   * Every no-privilege spelling `ROLE_ALIASES` declares, not just the two the
+   * old webhook wrote. `users.role` is free TEXT with no CHECK constraint, so a
+   * spelling this migration misses is never rejected or flagged — it simply
+   * sits there looking canonical to a casual reader.
+   *
+   * The list is written out rather than derived from `ROLE_ALIASES` on purpose:
+   * deriving it would make the test agree with the table by construction, and
+   * then a spelling added to the table but not to the migration would still
+   * pass. Enumerating is what makes the two diverge loudly.
+   */
+  it.each([
+    ['Team Member'],
+    ['Team_Member'],
+    ['TEAM_MEMBER'],
+    ['team-member'],
+    ['member'],
+    ['Staff'],
+    ['staff'],
+    ['org:member'],
+    ['org:team_member'],
+  ])('normalizes the no-privilege spelling %j to team_member', async (spelling) => {
+    await seed('legacy', spelling, null);
+    await apply();
+    expect(await roleOf('legacy')).toBe('team_member');
+  });
+
+  it.each([['MANAGER'], ['org:manager']])(
+    'normalizes the manager spelling %j without granting admin',
+    async (spelling) => {
+      await seed('legacy', spelling, 'clerk_m');
+      await apply();
+      expect(await roleOf('legacy')).toBe('manager');
+    },
+  );
+
+  /**
+   * The privileged aliases are deliberately left alone. No writer in this repo
+   * has produced them, so a row holding one is hypothetical, and promoting it
+   * would be a grant made on the strength of a spelling. Asserting the
+   * *non*-change is what stops a later "let's be thorough" edit from quietly
+   * turning this migration into one that hands out administrator.
+   *
+   * They remain functional regardless: every gate normalizes before comparing.
+   */
+  it.each([['Admin'], ['ADMIN'], ['owner'], ['org:admin']])(
+    'leaves the privileged alias %j untouched rather than promoting it',
+    async (spelling) => {
+      await seed('hypothetical', spelling, 'clerk_p');
+      await apply();
+      expect(await roleOf('hypothetical')).toBe(spelling);
+    },
+  );
+
   it('leaves already-canonical rows untouched', async () => {
     await seed('canon-admin', 'admin', 'clerk_3');
     await seed('canon-member', 'team_member', 'clerk_4');
