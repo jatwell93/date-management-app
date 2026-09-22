@@ -284,6 +284,10 @@ const SCHEMA_SQL = `
     trial_end_date TIMESTAMPTZ,
     trial_converted_at TIMESTAMPTZ,
     stripe_subscription_id TEXT,
+    -- Baseline column. The Stripe webhook resolves an event's organization from
+    -- it rather than calling Stripe's API, so a harness missing it would make
+    -- that lookup untestable.
+    stripe_customer_id TEXT,
     -- past_due_since is baseline; current_period_end and cancel_at_period_end
     -- arrived in migration 0011. All three are inputs to the derived access
     -- state (#489), so the harness carries them or its gating tests would pass
@@ -309,6 +313,18 @@ const SCHEMA_SQL = `
     -- Defaulted, as 0012 leaves it: a row inserted without naming the column is
     -- born completed, which is what makes an old Worker's post-hoc marker safe
     -- during the deploy gap. The claim always writes NULL explicitly.
+    completed_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  -- Stripe delivery ledger, the twin of clerk_webhook_events above.
+  -- completed_at arrived in migration 0015 for exactly the reason 0012 added it
+  -- to the Clerk table: without it the row is a receipt written after the fact,
+  -- which forces check-then-act and lets two concurrent deliveries of one event
+  -- id both run the side effects.
+  CREATE TABLE processed_webhook_events (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ DEFAULT NOW()
   );
 

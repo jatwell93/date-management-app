@@ -1,0 +1,50 @@
+-- Migration 0015: give Stripe webhook processing the same database-level
+-- idempotency claim that migration 0012 gave the Clerk one.
+--
+-- `processed_webhook_events` is the Stripe-side twin of `clerk_webhook_events`,
+-- and it carries the identical defect 0012 fixed on its sibling: the row records
+-- only *that* an event was processed (`id`, `event_type`, `processed_at`), with
+-- no way to express "a delivery has claimed this event and is still working on
+-- it". Any handler built on it must therefore read-then-write across separate
+-- statements -- `isNewEvent` -> `handleEvent` -> `markEventProcessed`, which is
+-- exactly the shape Express's `webhook.controller.ts` uses -- so two concurrent
+-- deliveries of one event id both observe "new" and both perform the side
+-- effects. Stripe retries on timeout and on any 5xx, so concurrent redelivery of
+-- one event id is the expected case, not the exotic one.
+--
+-- `completed_at` splits the row's life into claimed (`completed_at IS NULL`) and
+-- finished. That lets the claim be a single `INSERT ... ON CONFLICT ...
+-- RETURNING` and lets a claim abandoned by a crashed isolate be re-driven after
+-- a staleness window. The Worker's `claimStripeWebhookEvent`
+-- (`workers/src/stripe/stripe-persistence.ts`) is a copy of
+-- `claimClerkWebhookEvent`, as `tasks.md` directs; this column is what that
+-- mechanism rests on.
+--
+-- Backfill is by column default, not by an UPDATE, for the reasons 0012 set out
+-- and which apply unchanged here. Every row that exists when this runs records
+-- finished work: the only writer of this table has ever been Express's
+-- `markEventProcessed`, which inserts its marker *after* processing. `DEFAULT
+-- CURRENT_TIMESTAMP` on a non-volatile expression is evaluated once at DDL time
+-- and stored as the attribute's missing value, so existing rows read as
+-- completed with no table rewrite, no WAL spike and no dead tuples, and any row
+-- inserted later without naming the column is born completed. The stored instant
+-- is "at or before the migration", not the true completion time; nothing reads
+-- the value, only whether it is NULL.
+--
+-- The new Worker's claim always writes `completed_at` explicitly as NULL, so the
+-- default never applies to it. That is load-bearing, and it is the one thing to
+-- carry forward: **any future writer of this table must name the column**, or
+-- its row is born completed and the event it represents will never be processed.
+--
+-- Deployment order matters less here than it did for 0012, because there is no
+-- old writer to race: the Worker has never had a Stripe handler, and the Express
+-- backend that owns `markEventProcessed` is not deployed. This migration lands
+-- ahead of the Worker that assumes it in the usual way -- `migrate:apply` runs
+-- before the Worker deploy in `workers-deploy.yml` -- and an Express instance
+-- brought up against the new column would insert marker rows that default to
+-- completed, which is the correct reading of what it did.
+--
+-- Idempotent on replay: `ADD COLUMN IF NOT EXISTS` is a no-op over its own
+-- result, which the forward-fix path in `e2e.test.ts` requires.
+ALTER TABLE processed_webhook_events
+  ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;

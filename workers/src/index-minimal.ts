@@ -82,6 +82,7 @@ import {
   handleOrganizationBootstrap,
 } from './clerk/bootstrap-handler';
 import { handleClerkWebhook } from './clerk/webhook-handler';
+import { handleStripeWebhook } from './stripe/webhook-handler';
 import {
   CREDIT_SCOPES,
   DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
@@ -399,6 +400,23 @@ export default Sentry.withSentry(
           (pathname === '/api/webhooks/clerk' || pathname === '/webhooks/clerk')
         ) {
           const webhookResponse = await handleClerkWebhook(request, env, requestOrigin);
+          return maybeCompressJsonResponse(request, webhookResponse);
+        }
+
+        // Stripe webhook endpoint (public, signature-verified).
+        //
+        // Dispatched here rather than from MINIMAL_API_ROUTES for the same
+        // reason the Clerk one is: every handler in that table runs behind
+        // `authenticateApiRequest`, and a webhook carries no session -- its
+        // caller is authenticated by the HMAC over the raw body, not by a token.
+        // Both spellings are accepted because the Clerk endpoint accepts both
+        // and an endpoint URL registered with a payment provider is an
+        // expensive thing to get subtly wrong.
+        if (
+          method === 'POST' &&
+          (pathname === '/api/webhooks/stripe' || pathname === '/webhooks/stripe')
+        ) {
+          const webhookResponse = await handleStripeWebhook(request, env, requestOrigin);
           return maybeCompressJsonResponse(request, webhookResponse);
         }
 

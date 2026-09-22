@@ -1528,6 +1528,13 @@
       "default": "CURRENT_TIMESTAMP"
     },
     {
+      "table": "processed_webhook_events",
+      "name": "completed_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
       "table": "products",
       "name": "id",
       "type": "integer",
