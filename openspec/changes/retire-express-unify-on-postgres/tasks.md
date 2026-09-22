@@ -1502,10 +1502,22 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>The `worker-shaped-rewrite` rows at `audit/2.2-test-manifest-part4.md:624-635` are
             satisfied by this change; Phase 3.2 should treat them as landed rather than re-porting
             them. The manifest itself is unchanged (row counts and citations still verify).
-      - [ ] 3.1.d **Six of the eight credit-claim endpoints the frontend calls have no Worker route**
+      - [x] 3.1.d **Six of the eight credit-claim endpoints the frontend calls have no Worker route**
             (Finding 6). **This work is already specified — do not re-plan it here.** The change
             `openspec/changes/add-workers-credit-claim-write-handlers` covers it in full, carried
             forward from `add-supplier-credit-claims` task 4.2, which deferred the write side because
+            **CLOSED 2026-09-22: `add-workers-credit-claim-write-handlers` has landed, 13/13.**
+            All six routes exist in `MINIMAL_API_ROUTES` and were checked against the exact paths
+            `frontend/src/services/supplierCreditService.ts:143-186` calls, the multipart field name
+            (`file`) included. The three verifications this row rested on are all now false: regexes
+            under `/api/supplier-credits/claims/` exist (`RE_CREDIT_CLAIM`, `_PHOTOS`, `_SEND`,
+            `_FOLLOW_UP`, `_OUTCOME`); `INSERT INTO credit_claim` appears in production code at
+            `workers/src/credit-claim-database.ts`; and `credit_claim_photos` is now written by
+            `addCreditClaimPhoto` with the bytes in R2 under `credit-claims/{org}/{claim}/{line}/`.
+            <br>**One residual, which is not a route gap.** `RESEND_API_KEY` is not set on any Worker
+            environment, so send and follow-up answer 400 "Email provider is not configured" and
+            return the claim to `DRAFT` rather than 404. Phase 4 can delete Express on the route
+            surface; sending to a real supplier needs `wrangler secret put RESEND_API_KEY` first.
             the Express router imports `multer` (no Workers bundle) and photo storage needs R2
             bindings. That change is written and unstarted. This task is the **link**: Phase 4 cannot
             delete Express until it lands.

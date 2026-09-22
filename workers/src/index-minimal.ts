@@ -91,6 +91,16 @@ import {
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
+import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
+import {
+  recordOutcome,
+  sendClaim,
+  sendFollowUp,
+  uploadClaimPhoto,
+} from './credit-claim-service';
+
+/** Outcomes the outcome route accepts, matching the backend's `claimOutcomeSchema`. */
+const CLAIM_OUTCOMES: readonly ClaimOutcome[] = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED'];
 import { isPlatformAdminUser as isSharedPlatformAdminUser } from '../../shared/domain/platform-catalogue';
 import {
   isCreditType,
@@ -237,6 +247,11 @@ const RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER = /^\/api\/supplier-credits\/products\
 const RE_SUPPLIER_CREDIT_SUPPLIER = /^\/api\/supplier-credits\/suppliers\/\d+$/;
 const RE_SUPPLIER_CREDIT_SUPPLIER_POLICY = /^\/api\/supplier-credits\/suppliers\/\d+\/policy$/;
 const RE_SUPPLIER_CREDIT_DISPOSE = /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/;
+const RE_CREDIT_CLAIM = /^\/api\/supplier-credits\/claims\/\d+$/;
+const RE_CREDIT_CLAIM_PHOTOS = /^\/api\/supplier-credits\/claims\/\d+\/lines\/\d+\/photos$/;
+const RE_CREDIT_CLAIM_SEND = /^\/api\/supplier-credits\/claims\/\d+\/send$/;
+const RE_CREDIT_CLAIM_FOLLOW_UP = /^\/api\/supplier-credits\/claims\/\d+\/follow-up$/;
+const RE_CREDIT_CLAIM_OUTCOME = /^\/api\/supplier-credits\/claims\/\d+\/outcome$/;
 const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
@@ -303,6 +318,12 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/supplier-credits/claimable-pool', handleGetClaimablePool],
   ['GET', '/api/supplier-credits/recovery-report', handleGetRecoveryReport],
   ['GET', '/api/supplier-credits/claims', handleListCreditClaims],
+  ['POST', '/api/supplier-credits/claims', handleBuildCreditClaim],
+  ['GET', RE_CREDIT_CLAIM, handleGetCreditClaim, 'path'],
+  ['POST', RE_CREDIT_CLAIM_PHOTOS, handleAddClaimPhoto, 'path'],
+  ['POST', RE_CREDIT_CLAIM_SEND, handleSendCreditClaim, 'path'],
+  ['POST', RE_CREDIT_CLAIM_FOLLOW_UP, handleSendCreditClaimFollowUp, 'path'],
+  ['POST', RE_CREDIT_CLAIM_OUTCOME, handleRecordCreditClaimOutcome, 'path'],
   ['GET', '/api/platform/catalogue-corrections', handleListCatalogueCorrections],
   ['GET', '/api/platform/catalogue/provenance', handleGetCatalogueProvenance],
   ['PATCH', RE_PLATFORM_CATALOGUE_CORRECTION, handleReviewCatalogueCorrection, 'path'],
@@ -2394,6 +2415,206 @@ async function handleListCreditClaims(request: Request, db: Database, env: Env):
         : undefined;
   const claims = await db.listCreditClaims(auth.organizationId, statuses);
   return jsonResponse(claims, 200, env);
+}
+
+/**
+ * Map a claim write refusal onto a status code. The Express side throws typed errors
+ * into error middleware the Worker has no equivalent of, so refusals travel back as
+ * data and are translated here — one place, so the two runtimes answer alike.
+ */
+function claimErrorStatus(code: 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT'): number {
+  if (code === 'NOT_FOUND') return 404;
+  return code === 'CONFLICT' ? 409 : 400;
+}
+
+function claimIdFromPath(pathname: string): number | null {
+  return parsePositiveInt(pathname.split('/')[4] ?? '');
+}
+
+/**
+ * GET /api/supplier-credits/claims/:id
+ */
+async function handleGetCreditClaim(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const claim = await db.findCreditClaim(auth.organizationId, id);
+  if (!claim) return errorResponse(`Claim ${id} not found`, 404, env);
+  return jsonResponse(claim, 200, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims — build a draft claim from write-offs.
+ *
+ * The creator is taken from `auth`, which comes from the verified token, and a
+ * `createdByUserId` in the body is ignored: the body is destructured to
+ * `supplierId`/`lines` only, so there is no path by which a caller can attribute a
+ * claim to another user. Mirrors the Express controller, which passes `req.userId`
+ * as a separate argument from the body.
+ */
+async function handleBuildCreditClaim(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json().catch(() => null)) as {
+    supplierId?: unknown;
+    lines?: unknown;
+  } | null;
+  const supplierId = parsePositiveInt(String(body?.supplierId ?? ''));
+  if (supplierId == null || !Array.isArray(body?.lines)) {
+    return errorResponse('A supplier id and at least one line are required', 400, env);
+  }
+
+  const lines: ClaimLineInput[] = [];
+  for (const raw of body.lines as unknown[]) {
+    const line = raw as { expiredItemTransactionId?: unknown; batchNumber?: unknown; unitsClaimed?: unknown };
+    const transactionId = parsePositiveInt(String(line?.expiredItemTransactionId ?? ''));
+    if (transactionId == null) {
+      return errorResponse('Each line needs a valid expiredItemTransactionId', 400, env);
+    }
+    const unitsClaimed =
+      line.unitsClaimed == null ? undefined : parsePositiveInt(String(line.unitsClaimed));
+    if (line.unitsClaimed != null && unitsClaimed == null) {
+      return errorResponse('unitsClaimed must be a positive whole number', 400, env);
+    }
+    lines.push({
+      expiredItemTransactionId: transactionId,
+      batchNumber: line.batchNumber == null ? null : String(line.batchNumber),
+      unitsClaimed: unitsClaimed ?? undefined,
+    });
+  }
+
+  const result = await db.buildCreditClaim(auth.organizationId, { supplierId, lines }, auth.userId);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 201, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/lines/:lineId/photos
+ *
+ * The missing-file guard runs before any R2 or DB call — the same reject-before-work
+ * ordering `handleUploadDirect` uses and the Express controller enforces with its
+ * `!req.file` throw.
+ */
+async function handleAddClaimPhoto(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const segments = pathname.split('/');
+  const claimId = parsePositiveInt(segments[4] ?? '');
+  const lineId = parsePositiveInt(segments[6] ?? '');
+  if (claimId == null || lineId == null) {
+    return errorResponse('Valid claim and line ids are required', 400, env);
+  }
+
+  const formData = await request.formData().catch(() => null);
+  const fileValue = formData?.get('file') as unknown;
+  if (!(fileValue instanceof File)) {
+    return errorResponse('A photo file is required.', 400, env);
+  }
+
+  const result = await uploadClaimPhoto(db, env, auth.organizationId, claimId, lineId, fileValue);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 201, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/send
+ */
+async function handleSendCreditClaim(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const result = await sendClaim(db, env, auth.organizationId, id);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 200, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/follow-up
+ */
+async function handleSendCreditClaimFollowUp(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const result = await sendFollowUp(db, env, auth.organizationId, id);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 200, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/outcome
+ */
+async function handleRecordCreditClaimOutcome(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const body = (await request.json().catch(() => null)) as {
+    outcome?: unknown;
+    creditedValue?: unknown;
+    note?: unknown;
+  } | null;
+  const outcome = String(body?.outcome ?? '');
+  if (!CLAIM_OUTCOMES.includes(outcome as ClaimOutcome)) {
+    return errorResponse(`Outcome must be one of ${CLAIM_OUTCOMES.join(', ')}`, 400, env);
+  }
+  const creditedValue =
+    body?.creditedValue == null ? null : Number.parseFloat(String(body.creditedValue));
+  if (creditedValue != null && !Number.isFinite(creditedValue)) {
+    return errorResponse('creditedValue must be a number', 400, env);
+  }
+
+  const result = await recordOutcome(
+    db,
+    auth.organizationId,
+    id,
+    outcome as ClaimOutcome,
+    creditedValue,
+    body?.note == null ? null : String(body.note),
+  );
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 200, env);
 }
 
 /**

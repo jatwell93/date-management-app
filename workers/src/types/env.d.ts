@@ -54,6 +54,13 @@ export interface Env {
   R2_SECRET_ACCESS_KEY: string;
   R2_BUCKET_NAME: string;
 
+  // Resend transactional email, for supplier credit-claim sends and follow-ups.
+  // Optional on purpose: when unset the claim send path returns the backend's
+  // "Email provider is not configured" validation error instead of failing hard, so
+  // every other claim operation still works on an instance without the secret.
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
+
   // Optional: Sentry DSN for error monitoring
   WORKERS_SENTRY_DSN?: string;
 
