@@ -14,7 +14,11 @@
 //     lose.
 
 import type { NeonQueryFunction } from '@neondatabase/serverless';
-import { expectedCredit, type CreditPolicyRatio } from '../../shared/domain/credit-claim';
+import {
+  CHASEABLE_CLAIM_STATUSES,
+  expectedCredit,
+  type CreditPolicyRatio,
+} from '../../shared/domain/credit-claim';
 import type {
   CreditClaim,
   CreditClaimEvent,
@@ -588,8 +592,17 @@ export function createCreditClaimDatabase(
 
     /**
      * Reserve the next follow-up slot by advancing the counter from the value the
-     * caller observed. Keyed on the counter rather than the status so it re-arms for
-     * each nudge — an overlapping cron tick and a manual nudge cannot both email.
+     * caller observed. Keyed on the counter so it re-arms for each nudge — an
+     * overlapping cron tick and a manual nudge cannot both email.
+     *
+     * The status is in the predicate too, and that part is not redundant: the caller
+     * checks `isChaseableClaimStatus` against a row it read earlier, so an outcome
+     * recorded in between would leave that check passing against a claim that is now
+     * settled. Without the status here the CAS would still match on the counter,
+     * email the supplier about a closed claim, and write a `next_follow_up_at` onto
+     * the settled row that `recordClaimOutcome` had just cleared — re-arming the
+     * reminder engine against it forever. A stale read is only safe when everything
+     * the decision rested on is re-checked in the write.
      */
     async reserveFollowUp(organizationId, id, expectedCount, next) {
       const rows = (await sql`
@@ -600,11 +613,18 @@ export function createCreditClaimDatabase(
         WHERE organization_id = ${organizationId}
           AND id = ${id}
           AND follow_up_count = ${expectedCount}
+          AND status = ANY(${[...CHASEABLE_CLAIM_STATUSES]})
         RETURNING id
       `) as Array<{ id: number }>;
       return rows.length === 1;
     },
 
+    /**
+     * Put a reservation back after a follow-up that never went out. Also gated on a
+     * chaseable status: if the claim settled while the send was failing, the schedule
+     * it is being restored to no longer applies, and writing it back would resurrect
+     * `next_follow_up_at` on a settled claim.
+     */
     async restoreFollowUpSchedule(organizationId, id, previous) {
       await sql`
         UPDATE credit_claims
@@ -614,6 +634,7 @@ export function createCreditClaimDatabase(
             }::timestamp,
             updated_at = NOW()
         WHERE organization_id = ${organizationId} AND id = ${id}
+          AND status = ANY(${[...CHASEABLE_CLAIM_STATUSES]})
       `;
     },
 

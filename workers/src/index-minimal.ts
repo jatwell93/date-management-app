@@ -2470,18 +2470,24 @@ function parseClaimLineInput(raw: unknown): { line: ClaimLineInput } | { error: 
     unitsClaimed?: unknown;
   };
 
-  const transactionId = parsePositiveInt(String(line?.expiredItemTransactionId ?? ''));
-  if (transactionId == null) {
+  // `isPositiveInteger` rather than a string coercion: the backend's zod schemas use
+  // `z.number().int().positive()`, which refuses the *string* "10", so coercing here
+  // would let the Worker accept a payload Express answers 400 to. Path segments are a
+  // different matter and still parse from text — that is what a URL is.
+  if (!isPositiveInteger(line?.expiredItemTransactionId)) {
     return { error: 'Each line needs a valid expiredItemTransactionId' };
   }
+  const transactionId = line.expiredItemTransactionId;
 
-  const unitsClaimed =
-    line.unitsClaimed == null ? undefined : parsePositiveInt(String(line.unitsClaimed));
-  if (line.unitsClaimed != null && unitsClaimed == null) {
+  if (line.unitsClaimed != null && !isPositiveInteger(line.unitsClaimed)) {
     return { error: 'unitsClaimed must be a positive whole number' };
   }
+  const unitsClaimed = line.unitsClaimed == null ? undefined : (line.unitsClaimed as number);
 
-  const batchNumber = line.batchNumber == null ? null : String(line.batchNumber);
+  if (line.batchNumber != null && typeof line.batchNumber !== 'string') {
+    return { error: 'Batch number must be a string' };
+  }
+  const batchNumber = line.batchNumber ?? null;
   if (batchNumber != null && batchNumber.length > MAX_BATCH_NUMBER_LENGTH) {
     return { error: `Batch number must be at most ${MAX_BATCH_NUMBER_LENGTH} characters` };
   }
@@ -2519,10 +2525,10 @@ async function handleBuildCreditClaim(
     supplierId?: unknown;
     lines?: unknown;
   } | null;
-  const supplierId = parsePositiveInt(String(body?.supplierId ?? ''));
-  if (supplierId == null || !Array.isArray(body?.lines)) {
+  if (!isPositiveInteger(body?.supplierId) || !Array.isArray(body?.lines)) {
     return errorResponse('A supplier id and at least one line are required', 400, env);
   }
+  const supplierId = body.supplierId;
 
   const lines: ClaimLineInput[] = [];
   for (const raw of body.lines as unknown[]) {
@@ -2639,11 +2645,21 @@ async function handleRecordCreditClaimOutcome(
   // the backend's `z.number()` refuses the string outright. The non-negative bound is
   // the one that matters — a negative credit would flow into the recovery report as
   // money recovered.
-  const creditedValue = body?.creditedValue == null ? null : Number(body.creditedValue);
-  if (creditedValue != null && (!Number.isFinite(creditedValue) || creditedValue < 0)) {
+  // The value must BE a number, not merely coerce to one: `z.number()` rejects '5',
+  // true and '' where `Number()` happily turns them into 5, 1 and 0.
+  const rawCredited = body?.creditedValue;
+  if (
+    rawCredited != null &&
+    (typeof rawCredited !== 'number' || !Number.isFinite(rawCredited) || rawCredited < 0)
+  ) {
     return errorResponse('Credited value must be zero or greater', 400, env);
   }
-  const note = body?.note == null ? null : String(body.note);
+  const creditedValue = rawCredited == null ? null : rawCredited;
+
+  if (body?.note != null && typeof body.note !== 'string') {
+    return errorResponse('Note must be a string', 400, env);
+  }
+  const note = (body?.note as string | null | undefined) ?? null;
   if (note != null && note.length > MAX_CLAIM_NOTE_LENGTH) {
     return errorResponse(
       `Note must be at most ${MAX_CLAIM_NOTE_LENGTH} characters`,

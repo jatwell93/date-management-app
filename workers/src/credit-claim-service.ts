@@ -114,13 +114,21 @@ export interface ClaimEmailMessage {
  */
 export async function sendClaimEmail(env: Env, message: ClaimEmailMessage): Promise<boolean> {
   const apiKey = env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.warn('[CreditClaim] RESEND_API_KEY not set; claim email not sent.');
+  const from = env.RESEND_FROM_EMAIL;
+  // Both secrets are required, and a missing sender counts as unconfigured rather
+  // than falling back to a placeholder address. Resend rejects a `from` outside a
+  // verified domain, so a placeholder does not degrade gracefully — it turns a clean
+  // "not configured" refusal into a provider error, i.e. a 500 on the very first
+  // send after someone sets only the API key.
+  if (!apiKey || !from) {
+    console.warn(
+      '[CreditClaim] RESEND_API_KEY and RESEND_FROM_EMAIL must both be set; claim email not sent.',
+    );
     return false;
   }
 
   const body: Record<string, unknown> = {
-    from: env.RESEND_FROM_EMAIL || 'noreply@example.com',
+    from,
     to: [message.to],
     subject: message.subject,
     html: message.html,
@@ -176,6 +184,29 @@ function reportStuckSending(
 }
 
 /**
+ * A write that failed *after* the supplier was emailed. The user-visible operation
+ * succeeded, so this is an audit gap rather than a failure — but it leaves the claim's
+ * timeline disagreeing with what the supplier actually received, which someone has to
+ * be told about.
+ */
+function reportPostSendGap(
+  organizationId: string,
+  claimId: number,
+  event: string,
+  error: unknown,
+): void {
+  console.error(
+    `[CreditClaim] Claim ${claimId} ${event} failed after the email was sent ` +
+      `(org ${organizationId}): ${String(error)}`,
+  );
+  Sentry.captureException(error, {
+    level: 'error',
+    tags: { feature: 'credit-claim-send', event: 'post-send-gap' },
+    extra: { organizationId, claimId, step: event },
+  });
+}
+
+/**
  * Give a reservation back after a send that never happened. Best-effort: the claim
  * being stuck in SENDING is worth reporting but must not replace the refusal the
  * caller is about to receive with a database error.
@@ -220,6 +251,22 @@ async function deliverClaimEmail(
   return sendClaimEmail(env, { to, ...email, attachments });
 }
 
+/**
+ * A claim photo has a row but no object behind it. Not an expected state: photos can
+ * only be attached to a DRAFT claim, and `delete_after` is only ever set when a claim
+ * settles, so nothing can have purged them while the claim is still sendable. It means
+ * the R2 write and the metadata row have diverged.
+ */
+class MissingClaimPhotoError extends Error {
+  constructor(readonly fileNames: string[]) {
+    super(
+      `Photo evidence is missing from storage (${fileNames.join(', ')}). ` +
+        'Re-upload the photo before sending.',
+    );
+    this.name = 'MissingClaimPhotoError';
+  }
+}
+
 async function loadAttachments(
   db: Database,
   env: Env,
@@ -238,14 +285,23 @@ async function loadAttachments(
     })),
   );
   const attachments: ClaimEmailAttachment[] = [];
+  const missing: string[] = [];
   for (const { photo, object } of fetched) {
-    if (!object) continue; // Already purged; send the claim without it rather than fail.
+    if (!object) {
+      missing.push(photo.fileName);
+      continue;
+    }
     attachments.push({
       filename: photo.fileName,
       content: await object.arrayBuffer(),
       contentType: 'application/octet-stream',
     });
   }
+  // Refuse rather than send a claim whose evidence is incomplete. The photos are the
+  // whole basis of the claim, so a supplier receiving it without them will reject it
+  // and the loss is written off for good — a worse outcome, and a silent one, than
+  // telling the user to re-upload.
+  if (missing.length > 0) throw new MissingClaimPhotoError(missing);
   return attachments;
 }
 
@@ -277,18 +333,31 @@ export async function uploadClaimPhoto(
   const bytes = await file.arrayBuffer();
   await photoBucket(env).put(key, bytes, { httpMetadata: { contentType } });
 
-  const recorded = await db.addCreditClaimPhoto(organizationId, claimId, lineId, {
-    storageKey: key,
-    fileName: file.name,
-    sizeBytes: file.size,
-  });
+  const dropOrphan = () =>
+    photoBucket(env)
+      .delete(key)
+      .catch(() => undefined);
+
+  let recorded: ClaimWriteResult<CreditClaimPhoto>;
+  try {
+    recorded = await db.addCreditClaimPhoto(organizationId, claimId, lineId, {
+      storageKey: key,
+      fileName: file.name,
+      sizeBytes: file.size,
+    });
+  } catch (error) {
+    // The metadata write threw rather than refusing. Same orphan, and the only place
+    // that could ever clean it up, since nothing else knows the key: the purge job
+    // works from photo rows, and this one was never written.
+    await dropOrphan();
+    throw error;
+  }
+
   if (!recorded.ok) {
     // The row was refused (wrong org, missing line, or the claim is no longer a
     // draft), so the bytes are orphaned. Drop them rather than leave an object that
     // nothing references and the purge job will never see.
-    await photoBucket(env)
-      .delete(key)
-      .catch(() => undefined);
+    await dropOrphan();
   }
   return recorded;
 }
@@ -332,6 +401,7 @@ export async function sendClaim(
     }
   } catch (error) {
     await releaseReservation(db, organizationId, id, 'send-failed');
+    if (error instanceof MissingClaimPhotoError) return fail('VALIDATION', error.message);
     throw error;
   }
 
@@ -414,13 +484,33 @@ export async function sendFollowUp(
     // Rolled back to what we observed so the reminder engine retries this claim next
     // run rather than silently skipping it.
     await restore();
+    if (error instanceof MissingClaimPhotoError) return fail('VALIDATION', error.message);
     throw error;
   }
 
-  await db.addCreditClaimEvent(organizationId, id, 'FOLLOW_UP_SENT', null);
-  const updated = await db.findCreditClaim(organizationId, id);
-  if (!updated) return fail('NOT_FOUND', `Claim ${id} not found`);
-  return { ok: true, value: updated };
+  // Past this line the supplier has the email and the counter is advanced, so the
+  // nudge has happened as far as the outside world is concerned. Nothing below may
+  // throw: a 500 invites the client to retry, and on that retry the counter CAS would
+  // re-arm against the already-advanced value and email the supplier a second time.
+  // The remaining writes are an audit trail — report a gap, never fail the call.
+  await db
+    .addCreditClaimEvent(organizationId, id, 'FOLLOW_UP_SENT', null)
+    .catch((error) => reportPostSendGap(organizationId, id, 'follow-up-event', error));
+
+  const updated = await db
+    .findCreditClaim(organizationId, id)
+    .catch((error) => {
+      reportPostSendGap(organizationId, id, 'follow-up-reload', error);
+      return null;
+    });
+  return {
+    ok: true,
+    value: updated ?? {
+      ...claim,
+      followUpCount: nextCount,
+      nextFollowUpAt: nextFollowUpAt.toISOString(),
+    },
+  };
 }
 
 /**

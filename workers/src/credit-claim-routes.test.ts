@@ -102,9 +102,20 @@ function jsonPost(pathname: string, body: unknown, db: Database, env: Env) {
   });
 }
 
-/** An env with a fresh recording bucket and no Resend key — the deployed default. */
+/** An env with a fresh recording bucket and no Resend secrets — today's deployment. */
 function bareEnv(): Env {
   return envWith(createBucket());
+}
+
+/** Both Resend secrets, which is what `sendClaimEmail` requires to consider itself
+ *  configured — an API key alone is not enough (Resend rejects an unverified sender). */
+const RESEND_CONFIGURED = {
+  RESEND_API_KEY: 'test-key',
+  RESEND_FROM_EMAIL: 'claims@pharmacy.test',
+} as const;
+
+function configuredEnv(bucket = createBucket()): Env {
+  return envWith(bucket, { ...RESEND_CONFIGURED });
 }
 
 /** POST a claim-build payload; the route under test in most of the cases below. */
@@ -258,6 +269,38 @@ describe('credit-claim write routes', () => {
       expect(buildCreditClaim).toHaveBeenCalledTimes(1);
     });
 
+    /**
+     * The backend's schemas are `z.number().int().positive()`, which refuse the string
+     * "10". Coercing here would let the Worker accept payloads Express answers 400 to.
+     */
+    it.each([
+      ['a string supplier id', { supplierId: '10', lines: [{ expiredItemTransactionId: 1 }] }],
+      [
+        'a string transaction id',
+        { supplierId: 10, lines: [{ expiredItemTransactionId: '1' }] },
+      ],
+      [
+        'a string unitsClaimed',
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 1, unitsClaimed: '3' }] },
+      ],
+      [
+        'a boolean unitsClaimed',
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 1, unitsClaimed: true }] },
+      ],
+      [
+        'a numeric batch number',
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 1, batchNumber: 12 }] },
+      ],
+    ])('refuses %s, which the backend schema rejects', async (_label, body) => {
+      const buildCreditClaim = vi.fn();
+      const db = createAuthenticatedDb({ buildCreditClaim });
+
+      const response = await postClaim(body, db);
+
+      expect(response?.status).toBe(400);
+      expect(buildCreditClaim).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['a missing supplier id', { lines: [{ expiredItemTransactionId: 1 }] }],
       ['a missing line list', { supplierId: 10 }],
@@ -405,6 +448,29 @@ describe('credit-claim write routes', () => {
       expect(addCreditClaimPhoto).not.toHaveBeenCalled();
     });
 
+    it('deletes the uploaded object when the metadata write throws', async () => {
+      // A refusal is handled below; this is the throw. Nothing else knows the key --
+      // the purge job works from photo rows, and this one was never written -- so if
+      // the upload path does not clean up, the object is unreachable forever.
+      const db = createAuthenticatedDb({
+        addCreditClaimPhoto: vi.fn().mockRejectedValue(new Error('neon: down')),
+      });
+      const bucket = createBucket();
+      const form = new FormData();
+      form.set('file', new File(['abc'], 'lot.jpg', { type: 'image/jpeg' }));
+
+      // The database error still surfaces (a 500 via the entrypoint's handler, which
+      // is right for a failed write); what must not happen is losing the object.
+      await expect(
+        dispatch('POST', '/api/supplier-credits/claims/1/lines/100/photos', db, envWith(bucket), {
+          body: form,
+        }),
+      ).rejects.toThrow('neon: down');
+
+      const [key] = bucket.put.mock.calls[0];
+      expect(bucket.delete).toHaveBeenCalledWith(key);
+    });
+
     it('deletes the uploaded object when the row is refused, leaving no orphan', async () => {
       const db = createAuthenticatedDb({
         addCreditClaimPhoto: vi
@@ -477,7 +543,7 @@ describe('credit-claim write routes', () => {
         finalizeSentClaim,
       });
 
-      await sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1);
+      await sendClaim(db, configuredEnv(), ORG, 1);
 
       const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
       expect(body.to).toEqual(['snapshot@acme.test']);
@@ -496,7 +562,7 @@ describe('credit-claim write routes', () => {
         finalizeSentClaim: vi.fn(),
       });
 
-      await sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1);
+      await sendClaim(db, configuredEnv(), ORG, 1);
 
       const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
       expect(body.to).toEqual(['current@acme.test']);
@@ -573,7 +639,7 @@ describe('credit-claim write routes', () => {
 
         const result = await sendClaim(
           sendingDb(finalizeSentClaim),
-          envWith(createBucket(), { RESEND_API_KEY: 'test-key' }),
+          configuredEnv(),
           ORG,
           1,
         );
@@ -592,7 +658,7 @@ describe('credit-claim write routes', () => {
         const errorSpy = captureErrors();
 
         await expect(
-          sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1),
+          sendClaim(db, configuredEnv(), ORG, 1),
         ).rejects.toThrow();
 
         expect(db.revertClaimToDraft).not.toHaveBeenCalled();
@@ -608,7 +674,7 @@ describe('credit-claim write routes', () => {
         await expect(
           sendClaim(
             sendingDb(finalizeSentClaim),
-            envWith(createBucket(), { RESEND_API_KEY: 'test-key' }),
+            configuredEnv(),
             ORG,
             1,
           ),
@@ -681,7 +747,7 @@ describe('credit-claim write routes', () => {
         finalizeSentClaim: vi.fn(),
       });
 
-      await sendClaim(db, envWith(bucket, { RESEND_API_KEY: 'test-key' }), ORG, 1);
+      await sendClaim(db, configuredEnv(bucket), ORG, 1);
 
       // Both reads were in flight before the slow one came back.
       expect(callsWhenFirstSettled).toBe(2);
@@ -690,6 +756,63 @@ describe('credit-claim write routes', () => {
         'first.jpg',
         'second.jpg',
       ]);
+      fetchSpy.mockRestore();
+    });
+
+    it('refuses to send when a photo row has no object behind it', async () => {
+      // Photos attach only to DRAFT claims and delete_after is only set at settlement,
+      // so nothing can have purged these while the claim is still sendable: a missing
+      // object means R2 and the metadata row have diverged. Sending anyway would put a
+      // claim with no evidence in front of the supplier, who would reject it -- and
+      // the loss would be written off with nobody the wiser.
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const bucket = createBucket();
+      bucket.get = vi.fn().mockResolvedValue(null) as never;
+      const revertClaimToDraft = vi.fn().mockResolvedValue(undefined);
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([
+          { id: 1, claimLineId: 100, storageKey: 'gone', fileName: 'lot.jpg', sizeBytes: 5 },
+        ]),
+        revertClaimToDraft,
+        finalizeSentClaim: vi.fn(),
+      });
+
+      const result = await sendClaim(db, configuredEnv(bucket), ORG, 1);
+
+      expect(result).toMatchObject({ ok: false, code: 'VALIDATION' });
+      expect(result.ok === false && result.message).toContain('lot.jpg');
+      // No email, and the claim is back in DRAFT so it can be sent after re-upload.
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(revertClaimToDraft).toHaveBeenCalledWith(ORG, 1);
+      fetchSpy.mockRestore();
+    });
+
+    it('treats an API key with no sender address as unconfigured', async () => {
+      // Resend refuses a `from` outside a verified domain, so a half-configured Worker
+      // must give the same clean, reversible refusal as an unconfigured one rather
+      // than letting the provider turn it into a 500 on the first real send.
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const revertClaimToDraft = vi.fn().mockResolvedValue(undefined);
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        revertClaimToDraft,
+        finalizeSentClaim: vi.fn(),
+      });
+
+      const result = await sendClaim(
+        db,
+        envWith(createBucket(), { RESEND_API_KEY: 'test-key' }),
+        ORG,
+        1,
+      );
+
+      expect(result).toMatchObject({ ok: false, code: 'VALIDATION' });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(revertClaimToDraft).toHaveBeenCalledWith(ORG, 1);
       fetchSpy.mockRestore();
     });
 
@@ -709,7 +832,7 @@ describe('credit-claim write routes', () => {
       const sentAt = new Date('2026-09-22T10:00:00.000Z');
       const result = await sendClaim(
         db,
-        envWith(bucket, { RESEND_API_KEY: 'test-key' }),
+        configuredEnv(bucket),
         ORG,
         1,
         () => sentAt,
@@ -762,10 +885,10 @@ describe('credit-claim write routes', () => {
         ),
         reserveFollowUp,
         listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
-        addCreditClaimEvent: vi.fn(),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
       });
 
-      await sendFollowUp(db, envWith(bucket, { RESEND_API_KEY: 'test-key' }), ORG, 1);
+      await sendFollowUp(db, configuredEnv(bucket), ORG, 1);
 
       // The schedule is derived from the send time, never from `now`: with a 7-day
       // cadence the slot is `sentAt + followUpDays * (nextCount + 1)`, so advancing
@@ -789,14 +912,61 @@ describe('credit-claim write routes', () => {
           .mockResolvedValue(draftClaim({ status: 'SENT', sentAt: '2026-09-22 10:00:00' })),
         reserveFollowUp: vi.fn().mockResolvedValue(true),
         listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
-        addCreditClaimEvent: vi.fn(),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
       });
 
-      await sendFollowUp(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1);
+      await sendFollowUp(db, configuredEnv(), ORG, 1);
 
       const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
       expect(body.subject).toContain('Follow-up');
       expect(body.text).toContain('We have not yet received a response');
+      fetchSpy.mockRestore();
+    });
+
+    it('does not fail the nudge when the audit event write fails afterwards', async () => {
+      // The supplier already has the email and the counter is advanced. Throwing here
+      // would return 500, the client would retry, and the counter CAS would re-arm on
+      // the advanced value -- emailing the supplier a second time. Report the gap and
+      // report success, because the nudge did happen.
+      const fetchSpy = acceptEmails();
+      const errorSpy = captureErrors();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi
+          .fn()
+          .mockResolvedValue(draftClaim({ status: 'SENT', sentAt: '2026-09-22 10:00:00' })),
+        reserveFollowUp: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn().mockRejectedValue(new Error('neon: down')),
+      });
+
+      const result = await sendFollowUp(db, configuredEnv(), ORG, 1);
+
+      expect(result.ok).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(loggedText(errorSpy)).toContain('after the email was sent');
+      errorSpy.mockRestore();
+      fetchSpy.mockRestore();
+    });
+
+    it('still reports success when the post-send reload fails', async () => {
+      const fetchSpy = acceptEmails();
+      const errorSpy = captureErrors();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi
+          .fn()
+          .mockResolvedValueOnce(draftClaim({ status: 'SENT', sentAt: '2026-09-22 10:00:00' }))
+          .mockRejectedValue(new Error('neon: down')),
+        reserveFollowUp: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const result = await sendFollowUp(db, configuredEnv(), ORG, 1);
+
+      expect(result.ok).toBe(true);
+      // The returned claim carries the advance that was actually committed.
+      expect(result.ok === true && result.value.followUpCount).toBe(1);
+      errorSpy.mockRestore();
       fetchSpy.mockRestore();
     });
 
@@ -922,6 +1092,40 @@ describe('credit-claim write routes', () => {
       // Rejected before any work: a negative credit that reached the DB would be
       // counted as money recovered by the recovery report.
       expect(findCreditClaim).not.toHaveBeenCalled();
+      expect(recordClaimOutcome).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a numeric string', '5'],
+      ['a boolean', true],
+      ['an empty string', ''],
+    ])('refuses %s as a credited value, which Number() would have coerced', async (_l, v) => {
+      const recordClaimOutcome = vi.fn();
+      const db = createAuthenticatedDb({ findCreditClaim: vi.fn(), recordClaimOutcome });
+
+      const response = await jsonPost(
+        '/api/supplier-credits/claims/1/outcome',
+        { outcome: 'CREDITED', creditedValue: v },
+        db,
+        bareEnv(),
+      );
+
+      expect(response?.status).toBe(400);
+      expect(recordClaimOutcome).not.toHaveBeenCalled();
+    });
+
+    it('refuses a non-string note', async () => {
+      const recordClaimOutcome = vi.fn();
+      const db = createAuthenticatedDb({ findCreditClaim: vi.fn(), recordClaimOutcome });
+
+      const response = await jsonPost(
+        '/api/supplier-credits/claims/1/outcome',
+        { outcome: 'CREDITED', creditedValue: 10, note: 42 },
+        db,
+        bareEnv(),
+      );
+
+      expect(response?.status).toBe(400);
       expect(recordClaimOutcome).not.toHaveBeenCalled();
     });
 

@@ -93,9 +93,12 @@ them. Verified present, not re-implemented: `createSupplier` / `updateSupplier` 
 - **`RESEND_API_KEY` / `RESEND_FROM_EMAIL` are declared optional** in `types/env.d.ts`
   and are **not yet set on any Worker environment**. Until they are, send and follow-up
   return the backend's "Email provider is not configured" validation error and roll the
-  claim back to `DRAFT` -- every other claim operation works. Setting them
-  (`wrangler secret put RESEND_API_KEY`) is the one manual step before the send path is
-  live in production.
+  claim back to `DRAFT` -- every other claim operation works.
+  **Both** are required before the send path is live:
+  `wrangler secret put RESEND_API_KEY` and `wrangler secret put RESEND_FROM_EMAIL`.
+  A missing sender counts as unconfigured rather than falling back to a placeholder,
+  because Resend rejects a `from` outside a verified domain -- the placeholder would
+  turn a clean refusal into a provider error on the first real send.
 - **Harness fix.** The pglite harness declared the four `credit_claim*` tables
   `TIMESTAMPTZ` where migration 0005 declares `timestamp(3)`. The write path casts with
   an explicit `::timestamp`, which a naive column stores verbatim but a `TIMESTAMPTZ`
@@ -173,3 +176,47 @@ but deferred to its own issue.
 **Verification of the round.** Eleven further mutations, each killing the test guarding
 it and no others -- including the new idempotency predicate, whose removal fails the
 "no-op when finalized a second time" test alone.
+
+## Second review round (Copilot + Sentry)
+
+The first round covered two bot reports. A later pass over the PR's own review threads
+found Copilot and Sentry comments that had not been read. Six Copilot findings and one
+Sentry finding, all confirmed against the code, all fixed.
+
+- **The follow-up reservation was keyed only on the counter.** The caller checks
+  `isChaseableClaimStatus` against a row it read earlier, so an outcome recorded in
+  between left that check passing against a claim that was by then settled: the CAS
+  still matched on the counter, the supplier was emailed about a closed claim, and a
+  `next_follow_up_at` was written onto the settled row that `recordClaimOutcome` had
+  just cleared -- re-arming the reminder engine against it permanently. The status is
+  now part of the predicate, in `reserveFollowUp` and in `restoreFollowUpSchedule`.
+  Same lesson as the `finalizeSentClaim` fix: a stale read is only safe when
+  everything the decision rested on is re-checked in the write.
+- **Sentry's duplicate-follow-up finding is the same defect from the other end.** It
+  observed that the only way a duplicate nudge happens is a retry, and the only reason
+  the client retries is that the function throws *after* the email was accepted. The
+  post-send writes (the `FOLLOW_UP_SENT` event and the reload) are now best-effort and
+  reported rather than thrown, so the caller is told the truth -- the nudge happened --
+  and never retries into a second email.
+- **A missing R2 object was being skipped silently** on the grounds that it had "already
+  been purged". That is unreachable: photos attach only to `DRAFT` claims and
+  `delete_after` is only set at settlement, so nothing can purge them while the claim is
+  still sendable. It meant the R2 write and the metadata row had diverged, and the claim
+  went to the supplier without the evidence it is built on. Now refused with an
+  actionable 400 and the claim returned to `DRAFT`.
+- **`RESEND_FROM_EMAIL` is now required**, not defaulted to `noreply@example.com`. Resend
+  rejects an unverified sender, so the placeholder did not degrade gracefully -- it
+  turned "not configured" into a 500 on the first send after someone set only the API
+  key, which is exactly what this change's own deployment note told them to do.
+- **An orphaned R2 object** was left behind when the metadata write *threw* (only a
+  returned refusal was cleaned up). Nothing else knows the key, so the purge job -- which
+  works from photo rows -- could never find it.
+- **Body fields were coerced, not type-checked.** The backend's schemas are
+  `z.number().int().positive()`, which refuse the string `"10"`; the Worker accepted it,
+  and `Number()` also turned `true` and `''` into valid credited values. Both runtimes
+  now answer alike. Path segments still parse from text, which is what a URL is.
+
+Nine mutations were run against the fixes; each killed the test guarding it. Fixing the
+follow-up CAS also exposed two existing tests that would have started passing for the
+wrong reason -- the cross-organization one would have been refused by the new status
+guard rather than by scoping -- so their fixtures now set a chaseable status explicitly.

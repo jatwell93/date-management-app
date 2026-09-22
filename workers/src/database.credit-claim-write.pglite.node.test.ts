@@ -591,6 +591,10 @@ describe('Workers credit-claim writes (real SQL)', () => {
     });
 
     it('advances the follow-up counter only from the value the caller observed', async () => {
+      // A follow-up only applies to a claim that was actually sent; the reservation
+      // now refuses anything else, so the fixture has to be in a chaseable state for
+      // this test to be exercising the counter rather than the status.
+      await sql`UPDATE credit_claims SET status = 'SENT' WHERE id = ${claimId}`;
       const nextAt = new Date('2026-10-06T10:00:00.000Z');
       expect(
         await db.reserveFollowUp(ORG, claimId, 0, { followUpCount: 1, nextFollowUpAt: nextAt }),
@@ -609,7 +613,61 @@ describe('Workers credit-claim writes (real SQL)', () => {
       expect(Number(rows[0].follow_up_count)).toBe(2);
     });
 
+    it('will not reserve a follow-up on a claim that settled since it was read', async () => {
+      // The caller checks the status against a row it read earlier. If an outcome
+      // lands in between, only the status in this predicate stops the Worker emailing
+      // a supplier about a closed claim -- and stops it writing a nextFollowUpAt that
+      // recordClaimOutcome had just cleared, which would re-arm the reminder engine
+      // against a settled claim for good.
+      await sql`UPDATE credit_claims SET status = 'CREDITED' WHERE id = ${claimId}`;
+
+      expect(
+        await db.reserveFollowUp(ORG, claimId, 0, {
+          followUpCount: 1,
+          nextFollowUpAt: new Date('2026-10-06T10:00:00.000Z'),
+        }),
+      ).toBe(false);
+
+      const rows = await sql`
+        SELECT follow_up_count, next_follow_up_at FROM credit_claims WHERE id = ${claimId}`;
+      expect(Number(rows[0].follow_up_count)).toBe(0);
+      expect(rows[0].next_follow_up_at).toBeNull();
+    });
+
+    it.each(['SENT', 'ACKNOWLEDGED'])('reserves a follow-up on a %s claim', async (status) => {
+      // The other half of the predicate: it must not be so tight that it refuses the
+      // statuses follow-ups exist for.
+      await sql`UPDATE credit_claims SET status = ${status} WHERE id = ${claimId}`;
+
+      expect(
+        await db.reserveFollowUp(ORG, claimId, 0, {
+          followUpCount: 1,
+          nextFollowUpAt: new Date('2026-10-06T10:00:00.000Z'),
+        }),
+      ).toBe(true);
+    });
+
+    it('will not restore a follow-up schedule onto a claim that has settled', async () => {
+      // The compensation for a failed send. If the claim settled while the send was
+      // failing, putting the old schedule back would resurrect next_follow_up_at on a
+      // settled claim.
+      await sql`UPDATE credit_claims SET status = 'CREDITED' WHERE id = ${claimId}`;
+
+      await db.restoreFollowUpSchedule(ORG, claimId, {
+        followUpCount: 3,
+        nextFollowUpAt: '2026-10-06 10:00:00',
+      });
+
+      const rows = await sql`
+        SELECT follow_up_count, next_follow_up_at FROM credit_claims WHERE id = ${claimId}`;
+      expect(Number(rows[0].follow_up_count)).toBe(0);
+      expect(rows[0].next_follow_up_at).toBeNull();
+    });
+
     it("cannot advance another organization's follow-up", async () => {
+      // Chaseable on purpose: otherwise this would pass because of the status guard
+      // and prove nothing about organization scoping.
+      await sql`UPDATE credit_claims SET status = 'SENT' WHERE id = ${claimId}`;
       expect(
         await db.reserveFollowUp(OTHER_ORG, claimId, 0, {
           followUpCount: 1,
@@ -621,6 +679,7 @@ describe('Workers credit-claim writes (real SQL)', () => {
     });
 
     it('restores the schedule a failed send advanced', async () => {
+      await sql`UPDATE credit_claims SET status = 'SENT' WHERE id = ${claimId}`;
       const nextAt = new Date('2026-10-06T10:00:00.000Z');
       await db.reserveFollowUp(ORG, claimId, 0, { followUpCount: 1, nextFollowUpAt: nextAt });
       await db.restoreFollowUpSchedule(ORG, claimId, { followUpCount: 0, nextFollowUpAt: null });
