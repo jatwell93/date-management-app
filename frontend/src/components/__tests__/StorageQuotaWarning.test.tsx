@@ -17,6 +17,14 @@ vi.mock('../../hooks/useFreshApiToken', () => ({
   })(),
 }));
 
+// Mocked so the assertions below pin the *shape* of the call rather than
+// whatever REACT_APP_API_URL happens to be in CI. A component that went back to
+// a relative `/api/...` would call fetch with a path that lacks this host, so
+// the mock still catches the regression it exists to catch.
+vi.mock('../../lib/api.service', () => ({
+  buildApiUrl: (route: string) => `https://api.test${route}`,
+}));
+
 describe('StorageQuotaWarning', () => {
   const mockUserId = 1;
   const mockAuthToken = 'mock-jwt-token';
@@ -48,11 +56,11 @@ describe('StorageQuotaWarning', () => {
     it('fetches quota data on mount with correct URL and headers', async () => {
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
 
-      renderWarning({ subscriptionTier: 'free' });
+      renderWarning();
 
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledWith(
-          '/api/storage-quota/1?tier=free',
+          'https://api.test/api/storage-quota/1',
           expect.objectContaining({
             headers: {
               Authorization: 'Bearer mock-jwt-token',
@@ -62,14 +70,22 @@ describe('StorageQuotaWarning', () => {
       });
     });
 
-    it('includes subscription tier in query params', async () => {
-      fetchMock.mockResponseOnce(JSON.stringify({ ...mockQuotaData, tier: 'pro' }));
+    // Replaces an older test that asserted the tier was forwarded as
+    // `?tier=`. The server now resolves the organization's tier itself, so a
+    // client-supplied tier is at best ignored and at worst a caller naming its
+    // own quota. This pins the absence.
+    it('does not send a client-supplied tier', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
 
-      renderWarning({ subscriptionTier: 'pro' });
+      renderWarning();
 
       await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith('/api/storage-quota/1?tier=pro', expect.anything());
+        expect(fetchMock).toHaveBeenCalled();
       });
+
+      const requestedUrl = String(fetchMock.mock.calls[0][0]);
+      expect(requestedUrl).toBe('https://api.test/api/storage-quota/1');
+      expect(requestedUrl).not.toContain('tier');
     });
 
     it('handles API error gracefully', async () => {
@@ -213,7 +229,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('displays current subscription tier', async () => {
-      renderWarning({ subscriptionTier: 'free' });
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText('Current Plan:')).toBeInTheDocument();
@@ -231,7 +247,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(proQuota));
 
-      renderWarning({ subscriptionTier: 'pro' });
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText('Current Plan:')).toBeInTheDocument();

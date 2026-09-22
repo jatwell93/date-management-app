@@ -33,6 +33,7 @@ import {
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
 import {
+  formatStorageBytes,
   normalizeLaunchTier,
   parsePositiveIntEnv,
   isUsageEnforcementEnabled,
@@ -40,6 +41,7 @@ import {
   resolveMaxSkus,
   resolveMaxUsers,
   resolveStorageLimitBytes,
+  STORAGE_WARNING_THRESHOLD_PERCENT,
   UNLIMITED_CAP,
   type LaunchTier,
 } from './utils/usage-limits';
@@ -244,6 +246,9 @@ const RE_CREDIT_CLAIM_SEND = /^\/api\/supplier-credits\/claims\/\d+\/send$/;
 const RE_CREDIT_CLAIM_FOLLOW_UP = /^\/api\/supplier-credits\/claims\/\d+\/follow-up$/;
 const RE_CREDIT_CLAIM_OUTCOME = /^\/api\/supplier-credits\/claims\/\d+\/outcome$/;
 const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
+// Deliberately `[^/]+` and not `\d+`: a non-numeric id must reach the handler
+// and get Express's 400, rather than missing every route and returning 404.
+const RE_STORAGE_QUOTA_USER = /^\/api\/storage-quota\/[^/]+$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
@@ -322,6 +327,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
   ['GET', '/api/organization/usage', handleGetOrganizationUsage],
+  ['GET', RE_STORAGE_QUOTA_USER, handleGetStorageQuota, 'path'],
   ['GET', '/api/markdown-config', handleGetMarkdownConfig],
   ['PUT', '/api/markdown-config', handleUpdateMarkdownConfig],
   ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
@@ -3679,6 +3685,83 @@ async function handleGetOrganizationUsage(
   ]);
 
   return jsonResponse(mapOrganizationUsageResponse(counts, storageUsedBytes, tier, env), 200, env);
+}
+
+/**
+ * GET /api/storage-quota/:userId
+ *
+ * Ports Express's `storage-quota.routes.ts` `GET /:userId`. The response shape
+ * is unchanged — `used`, `limit`, `percentageUsed`, `tier`, `displayLimit`,
+ * `warningThreshold`, `isWarning` — because `StorageQuotaWarning.tsx` reads
+ * every field. Two deliberate divergences, both narrowing trust:
+ *
+ * 1. **The `tier` query parameter is accepted and ignored.** Express let the
+ *    *caller* name the tier its own quota was measured against
+ *    (`storage-quota.controller.ts` `parseTier`), validating it only against
+ *    the set `{free, pro, enterprise}`. The only caller hardcodes `tier=free`
+ *    (`frontend/src/components/StorageQuotaWarning.tsx`), so every paying
+ *    organization was measured against the 1 GB free cap and would have been
+ *    shown a permanent over-quota warning the moment the URL was fixed. The
+ *    tier is resolved from the organization here, through the same
+ *    `getOrganizationLaunchTier` the write-side usage gates use, so the quota a
+ *    customer is shown and the quota they are refused against are one number.
+ *    The parameter is discarded rather than rejected: a 400 on a value that no
+ *    longer changes the answer would be theatre, and rejecting it would break
+ *    the existing caller for no gain.
+ * 2. **`used` reuses `db.getStorageUsedBytes`** — already what
+ *    `GET /api/organization/usage` reports — instead of re-deriving Express's
+ *    `status IN ('processing','completed')` sum. That helper's documented
+ *    undercount (only queued catalogue imports persist an `uploads` row) is
+ *    inherited on purpose: one storage number per Worker beats two that
+ *    disagree, and the dashboard and this warning must not contradict.
+ *
+ * The per-user 403 is kept as Express had it. The quota itself is
+ * organization-scoped, so the `:userId` segment is decorative — but it is in a
+ * published URL, and a caller that passes someone else's id is asking a
+ * question it should not get an answer to.
+ */
+async function handleGetStorageQuota(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  // Matched loosely as `[^/]+` rather than `\d+` so that a non-numeric id
+  // reaches this handler and returns Express's 400 instead of falling through
+  // the route table to a 404.
+  const requestedUserId = Number.parseInt(pathname.split('/')[3] ?? '', 10);
+  if (!Number.isInteger(requestedUserId)) {
+    return errorResponse('User ID must be a number', 400, env);
+  }
+
+  if (requestedUserId !== auth.userId) {
+    return errorResponse('You can only access your own storage quota', 403, env);
+  }
+
+  const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+  const limit = resolveStorageLimitBytes(tier);
+  const used = await db.getStorageUsedBytes(auth.organizationId);
+
+  const percentageUsed = Math.round((used / limit) * 1000) / 10;
+
+  return jsonResponse(
+    {
+      used,
+      limit,
+      percentageUsed,
+      tier,
+      displayLimit: formatStorageBytes(limit),
+      warningThreshold: STORAGE_WARNING_THRESHOLD_PERCENT,
+      isWarning: percentageUsed >= STORAGE_WARNING_THRESHOLD_PERCENT,
+    },
+    200,
+    env,
+  );
 }
 
 // A missing products.retail_price column (migration 0003 not applied) is

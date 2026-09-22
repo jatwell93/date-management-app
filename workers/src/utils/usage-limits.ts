@@ -168,6 +168,36 @@ export function resolveStorageLimitBytes(tier: LaunchTier): number {
 }
 
 /**
+ * Percentage of the storage cap at which `GET /api/storage-quota/:userId`
+ * reports `isWarning`. Carried over from Express's `StorageQuotaService`, which
+ * hardcoded 80 inline.
+ */
+export const STORAGE_WARNING_THRESHOLD_PERCENT = 80;
+
+/**
+ * Human-readable byte size, e.g. `1 GB` / `10 GB` / `1000 GB`.
+ *
+ * Kept byte-identical to Express's `StorageQuotaService.formatBytes`
+ * (`backend/src/services/storage-quota.service.ts`) — including the space
+ * before the unit and the `parseFloat(toFixed(2))` trailing-zero trim — because
+ * `displayLimit` is rendered verbatim by the frontend, so any change here is a
+ * visible copy change rather than a refactor. It lives beside
+ * `STORAGE_LIMIT_BYTES_BY_TIER` so the numbers and the way they are spelled
+ * cannot drift apart.
+ */
+export function formatStorageBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B';
+
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  // Clamped so a value above 1024 TB renders as a large number of TB rather
+  // than indexing off the end of the table and printing `undefined`.
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+/**
  * Master switch for refusing over-cap writes. **Defaults to off.**
  *
  * The comparison is strict `=== 'true'`, matching `CATALOGUE_QUEUE_ENABLED`
