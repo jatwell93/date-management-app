@@ -2371,6 +2371,53 @@ equivalent, a relocated home, or an explicit retirement decision.
       `requireFeature('advanced_analytics')` prevents in Express. Decide explicitly rather than
       inherit. If tier gating is adopted, note the vocabulary mismatch: the Express tests treat
       `premium` as first-class, while the Worker's `LaunchTier` folds it into `professional`.
+      - [x] 3.1.l **Build `GET /api/storage-quota/:userId` in the live Worker and correct the
+            frontend call site (2.5 Finding 21). DONE 2026-09-23.** One piece of work because the
+            defect had two halves that hid each other: `StorageQuotaWarning.tsx:61` fetched a
+            **relative** `/api/storage-quota/...` rather than `buildApiUrl(...)`, and the live
+            Worker had no such route to reach even if it had. The frontend is Vite with no dev proxy
+            and no Pages `_redirects`, so the request resolved against the Pages origin; the
+            component's `catch` swallowed the failure, making "the warning is broken" and "this user
+            is comfortably under quota" indistinguishable from the outside.
+            <br>**A second defect was latent behind the first.** Express took the quota tier from a
+            **client-supplied** `?tier=` query parameter (`storage-quota.controller.ts` `parseTier`),
+            and the only caller hardcoded `subscriptionTier="free"` (`App.tsx:576`). Fixing only the
+            URL would have shipped a *new* bug: every paying organization measured against the 1 GB
+            free cap, so a professional org at 5 GB shows 500% used and an undismissable warning. The
+            Worker therefore resolves the tier itself via `getOrganizationLaunchTier` — the same
+            resolver the write-side usage gates use — so the quota a customer is shown and the quota
+            they are refused against are one number. The query parameter is accepted and ignored
+            rather than rejected: a 400 on a value that no longer changes the answer would be
+            theatre. The now-dead `subscriptionTier` prop is removed from the component, `App.tsx`,
+            and both test files.
+            <br>This also dissolved a vocabulary clash that a literal port would have carried across:
+            Express validates `{free, pro, enterprise}`, the Worker's `LaunchTier` is
+            `{free, starter, professional, enterprise}`. With the tier resolved server-side there is
+            no client value to translate.
+            <br>`used` reuses `db.getStorageUsedBytes` — already what `GET /api/organization/usage`
+            reports — rather than re-deriving Express's `status IN ('processing','completed')` sum.
+            That helper's documented undercount (only queued catalogue imports persist an `uploads`
+            row) is inherited deliberately: one storage number per Worker beats two that disagree,
+            and the dashboard and this warning must not contradict each other. Closing the undercount
+            is separate work and is not smuggled in here.
+            <br>The route pattern is `[^/]+`, not `\d+`, so a non-numeric id reaches the handler and
+            gets Express's 400 instead of missing every route and returning 404. The per-user 403 is
+            kept as Express had it, even though the quota is organization-scoped and the `:userId`
+            segment is therefore decorative — it is in a published URL.
+            <br>**Coverage, mutation-verified.** Five Worker tests in `minimal-api-routes.test.ts`
+            (tier resolved server-side while `?tier=free` contradicts it; the inclusive 80% boundary;
+            403 for another user's id, asserting the read never happens; 400 rather than 404 for a
+            non-numeric id; route registration) and the frontend assertion at
+            `StorageQuotaWarning.test.tsx` repointed from the relative path it pinned onto the built
+            URL, plus a replacement for the obsolete "forwards the tier" test that now pins the
+            *absence* of a client tier. Every one was verified to fail: four source mutations
+            (tier-from-query, `>` for `>=`, dropped 403, regex tightened to `\d+`) each failed the
+            tests that name them, and reverting the component to the relative URL failed 2 of the 33
+            frontend tests — the other 31 render mocked responses and are blind to the call site.
+            `npm run test:build-artifact` gained the route so it cannot silently vanish from the
+            bundle; because the route is a RegExp its slashes are escaped in the built artifact, so
+            the guard matches `\/api\/storage-quota\/` and not the plain path. That guard was
+            mutation-verified too.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,

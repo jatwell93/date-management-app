@@ -572,9 +572,7 @@ function AppContent({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {isLoggedIn && userId && (
-        <StorageQuotaWarning userId={userId} token={token} subscriptionTier="free" />
-      )}
+      {isLoggedIn && userId && <StorageQuotaWarning userId={userId} token={token} />}
       {isLoggedIn && token && <TrialBanner token={token} />}
       <ExpectQaStatus
         isLoggedIn={isLoggedIn}

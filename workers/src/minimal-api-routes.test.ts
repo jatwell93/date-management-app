@@ -646,6 +646,99 @@ describe('minimal API route table', () => {
     });
   });
 
+  describe('GET /api/storage-quota/:userId', () => {
+    const GIBIBYTE = 1024 * 1024 * 1024;
+
+    it('reports the quota against the organization tier, ignoring the client-supplied one', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const dbWithRows = createAuthenticatedOrgDatabase(
+        { 'FROM subscription_tiers': [{ tier_level: 'professional' }] },
+        { getStorageUsedBytes: vi.fn().mockResolvedValue(5 * GIBIBYTE) },
+      );
+
+      // `?tier=free` contradicts the organization's actual tier on purpose.
+      // Express took the caller's word for it and would answer with the 1 GB
+      // free cap; the only caller hardcoded `free`, so every paying
+      // organization was measured against the smallest limit in the table. If
+      // this ever reports a 1 GB limit again, the client is naming its own
+      // quota and this assertion fails.
+      const response = await resolveMinimalGet(
+        '/api/storage-quota/7',
+        dbWithRows,
+        '/api/storage-quota/7?tier=free',
+      );
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toEqual({
+        used: 5 * GIBIBYTE,
+        limit: 10 * GIBIBYTE,
+        percentageUsed: 50,
+        tier: 'professional',
+        displayLimit: '10 GB',
+        warningThreshold: 80,
+        isWarning: false,
+      });
+    });
+
+    it('flags a warning at exactly the threshold', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const dbWithRows = createAuthenticatedOrgDatabase(
+        { 'FROM subscription_tiers': [{ tier_level: 'professional' }] },
+        { getStorageUsedBytes: vi.fn().mockResolvedValue(8 * GIBIBYTE) },
+      );
+
+      const response = await resolveMinimalGet('/api/storage-quota/7', dbWithRows);
+
+      expect(response?.status).toBe(200);
+      // 80 is inclusive -- `>=`, as Express had it. A strict `>` here would
+      // leave the warning silent for exactly the user it was written for.
+      await expect(response?.json()).resolves.toMatchObject({
+        percentageUsed: 80,
+        isWarning: true,
+      });
+    });
+
+    it('refuses a quota lookup for another user', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const getStorageUsedBytes = vi.fn().mockResolvedValue(5 * GIBIBYTE);
+      const dbWithRows = createAuthenticatedOrgDatabase(
+        { 'FROM subscription_tiers': [{ tier_level: 'professional' }] },
+        { getStorageUsedBytes },
+      );
+
+      // The authenticated user is id 7 (see createAuthenticatedOrgDatabase).
+      const response = await resolveMinimalGet('/api/storage-quota/8', dbWithRows);
+
+      expect(response?.status).toBe(403);
+      // Refused before the read, not merely filtered out of the answer.
+      expect(getStorageUsedBytes).not.toHaveBeenCalled();
+    });
+
+    it('answers a non-numeric user id with 400 rather than falling through to 404', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const dbWithRows = createAuthenticatedOrgDatabase(
+        { 'FROM subscription_tiers': [{ tier_level: 'professional' }] },
+        { getStorageUsedBytes: vi.fn().mockResolvedValue(0) },
+      );
+
+      // Pins the route pattern itself: it matches `[^/]+`, not `\d+`, so a bad
+      // id reaches the handler and gets Express's 400. Tightening the regex to
+      // `\d+` would turn this into a route miss -- a 404 -- and silently change
+      // the documented error contract.
+      const response = await resolveMinimalGet('/api/storage-quota/not-a-number', dbWithRows);
+
+      expect(response?.status).toBe(400);
+    });
+
+    it('registers the storage-quota route used by StorageQuotaWarning', () => {
+      expect(getMinimalRoutes()).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining(['GET', /^\/api\/storage-quota\/[^/]+$/]),
+        ]),
+      );
+    });
+  });
+
   it('loads supplier credit read data from the authenticated organization', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithSupplierCredits = {

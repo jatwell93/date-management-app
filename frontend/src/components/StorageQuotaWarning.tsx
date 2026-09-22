@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './StorageQuotaWarning.css';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { buildApiUrl } from '../lib/api.service';
 
 /**
  * Storage Quota Warning Modal Component
@@ -9,7 +10,6 @@ import { useFreshApiToken } from '../hooks/useFreshApiToken';
  * Usage:
  * <StorageQuotaWarning
  *   userId={123}
- *   subscriptionTier="free"
  *   onUpgrade={() => navigateToUpgrade()}
  *   onDismiss={() => setShowWarning(false)}
  * />
@@ -28,7 +28,6 @@ interface StorageQuotaInfo {
 interface StorageQuotaWarningProps {
   userId: number;
   token?: string | null;
-  subscriptionTier?: 'free' | 'pro' | 'enterprise';
   onUpgrade?: () => void;
   onDismiss?: () => void;
   autoHideDays?: number; // Days before showing warning again (default 7)
@@ -37,7 +36,6 @@ interface StorageQuotaWarningProps {
 export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   userId,
   token,
-  subscriptionTier = 'free',
   onUpgrade,
   onDismiss,
   autoHideDays = 7,
@@ -58,7 +56,16 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
         }
 
         const authToken = await getFreshApiToken('storage-quota');
-        const response = await fetch(`/api/storage-quota/${userId}?tier=${subscriptionTier}`, {
+        // Must go through buildApiUrl: the frontend is Vite with no dev proxy
+        // and no Pages `_redirects`, so a relative `/api/...` resolves against
+        // the Pages origin and never reaches the Worker. The `catch` below
+        // swallows that, which is why a quota warning that never appeared was
+        // indistinguishable from a user comfortably under quota.
+        //
+        // No `tier` query parameter: the server resolves the organization's
+        // tier itself (`handleGetStorageQuota`). A client that names its own
+        // limit can only be wrong, and this one always said "free".
+        const response = await fetch(buildApiUrl(`/api/storage-quota/${userId}`), {
           headers: {
             Authorization: `Bearer ${authToken}`,
           },
@@ -97,7 +104,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
     };
 
     fetchQuota();
-  }, [userId, subscriptionTier, autoHideDays, token, getFreshApiToken]);
+  }, [userId, autoHideDays, token, getFreshApiToken]);
 
   // Handle dismiss
   const handleDismiss = () => {

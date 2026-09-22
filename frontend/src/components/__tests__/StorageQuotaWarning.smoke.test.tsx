@@ -25,11 +25,13 @@ vi.mock('../../hooks/useFreshApiToken', () => ({
 }));
 
 // Mock the App component parts we need
+// The tier is no longer a prop: the server resolves the organization's tier
+// and returns it in the payload, so the tier these tests exercise is the one in
+// each mocked response body below.
 const MockAppWithStorageWarning: React.FC<{
   userId: number;
-  tier: 'free' | 'pro' | 'enterprise';
   token?: string | null;
-}> = ({ userId, tier, token = 'mock-token' }) => {
+}> = ({ userId, token = 'mock-token' }) => {
   const [showWarning, setShowWarning] = React.useState(true);
 
   if (!showWarning) {
@@ -42,7 +44,6 @@ const MockAppWithStorageWarning: React.FC<{
       <StorageQuotaWarning
         userId={userId}
         token={token}
-        subscriptionTier={tier}
         onDismiss={() => setShowWarning(false)}
         onUpgrade={() => undefined}
       />
@@ -71,7 +72,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} />);
 
       // Verify main app content still visible
       expect(screen.getByText('Main App Content')).toBeInTheDocument();
@@ -96,7 +97,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} />);
 
       // Main app content should be visible
       expect(screen.getByText('Main App Content')).toBeInTheDocument();
@@ -120,7 +121,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} />);
 
       // Wait for warning to appear
       await waitFor(() => {
@@ -156,7 +157,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/85%/)).toBeInTheDocument();
@@ -180,7 +181,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={2} tier="pro" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={2} token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/90%/)).toBeInTheDocument();
@@ -204,7 +205,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/100%/)).toBeInTheDocument();
@@ -215,9 +216,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     it('should handle network errors gracefully without crashing app', async () => {
       fetchMock.mockRejectOnce(new Error('Network failure'));
 
-      const { container } = render(
-        <MockAppWithStorageWarning userId={1} tier="free" token="test-token" />,
-      );
+      const { container } = render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       // App should still render
       expect(screen.getByText('Main App Content')).toBeInTheDocument();
@@ -244,9 +243,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
       // First render and dismiss
       fetchMock.mockResponseOnce(JSON.stringify(quotaData));
-      const { unmount } = render(
-        <MockAppWithStorageWarning userId={1} tier="free" token="test-token" />,
-      );
+      const { unmount } = render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -262,7 +259,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
       // Remount component
       fetchMock.mockResponseOnce(JSON.stringify(quotaData));
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       // Should not show warning again (dismissed recently)
       await waitFor(() => {
@@ -286,7 +283,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
       );
 
       const startTime = performance.now();
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
       const renderTime = performance.now() - startTime;
 
       // Should render quickly (< 100ms)
@@ -319,7 +316,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           ),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       // Main app should be visible immediately
       expect(screen.getByText('Main App Content')).toBeInTheDocument();
@@ -348,7 +345,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       await waitFor(() => {
         const closeButton = screen.getByLabelText('Close warning');
@@ -370,7 +367,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
+      render(<MockAppWithStorageWarning userId={1} token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
