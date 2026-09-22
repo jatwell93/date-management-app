@@ -329,6 +329,32 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
     });
 
     /**
+     * An admin whose stored role is still the pre-#517 spelling.
+     *
+     * `canManageUsers` used to compare the raw column, so `'Manager'` — which
+     * the Clerk webhook wrote for `org:admin` — matched nothing and the user
+     * got "Only admins can create users". Migration 0014 rewrites these rows,
+     * but the gate normalizes too, so a database that has not run it yet (or a
+     * replica mid-rollout) still admits the person the row plainly describes.
+     *
+     * Mutation check: restoring the raw `role === 'admin'` comparison turns
+     * this into a 403.
+     */
+    it('admits an admin whose row still holds the pre-migration spelling', async () => {
+      await sql`
+        INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
+        VALUES (${ORG}, 'clerk-legacy-admin', 'legacy', 'legacy@a.test', 'Manager', NOW())`;
+      await sql`
+        INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
+        VALUES (${ORG}, 'professional', 'active', NOW())`;
+
+      const response = await postUser('team_member', 'clerk-legacy-admin');
+
+      expect(response.status).toBe(201);
+      expect(await readAudit()).toHaveLength(1);
+    });
+
+    /**
      * Seat cap (task 3.1.j(a)).
      *
      * These live beside the audit cases rather than in

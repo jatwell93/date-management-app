@@ -1,17 +1,26 @@
 /**
- * Canonical organization role constants — frontend re-export.
+ * Frontend role constants.
  *
- * Keep in sync with backend/src/constants/roles.ts.
- * Only the subset needed by UI logic is included here.
+ * The vocabulary and the normalizer are **re-exported from
+ * `shared/domain/roles.ts`** rather than restated. This file used to carry its
+ * own copy under the instruction "Keep in sync with
+ * backend/src/constants/roles.ts" — the same instruction the other copy carried
+ * while silently disagreeing with it, which is issue #517.
+ *
+ * This copy happened to agree entry-for-entry, but nothing enforced that, and
+ * it is not decorative: `ClerkAuthProvider.tsx:17` normalizes the JWT
+ * `role`/`org_role` claim through `normalizeRole`, and the UI permission gates
+ * act on the result. An alias added to the shared table alone would have made
+ * the client's gates disagree with the server's for the same user — #517,
+ * client-side.
+ *
+ * What stays here is genuinely frontend-specific: the permission matrix and
+ * the display labels.
  */
+export { ROLES, CANONICAL_ROLES, normalizeRole, isCanonicalRole } from '@shared/roles';
+export type { RoleValue } from '@shared/roles';
 
-export const ROLES = {
-  ADMIN: 'admin',
-  MANAGER: 'manager',
-  TEAM_MEMBER: 'team_member',
-} as const;
-
-export type RoleValue = (typeof ROLES)[keyof typeof ROLES];
+import { ROLES, type RoleValue } from '@shared/roles';
 
 export const PERMISSIONS = {
   MANAGE_ORGANIZATION: 'manage_organization',
@@ -55,39 +64,8 @@ export function hasPermission(role: RoleValue, permission: PermissionValue): boo
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
 }
 
-/** Type guard: is the string a valid canonical role? */
-export function isValidRole(role: string): role is RoleValue {
-  return (Object.values(ROLES) as string[]).includes(role);
-}
-
 /** Production-only roles (excludes manager until plan upgrade). */
 export const PRODUCTION_ROLES: readonly RoleValue[] = [ROLES.ADMIN, ROLES.TEAM_MEMBER];
 
-const LEGACY_ROLE_MAP: Record<string, RoleValue> = {
-  owner: ROLES.ADMIN,
-  admin: ROLES.ADMIN,
-  Admin: ROLES.ADMIN,
-  ADMIN: ROLES.ADMIN,
-  'org:admin': ROLES.ADMIN,
-  manager: ROLES.MANAGER,
-  Manager: ROLES.MANAGER,
-  MANAGER: ROLES.MANAGER,
-  'org:manager': ROLES.MANAGER,
-  member: ROLES.TEAM_MEMBER,
-  team_member: ROLES.TEAM_MEMBER,
-  'team-member': ROLES.TEAM_MEMBER,
-  'Team Member': ROLES.TEAM_MEMBER,
-  Team_Member: ROLES.TEAM_MEMBER,
-  TEAM_MEMBER: ROLES.TEAM_MEMBER,
-  Staff: ROLES.TEAM_MEMBER,
-  staff: ROLES.TEAM_MEMBER,
-  'org:member': ROLES.TEAM_MEMBER,
-  'org:team_member': ROLES.TEAM_MEMBER,
-};
-
-/** Normalize any role string (legacy or canonical) to a canonical RoleValue. */
-export function normalizeRole(role: string | null | undefined): RoleValue {
-  if (!role) return ROLES.TEAM_MEMBER;
-  if (isValidRole(role)) return role;
-  return LEGACY_ROLE_MAP[role] ?? ROLES.TEAM_MEMBER;
-}
+/** Type guard: is the string a valid canonical role? Alias for `isCanonicalRole`. */
+export { isCanonicalRole as isValidRole } from '@shared/roles';

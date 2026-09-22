@@ -18,6 +18,7 @@ import {
   ORG_AUDIT_TRIGGERS,
 } from '../../../shared/domain/org-audit';
 import { isPlatformAdminUser } from '../../../shared/domain/platform-catalogue';
+import { normalizeRole, type RoleValue } from '../constants/roles';
 
 interface ClerkSessionClaims {
   sub?: string;
@@ -43,7 +44,9 @@ interface OrganizationBootstrapBody {
   clerkMembershipRole?: string | null;
 }
 
-type BootstrapRoleValue = 'admin' | 'manager' | 'team_member';
+/** The canonical role set. Kept as a local alias of the shared `RoleValue`
+ * so the many signatures below read unchanged. */
+type BootstrapRoleValue = RoleValue;
 
 const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
 const MULTI_LABEL_PUBLIC_SUFFIXES = ['com.au', 'net.au', 'org.au', 'co.uk', 'org.uk'];
@@ -126,26 +129,17 @@ export function getClerkAuthorizedParties(env: Env, requestOrigin?: string): str
   return Array.from(parties);
 }
 
+/**
+ * Normalize a Clerk role for the bootstrap path.
+ *
+ * This was a hand-rolled ladder covering a subset of the spellings the shared
+ * table already holds. It was also the *correct* one of the Worker's two
+ * normalizers — the webhook's disagreed with it, which is issue #517 — so
+ * pointing both at `shared/domain/roles.ts` is what makes them agree by
+ * construction rather than by review.
+ */
 function normalizeBootstrapRole(role: string | null | undefined): BootstrapRoleValue {
-  if (!role) {
-    return 'team_member';
-  }
-
-  if (
-    role === 'admin' ||
-    role === 'Admin' ||
-    role === 'ADMIN' ||
-    role === 'owner' ||
-    role === 'org:admin'
-  ) {
-    return 'admin';
-  }
-
-  if (role === 'manager' || role === 'Manager' || role === 'MANAGER' || role === 'org:manager') {
-    return 'manager';
-  }
-
-  return 'team_member';
+  return normalizeRole(role);
 }
 
 export async function authenticateClerkRequest(

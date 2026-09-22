@@ -1894,6 +1894,100 @@ equivalent, a relocated home, or an explicit retirement decision.
             backfill of existing non-canonical rows. The audit trail records the raw stored value
             rather than a tidied one, precisely so the divergence surfaces; the webhook test pins
             `'Team Member'`/`'Manager'` and is written to **fail when #517 is fixed**.
+            <br>**#517 is now FIXED (2026-09-21), and that pinned assertion has been flipped to
+            the canonical values — the alarm fired as designed.** Recorded here rather than in a new
+            row because this is where the finding was escalated from.
+            <br>**Root cause was wider than two normalizers.** There were **four** copies of the
+            role vocabulary — `backend/src/constants/roles.ts`, `workers/src/constants/roles.ts`,
+            `frontend/src/constants/roles.ts`, and the two ad-hoc ladders inside the Worker's Clerk
+            handlers. Three carried the comment *"Keep in sync with backend/src/constants/roles.ts"*
+            and none of them were: the Worker's table omitted `owner`, so the same Clerk role
+            normalized to `admin` through the bootstrap path and to `team_member` through the
+            webhook. A comment asking humans to keep four tables identical is not a mechanism.
+            `shared/domain/roles.ts` is now the mechanism; the package copies re-export it.
+            <br>**The backfill decision, which is the subtle part.** Migration 0014 splits
+            `'Manager'` on `clerk_user_id`. `mapClerkRole` produced that spelling **only** for
+            Clerk's `admin`/`org:admin`, so a Clerk-originated row holding it belongs to an
+            administrator and becomes `'admin'` — mapping it to `'manager'` instead would have left
+            the reported bug unfixed, because the three supplier-policy gates normalize before
+            comparing and would still refuse them. A row with **no** `clerk_user_id` predates Clerk,
+            where the spelling meant an actual manager, and takes the least-privilege reading. That
+            the live Express create route cannot produce the title-case spelling today is what makes
+            the split safe rather than a guess: it validates
+            `z.enum(['admin','manager','team_member'])` (`backend/src/schemas/index.ts:32`), and the
+            middleware that accepted `'Manager'` (`validateUserInput`) is referenced only by its own
+            test.
+            <br>**One deliberate behaviour change beyond the defect, flagged rather than buried:**
+            `owner` now normalizes to `admin` on every Worker path, where the Worker's own table
+            previously treated it as unrecognised. This is not a widening of who can reach admin —
+            `normalizeBootstrapRole` already granted it for that spelling, so the privilege was
+            always one page load away — but it does mean the two paths now agree, which is the
+            point. The Worker's role test had pinned the old behaviour by grouping `owner` with
+            `superuser` and `org:billing`; it was a known spelling this copy had omitted, not an
+            unknown one, and the test now says so.
+            <br>**Evidence.** Six real-SQL pglite cases run the **actual 0014 file** rather than a
+            paraphrase of it, because `test:migrations:e2e` proves the migration applies and
+            replays but never looks at what the rows become. Five mutations, each failing exactly
+            the intended cases: the legacy mapper restored (2), `owner` dropped from the shared
+            table (2), `canManageUsers` comparing raw again (1), the backfill losing its
+            `clerk_user_id` split (1), and the backfill widened to rewrite every row (2). The full
+            migration series suite (95) and the real-Postgres e2e suite (8) both pass with the
+            synthetic interruption probe renumbered to 0015.
+            <br>**Review round, and a correction to the paragraph above.** A reviewer challenged
+            the claim that the frontend copy "sits outside the defect path". That was wrong:
+            `ClerkAuthProvider.tsx:17` normalizes the JWT `role`/`org_role` claim through it and
+            the UI permission gates act on the result, so it is a live consumer. Its table happened
+            to agree with `ROLE_ALIASES` entry-for-entry, but nothing enforced that — an alias added
+            to the shared table alone would have made the client's gates disagree with the server's
+            for the same user, which is #517 client-side. It is now a re-export too, wired through
+            the `@shared/*` precedent already in `frontend/tsconfig.json` and `vite.config.ts`. All
+            three package copies defer to the shared table; the docstring's claim is now true rather
+            than aspirational.
+            <br>**A second copy the first pass missed entirely:**
+            `backend/scripts/backfill-canonical-roles.js` holds a private table, and it had already
+            drifted — the four `org:*` Clerk spellings were absent, so running it against a row
+            holding `org:admin` would have demoted an administrator to `team_member`, the exact
+            failure it exists to prevent. The runbook tells an operator to run it, so this was a
+            live footgun rather than a latent one. The missing entries are added. It is **not**
+            deleted here even though 0014 supersedes it: `audit/2.4-script-inventory.md` already
+            records "retire, gated on the role-value check in Finding 18" and retirement belongs to
+            **3.4**. Overriding a recorded disposition mid-change would be the wrong kind of
+            tidiness. It cannot import the shared module — CommonJS run by bare `node` against a
+            TypeScript source — and its header now says so, which is itself the argument for
+            deleting rather than maintaining it.
+            <br>**0014 was incomplete relative to the vocabulary this change documents.** It
+            rewrote only `'Manager'` and `'Team Member'`, while `ROLE_ALIASES` lists `Staff`,
+            `staff`, `Team_Member`, `TEAM_MEMBER`, `team-member`, `member` and the `org:*` forms as
+            spellings a stored row might hold. `users.role` is free TEXT with no CHECK constraint,
+            so a residual row is never rejected or flagged. The sweep now covers **every
+            no-privilege spelling**, and the manager aliases (`MANAGER`, `org:manager`) as well.
+            <br>**The privileged aliases are deliberately still not rewritten** — `Admin`, `ADMIN`,
+            `owner`, `org:admin`. No writer in this repo has produced them, so such a row is
+            hypothetical, and promoting it would be a grant made on the strength of a spelling
+            rather than a normalization. Four tests assert the *non*-change, so a later
+            "let's be thorough" edit cannot quietly turn this migration into one that hands out
+            administrator. Such rows stay functional regardless, because every gate normalizes
+            before comparing.
+            <br>**Deploy-order hazard, accepted and documented rather than engineered away.**
+            `workers-deploy.yml` declares `deploy-production` `needs: [migration-prep-production]`,
+            so 0014 applies **before** the fixed Worker ships. In that window the old
+            `mapClerkRole` is still live and `organizationMembership.created` overwrites
+            `users.role` unconditionally, so a Clerk redelivery re-breaks a user *after* the
+            backfill has passed over them, and nothing re-applies the migration on its own.
+            Reordering the workflow for one data migration is the wrong lever — expand-first is
+            correct for the schema case. The remedy is the idempotency the migration already has:
+            the header and the RBAC runbook now require a post-deploy check
+            (`SELECT COUNT(*) FROM users WHERE role NOT IN (...)` = 0) with a re-run if it is not.
+            <br>**One reviewer claim rejected on the evidence:** that the `clerk_user_id` split has
+            no test coverage, on the grounds that a search "across the test suites finds nothing".
+            The coverage exists — `workers/src/migration-0014-role-normalization.pglite.node.test.ts`
+            executes the real migration file and asserts exactly the cases the comment asked for. It
+            is not under `src/database/migrations/`, which is where that search evidently looked, and
+            it is not under it on purpose: those suites are `node --test` against a real cluster,
+            while the row-level assertions want the pglite harness the rest of the Worker's real-SQL
+            coverage already uses. The file now holds 21 cases.
+            <br>**Residual, recorded not fixed:** none of the four copies now restates the table
+            except the CommonJS backfill script above, whose deletion is 3.4's.
       - [x] 3.1.h **Decide whether concurrent first-bootstrap may mint two admins.** **Tracked as #474.**
             Pre-existing in
             **both** implementations, so not a regression and not a Worker defect — recorded because

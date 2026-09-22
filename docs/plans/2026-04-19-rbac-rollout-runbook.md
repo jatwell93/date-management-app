@@ -23,6 +23,44 @@
 
 ### Purpose
 
+> **Superseded by migration 0014 for the `User` table (issue #517).**
+> `database/migrations/0014_normalize_user_roles.up.sql` performs this
+> normalization transactionally, inside the migration ledger, with tests. Prefer
+> it. The steps below remain for the `OrganizationInvite` table, which 0014 does
+> not touch, and as the manual fallback described in "After the Worker deploy"
+> immediately below.
+
+### After the Worker deploy — required, not optional
+
+`.github/workflows/workers-deploy.yml` runs `migration-prep-production` **before**
+`deploy-production` (`needs: [migration-prep-production]`). So 0014 applies while the
+previous Worker is still serving, and that Worker's `mapClerkRole` still writes
+`'Manager'` / `'Team Member'` — overwriting `users.role` unconditionally on every
+`organizationMembership.created`, redeliveries included.
+
+A Clerk delivery landing in that window re-breaks a user *after* 0014 has passed over
+them, and nothing re-applies the migration on its own. Once the deploy finishes,
+confirm it found nothing left:
+
+```sql
+SELECT role, COUNT(*) FROM users
+WHERE role NOT IN ('admin', 'manager', 'team_member')
+GROUP BY role;
+```
+
+**Expected: no rows.** Group by `role` rather than counting, because the two possible
+causes need different responses and a bare count cannot tell them apart:
+
+| Rows returned | Meaning | Action |
+|---|---|---|
+| `'Manager'`, `'Team Member'`, `Staff`, `member`, `MANAGER`, `org:*`… | A delivery landed in the deploy window and re-wrote them after 0014 passed over | **Re-apply 0014's statements** — idempotent, so a clean replay updates zero rows — then re-check |
+| `Admin`, `ADMIN`, `owner`, `org:admin` | Deliberately preserved by 0014 | **Do nothing.** Re-running the migration will not change them, by design — see the header of `0014_normalize_user_roles.up.sql`. They resolve correctly at runtime because every gate normalizes before comparing |
+
+`'Manager'` is the row that matters most: it is the one that costs an administrator
+their privileges rather than merely looking untidy.
+
+---
+
 Normalize any legacy role values (`Manager`, `owner`, `Staff`, etc.) in the `User` and `OrganizationInvite` tables to canonical values (`admin`, `manager`, `team_member`). The script is idempotent — safe to run multiple times.
 
 ### Step 1 — Dry Run (no writes)

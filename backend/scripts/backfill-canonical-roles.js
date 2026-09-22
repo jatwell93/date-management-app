@@ -6,11 +6,28 @@
  * Canonical roles: 'admin', 'manager', 'team_member'
  *
  * Maps:
- *   owner, admin, Admin, ADMIN        → admin
- *   manager, Manager, MANAGER         → manager
+ *   owner, admin, Admin, ADMIN,
+ *   org:admin                         → admin
+ *   manager, Manager, MANAGER,
+ *   org:manager                       → manager
  *   member, team_member, team-member,
  *   Team Member, Team_Member,
  *   TEAM_MEMBER, Staff, staff, null   → team_member
+ *
+ * SUPERSEDED BY MIGRATION 0014 (issue #517), which does the same normalization
+ * transactionally, inside the migration ledger, with tests. Prefer it. This
+ * script survives only because its retirement is gated by the script
+ * disposition in audit/2.4-script-inventory.md (Finding 18) and belongs to task
+ * 3.4 -- not because it is still the right tool.
+ *
+ * The table below MUST mirror ROLE_ALIASES in shared/domain/roles.ts. It cannot
+ * import it: this file is CommonJS run by bare `node`, and the shared module is
+ * TypeScript. That hand-sync arrangement is exactly what caused #517, which is
+ * the argument for deleting this rather than maintaining it. It had in fact
+ * already drifted -- the four `org:*` Clerk spellings were missing, so running
+ * it against a row holding `org:admin` would have demoted an administrator to
+ * team_member, the precise failure the script exists to prevent. They are
+ * added below.
  *
  * Safe to run multiple times — only updates rows that don't already have canonical values.
  *
@@ -29,10 +46,14 @@ const LEGACY_ROLE_MAP = {
   admin: 'admin',
   Admin: 'admin',
   ADMIN: 'admin',
+  'org:admin': 'admin',
   manager: 'manager',
   Manager: 'manager',
   MANAGER: 'manager',
+  'org:manager': 'manager',
   member: 'team_member',
+  'org:member': 'team_member',
+  'org:team_member': 'team_member',
   team_member: 'team_member',
   'team-member': 'team_member',
   'Team Member': 'team_member',

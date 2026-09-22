@@ -1,4 +1,5 @@
 import type { Database } from '../database';
+import { normalizeRole, type RoleValue } from '../constants/roles';
 import {
   ORG_AUDIT_EVENT_TYPES,
   ORG_AUDIT_TRIGGERS,
@@ -23,16 +24,24 @@ export function sanitizeSlug(value: string, fallback: string): string {
   return slug || fallback;
 }
 
-function mapClerkRole(role: unknown): string {
-  if (typeof role !== 'string') {
-    return 'Team Member';
-  }
-
-  if (role === 'admin' || role === 'org:admin') {
-    return 'Manager';
-  }
-
-  return 'Team Member';
+/**
+ * Normalize a Clerk membership role for storage.
+ *
+ * Replaces a local `mapClerkRole` that returned `'Manager'` for `admin` and
+ * `org:admin`, and `'Team Member'` for everything else (issue #517). Neither is
+ * a value any authorization gate accepts: `canManageUsers` compares lowercase,
+ * so `'Manager' !== 'manager'` refused user management, and the supplier-policy
+ * gates normalize first and got `manager`, not `admin`. Since
+ * `organizationMembership.created` overwrites `users.role` unconditionally and
+ * Clerk redelivers, a correctly bootstrapped admin was silently downgraded by a
+ * routine webhook — with a 403 that explained nothing.
+ *
+ * It now defers to the shared normalizer, which is what the bootstrap path has
+ * always effectively used, so the same Clerk role means the same thing whether
+ * it arrives by page load or by webhook.
+ */
+function mapClerkRole(role: unknown): RoleValue {
+  return normalizeRole(typeof role === 'string' ? role : null);
 }
 
 function extractPrimaryClerkEmail(data: Record<string, unknown>): string | null {

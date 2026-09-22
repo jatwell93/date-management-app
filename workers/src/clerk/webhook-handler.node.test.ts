@@ -200,18 +200,15 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
       const rows = await audit();
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
-        // NOT 'team_member' → 'admin'. `mapClerkRole` maps org:admin to
-        // 'Manager' and everything else to 'Team Member' — neither of which is
-        // in ROLES_PROD/ROLES_DEV, and `canManageUsers` compares against
-        // lowercase 'manager', so it rejects 'Manager'. Meanwhile the bootstrap
-        // path's `normalizeBootstrapRole` maps the same org:admin to 'admin'.
-        // The trail records what was actually written to users.role rather than
-        // a tidied-up version, because normalizing here would hide the
-        // divergence instead of surfacing it. Pre-existing and out of scope for
-        // 3.1.g; tracked as #517. The values below are pinned to the defect,
-        // and this assertion is what will fail loudly when it is fixed.
-        old_role: 'Team Member',
-        new_role: 'Manager',
+        // Canonical, as of the #517 fix. This assertion previously read
+        // `old_role: 'Team Member', new_role: 'Manager'` and was pinned to the
+        // defect on purpose, so that fixing it could not land silently — the
+        // webhook stored spellings no authorization gate accepted, while the
+        // bootstrap path wrote 'admin' for the same org:admin. Both normalizers
+        // now defer to `shared/domain/roles.ts`, so the trail records the value
+        // an authorization gate will actually honour.
+        old_role: 'team_member',
+        new_role: 'admin',
         // No local actor: the grant was made inside Clerk by someone this
         // database has no user id for. NULL is the honest value, not a bug.
         actor_user_id: null,
@@ -315,7 +312,9 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
         // Read from the caller's own organization, not the foreign row that
         // shares the address and holds 'admin'.
         old_role: String(seeded[0].role),
-        new_role: 'Manager',
+        // Was 'Manager' before the #517 fix; org:admin now normalizes to the
+        // canonical 'admin' on this path as it always did on the bootstrap one.
+        new_role: 'admin',
       });
       expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
         trigger: 'clerk-webhook',

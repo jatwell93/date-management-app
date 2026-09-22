@@ -322,6 +322,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0014",
+      "forward": "0014_normalize_user_roles.up.sql",
+      "transaction": "required",
+      "compatibility": "migrate",
+      "dataLoss": "possible",
+      "recovery": {
+        "strategy": "forward-fix",
+        "file": "0014_normalize_user_roles.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "partial"
+      },
+      "backfill": {
+        "required": true,
+        "plan": "Rewrite non-canonical users.role values written by the Clerk webhook (issue #517). 'Manager' with a clerk_user_id becomes 'admin' -- mapClerkRole produced it only for Clerk's admin/org:admin, so those rows are administrators; 'Manager' without one is pre-Clerk legacy and becomes 'manager'. 'Team Member' becomes 'team_member'. Idempotent: each statement matches only the spelling it replaces, so a replay updates zero rows.",
+        "resumable": true
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }
