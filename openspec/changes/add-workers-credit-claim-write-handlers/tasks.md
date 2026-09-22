@@ -107,3 +107,68 @@ them. Verified present, not re-implemented: `createSupplier` / `updateSupplier` 
   mutations were run against them; each killed the test guarding it and no others.
   `npm run test:db` 236 passed, `npx vitest run` 365 passed, `npm run typecheck` and
   `npm run build` clean, backend `tsc` clean, 59 backend credit-claim tests pass.
+
+## Bot review round
+
+Two automated reviews of the branch produced ten distinct findings. Seven were
+confirmed against the code and fixed, two were rejected with reasons, one was confirmed
+but deferred to its own issue.
+
+**Fixed**
+
+- **Stuck `SENDING` (the one that mattered).** `finalizeSentClaim` ran with no error
+  handling after the supplier had already been emailed. `SENDING` is a dead end --
+  `reserveClaimForSending` needs `DRAFT`, follow-ups need a chaseable status,
+  `recordOutcome` refuses anything neither chaseable nor `PARTIALLY_CREDITED`, and
+  `revertClaimToDraft` is only reachable from inside `sendClaim`'s own failure paths --
+  so a transient Neon failure stranded the claim with no route out. Now retried once
+  and, on a second failure, reported through the backend's own `sending-stuck` Sentry
+  tags. **The review's suggested remedy was a blind retry, which would have introduced
+  the bug issue #487 documents:** a statement that times out *after* the server
+  committed it gets applied twice, and this one ends in an `INSERT` of the `SENT`
+  event. `finalizeSentClaim` is therefore now gated on `status = 'SENDING'`, which
+  makes it idempotent -- a retry after a committed attempt matches no row, so the
+  `updated` CTE is empty and no duplicate event is written. The retry is only safe
+  because of that predicate.
+- The file header's claim that the ambiguous `SENDING` state "is not reachable the same
+  way" was corrected: single-statement finalize removes the *partial* finalize, not a
+  *failed* one.
+- `revertClaimToDraft` on the not-configured path was unguarded while the sibling call
+  in the `catch` was guarded, so a failing revert replaced the caller's 400 with a 500.
+  Both now go through `releaseReservation`, which reports the stuck row rather than
+  swallowing it silently (the review's remedy swallowed it).
+- Outcome validation now mirrors `claimOutcomeSchema`: non-negative `creditedValue`
+  (a negative would have been counted as money recovered by the recovery report),
+  `Number` instead of `parseFloat` (which reads "5abc" as 5), and the 1000-character
+  note cap.
+- `batchNumber` now mirrors `claimCreateSchema`: max 120 characters and no HTML tags.
+- `loadAttachments` issues its R2 reads with `Promise.all` instead of serially.
+- `escapeHtml` now escapes `'`. No current interpolation needs it, but the helper is
+  shared now and the cost is nil.
+- The renderer's JSDoc, carried over verbatim in the hoist, described a Prisma-shaped
+  input it no longer takes (SKU, expiry, a product relation). Rewritten, and the module
+  gained the unit tests it never had on either side (`credit-claim-email.test.ts`).
+
+**Rejected**
+
+- *Hoist the Resend endpoint URL and the `noreply@example.com` fallback into
+  `shared/domain`.* `shared/domain/` holds domain logic deliberately free of transport;
+  an HTTP endpoint and a placeholder sender are configuration. Nothing breaks if the
+  runtimes disagree on them, unlike the email body, where divergence is silent and
+  visible to suppliers. Moving them blurs the boundary that makes the module useful.
+- *Guard on `Content-Length` before `request.formData()`.* `Content-Length` is
+  attacker-controlled and absent on chunked uploads, so it does not actually bound
+  isolate memory -- it only helps an honest client while reading as protection.
+  Cloudflare already caps request bodies at the edge.
+
+**Deferred to an issue**
+
+- `unitsClaimed` is never bounded by the write-off's `unitsDiscarded`, so a line can
+  claim more units than were written off and snapshot the inflated expected credit.
+  Real, but **shared with the backend** (`credit-claim.service.ts:93-96`) rather than a
+  Worker divergence: fixing one runtime would break the parity this change exists to
+  establish, and fixing the backend is out of scope here. Same disposition as #460.
+
+**Verification of the round.** Eleven further mutations, each killing the test guarding
+it and no others -- including the new idempotency predicate, whose removal fails the
+"no-op when finalized a second time" test alone.

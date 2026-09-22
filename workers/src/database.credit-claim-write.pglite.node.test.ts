@@ -531,6 +531,33 @@ describe('Workers credit-claim writes (real SQL)', () => {
       expect(claim?.events[1].note).toBe('Sent to claims@acme.test');
     });
 
+    it('is a no-op when finalized a second time, so the retry cannot double-write', async () => {
+      // The send path retries the finalize when it fails after the supplier was
+      // emailed. A statement can time out *after* the server committed it (issue
+      // #487), so that retry is only safe if a second application changes nothing.
+      // Without the `status = 'SENDING'` predicate the claim's timeline would show
+      // "Sent to ..." twice.
+      await db.reserveClaimForSending(ORG, claimId);
+      const first = {
+        contactEmail: 'claims@acme.test',
+        sentAt: new Date('2026-09-22T10:00:00.000Z'),
+        nextFollowUpAt: new Date('2026-09-29T10:00:00.000Z'),
+      };
+      await db.finalizeSentClaim(ORG, claimId, first);
+      await db.finalizeSentClaim(ORG, claimId, {
+        contactEmail: 'someone-else@acme.test',
+        sentAt: new Date('2026-10-01T10:00:00.000Z'),
+        nextFollowUpAt: new Date('2026-10-08T10:00:00.000Z'),
+      });
+
+      const claim = await db.findCreditClaim(ORG, claimId);
+      expect(claim?.events.map((e) => e.type)).toEqual(['CREATED', 'SENT']);
+      // The first send's facts stand: the retry must not move sentAt or rewrite the
+      // address the claim was actually sent to.
+      expect(parseDbTimestamp(claim!.sentAt!).toISOString()).toBe(first.sentAt.toISOString());
+      expect(claim?.contactEmailSnapshot).toBe('claims@acme.test');
+    });
+
     it("does not finalize another organization's claim", async () => {
       await db.reserveClaimForSending(ORG, claimId);
       await db.finalizeSentClaim(OTHER_ORG, claimId, {

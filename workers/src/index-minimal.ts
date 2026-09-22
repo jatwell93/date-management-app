@@ -101,6 +101,12 @@ import {
 
 /** Outcomes the outcome route accepts, matching the backend's `claimOutcomeSchema`. */
 const CLAIM_OUTCOMES: readonly ClaimOutcome[] = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED'];
+
+// Field bounds copied from the backend's zod schemas (backend/src/schemas/index.ts).
+// The Worker has no schema layer, so these are the only thing keeping the two runtimes
+// answering alike on the same payload.
+const MAX_BATCH_NUMBER_LENGTH = 120;
+const MAX_CLAIM_NOTE_LENGTH = 1000;
 import { isPlatformAdminUser as isSharedPlatformAdminUser } from '../../shared/domain/platform-catalogue';
 import {
   isCreditType,
@@ -2489,9 +2495,21 @@ async function handleBuildCreditClaim(
     if (line.unitsClaimed != null && unitsClaimed == null) {
       return errorResponse('unitsClaimed must be a positive whole number', 400, env);
     }
+    // Mirrors `claimCreateSchema.batchNumber` (backend/src/schemas/index.ts:456-461).
+    const batchNumber = line.batchNumber == null ? null : String(line.batchNumber);
+    if (batchNumber != null && batchNumber.length > MAX_BATCH_NUMBER_LENGTH) {
+      return errorResponse(
+        `Batch number must be at most ${MAX_BATCH_NUMBER_LENGTH} characters`,
+        400,
+        env,
+      );
+    }
+    if (batchNumber != null && (batchNumber.includes('<') || batchNumber.includes('>'))) {
+      return errorResponse('Batch number cannot contain HTML tags', 400, env);
+    }
     lines.push({
       expiredItemTransactionId: transactionId,
-      batchNumber: line.batchNumber == null ? null : String(line.batchNumber),
+      batchNumber,
       unitsClaimed: unitsClaimed ?? undefined,
     });
   }
@@ -2599,10 +2617,22 @@ async function handleRecordCreditClaimOutcome(
   if (!CLAIM_OUTCOMES.includes(outcome as ClaimOutcome)) {
     return errorResponse(`Outcome must be one of ${CLAIM_OUTCOMES.join(', ')}`, 400, env);
   }
-  const creditedValue =
-    body?.creditedValue == null ? null : Number.parseFloat(String(body.creditedValue));
-  if (creditedValue != null && !Number.isFinite(creditedValue)) {
-    return errorResponse('creditedValue must be a number', 400, env);
+  // Mirrors `claimOutcomeSchema` (backend/src/schemas/index.ts:473-483). `Number`
+  // rather than `parseFloat`: parseFloat is lenient enough to read "5abc" as 5, where
+  // the backend's `z.number()` refuses the string outright. The non-negative bound is
+  // the one that matters — a negative credit would flow into the recovery report as
+  // money recovered.
+  const creditedValue = body?.creditedValue == null ? null : Number(body.creditedValue);
+  if (creditedValue != null && (!Number.isFinite(creditedValue) || creditedValue < 0)) {
+    return errorResponse('Credited value must be zero or greater', 400, env);
+  }
+  const note = body?.note == null ? null : String(body.note);
+  if (note != null && note.length > MAX_CLAIM_NOTE_LENGTH) {
+    return errorResponse(
+      `Note must be at most ${MAX_CLAIM_NOTE_LENGTH} characters`,
+      400,
+      env,
+    );
   }
 
   const result = await recordOutcome(
@@ -2611,7 +2641,7 @@ async function handleRecordCreditClaimOutcome(
     id,
     outcome as ClaimOutcome,
     creditedValue,
-    body?.note == null ? null : String(body.note),
+    note,
   );
   if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
   return jsonResponse(result.value, 200, env);

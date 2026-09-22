@@ -4,13 +4,16 @@
 // in shared/domain/ so this runtime and the Express backend cannot drift.
 //
 // The Express original is backend/src/services/credit-claim.service.ts. The one
-// structural difference: Express wraps finalize-after-send in a transaction with a
-// compensating write, which the Neon HTTP driver cannot do. Here the finalize is a
-// single statement (claim row + SENT event together), so the ambiguous SENDING state
-// the backend has to apologise for in comments is not reachable the same way — either
-// the one statement lands or it does not.
+// structural difference: Express wraps finalize-after-send in a transaction, which the
+// Neon HTTP driver cannot do, so the finalize here is a single statement (claim row +
+// SENT event together). That removes the *partial* finalize — either the statement
+// lands or it does not — but it does NOT remove the stuck-SENDING problem: the
+// statement can still fail outright after the supplier has been emailed. So the
+// backend's compensation and its loud `sending-stuck` alert are mirrored below rather
+// than dropped; see `reportStuckSending`.
 
 import type { R2Bucket } from '@cloudflare/workers-types';
+import * as Sentry from '@sentry/cloudflare';
 import {
   isChaseableClaimStatus,
   isSettledClaimStatus,
@@ -148,6 +151,48 @@ function photoBucket(env: Env): R2Bucket {
   return env.CSV_UPLOADS;
 }
 
+/**
+ * A claim left in SENDING cannot be moved by any route: `reserveClaimForSending`
+ * needs DRAFT, follow-ups need a chaseable status, `recordOutcome` refuses anything
+ * that is neither chaseable nor `PARTIALLY_CREDITED`, and `revertClaimToDraft` is
+ * only reachable from inside `sendClaim`'s own failure paths. It therefore needs
+ * manual reconciliation, and the one thing that must never happen is for it to be
+ * silent. Same posture — and the same Sentry tags — as the backend.
+ */
+function reportStuckSending(
+  organizationId: string,
+  claimId: number,
+  error: unknown,
+  originalError?: string,
+): void {
+  console.error(
+    `[CreditClaim] Claim ${claimId} stuck in SENDING (org ${organizationId}): ${String(error)}`,
+  );
+  Sentry.captureException(error, {
+    level: 'error',
+    tags: { feature: 'credit-claim-send', event: 'sending-stuck' },
+    extra: { organizationId, claimId, originalError },
+  });
+}
+
+/**
+ * Give a reservation back after a send that never happened. Best-effort: the claim
+ * being stuck in SENDING is worth reporting but must not replace the refusal the
+ * caller is about to receive with a database error.
+ */
+async function releaseReservation(
+  db: Database,
+  organizationId: string,
+  claimId: number,
+  reason: string,
+): Promise<void> {
+  try {
+    await db.revertClaimToDraft(organizationId, claimId);
+  } catch (error) {
+    reportStuckSending(organizationId, claimId, error, reason);
+  }
+}
+
 async function loadAttachments(
   db: Database,
   env: Env,
@@ -155,9 +200,18 @@ async function loadAttachments(
   claimId: number,
 ): Promise<ClaimEmailAttachment[]> {
   const photos = await db.listClaimPhotoKeys(organizationId, claimId);
+  // Independent reads, fetched together: this runs before every claim email, so a
+  // claim with several photos would otherwise pay one R2 round-trip each, serially,
+  // on the latency-critical send path. Order is preserved by `map`, so attachments
+  // still follow line/photo id order.
+  const fetched = await Promise.all(
+    photos.map(async (photo) => ({
+      photo,
+      object: await photoBucket(env).get(photo.storageKey),
+    })),
+  );
   const attachments: ClaimEmailAttachment[] = [];
-  for (const photo of photos) {
-    const object = await photoBucket(env).get(photo.storageKey);
+  for (const { photo, object } of fetched) {
     if (!object) continue; // Already purged; send the claim without it rather than fail.
     attachments.push({
       filename: photo.fileName,
@@ -245,20 +299,43 @@ export async function sendClaim(
     const attachments = await loadAttachments(db, env, organizationId, id);
     const accepted = await sendClaimEmail(env, { to, ...email, attachments });
     if (!accepted) {
-      await db.revertClaimToDraft(organizationId, id);
+      // The revert is itself a network call. If it fails the claim is stuck in
+      // SENDING, so report that rather than letting the DB error replace the
+      // caller's "not configured" answer with an opaque 500.
+      await releaseReservation(db, organizationId, id, 'provider-not-configured');
       return fail('VALIDATION', 'Email provider is not configured; claim was not sent.');
     }
   } catch (error) {
-    await db.revertClaimToDraft(organizationId, id).catch(() => undefined);
+    await releaseReservation(db, organizationId, id, 'send-failed');
     throw error;
   }
 
   const sentAt = now();
-  await db.finalizeSentClaim(organizationId, id, {
-    contactEmail: to,
-    sentAt,
-    nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
-  });
+  const finalize = () =>
+    db.finalizeSentClaim(organizationId, id, {
+      contactEmail: to,
+      sentAt,
+      nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
+    });
+
+  try {
+    await finalize();
+  } catch (error) {
+    // The supplier has the email. Reverting to DRAFT here would let someone send it
+    // again, so the only safe moves are to retry the finalize or to shout. Mirrors
+    // the compensation in backend/src/services/credit-claim.service.ts.
+    //
+    // Retrying a write is only safe because `finalizeSentClaim` is idempotent (it is
+    // gated on status = 'SENDING'). Issue #487 is the standing warning here: a
+    // statement that times out *after* the server committed it would otherwise be
+    // applied twice — in this case appending a second SENT event to the timeline.
+    try {
+      await finalize();
+    } catch (retryError) {
+      reportStuckSending(organizationId, id, retryError, String(error));
+      throw error;
+    }
+  }
 
   const updated = await db.findCreditClaim(organizationId, id);
   if (!updated) return fail('NOT_FOUND', `Claim ${id} not found`);

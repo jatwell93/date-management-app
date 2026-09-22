@@ -530,6 +530,17 @@ export function createCreditClaimDatabase(
       return rows.length === 1;
     },
 
+    /**
+     * Complete a send: flip SENDING→SENT and append the SENT event together.
+     *
+     * The `status = 'SENDING'` predicate makes this **idempotent**, which is what lets
+     * the caller retry it after the supplier has already been emailed. A statement can
+     * time out *after* the server committed it (issue #487), and a blind retry of the
+     * old unconditional form would have appended a second SENT event to the claim's
+     * timeline. With the predicate, a retry that follows a committed attempt matches no
+     * row, so `updated` is empty and the event insert selects nothing — while a retry
+     * after a genuinely failed attempt still finds SENDING and applies.
+     */
     async finalizeSentClaim(organizationId, id, data) {
       await sql`
         WITH updated AS (
@@ -540,6 +551,7 @@ export function createCreditClaimDatabase(
               next_follow_up_at = ${toTimestamp(data.nextFollowUpAt)}::timestamp,
               updated_at = NOW()
           WHERE organization_id = ${organizationId} AND id = ${id}
+            AND status = 'SENDING'
           RETURNING id
         )
         INSERT INTO credit_claim_events (organization_id, claim_id, user_id, type, note, created_at)

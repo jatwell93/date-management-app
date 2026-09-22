@@ -218,6 +218,46 @@ describe('credit-claim write routes', () => {
       ]);
     });
 
+    /**
+     * Validation parity with `claimCreateSchema.batchNumber`
+     * (backend/src/schemas/index.ts:456-461).
+     */
+    it.each([
+      ['an over-long batch number', 'x'.repeat(121)],
+      ['a batch number containing an opening tag', '<script>'],
+      ['a batch number containing a closing bracket', 'B-1>'],
+    ])('refuses %s, as the backend schema does', async (_label, batchNumber) => {
+      const buildCreditClaim = vi.fn();
+      const db = createAuthenticatedDb({ buildCreditClaim });
+
+      const response = await jsonPost(
+        '/api/supplier-credits/claims',
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber }] },
+        db,
+        envWith(createBucket()),
+      );
+
+      expect(response?.status).toBe(400);
+      expect(buildCreditClaim).not.toHaveBeenCalled();
+    });
+
+    it('accepts a batch number at exactly the length limit', async () => {
+      // The boundary, so the guard cannot quietly become off-by-one and start
+      // refusing payloads the backend accepts.
+      const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
+      const db = createAuthenticatedDb({ buildCreditClaim });
+
+      const response = await jsonPost(
+        '/api/supplier-credits/claims',
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber: 'x'.repeat(120) }] },
+        db,
+        envWith(createBucket()),
+      );
+
+      expect(response?.status).toBe(201);
+      expect(buildCreditClaim).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
       ['a missing supplier id', { lines: [{ expiredItemTransactionId: 1 }] }],
       ['a missing line list', { supplierId: 10 }],
@@ -475,6 +515,162 @@ describe('credit-claim write routes', () => {
       expect(finalizeSentClaim).not.toHaveBeenCalled();
     });
 
+    /**
+     * A claim stuck in SENDING cannot be moved by any route — re-sending needs DRAFT,
+     * follow-ups need a chaseable status, and `recordOutcome` refuses anything that is
+     * neither chaseable nor PARTIALLY_CREDITED. So the finalize that follows an
+     * accepted email is the one write in this module that must not fail silently.
+     */
+    describe('when the finalize fails after the supplier was emailed', () => {
+      function sendingDb(finalizeSentClaim: ReturnType<typeof vi.fn>) {
+        return createAuthenticatedDb({
+          findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+          reserveClaimForSending: vi.fn().mockResolvedValue(true),
+          listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+          revertClaimToDraft: vi.fn().mockResolvedValue(undefined),
+          finalizeSentClaim,
+        });
+      }
+
+      it('retries once and succeeds without disturbing the caller', async () => {
+        const fetchSpy = vi
+          .spyOn(globalThis, 'fetch')
+          .mockResolvedValue(new Response('{}', { status: 200 }));
+        const finalizeSentClaim = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('neon: transient'))
+          .mockResolvedValue(undefined);
+
+        const result = await sendClaim(
+          sendingDb(finalizeSentClaim),
+          envWith(createBucket(), { RESEND_API_KEY: 'test-key' }),
+          ORG,
+          1,
+        );
+
+        expect(result.ok).toBe(true);
+        expect(finalizeSentClaim).toHaveBeenCalledTimes(2);
+        // Exactly one email: the retry is of the database write, never of the send.
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        fetchSpy.mockRestore();
+      });
+
+      it('never reverts to draft, which would let the supplier be emailed twice', async () => {
+        const fetchSpy = vi
+          .spyOn(globalThis, 'fetch')
+          .mockResolvedValue(new Response('{}', { status: 200 }));
+        const finalizeSentClaim = vi.fn().mockRejectedValue(new Error('neon: down'));
+        const db = sendingDb(finalizeSentClaim);
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        await expect(
+          sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1),
+        ).rejects.toThrow();
+
+        expect(db.revertClaimToDraft).not.toHaveBeenCalled();
+        errorSpy.mockRestore();
+        fetchSpy.mockRestore();
+      });
+
+      it('reports the stuck claim loudly when the retry also fails', async () => {
+        const fetchSpy = vi
+          .spyOn(globalThis, 'fetch')
+          .mockResolvedValue(new Response('{}', { status: 200 }));
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const finalizeSentClaim = vi.fn().mockRejectedValue(new Error('neon: down'));
+
+        await expect(
+          sendClaim(
+            sendingDb(finalizeSentClaim),
+            envWith(createBucket(), { RESEND_API_KEY: 'test-key' }),
+            ORG,
+            1,
+          ),
+        ).rejects.toThrow('neon: down');
+
+        expect(finalizeSentClaim).toHaveBeenCalledTimes(2);
+        // Ops needs the org and claim id to reconcile by hand; a bare stack trace
+        // would not say which row is stuck.
+        const logged = errorSpy.mock.calls.map((args) => String(args[0])).join('\n');
+        expect(logged).toContain('stuck in SENDING');
+        expect(logged).toContain('Claim 1');
+        expect(logged).toContain(ORG);
+        errorSpy.mockRestore();
+        fetchSpy.mockRestore();
+      });
+    });
+
+    it('still answers the refusal when releasing the reservation itself fails', async () => {
+      // Unconfigured provider AND a failing revert. The caller must still get the
+      // actionable 400 rather than an opaque 500, and the stuck row must be reported.
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        revertClaimToDraft: vi.fn().mockRejectedValue(new Error('neon: down')),
+        finalizeSentClaim: vi.fn(),
+      });
+
+      const result = await sendClaim(db, envWith(createBucket()), ORG, 1);
+
+      expect(result).toMatchObject({ ok: false, code: 'VALIDATION' });
+      expect(errorSpy.mock.calls.map((args) => String(args[0])).join('\n')).toContain(
+        'stuck in SENDING',
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('issues the photo reads together and keeps them in photo order', async () => {
+      // Two properties at once, because each alone is passable by a wrong version:
+      // *parallelism* (a sequential loop would not have issued the second read before
+      // the first settled) and *ordering* (gathering results as they settle would
+      // reorder the supplier's attachments). The slow/fast pair makes the second fail
+      // loudly if `map` is ever replaced by a settle-ordered collection.
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{}', { status: 200 }));
+      const bucket = createBucket();
+      const slow = { arrayBuffer: async () => new TextEncoder().encode('first').buffer };
+      const fast = { arrayBuffer: async () => new TextEncoder().encode('second').buffer };
+      let getCalls = 0;
+      let callsWhenFirstSettled = 0;
+      bucket.get = vi.fn((key: string) => {
+        getCalls += 1;
+        if (key !== 'k1') return Promise.resolve(fast);
+        return new Promise((resolve) =>
+          setTimeout(() => {
+            callsWhenFirstSettled = getCalls;
+            resolve(slow);
+          }, 20),
+        );
+      }) as never;
+
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi
+          .fn()
+          .mockResolvedValueOnce(draftClaim())
+          .mockResolvedValue(draftClaim({ status: 'SENT' })),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([
+          { id: 1, claimLineId: 100, storageKey: 'k1', fileName: 'first.jpg', sizeBytes: 5 },
+          { id: 2, claimLineId: 100, storageKey: 'k2', fileName: 'second.jpg', sizeBytes: 6 },
+        ]),
+        finalizeSentClaim: vi.fn(),
+      });
+
+      await sendClaim(db, envWith(bucket, { RESEND_API_KEY: 'test-key' }), ORG, 1);
+
+      // Both reads were in flight before the slow one came back.
+      expect(callsWhenFirstSettled).toBe(2);
+      const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+      expect(body.attachments.map((a: { filename: string }) => a.filename)).toEqual([
+        'first.jpg',
+        'second.jpg',
+      ]);
+      fetchSpy.mockRestore();
+    });
+
     it('sends, then records sentAt and the first follow-up from the supplier cadence', async () => {
       const finalizeSentClaim = vi.fn();
       const fetchSpy = vi
@@ -657,6 +853,56 @@ describe('credit-claim write routes', () => {
       expect(actualSettledAt).toEqual(settledAt);
       // 90 days of retention, counted from settlement.
       expect(deleteAfter).toEqual(new Date('2026-12-21T10:00:00.000Z'));
+    });
+
+    /**
+     * Validation parity with `claimOutcomeSchema` (backend/src/schemas/index.ts:473).
+     * The Worker has no schema layer, so anything the zod schema refuses has to be
+     * refused by hand here or the two runtimes answer differently on one payload.
+     */
+    it.each([
+      ['a negative credited value', { outcome: 'CREDITED', creditedValue: -20 }],
+      ['a non-numeric credited value', { outcome: 'CREDITED', creditedValue: 'free money' }],
+      // parseFloat would read this as 5; z.number() refuses the string outright.
+      ['a partially numeric string', { outcome: 'CREDITED', creditedValue: '5abc' }],
+      ['an over-long note', { outcome: 'CREDITED', creditedValue: 10, note: 'x'.repeat(1001) }],
+    ])('refuses %s, as the backend schema does', async (_label, body) => {
+      const recordClaimOutcome = vi.fn();
+      const findCreditClaim = vi.fn();
+      const db = createAuthenticatedDb({ findCreditClaim, recordClaimOutcome });
+
+      const response = await jsonPost(
+        '/api/supplier-credits/claims/1/outcome',
+        body,
+        db,
+        envWith(createBucket()),
+      );
+
+      expect(response?.status).toBe(400);
+      // Rejected before any work: a negative credit that reached the DB would be
+      // counted as money recovered by the recovery report.
+      expect(findCreditClaim).not.toHaveBeenCalled();
+      expect(recordClaimOutcome).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['zero', 0],
+      ['a positive value', 12.5],
+      ['null', null],
+    ])('accepts %s as a credited value', async (_label, creditedValue) => {
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'SENT' })),
+        recordClaimOutcome: vi.fn(),
+      });
+
+      const response = await jsonPost(
+        '/api/supplier-credits/claims/1/outcome',
+        { outcome: 'CREDITED', creditedValue },
+        db,
+        envWith(createBucket()),
+      );
+
+      expect(response?.status).toBe(200);
     });
 
     it('rejects an outcome outside the accepted vocabulary at the route', async () => {

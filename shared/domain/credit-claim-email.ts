@@ -11,11 +11,18 @@
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
 
 function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return (
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      // Every current interpolation sits in a text node, where an apostrophe is
+      // harmless. Escaped anyway because this is now the canonical helper for both
+      // runtimes: the first reuse inside a single-quoted attribute would otherwise
+      // turn the omission into an injection point, and `&#39;` renders identically.
+      .replace(/'/g, '&#39;')
+  );
 }
 
 /** The claim fields the email body reads — nothing runtime-specific. */
@@ -42,9 +49,13 @@ export interface RenderedClaimEmail {
 /**
  * Render the supplier claim email from the claim + its lines. Pure and deterministic
  * so it is unit-testable and identical for the initial send and follow-ups (the
- * follow-up just prepends a reminder note). Batch, SKU, units and expiry are the
- * fields suppliers require on a return; each line links back to its write-off's
- * product via the loaded relation.
+ * follow-up swaps the subject and the intro sentence for a reminder). Each line
+ * reports batch, units claimed, expected credit and a photo count, which is what a
+ * supplier needs to match the attachments to the lines and process the return.
+ *
+ * It reads nothing but `RenderableClaim` — no product relation, no SKU, no expiry
+ * date. Those were available to the Prisma-shaped input this renderer started from;
+ * the structural subset it takes now deliberately does not carry them.
  */
 export function renderClaimEmail(
   claim: RenderableClaim,
