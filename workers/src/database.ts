@@ -55,6 +55,13 @@ import {
   type RecoveryReport,
 } from '../../shared/domain/credit-claim';
 import { createSupplierCreditDatabase } from './supplier-credit-database';
+import {
+  createCreditClaimDatabase,
+  type BuildClaimInput,
+  type ClaimOutcome,
+  type ClaimPhotoRow,
+  type ClaimWriteResult,
+} from './credit-claim-database';
 import { assertReferencesBelongToOrganization } from './tenant-references';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
@@ -210,6 +217,57 @@ export interface Database {
   getClaimablePool(organizationId: string): Promise<ClaimablePoolGroup[]>;
   getRecoveryReport(organizationId: string): Promise<RecoveryReport>;
   listCreditClaims(organizationId: string, statuses?: string[]): Promise<CreditClaim[]>;
+  findCreditClaim(organizationId: string, id: number): Promise<CreditClaim | null>;
+  /**
+   * `createdByUserId` is deliberately a separate argument rather than a field of
+   * `input`: the creator must come from the verified token and never from the request
+   * body, matching `backend/src/controllers/credit-claim.controller.ts:44`.
+   */
+  buildCreditClaim(
+    organizationId: string,
+    input: BuildClaimInput,
+    createdByUserId: number | null,
+  ): Promise<ClaimWriteResult<CreditClaim>>;
+  addCreditClaimPhoto(
+    organizationId: string,
+    claimId: number,
+    lineId: number,
+    file: { storageKey: string; fileName: string; sizeBytes: number },
+  ): Promise<ClaimWriteResult<CreditClaimPhoto>>;
+  reserveClaimForSending(organizationId: string, id: number): Promise<boolean>;
+  finalizeSentClaim(
+    organizationId: string,
+    id: number,
+    data: { contactEmail: string; sentAt: Date; nextFollowUpAt: Date },
+  ): Promise<void>;
+  revertClaimToDraft(organizationId: string, id: number): Promise<void>;
+  reserveFollowUp(
+    organizationId: string,
+    id: number,
+    expectedCount: number,
+    next: { followUpCount: number; nextFollowUpAt: Date },
+  ): Promise<boolean>;
+  restoreFollowUpSchedule(
+    organizationId: string,
+    id: number,
+    previous: { followUpCount: number; nextFollowUpAt: string | null },
+  ): Promise<void>;
+  recordClaimOutcome(
+    organizationId: string,
+    id: number,
+    outcome: ClaimOutcome,
+    creditedValue: number | null,
+    note: string | null,
+    settledAt: Date,
+    deleteAfter: Date,
+  ): Promise<boolean>;
+  addCreditClaimEvent(
+    organizationId: string,
+    claimId: number,
+    type: string,
+    note: string | null,
+  ): Promise<void>;
+  listClaimPhotoKeys(organizationId: string, claimId: number): Promise<ClaimPhotoRow[]>;
 
   // Expired items queries
   getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]>;
@@ -1160,6 +1218,7 @@ export function createWorkersDatabase(env: Env): Database {
   return {
     sql,
     ...createSupplierCreditDatabase(sql),
+    ...createCreditClaimDatabase(sql),
 
     // User queries
     async findUserByEmail(email: string): Promise<User | null> {
@@ -2351,169 +2410,6 @@ export function createWorkersDatabase(env: Env): Database {
         })) satisfies RecoveryClaimRow[],
         unclaimedValue,
       );
-    },
-
-    async listCreditClaims(organizationId: string, statuses?: string[]): Promise<CreditClaim[]> {
-      const claimRows = (await sql`
-        SELECT cc.id,
-               cc.supplier_id AS "supplierId",
-               cc.status,
-               cc.contact_email_snapshot AS "contactEmailSnapshot",
-               cc.expected_credit_units AS "expectedCreditUnits",
-               cc.expected_credit_value AS "expectedCreditValue",
-               cc.credited_value AS "creditedValue",
-               cc.sent_at::text AS "sentAt",
-               cc.next_follow_up_at::text AS "nextFollowUpAt",
-               cc.follow_up_count AS "followUpCount",
-               cc.settled_at::text AS "settledAt",
-               s.id AS "supplier_id",
-               s.name AS "supplier_name",
-               s.credit_type AS "supplier_credit_type",
-               s.contact_email AS "supplier_contact_email",
-               s.contact_phone AS "supplier_contact_phone",
-               s.credit_policy_note AS "supplier_credit_policy_note",
-               s.policy_write_off_qty AS "supplier_policy_write_off_qty",
-               s.policy_credit_qty AS "supplier_policy_credit_qty",
-               s.follow_up_days AS "supplier_follow_up_days",
-               s.representative_name AS "supplier_representative_name",
-               s.representative_email AS "supplier_representative_email",
-               s.policy_updated_at::text AS "supplier_policy_updated_at"
-        FROM credit_claims cc
-        JOIN suppliers s ON s.id = cc.supplier_id
-        WHERE cc.organization_id = ${organizationId}
-          AND (${statuses == null} OR cc.status = ANY(${statuses ?? []}))
-        ORDER BY cc.id DESC
-      `) as Array<Record<string, unknown>>;
-
-      if (claimRows.length === 0) {
-        return [];
-      }
-
-      const claimIds = claimRows.map((row) => Number(row.id));
-      const [lineRows, photoRows, eventRows] = await Promise.all([
-        sql`
-          SELECT id,
-                 claim_id AS "claimId",
-                 expired_item_transaction_id AS "expiredItemTransactionId",
-                 batch_number AS "batchNumber",
-                 units_claimed AS "unitsClaimed",
-                 expected_credit_units AS "expectedCreditUnits",
-                 expected_credit_value AS "expectedCreditValue"
-          FROM credit_claim_lines
-          WHERE organization_id = ${organizationId}
-            AND claim_id = ANY(${claimIds})
-          ORDER BY id ASC
-        `,
-        sql`
-          SELECT ccp.id,
-                 ccl.claim_id AS "claimId",
-                 ccp.claim_line_id AS "claimLineId",
-                 ccp.file_name AS "fileName",
-                 ccp.size_bytes AS "sizeBytes"
-          FROM credit_claim_photos ccp
-          JOIN credit_claim_lines ccl ON ccl.id = ccp.claim_line_id
-          WHERE ccp.organization_id = ${organizationId}
-            AND ccl.claim_id = ANY(${claimIds})
-          ORDER BY ccp.id ASC
-        `,
-        sql`
-          SELECT id,
-                 claim_id AS "claimId",
-                 type,
-                 note,
-                 created_at::text AS "createdAt"
-          FROM credit_claim_events
-          WHERE organization_id = ${organizationId}
-            AND claim_id = ANY(${claimIds})
-          ORDER BY id ASC
-        `,
-      ]);
-
-      const photosByLine = new Map<number, CreditClaimPhoto[]>();
-      for (const row of photoRows as Array<Record<string, unknown>>) {
-        const lineId = Number(row.claimLineId);
-        const photos = photosByLine.get(lineId) ?? [];
-        photos.push({
-          id: Number(row.id),
-          fileName: String(row.fileName),
-          sizeBytes: Number(row.sizeBytes),
-        });
-        photosByLine.set(lineId, photos);
-      }
-
-      const linesByClaim = new Map<number, CreditClaimLine[]>();
-      for (const row of lineRows as Array<Record<string, unknown>>) {
-        const claimId = Number(row.claimId);
-        const lineId = Number(row.id);
-        const lines = linesByClaim.get(claimId) ?? [];
-        lines.push({
-          id: lineId,
-          expiredItemTransactionId: Number(row.expiredItemTransactionId),
-          batchNumber: (row.batchNumber as string | null) ?? null,
-          unitsClaimed: Number(row.unitsClaimed),
-          expectedCreditUnits:
-            row.expectedCreditUnits == null ? null : Number(row.expectedCreditUnits),
-          expectedCreditValue:
-            row.expectedCreditValue == null ? null : Number(row.expectedCreditValue),
-          photos: photosByLine.get(lineId) ?? [],
-        });
-        linesByClaim.set(claimId, lines);
-      }
-
-      const eventsByClaim = new Map<number, CreditClaimEvent[]>();
-      for (const row of eventRows as Array<Record<string, unknown>>) {
-        const claimId = Number(row.claimId);
-        const events = eventsByClaim.get(claimId) ?? [];
-        events.push({
-          id: Number(row.id),
-          type: String(row.type),
-          note: (row.note as string | null) ?? null,
-          createdAt: String(row.createdAt),
-        });
-        eventsByClaim.set(claimId, events);
-      }
-
-      return claimRows.map((row) => {
-        const claimId = Number(row.id);
-        return {
-          id: claimId,
-          supplierId: Number(row.supplierId),
-          status: String(row.status),
-          contactEmailSnapshot: (row.contactEmailSnapshot as string | null) ?? null,
-          expectedCreditUnits:
-            row.expectedCreditUnits == null ? null : Number(row.expectedCreditUnits),
-          expectedCreditValue:
-            row.expectedCreditValue == null ? null : Number(row.expectedCreditValue),
-          creditedValue: row.creditedValue == null ? null : Number(row.creditedValue),
-          sentAt: (row.sentAt as string | null) ?? null,
-          nextFollowUpAt: (row.nextFollowUpAt as string | null) ?? null,
-          followUpCount: row.followUpCount == null ? 0 : Number(row.followUpCount),
-          settledAt: (row.settledAt as string | null) ?? null,
-          supplier: {
-            id: Number(row.supplier_id),
-            name: String(row.supplier_name),
-            creditType: row.supplier_credit_type === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE',
-            contactEmail: (row.supplier_contact_email as string | null) ?? null,
-            contactPhone: (row.supplier_contact_phone as string | null) ?? null,
-            creditPolicyNote: String(row.supplier_credit_policy_note ?? ''),
-            policyWriteOffQty:
-              row.supplier_policy_write_off_qty == null
-                ? null
-                : Number(row.supplier_policy_write_off_qty),
-            policyCreditQty:
-              row.supplier_policy_credit_qty == null
-                ? null
-                : Number(row.supplier_policy_credit_qty),
-            followUpDays:
-              row.supplier_follow_up_days == null ? 7 : Number(row.supplier_follow_up_days),
-            representativeName: (row.supplier_representative_name as string | null) ?? null,
-            representativeEmail: (row.supplier_representative_email as string | null) ?? null,
-            policyUpdatedAt: (row.supplier_policy_updated_at as string | null) ?? null,
-          },
-          lines: linesByClaim.get(claimId) ?? [],
-          events: eventsByClaim.get(claimId) ?? [],
-        };
-      });
     },
 
     // Expired items queries

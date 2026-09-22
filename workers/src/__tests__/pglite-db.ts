@@ -409,6 +409,13 @@ const SCHEMA_SQL = `
   CREATE INDEX idx_expired_transactions_credit_disposition
     ON expired_item_transactions (credit_disposition);
 
+  -- The four credit_claim* tables use TIMESTAMP(3), not TIMESTAMPTZ, because that is
+  -- what migration 0005 declares. The distinction is load-bearing: the write path
+  -- casts an ISO string with an explicit ::timestamp, which a naive column stores
+  -- verbatim but a
+  -- TIMESTAMPTZ column re-interprets in the session timezone -- so a TIMESTAMPTZ
+  -- harness silently shifts every sent_at/settled_at by the runner's UTC offset and
+  -- fails tests the production schema would pass.
   CREATE TABLE credit_claims (
     id SERIAL PRIMARY KEY,
     organization_id TEXT NOT NULL,
@@ -419,12 +426,12 @@ const SCHEMA_SQL = `
     expected_credit_units INTEGER,
     expected_credit_value DOUBLE PRECISION,
     credited_value DOUBLE PRECISION,
-    sent_at TIMESTAMPTZ,
-    next_follow_up_at TIMESTAMPTZ,
+    sent_at TIMESTAMP(3),
+    next_follow_up_at TIMESTAMP(3),
     follow_up_count INTEGER NOT NULL DEFAULT 0,
-    settled_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    settled_at TIMESTAMP(3),
+    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE credit_claim_lines (
@@ -436,8 +443,8 @@ const SCHEMA_SQL = `
     units_claimed INTEGER NOT NULL,
     expected_credit_units INTEGER,
     expected_credit_value DOUBLE PRECISION,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE credit_claim_photos (
@@ -447,8 +454,8 @@ const SCHEMA_SQL = `
     storage_key TEXT NOT NULL,
     file_name TEXT NOT NULL,
     size_bytes INTEGER NOT NULL,
-    delete_after TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    delete_after TIMESTAMP(3),
+    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE credit_claim_events (
@@ -458,7 +465,7 @@ const SCHEMA_SQL = `
     user_id INTEGER,
     type TEXT NOT NULL,
     note TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
   );
 `;
 

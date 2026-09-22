@@ -91,6 +91,23 @@ import {
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
+import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
+import { isUniqueViolation } from './db-errors';
+import {
+  recordOutcome,
+  sendClaim,
+  sendFollowUp,
+  uploadClaimPhoto,
+} from './credit-claim-service';
+
+/** Outcomes the outcome route accepts, matching the backend's `claimOutcomeSchema`. */
+const CLAIM_OUTCOMES: readonly ClaimOutcome[] = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED'];
+
+// Field bounds copied from the backend's zod schemas (backend/src/schemas/index.ts).
+// The Worker has no schema layer, so these are the only thing keeping the two runtimes
+// answering alike on the same payload.
+const MAX_BATCH_NUMBER_LENGTH = 120;
+const MAX_CLAIM_NOTE_LENGTH = 1000;
 import { isPlatformAdminUser as isSharedPlatformAdminUser } from '../../shared/domain/platform-catalogue';
 import {
   isCreditType,
@@ -166,22 +183,6 @@ function isPositiveInteger(value: unknown): value is number {
 /** ISO calendar date YYYY-MM-DD (no time component). */
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/**
- * Detect a Postgres unique-violation. Prefer the SQLSTATE code over
- * substring matching the message, which is locale/version dependent.
- */
-function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const e = error as { code?: unknown; message?: unknown };
-  if (e.code === '23505') return true;
-  // Some neon driver wrappers nest the pg error under .cause.
-  const cause = (error as { cause?: { code?: unknown } }).cause;
-  if (cause && typeof cause === 'object' && (cause as { code?: unknown }).code === '23505') {
-    return true;
-  }
-  return false;
-}
-
 // Postgres `undefined_column` (42703) or `undefined_table` (42P01). Guards
 // against a code-before-migration gap: e.g. the products.retail_price column or
 // organization_markdown_config table (#338) not yet applied to the live Neon DB.
@@ -237,6 +238,11 @@ const RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER = /^\/api\/supplier-credits\/products\
 const RE_SUPPLIER_CREDIT_SUPPLIER = /^\/api\/supplier-credits\/suppliers\/\d+$/;
 const RE_SUPPLIER_CREDIT_SUPPLIER_POLICY = /^\/api\/supplier-credits\/suppliers\/\d+\/policy$/;
 const RE_SUPPLIER_CREDIT_DISPOSE = /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/;
+const RE_CREDIT_CLAIM = /^\/api\/supplier-credits\/claims\/\d+$/;
+const RE_CREDIT_CLAIM_PHOTOS = /^\/api\/supplier-credits\/claims\/\d+\/lines\/\d+\/photos$/;
+const RE_CREDIT_CLAIM_SEND = /^\/api\/supplier-credits\/claims\/\d+\/send$/;
+const RE_CREDIT_CLAIM_FOLLOW_UP = /^\/api\/supplier-credits\/claims\/\d+\/follow-up$/;
+const RE_CREDIT_CLAIM_OUTCOME = /^\/api\/supplier-credits\/claims\/\d+\/outcome$/;
 const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
@@ -303,6 +309,12 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/supplier-credits/claimable-pool', handleGetClaimablePool],
   ['GET', '/api/supplier-credits/recovery-report', handleGetRecoveryReport],
   ['GET', '/api/supplier-credits/claims', handleListCreditClaims],
+  ['POST', '/api/supplier-credits/claims', handleBuildCreditClaim],
+  ['GET', RE_CREDIT_CLAIM, handleGetCreditClaim, 'path'],
+  ['POST', RE_CREDIT_CLAIM_PHOTOS, handleAddClaimPhoto, 'path'],
+  ['POST', RE_CREDIT_CLAIM_SEND, handleSendCreditClaim, 'path'],
+  ['POST', RE_CREDIT_CLAIM_FOLLOW_UP, handleSendCreditClaimFollowUp, 'path'],
+  ['POST', RE_CREDIT_CLAIM_OUTCOME, handleRecordCreditClaimOutcome, 'path'],
   ['GET', '/api/platform/catalogue-corrections', handleListCatalogueCorrections],
   ['GET', '/api/platform/catalogue/provenance', handleGetCatalogueProvenance],
   ['PATCH', RE_PLATFORM_CATALOGUE_CORRECTION, handleReviewCatalogueCorrection, 'path'],
@@ -2394,6 +2406,263 @@ async function handleListCreditClaims(request: Request, db: Database, env: Env):
         : undefined;
   const claims = await db.listCreditClaims(auth.organizationId, statuses);
   return jsonResponse(claims, 200, env);
+}
+
+/**
+ * Map a claim write refusal onto a status code. The Express side throws typed errors
+ * into error middleware the Worker has no equivalent of, so refusals travel back as
+ * data and are translated here — one place, so the two runtimes answer alike.
+ */
+function claimErrorStatus(code: 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT'): number {
+  if (code === 'NOT_FOUND') return 404;
+  return code === 'CONFLICT' ? 409 : 400;
+}
+
+function claimIdFromPath(pathname: string): number | null {
+  return parsePositiveInt(pathname.split('/')[4] ?? '');
+}
+
+/**
+ * GET /api/supplier-credits/claims/:id
+ */
+async function handleGetCreditClaim(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const claim = await db.findCreditClaim(auth.organizationId, id);
+  if (!claim) return errorResponse(`Claim ${id} not found`, 404, env);
+  return jsonResponse(claim, 200, env);
+}
+
+/**
+ * Validate and normalise one requested claim line from the request body. Mirrors the
+ * per-line half of `claimCreateSchema` (backend/src/schemas/index.ts:449-467); the
+ * Worker has no schema layer, so these bounds are the only thing keeping the two
+ * runtimes answering alike on the same payload.
+ */
+function parseClaimLineInput(raw: unknown): { line: ClaimLineInput } | { error: string } {
+  const line = raw as {
+    expiredItemTransactionId?: unknown;
+    batchNumber?: unknown;
+    unitsClaimed?: unknown;
+  };
+
+  // `isPositiveInteger` rather than a string coercion: the backend's zod schemas use
+  // `z.number().int().positive()`, which refuses the *string* "10", so coercing here
+  // would let the Worker accept a payload Express answers 400 to. Path segments are a
+  // different matter and still parse from text — that is what a URL is.
+  if (!isPositiveInteger(line?.expiredItemTransactionId)) {
+    return { error: 'Each line needs a valid expiredItemTransactionId' };
+  }
+  const transactionId = line.expiredItemTransactionId;
+
+  if (line.unitsClaimed != null && !isPositiveInteger(line.unitsClaimed)) {
+    return { error: 'unitsClaimed must be a positive whole number' };
+  }
+  const unitsClaimed = line.unitsClaimed == null ? undefined : (line.unitsClaimed as number);
+
+  if (line.batchNumber != null && typeof line.batchNumber !== 'string') {
+    return { error: 'Batch number must be a string' };
+  }
+  const batchNumber = line.batchNumber ?? null;
+  if (batchNumber != null && batchNumber.length > MAX_BATCH_NUMBER_LENGTH) {
+    return { error: `Batch number must be at most ${MAX_BATCH_NUMBER_LENGTH} characters` };
+  }
+  if (batchNumber != null && (batchNumber.includes('<') || batchNumber.includes('>'))) {
+    return { error: 'Batch number cannot contain HTML tags' };
+  }
+
+  return {
+    line: {
+      expiredItemTransactionId: transactionId,
+      batchNumber,
+      unitsClaimed: unitsClaimed ?? undefined,
+    },
+  };
+}
+
+/**
+ * POST /api/supplier-credits/claims — build a draft claim from write-offs.
+ *
+ * The creator is taken from `auth`, which comes from the verified token, and a
+ * `createdByUserId` in the body is ignored: the body is destructured to
+ * `supplierId`/`lines` only, so there is no path by which a caller can attribute a
+ * claim to another user. Mirrors the Express controller, which passes `req.userId`
+ * as a separate argument from the body.
+ */
+async function handleBuildCreditClaim(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json().catch(() => null)) as {
+    supplierId?: unknown;
+    lines?: unknown;
+  } | null;
+  if (!isPositiveInteger(body?.supplierId) || !Array.isArray(body?.lines)) {
+    return errorResponse('A supplier id and at least one line are required', 400, env);
+  }
+  const supplierId = body.supplierId;
+
+  const lines: ClaimLineInput[] = [];
+  for (const raw of body.lines as unknown[]) {
+    const parsed = parseClaimLineInput(raw);
+    if ('error' in parsed) return errorResponse(parsed.error, 400, env);
+    lines.push(parsed.line);
+  }
+
+  const result = await db.buildCreditClaim(auth.organizationId, { supplierId, lines }, auth.userId);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 201, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/lines/:lineId/photos
+ *
+ * The missing-file guard runs before any R2 or DB call — the same reject-before-work
+ * ordering `handleUploadDirect` uses and the Express controller enforces with its
+ * `!req.file` throw.
+ */
+async function handleAddClaimPhoto(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const segments = pathname.split('/');
+  const claimId = parsePositiveInt(segments[4] ?? '');
+  const lineId = parsePositiveInt(segments[6] ?? '');
+  if (claimId == null || lineId == null) {
+    return errorResponse('Valid claim and line ids are required', 400, env);
+  }
+
+  const formData = await request.formData().catch(() => null);
+  const fileValue = formData?.get('file') as unknown;
+  if (!(fileValue instanceof File)) {
+    return errorResponse('A photo file is required.', 400, env);
+  }
+
+  const result = await uploadClaimPhoto(db, env, auth.organizationId, claimId, lineId, fileValue);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 201, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/send
+ */
+async function handleSendCreditClaim(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const result = await sendClaim(db, env, auth.organizationId, id);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 200, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/follow-up
+ */
+async function handleSendCreditClaimFollowUp(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const result = await sendFollowUp(db, env, auth.organizationId, id);
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 200, env);
+}
+
+/**
+ * POST /api/supplier-credits/claims/:id/outcome
+ */
+async function handleRecordCreditClaimOutcome(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const id = claimIdFromPath(pathname);
+  if (id == null) return errorResponse('A valid claim id is required', 400, env);
+
+  const body = (await request.json().catch(() => null)) as {
+    outcome?: unknown;
+    creditedValue?: unknown;
+    note?: unknown;
+  } | null;
+  const outcome = String(body?.outcome ?? '');
+  if (!CLAIM_OUTCOMES.includes(outcome as ClaimOutcome)) {
+    return errorResponse(`Outcome must be one of ${CLAIM_OUTCOMES.join(', ')}`, 400, env);
+  }
+  // Mirrors `claimOutcomeSchema` (backend/src/schemas/index.ts:473-483). `Number`
+  // rather than `parseFloat`: parseFloat is lenient enough to read "5abc" as 5, where
+  // the backend's `z.number()` refuses the string outright. The non-negative bound is
+  // the one that matters — a negative credit would flow into the recovery report as
+  // money recovered.
+  // The value must BE a number, not merely coerce to one: `z.number()` rejects '5',
+  // true and '' where `Number()` happily turns them into 5, 1 and 0.
+  const rawCredited = body?.creditedValue;
+  if (
+    rawCredited != null &&
+    (typeof rawCredited !== 'number' || !Number.isFinite(rawCredited) || rawCredited < 0)
+  ) {
+    return errorResponse('Credited value must be zero or greater', 400, env);
+  }
+  const creditedValue = rawCredited == null ? null : rawCredited;
+
+  if (body?.note != null && typeof body.note !== 'string') {
+    return errorResponse('Note must be a string', 400, env);
+  }
+  const note = (body?.note as string | null | undefined) ?? null;
+  if (note != null && note.length > MAX_CLAIM_NOTE_LENGTH) {
+    return errorResponse(
+      `Note must be at most ${MAX_CLAIM_NOTE_LENGTH} characters`,
+      400,
+      env,
+    );
+  }
+
+  const result = await recordOutcome(
+    db,
+    auth.organizationId,
+    id,
+    outcome as ClaimOutcome,
+    creditedValue,
+    note,
+  );
+  if (!result.ok) return errorResponse(result.message, claimErrorStatus(result.code), env);
+  return jsonResponse(result.value, 200, env);
 }
 
 /**
