@@ -163,8 +163,9 @@ but deferred to its own issue.
 
 **Deferred to an issue**
 
-- `unitsClaimed` is never bounded by the write-off's `unitsDiscarded`, so a line can
-  claim more units than were written off and snapshot the inflated expected credit.
+- **#522** — `unitsClaimed` is never bounded by the write-off's `unitsDiscarded`, so a
+  line can claim more units than were written off and snapshot the inflated expected
+  credit.
   Real, but **shared with the backend** (`credit-claim.service.ts:93-96`) rather than a
   Worker divergence: fixing one runtime would break the parity this change exists to
   establish, and fixing the backend is out of scope here. Same disposition as #460.
