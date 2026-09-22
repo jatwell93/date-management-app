@@ -193,6 +193,33 @@ async function releaseReservation(
   }
 }
 
+/**
+ * The address a claim is sent to: the snapshot taken when the claim was built, falling
+ * back to the supplier's current address. The snapshot wins so a later edit to the
+ * supplier cannot silently redirect an in-flight claim.
+ */
+function claimRecipient(claim: CreditClaim): string | null {
+  return claim.contactEmailSnapshot || claim.supplier.contactEmail || null;
+}
+
+/**
+ * Render a claim email, attach its photos and hand it to the provider. Shared by the
+ * initial send and the follow-up, which differ only in `options` — keeping one path
+ * means a change to attachments or transport cannot reach one and miss the other.
+ */
+async function deliverClaimEmail(
+  db: Database,
+  env: Env,
+  organizationId: string,
+  claim: CreditClaim,
+  to: string,
+  options: { followUp?: boolean } = {},
+): Promise<boolean> {
+  const email = renderClaimEmail(claim, options);
+  const attachments = await loadAttachments(db, env, organizationId, claim.id);
+  return sendClaimEmail(env, { to, ...email, attachments });
+}
+
 async function loadAttachments(
   db: Database,
   env: Env,
@@ -284,7 +311,7 @@ export async function sendClaim(
   if (claim.lines.length === 0) {
     return fail('VALIDATION', 'A claim needs at least one line before sending.');
   }
-  const to = claim.contactEmailSnapshot || claim.supplier.contactEmail;
+  const to = claimRecipient(claim);
   if (!to) {
     return fail('VALIDATION', 'The supplier has no contact email; add one before sending.');
   }
@@ -295,9 +322,7 @@ export async function sendClaim(
   }
 
   try {
-    const email = renderClaimEmail(claim);
-    const attachments = await loadAttachments(db, env, organizationId, id);
-    const accepted = await sendClaimEmail(env, { to, ...email, attachments });
+    const accepted = await deliverClaimEmail(db, env, organizationId, claim, to);
     if (!accepted) {
       // The revert is itself a network call. If it fails the claim is stuck in
       // SENDING, so report that rather than letting the DB error replace the
@@ -354,7 +379,7 @@ export async function sendFollowUp(
   if (!isChaseableClaimStatus(claim.status) || !claim.sentAt) {
     return fail('VALIDATION', `Claim ${id} is not awaiting a supplier response.`);
   }
-  const to = claim.contactEmailSnapshot || claim.supplier.contactEmail;
+  const to = claimRecipient(claim);
   if (!to) return fail('VALIDATION', 'The supplier has no contact email.');
 
   const nextCount = claim.followUpCount + 1;
@@ -378,9 +403,9 @@ export async function sendFollowUp(
       .catch(() => undefined);
 
   try {
-    const email = renderClaimEmail(claim, { followUp: true });
-    const attachments = await loadAttachments(db, env, organizationId, id);
-    const accepted = await sendClaimEmail(env, { to, ...email, attachments });
+    const accepted = await deliverClaimEmail(db, env, organizationId, claim, to, {
+      followUp: true,
+    });
     if (!accepted) {
       await restore();
       return fail('VALIDATION', 'Email provider is not configured; follow-up was not sent.');

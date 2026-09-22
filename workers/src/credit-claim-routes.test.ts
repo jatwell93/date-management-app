@@ -102,6 +102,31 @@ function jsonPost(pathname: string, body: unknown, db: Database, env: Env) {
   });
 }
 
+/** An env with a fresh recording bucket and no Resend key — the deployed default. */
+function bareEnv(): Env {
+  return envWith(createBucket());
+}
+
+/** POST a claim-build payload; the route under test in most of the cases below. */
+function postClaim(body: unknown, db: Database, env: Env = bareEnv()) {
+  return jsonPost('/api/supplier-credits/claims', body, db, env);
+}
+
+/** A Resend that accepts everything, so the send path reaches its database writes. */
+function acceptEmails() {
+  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+}
+
+/** Silence the stuck-SENDING reports while asserting on them. */
+function captureErrors() {
+  return vi.spyOn(console, 'error').mockImplementation(() => undefined);
+}
+
+/** Everything console.error was handed, joined — what ops would actually see. */
+function loggedText(spy: ReturnType<typeof captureErrors>): string {
+  return spy.mock.calls.map((args) => String(args[0])).join('\n');
+}
+
 /** A minimal DRAFT claim with one line, enough for the send preconditions. */
 function draftClaim(overrides: Partial<CreditClaim> = {}): CreditClaim {
   return {
@@ -157,18 +182,13 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await jsonPost(
-        '/api/supplier-credits/claims',
-        {
+      const response = await postClaim({
           supplierId: 10,
           lines: [{ expiredItemTransactionId: 500 }],
           // The attack: attribute the claim to someone else.
           createdByUserId: 999,
           userId: 999,
-        },
-        db,
-        envWith(createBucket()),
-      );
+        }, db);
 
       expect(response?.status).toBe(201);
       expect(buildCreditClaim).toHaveBeenCalledTimes(1);
@@ -185,12 +205,7 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      await jsonPost(
-        '/api/supplier-credits/claims',
-        { supplierId: 10, lines: [{ expiredItemTransactionId: 500 }], organizationId: 'org_evil' },
-        db,
-        envWith(createBucket()),
-      );
+      await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500 }], organizationId: 'org_evil' }, db);
 
       expect(buildCreditClaim.mock.calls[0][0]).toBe(ORG);
     });
@@ -199,18 +214,13 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      await jsonPost(
-        '/api/supplier-credits/claims',
-        {
+      await postClaim({
           supplierId: 10,
           lines: [
             { expiredItemTransactionId: 500, unitsClaimed: 3, batchNumber: 'B-1' },
             { expiredItemTransactionId: 501 },
           ],
-        },
-        db,
-        envWith(createBucket()),
-      );
+        }, db);
 
       expect(buildCreditClaim.mock.calls[0][1].lines).toEqual([
         { expiredItemTransactionId: 500, batchNumber: 'B-1', unitsClaimed: 3 },
@@ -230,12 +240,7 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn();
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await jsonPost(
-        '/api/supplier-credits/claims',
-        { supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber }] },
-        db,
-        envWith(createBucket()),
-      );
+      const response = await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber }] }, db);
 
       expect(response?.status).toBe(400);
       expect(buildCreditClaim).not.toHaveBeenCalled();
@@ -247,12 +252,7 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await jsonPost(
-        '/api/supplier-credits/claims',
-        { supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber: 'x'.repeat(120) }] },
-        db,
-        envWith(createBucket()),
-      );
+      const response = await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber: 'x'.repeat(120) }] }, db);
 
       expect(response?.status).toBe(201);
       expect(buildCreditClaim).toHaveBeenCalledTimes(1);
@@ -270,12 +270,7 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn();
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await jsonPost(
-        '/api/supplier-credits/claims',
-        body,
-        db,
-        envWith(createBucket()),
-      );
+      const response = await postClaim(body, db);
 
       expect(response?.status).toBe(400);
       expect(buildCreditClaim).not.toHaveBeenCalled();
@@ -290,12 +285,7 @@ describe('credit-claim write routes', () => {
         buildCreditClaim: vi.fn().mockResolvedValue({ ok: false, code, message: 'nope' }),
       });
 
-      const response = await jsonPost(
-        '/api/supplier-credits/claims',
-        { supplierId: 10, lines: [{ expiredItemTransactionId: 500 }] },
-        db,
-        envWith(createBucket()),
-      );
+      const response = await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500 }] }, db);
 
       expect(response?.status).toBe(status);
     });
@@ -471,6 +461,48 @@ describe('credit-claim write routes', () => {
       expect(reserveClaimForSending).not.toHaveBeenCalled();
     });
 
+    it('sends to the address snapshotted when the claim was built, not the current one', async () => {
+      // The snapshot column exists precisely so that editing a supplier afterwards
+      // cannot redirect an already-built claim. Both addresses are distinct here on
+      // purpose: with the fixture's usual identical pair, reversing the precedence is
+      // invisible and the guard is not actually under test.
+      const fetchSpy = acceptEmails();
+      const claim = draftClaim({ contactEmailSnapshot: 'snapshot@acme.test' });
+      claim.supplier.contactEmail = 'changed-later@acme.test';
+      const finalizeSentClaim = vi.fn();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(claim),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        finalizeSentClaim,
+      });
+
+      await sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1);
+
+      const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+      expect(body.to).toEqual(['snapshot@acme.test']);
+      expect(finalizeSentClaim.mock.calls[0][2].contactEmail).toBe('snapshot@acme.test');
+      fetchSpy.mockRestore();
+    });
+
+    it('falls back to the supplier address when the claim has no snapshot', async () => {
+      const fetchSpy = acceptEmails();
+      const claim = draftClaim({ contactEmailSnapshot: null });
+      claim.supplier.contactEmail = 'current@acme.test';
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(claim),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        finalizeSentClaim: vi.fn(),
+      });
+
+      await sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1);
+
+      const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+      expect(body.to).toEqual(['current@acme.test']);
+      fetchSpy.mockRestore();
+    });
+
     it('refuses a claim that is not a draft', async () => {
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'SENT' })),
@@ -533,9 +565,7 @@ describe('credit-claim write routes', () => {
       }
 
       it('retries once and succeeds without disturbing the caller', async () => {
-        const fetchSpy = vi
-          .spyOn(globalThis, 'fetch')
-          .mockResolvedValue(new Response('{}', { status: 200 }));
+        const fetchSpy = acceptEmails();
         const finalizeSentClaim = vi
           .fn()
           .mockRejectedValueOnce(new Error('neon: transient'))
@@ -556,12 +586,10 @@ describe('credit-claim write routes', () => {
       });
 
       it('never reverts to draft, which would let the supplier be emailed twice', async () => {
-        const fetchSpy = vi
-          .spyOn(globalThis, 'fetch')
-          .mockResolvedValue(new Response('{}', { status: 200 }));
+        const fetchSpy = acceptEmails();
         const finalizeSentClaim = vi.fn().mockRejectedValue(new Error('neon: down'));
         const db = sendingDb(finalizeSentClaim);
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const errorSpy = captureErrors();
 
         await expect(
           sendClaim(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1),
@@ -573,10 +601,8 @@ describe('credit-claim write routes', () => {
       });
 
       it('reports the stuck claim loudly when the retry also fails', async () => {
-        const fetchSpy = vi
-          .spyOn(globalThis, 'fetch')
-          .mockResolvedValue(new Response('{}', { status: 200 }));
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const fetchSpy = acceptEmails();
+        const errorSpy = captureErrors();
         const finalizeSentClaim = vi.fn().mockRejectedValue(new Error('neon: down'));
 
         await expect(
@@ -591,7 +617,7 @@ describe('credit-claim write routes', () => {
         expect(finalizeSentClaim).toHaveBeenCalledTimes(2);
         // Ops needs the org and claim id to reconcile by hand; a bare stack trace
         // would not say which row is stuck.
-        const logged = errorSpy.mock.calls.map((args) => String(args[0])).join('\n');
+        const logged = loggedText(errorSpy);
         expect(logged).toContain('stuck in SENDING');
         expect(logged).toContain('Claim 1');
         expect(logged).toContain(ORG);
@@ -603,7 +629,7 @@ describe('credit-claim write routes', () => {
     it('still answers the refusal when releasing the reservation itself fails', async () => {
       // Unconfigured provider AND a failing revert. The caller must still get the
       // actionable 400 rather than an opaque 500, and the stuck row must be reported.
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const errorSpy = captureErrors();
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
         reserveClaimForSending: vi.fn().mockResolvedValue(true),
@@ -615,9 +641,7 @@ describe('credit-claim write routes', () => {
       const result = await sendClaim(db, envWith(createBucket()), ORG, 1);
 
       expect(result).toMatchObject({ ok: false, code: 'VALIDATION' });
-      expect(errorSpy.mock.calls.map((args) => String(args[0])).join('\n')).toContain(
-        'stuck in SENDING',
-      );
+      expect(loggedText(errorSpy)).toContain('stuck in SENDING');
       errorSpy.mockRestore();
     });
 
@@ -627,9 +651,7 @@ describe('credit-claim write routes', () => {
       // the first settled) and *ordering* (gathering results as they settle would
       // reorder the supplier's attachments). The slow/fast pair makes the second fail
       // loudly if `map` is ever replaced by a settle-ordered collection.
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(new Response('{}', { status: 200 }));
+      const fetchSpy = acceptEmails();
       const bucket = createBucket();
       const slow = { arrayBuffer: async () => new TextEncoder().encode('first').buffer };
       const fast = { arrayBuffer: async () => new TextEncoder().encode('second').buffer };
@@ -673,9 +695,7 @@ describe('credit-claim write routes', () => {
 
     it('sends, then records sentAt and the first follow-up from the supplier cadence', async () => {
       const finalizeSentClaim = vi.fn();
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(new Response('{}', { status: 200 }));
+      const fetchSpy = acceptEmails();
       const db = createAuthenticatedDb({
         findCreditClaim: vi
           .fn()
@@ -733,9 +753,7 @@ describe('credit-claim write routes', () => {
 
     it('schedules the next nudge from the send time, not from now', async () => {
       const reserveFollowUp = vi.fn().mockResolvedValue(true);
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(new Response('{}', { status: 200 }));
+      const fetchSpy = acceptEmails();
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(
           // A timezone-naive string, exactly as `sent_at::text` returns it from a
@@ -757,6 +775,28 @@ describe('credit-claim write routes', () => {
         followUpCount: 2,
         nextFollowUpAt: new Date('2026-10-13T10:00:00.000Z'),
       });
+      fetchSpy.mockRestore();
+    });
+
+    it('sends the follow-up variant of the email, not the initial one', async () => {
+      // `sendClaim` and `sendFollowUp` share one delivery helper and differ only by
+      // this flag, so nothing but an assertion on the wire format stops the shared
+      // path from quietly sending every nudge as a first-time claim.
+      const fetchSpy = acceptEmails();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi
+          .fn()
+          .mockResolvedValue(draftClaim({ status: 'SENT', sentAt: '2026-09-22 10:00:00' })),
+        reserveFollowUp: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn(),
+      });
+
+      await sendFollowUp(db, envWith(createBucket(), { RESEND_API_KEY: 'test-key' }), ORG, 1);
+
+      const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+      expect(body.subject).toContain('Follow-up');
+      expect(body.text).toContain('We have not yet received a response');
       fetchSpy.mockRestore();
     });
 

@@ -2458,6 +2458,47 @@ async function handleGetCreditClaim(
 }
 
 /**
+ * Validate and normalise one requested claim line from the request body. Mirrors the
+ * per-line half of `claimCreateSchema` (backend/src/schemas/index.ts:449-467); the
+ * Worker has no schema layer, so these bounds are the only thing keeping the two
+ * runtimes answering alike on the same payload.
+ */
+function parseClaimLineInput(raw: unknown): { line: ClaimLineInput } | { error: string } {
+  const line = raw as {
+    expiredItemTransactionId?: unknown;
+    batchNumber?: unknown;
+    unitsClaimed?: unknown;
+  };
+
+  const transactionId = parsePositiveInt(String(line?.expiredItemTransactionId ?? ''));
+  if (transactionId == null) {
+    return { error: 'Each line needs a valid expiredItemTransactionId' };
+  }
+
+  const unitsClaimed =
+    line.unitsClaimed == null ? undefined : parsePositiveInt(String(line.unitsClaimed));
+  if (line.unitsClaimed != null && unitsClaimed == null) {
+    return { error: 'unitsClaimed must be a positive whole number' };
+  }
+
+  const batchNumber = line.batchNumber == null ? null : String(line.batchNumber);
+  if (batchNumber != null && batchNumber.length > MAX_BATCH_NUMBER_LENGTH) {
+    return { error: `Batch number must be at most ${MAX_BATCH_NUMBER_LENGTH} characters` };
+  }
+  if (batchNumber != null && (batchNumber.includes('<') || batchNumber.includes('>'))) {
+    return { error: 'Batch number cannot contain HTML tags' };
+  }
+
+  return {
+    line: {
+      expiredItemTransactionId: transactionId,
+      batchNumber,
+      unitsClaimed: unitsClaimed ?? undefined,
+    },
+  };
+}
+
+/**
  * POST /api/supplier-credits/claims — build a draft claim from write-offs.
  *
  * The creator is taken from `auth`, which comes from the verified token, and a
@@ -2485,33 +2526,9 @@ async function handleBuildCreditClaim(
 
   const lines: ClaimLineInput[] = [];
   for (const raw of body.lines as unknown[]) {
-    const line = raw as { expiredItemTransactionId?: unknown; batchNumber?: unknown; unitsClaimed?: unknown };
-    const transactionId = parsePositiveInt(String(line?.expiredItemTransactionId ?? ''));
-    if (transactionId == null) {
-      return errorResponse('Each line needs a valid expiredItemTransactionId', 400, env);
-    }
-    const unitsClaimed =
-      line.unitsClaimed == null ? undefined : parsePositiveInt(String(line.unitsClaimed));
-    if (line.unitsClaimed != null && unitsClaimed == null) {
-      return errorResponse('unitsClaimed must be a positive whole number', 400, env);
-    }
-    // Mirrors `claimCreateSchema.batchNumber` (backend/src/schemas/index.ts:456-461).
-    const batchNumber = line.batchNumber == null ? null : String(line.batchNumber);
-    if (batchNumber != null && batchNumber.length > MAX_BATCH_NUMBER_LENGTH) {
-      return errorResponse(
-        `Batch number must be at most ${MAX_BATCH_NUMBER_LENGTH} characters`,
-        400,
-        env,
-      );
-    }
-    if (batchNumber != null && (batchNumber.includes('<') || batchNumber.includes('>'))) {
-      return errorResponse('Batch number cannot contain HTML tags', 400, env);
-    }
-    lines.push({
-      expiredItemTransactionId: transactionId,
-      batchNumber,
-      unitsClaimed: unitsClaimed ?? undefined,
-    });
+    const parsed = parseClaimLineInput(raw);
+    if ('error' in parsed) return errorResponse(parsed.error, 400, env);
+    lines.push(parsed.line);
   }
 
   const result = await db.buildCreditClaim(auth.organizationId, { supplierId, lines }, auth.userId);

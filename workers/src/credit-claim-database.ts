@@ -14,7 +14,7 @@
 //     lose.
 
 import type { NeonQueryFunction } from '@neondatabase/serverless';
-import { expectedCredit } from '../../shared/domain/credit-claim';
+import { expectedCredit, type CreditPolicyRatio } from '../../shared/domain/credit-claim';
 import type {
   CreditClaim,
   CreditClaimEvent,
@@ -68,6 +68,71 @@ export interface ClaimPhotoRow {
   storageKey: string;
   fileName: string;
   sizeBytes: number;
+}
+
+/** One validated claim line, with its expected credit already snapshotted. */
+interface PreparedClaimLine {
+  expiredItemTransactionId: number;
+  batchNumber: string | null;
+  unitsClaimed: number;
+  expectedCreditUnits: number | null;
+  expectedCreditValue: number | null;
+}
+
+/**
+ * Validate one requested line against the write-off it claims and compute its expected
+ * credit. Extracted so the per-line guards sit in one small unit that can be read
+ * beside its opposite number, `prepareClaimLine` in
+ * backend/src/services/credit-claim.service.ts — these guards are the thing the two
+ * runtimes most need to agree on, and they are easiest to diff when they have the same
+ * shape and the same name.
+ */
+function prepareClaimLine(
+  line: ClaimLineInput,
+  writeOff: Record<string, unknown> | undefined,
+  supplierId: number,
+  policy: CreditPolicyRatio,
+): ClaimWriteResult<PreparedClaimLine> {
+  if (!writeOff) {
+    return {
+      ok: false,
+      code: 'NOT_FOUND',
+      message: `Write-off ${line.expiredItemTransactionId} not found`,
+    };
+  }
+  const id = Number(writeOff.id);
+  const refuse = (message: string): ClaimWriteResult<PreparedClaimLine> => ({
+    ok: false,
+    code: 'VALIDATION',
+    message,
+  });
+
+  if (writeOff.action !== 'expired') {
+    return refuse(`Write-off ${id} is not an expired-stock write-off.`);
+  }
+  if (writeOff.alreadyClaimed) {
+    return refuse(`Write-off ${id} is already on a claim.`);
+  }
+  if (Number(writeOff.productSupplierId) !== supplierId) {
+    return refuse(`Write-off ${id} is for a product not assigned to this supplier.`);
+  }
+
+  const unitsClaimed = line.unitsClaimed ?? Number(writeOff.unitsDiscarded) ?? 0;
+  if (unitsClaimed <= 0) {
+    return refuse(`Write-off ${id} has no units to claim.`);
+  }
+
+  const credit = expectedCredit(policy, unitsClaimed, Number(writeOff.costPrice));
+  return {
+    ok: true,
+    value: {
+      expiredItemTransactionId: id,
+      batchNumber: line.batchNumber?.trim() || null,
+      unitsClaimed,
+      expectedCreditUnits: credit.units,
+      expectedCreditValue: credit.value,
+    },
+  };
 }
 
 /** Postgres unique-violation, i.e. another claim took one of these write-offs first. */
@@ -338,63 +403,16 @@ export function createCreditClaimDatabase(
         creditQty: supplier.policyCreditQty == null ? null : Number(supplier.policyCreditQty),
       };
 
-      const lines: Array<{
-        expiredItemTransactionId: number;
-        batchNumber: string | null;
-        unitsClaimed: number;
-        expectedCreditUnits: number | null;
-        expectedCreditValue: number | null;
-      }> = [];
-
+      const lines: PreparedClaimLine[] = [];
       for (const line of input.lines) {
-        const writeOff = byId.get(line.expiredItemTransactionId);
-        if (!writeOff) {
-          return {
-            ok: false,
-            code: 'NOT_FOUND',
-            message: `Write-off ${line.expiredItemTransactionId} not found`,
-          };
-        }
-        const writeOffId = Number(writeOff.id);
-        if (writeOff.action !== 'expired') {
-          return {
-            ok: false,
-            code: 'VALIDATION',
-            message: `Write-off ${writeOffId} is not an expired-stock write-off.`,
-          };
-        }
-        if (writeOff.alreadyClaimed) {
-          return {
-            ok: false,
-            code: 'VALIDATION',
-            message: `Write-off ${writeOffId} is already on a claim.`,
-          };
-        }
-        if (Number(writeOff.productSupplierId) !== Number(supplier.id)) {
-          return {
-            ok: false,
-            code: 'VALIDATION',
-            message: `Write-off ${writeOffId} is for a product not assigned to this supplier.`,
-          };
-        }
-
-        const unitsClaimed = line.unitsClaimed ?? Number(writeOff.unitsDiscarded) ?? 0;
-        if (unitsClaimed <= 0) {
-          return {
-            ok: false,
-            code: 'VALIDATION',
-            message: `Write-off ${writeOffId} has no units to claim.`,
-          };
-        }
-
-        const credit = expectedCredit(policy, unitsClaimed, Number(writeOff.costPrice));
-        lines.push({
-          expiredItemTransactionId: writeOffId,
-          batchNumber: line.batchNumber?.trim() || null,
-          unitsClaimed,
-          expectedCreditUnits: credit.units,
-          expectedCreditValue: credit.value,
-        });
+        const prepared = prepareClaimLine(
+          line,
+          byId.get(line.expiredItemTransactionId),
+          Number(supplier.id),
+          policy,
+        );
+        if (!prepared.ok) return prepared;
+        lines.push(prepared.value);
       }
 
       const totalUnits = sumOrNull(lines.map((l) => l.expectedCreditUnits));
