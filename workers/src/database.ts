@@ -260,7 +260,7 @@ export interface Database {
     note: string | null,
     settledAt: Date,
     deleteAfter: Date,
-  ): Promise<void>;
+  ): Promise<boolean>;
   addCreditClaimEvent(
     organizationId: string,
     claimId: number,

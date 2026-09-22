@@ -719,8 +719,14 @@ describe('credit-claim write routes', () => {
       // loudly if `map` is ever replaced by a settle-ordered collection.
       const fetchSpy = acceptEmails();
       const bucket = createBucket();
-      const slow = { arrayBuffer: async () => new TextEncoder().encode('first').buffer };
-      const fast = { arrayBuffer: async () => new TextEncoder().encode('second').buffer };
+      const slow = {
+        arrayBuffer: async () => new TextEncoder().encode('first').buffer,
+        httpMetadata: { contentType: 'image/jpeg' },
+      };
+      const fast = {
+        arrayBuffer: async () => new TextEncoder().encode('second').buffer,
+        httpMetadata: { contentType: 'image/png' },
+      };
       let getCalls = 0;
       let callsWhenFirstSettled = 0;
       bucket.get = vi.fn((key: string) => {
@@ -751,6 +757,13 @@ describe('credit-claim write routes', () => {
 
       // Both reads were in flight before the slow one came back.
       expect(callsWhenFirstSettled).toBe(2);
+      // And each attachment keeps the type R2 stored at upload, so a supplier's mail
+      // client shows the evidence instead of offering an anonymous download.
+      const sent = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+      expect(sent.attachments.map((a: { content_type: string }) => a.content_type)).toEqual([
+        'image/jpeg',
+        'image/png',
+      ]);
       const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
       expect(body.attachments.map((a: { filename: string }) => a.filename)).toEqual([
         'first.jpg',
@@ -1004,7 +1017,7 @@ describe('credit-claim write routes', () => {
 
   describe('recordOutcome preconditions', () => {
     it('refuses an outcome for a claim that was never sent', async () => {
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
         recordClaimOutcome,
@@ -1019,7 +1032,7 @@ describe('credit-claim write routes', () => {
     it.each(['CREDITED', 'REJECTED', 'CANCELLED'])(
       'refuses a second outcome for a claim already settled as %s',
       async (status) => {
-        const recordClaimOutcome = vi.fn();
+        const recordClaimOutcome = vi.fn().mockResolvedValue(true);
         const db = createAuthenticatedDb({
           findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status })),
           recordClaimOutcome,
@@ -1037,7 +1050,7 @@ describe('credit-claim write routes', () => {
       // The one settled status that stays open, so a later top-up can progress it to
       // CREDITED. Pinned because the "already settled" guard above would otherwise be
       // the obvious place to accidentally exclude it.
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'PARTIALLY_CREDITED' })),
         recordClaimOutcome,
@@ -1049,8 +1062,22 @@ describe('credit-claim write routes', () => {
       expect(recordClaimOutcome).toHaveBeenCalledTimes(1);
     });
 
+    it('reports a conflict when another outcome settled the claim first', async () => {
+      // The preconditions ran against a row read a moment ago. If the settling UPDATE
+      // matches nothing, someone else recorded an outcome in between and this caller
+      // did not settle anything — returning success would report their outcome as ours.
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'SENT' })),
+        recordClaimOutcome: vi.fn().mockResolvedValue(false),
+      });
+
+      const result = await recordOutcome(db, ORG, 1, 'CREDITED', 20, null);
+
+      expect(result).toMatchObject({ ok: false, code: 'CONFLICT' });
+    });
+
     it('schedules the photo purge for the retention window after settlement', async () => {
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'SENT' })),
         recordClaimOutcome,
@@ -1077,7 +1104,7 @@ describe('credit-claim write routes', () => {
       ['a partially numeric string', { outcome: 'CREDITED', creditedValue: '5abc' }],
       ['an over-long note', { outcome: 'CREDITED', creditedValue: 10, note: 'x'.repeat(1001) }],
     ])('refuses %s, as the backend schema does', async (_label, body) => {
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const findCreditClaim = vi.fn();
       const db = createAuthenticatedDb({ findCreditClaim, recordClaimOutcome });
 
@@ -1100,7 +1127,7 @@ describe('credit-claim write routes', () => {
       ['a boolean', true],
       ['an empty string', ''],
     ])('refuses %s as a credited value, which Number() would have coerced', async (_l, v) => {
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const db = createAuthenticatedDb({ findCreditClaim: vi.fn(), recordClaimOutcome });
 
       const response = await jsonPost(
@@ -1115,7 +1142,7 @@ describe('credit-claim write routes', () => {
     });
 
     it('refuses a non-string note', async () => {
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const db = createAuthenticatedDb({ findCreditClaim: vi.fn(), recordClaimOutcome });
 
       const response = await jsonPost(
@@ -1136,7 +1163,7 @@ describe('credit-claim write routes', () => {
     ])('accepts %s as a credited value', async (_label, creditedValue) => {
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'SENT' })),
-        recordClaimOutcome: vi.fn(),
+        recordClaimOutcome: vi.fn().mockResolvedValue(true),
       });
 
       const response = await jsonPost(
@@ -1150,7 +1177,7 @@ describe('credit-claim write routes', () => {
     });
 
     it('rejects an outcome outside the accepted vocabulary at the route', async () => {
-      const recordClaimOutcome = vi.fn();
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
       const findCreditClaim = vi.fn();
       const db = createAuthenticatedDb({ findCreditClaim, recordClaimOutcome });
 

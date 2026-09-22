@@ -750,6 +750,35 @@ describe('Workers credit-claim writes (real SQL)', () => {
       expect(claim?.creditedValue).toBeNull();
     });
 
+    it('settles only once, so a second outcome cannot overwrite the first', async () => {
+      // Both callers passed their preconditions against the same SENT row. Without the
+      // status predicate the second UPDATE would land too, replacing CREDITED with
+      // REJECTED and discarding credited_value -- real money, silently.
+      expect(
+        await db.recordClaimOutcome(ORG, claimId, 'CREDITED', 18.5, 'paid', settledAt, deleteAfter),
+      ).toBe(true);
+      expect(
+        await db.recordClaimOutcome(ORG, claimId, 'REJECTED', null, 'no', settledAt, deleteAfter),
+      ).toBe(false);
+
+      const claim = await db.findCreditClaim(ORG, claimId);
+      expect(claim?.status).toBe('CREDITED');
+      expect(claim?.creditedValue).toBe(18.5);
+      // And the loser wrote no event, so the timeline shows one outcome.
+      expect(claim?.events.map((e) => e.type)).toEqual(['CREATED', 'CREDITED']);
+    });
+
+    it('still accepts a top-up outcome on a partially credited claim', async () => {
+      // PARTIALLY_CREDITED is settled but deliberately stays open, so the predicate
+      // must admit it -- otherwise the guard would block the one legitimate re-settle.
+      await sql`UPDATE credit_claims SET status = 'PARTIALLY_CREDITED' WHERE id = ${claimId}`;
+
+      expect(
+        await db.recordClaimOutcome(ORG, claimId, 'CREDITED', 25, 'topped up', settledAt, deleteAfter),
+      ).toBe(true);
+      expect((await db.findCreditClaim(ORG, claimId))?.status).toBe('CREDITED');
+    });
+
     it("does not settle another organization's claim", async () => {
       await db.recordClaimOutcome(
         OTHER_ORG,

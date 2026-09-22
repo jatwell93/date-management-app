@@ -66,6 +66,18 @@ export type ClaimWriteResult<T> =
   | { ok: true; value: T }
   | { ok: false; code: 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT'; message: string };
 
+/**
+ * The statuses that still accept an outcome: the chaseable ones, plus
+ * `PARTIALLY_CREDITED`, which is deliberately left open so a later top-up can carry it
+ * to `CREDITED`. Named once because it is asserted twice — as the service's
+ * precondition (which produces the specific refusal messages) and as the predicate on
+ * the settling UPDATE (which is what actually closes the race).
+ */
+export const OUTCOME_RECORDABLE_STATUSES = [
+  ...CHASEABLE_CLAIM_STATUSES,
+  'PARTIALLY_CREDITED',
+] as const;
+
 export interface ClaimPhotoRow {
   id: number;
   claimLineId: number;
@@ -642,6 +654,13 @@ export function createCreditClaimDatabase(
      * Settle a claim: status, credited value, settled time, stop follow-ups, and set
      * the photo retention deadline. One statement so a settled claim can never be left
      * with photos that are never purged.
+     *
+     * The status predicate is what makes the outcome final. The caller's preconditions
+     * are checked against a row it read earlier, so two outcomes recorded concurrently
+     * would both pass them and both write — the second silently replacing the first,
+     * which for a `REJECTED` landing on top of a `CREDITED` also discards
+     * `credited_value` and the money it represents. Returns whether this caller won,
+     * so a loser can be told rather than assume it settled the claim.
      */
     async recordClaimOutcome(
       organizationId,
@@ -652,7 +671,7 @@ export function createCreditClaimDatabase(
       settledAt,
       deleteAfter,
     ) {
-      await sql`
+      const rows = (await sql`
         WITH updated AS (
           UPDATE credit_claims
           SET status = ${outcome},
@@ -661,6 +680,7 @@ export function createCreditClaimDatabase(
               next_follow_up_at = NULL,
               updated_at = NOW()
           WHERE organization_id = ${organizationId} AND id = ${id}
+            AND status = ANY(${[...OUTCOME_RECORDABLE_STATUSES]})
           RETURNING id
         ), photos AS (
           UPDATE credit_claim_photos ccp
@@ -675,7 +695,9 @@ export function createCreditClaimDatabase(
         INSERT INTO credit_claim_events (organization_id, claim_id, user_id, type, note, created_at)
         SELECT ${organizationId}, u.id, NULL, ${outcome}, ${note}, NOW()
         FROM updated u
-      `;
+        RETURNING id
+      `) as Array<{ id: number }>;
+      return rows.length > 0;
     },
 
     async addCreditClaimEvent(organizationId, claimId, type, note) {

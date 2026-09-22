@@ -220,3 +220,34 @@ Nine mutations were run against the fixes; each killed the test guarding it. Fix
 follow-up CAS also exposed two existing tests that would have started passing for the
 wrong reason -- the cross-organization one would have been refused by the new status
 guard rather than by scoping -- so their fixtures now set a chaseable status explicitly.
+
+## Third review round — the rest of the Sentry thread
+
+The second round read seven of the ten non-CodeScene comments; the fetch had been
+truncated, and two further Sentry findings were sitting unread. Both were labelled
+"Resolved in 36dfa72" by Sentry, which only meant the lines had moved -- neither was
+fixed. Both confirmed against the code, both fixed.
+
+- **`recordClaimOutcome` had no status predicate (HIGH).** The service's preconditions
+  run against a row read a moment earlier, so two outcomes recorded concurrently both
+  passed them and both wrote: the second silently replaced the first, and a `REJECTED`
+  landing on top of a `CREDITED` also discarded `credited_value` -- money that was
+  actually recovered, gone with no trace. It now carries
+  `OUTCOME_RECORDABLE_STATUSES` (the chaseable statuses plus `PARTIALLY_CREDITED`,
+  which stays open for a top-up) and returns whether *this* caller settled the claim,
+  so a loser gets a 409 instead of being handed someone else's outcome as its own.
+- **Attachments were hardcoded to `application/octet-stream`** although R2 keeps the
+  type from upload. A supplier's mail client therefore offered the claim photos as
+  anonymous downloads rather than showing them -- and the photos are the evidence the
+  claim rests on.
+
+**This was the third instance of one class on this PR.** A `credit_claims` UPDATE whose
+correctness depends on a status the caller read earlier: `finalizeSentClaim` (round
+one), `reserveFollowUp` (round two), `recordClaimOutcome` (round three). The check that
+would have found all three at once is a one-liner:
+
+```
+grep -n "UPDATE credit_claims" -A 8 workers/src/credit-claim-database.ts
+```
+
+Six statements; five guarded, one not. Run it after touching any of them.

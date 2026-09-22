@@ -294,7 +294,10 @@ async function loadAttachments(
     attachments.push({
       filename: photo.fileName,
       content: await object.arrayBuffer(),
-      contentType: 'application/octet-stream',
+      // The real type, which R2 kept from the upload. Sent as octet-stream a supplier's
+      // mail client treats claim photos as anonymous downloads rather than showing
+      // them — and the photos are the evidence the whole claim rests on.
+      contentType: object.httpMetadata?.contentType || 'application/octet-stream',
     });
   }
   // Refuse rather than send a claim whose evidence is incomplete. The photos are the
@@ -545,7 +548,7 @@ export async function recordOutcome(
   }
 
   const settledAt = now();
-  await db.recordClaimOutcome(
+  const settled = await db.recordClaimOutcome(
     organizationId,
     id,
     outcome,
@@ -554,6 +557,12 @@ export async function recordOutcome(
     settledAt,
     addDays(settledAt, PHOTO_RETENTION_DAYS),
   );
+  // The checks above ran against a row read a moment ago. If another outcome landed in
+  // between, the settling UPDATE matched nothing and this caller did not settle the
+  // claim — say so rather than returning the other outcome as though it were ours.
+  if (!settled) {
+    return fail('CONFLICT', `Claim ${id} outcome was already recorded by someone else.`);
+  }
 
   const updated = await db.findCreditClaim(organizationId, id);
   if (!updated) return fail('NOT_FOUND', `Claim ${id} not found`);
