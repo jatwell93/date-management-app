@@ -92,6 +92,7 @@ import {
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
+import { isUniqueViolation } from './db-errors';
 import {
   recordOutcome,
   sendClaim,
@@ -181,22 +182,6 @@ function isPositiveInteger(value: unknown): value is number {
 
 /** ISO calendar date YYYY-MM-DD (no time component). */
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Detect a Postgres unique-violation. Prefer the SQLSTATE code over
- * substring matching the message, which is locale/version dependent.
- */
-function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const e = error as { code?: unknown; message?: unknown };
-  if (e.code === '23505') return true;
-  // Some neon driver wrappers nest the pg error under .cause.
-  const cause = (error as { cause?: { code?: unknown } }).cause;
-  if (cause && typeof cause === 'object' && (cause as { code?: unknown }).code === '23505') {
-    return true;
-  }
-  return false;
-}
 
 // Postgres `undefined_column` (42703) or `undefined_table` (42P01). Guards
 // against a code-before-migration gap: e.g. the products.retail_price column or

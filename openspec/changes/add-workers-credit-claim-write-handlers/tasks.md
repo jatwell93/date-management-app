@@ -251,3 +251,28 @@ grep -n "UPDATE credit_claims" -A 8 workers/src/credit-claim-database.ts
 ```
 
 Six statements; five guarded, one not. Run it after touching any of them.
+
+## Fourth review round — one finding, and it was a duplicate of this PR's own theme
+
+Sentry posted again after the third round: `isUniqueViolation` in
+`credit-claim-database.ts` did not handle a pg error nested under `.cause`, so the one
+case the `expired_item_transaction_id` unique constraint exists to catch -- two builds
+racing for the same write-off -- would rethrow and answer 500 instead of the 409 the
+handler was written to give.
+
+Valid, and pointed at something worse than the bug: `index-minimal.ts` **already had a
+hardened copy**, complete with a comment saying "some neon driver wrappers nest the pg
+error under .cause". This change introduced a second, weaker copy of a predicate the
+package had already got right, so the same collision answered 409 on one path and 500
+on another. That is precisely the drift this PR hoisted `renderClaimEmail` to avoid.
+
+Both copies are now gone: `workers/src/db-errors.ts` holds one implementation, imported
+by both modules, with unit tests pinning the flat shape, the nested shape, a different
+SQLSTATE (23503) and the message-substring fallback the weak copy used -- three
+mutations, each killing exactly its own case.
+
+**Wider than reported, and deliberately not fixed here.** `grep -rn "23505"` finds five
+sites: the two consolidated above and three inline checks in
+`workers/src/clerk/clerk-persistence.ts` (`:208`, `:261`, `:491`) which also miss the
+nested shape. Those are pre-existing, carry additional branch logic, and are nothing to
+do with credit claims -- the same disposition as #522.

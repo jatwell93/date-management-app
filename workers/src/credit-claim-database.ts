@@ -14,6 +14,7 @@
 //     lose.
 
 import type { NeonQueryFunction } from '@neondatabase/serverless';
+import { isUniqueViolation } from './db-errors';
 import {
   CHASEABLE_CLAIM_STATUSES,
   expectedCredit,
@@ -149,12 +150,6 @@ function prepareClaimLine(
       expectedCreditValue: credit.value,
     },
   };
-}
-
-/** Postgres unique-violation, i.e. another claim took one of these write-offs first. */
-function isUniqueViolation(error: unknown): boolean {
-  const code = (error as { code?: unknown })?.code;
-  return code === '23505' || /duplicate key value/i.test(String(error));
 }
 
 /**
