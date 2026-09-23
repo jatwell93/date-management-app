@@ -212,6 +212,68 @@ export interface StripeSubscriptionSync {
  * event cannot be attributed, and the caller must refuse it loudly rather than
  * guess an organization.
  */
+/**
+ * Confirm an organization id that arrived over the wire actually exists.
+ *
+ * Express makes the same check against its organization repository. Without it
+ * a forged or stale `metadata.organizationId` would create subscription state
+ * for an organization nobody has.
+ */
+async function confirmOrganizationExists(
+  sql: SqlClient,
+  candidate: unknown,
+): Promise<string | null> {
+  const organizationId = String(candidate ?? '').trim();
+
+  if (!organizationId) {
+    return null;
+  }
+
+  const rows = await sql`
+    SELECT id FROM organizations WHERE id = ${organizationId} LIMIT 1
+  `;
+
+  return rows.length > 0 ? organizationId : null;
+}
+
+/** The organization already linked to a Stripe subscription id, if any. */
+async function organizationIdByStripeSubscription(
+  sql: SqlClient,
+  stripeSubscriptionId: string | null | undefined,
+): Promise<string | null> {
+  if (!stripeSubscriptionId) {
+    return null;
+  }
+
+  const rows = await sql`
+    SELECT organization_id
+    FROM subscription_tiers
+    WHERE stripe_subscription_id = ${stripeSubscriptionId}
+    LIMIT 1
+  `;
+
+  return rows.length > 0 ? String(rows[0].organization_id) : null;
+}
+
+/** The organization already linked to a Stripe customer id, if any. */
+async function organizationIdByStripeCustomer(
+  sql: SqlClient,
+  stripeCustomerId: string | null | undefined,
+): Promise<string | null> {
+  if (!stripeCustomerId) {
+    return null;
+  }
+
+  const rows = await sql`
+    SELECT organization_id
+    FROM subscription_tiers
+    WHERE stripe_customer_id = ${stripeCustomerId}
+    LIMIT 1
+  `;
+
+  return rows.length > 0 ? String(rows[0].organization_id) : null;
+}
+
 export async function resolveOrganizationIdForStripeEvent(
   sql: SqlClient,
   options: {
@@ -220,43 +282,13 @@ export async function resolveOrganizationIdForStripeEvent(
     stripeCustomerId?: string | null;
   },
 ): Promise<string | null> {
-  const fromMetadata = String(options.metadataOrganizationId ?? '').trim();
-  if (fromMetadata) {
-    // Confirm the organization exists before trusting a value that arrived over
-    // the wire. Express does the same check against its organization repository.
-    const rows = await sql`
-      SELECT id FROM organizations WHERE id = ${fromMetadata} LIMIT 1
-    `;
-    if (rows.length > 0) {
-      return fromMetadata;
-    }
-  }
-
-  if (options.stripeSubscriptionId) {
-    const rows = await sql`
-      SELECT organization_id
-      FROM subscription_tiers
-      WHERE stripe_subscription_id = ${options.stripeSubscriptionId}
-      LIMIT 1
-    `;
-    if (rows.length > 0) {
-      return String(rows[0].organization_id);
-    }
-  }
-
-  if (options.stripeCustomerId) {
-    const rows = await sql`
-      SELECT organization_id
-      FROM subscription_tiers
-      WHERE stripe_customer_id = ${options.stripeCustomerId}
-      LIMIT 1
-    `;
-    if (rows.length > 0) {
-      return String(rows[0].organization_id);
-    }
-  }
-
-  return null;
+  // `??` short-circuits, so each lookup runs only when the more specific ones
+  // above it came back empty. The order is the precedence described above.
+  return (
+    (await confirmOrganizationExists(sql, options.metadataOrganizationId)) ??
+    (await organizationIdByStripeSubscription(sql, options.stripeSubscriptionId)) ??
+    (await organizationIdByStripeCustomer(sql, options.stripeCustomerId))
+  );
 }
 
 /**

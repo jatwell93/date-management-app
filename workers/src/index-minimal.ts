@@ -337,6 +337,34 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
 /**
  * Main Workers fetch handler
  */
+/**
+ * Public, signature-verified webhook endpoints.
+ *
+ * These are dispatched ahead of `MINIMAL_API_ROUTES` rather than from it,
+ * because every handler in that table runs behind `authenticateApiRequest` and
+ * a webhook carries no session — its caller is authenticated by the signature
+ * over the raw body, not by a token.
+ *
+ * A `Map` rather than an object literal: the key is a request path, and an
+ * object lookup on attacker-controlled keys such as `__proto__` would resolve
+ * against the prototype chain instead of missing.
+ *
+ * Both spellings of each path are registered because an endpoint URL handed to
+ * an identity or payment provider is an expensive thing to get subtly wrong.
+ */
+type PublicWebhookHandler = (
+  request: Request,
+  env: Env,
+  requestOrigin?: string,
+) => Promise<Response>;
+
+const PUBLIC_WEBHOOK_HANDLERS = new Map<string, PublicWebhookHandler>([
+  ['/api/webhooks/clerk', handleClerkWebhook],
+  ['/webhooks/clerk', handleClerkWebhook],
+  ['/api/webhooks/stripe', handleStripeWebhook],
+  ['/webhooks/stripe', handleStripeWebhook],
+]);
+
 export default Sentry.withSentry(
   (env: any) => ({
     dsn: env.WORKERS_SENTRY_DSN,
@@ -394,29 +422,14 @@ export default Sentry.withSentry(
           );
         }
 
-        // Clerk webhook endpoint (public, signature-verified)
-        if (
-          method === 'POST' &&
-          (pathname === '/api/webhooks/clerk' || pathname === '/webhooks/clerk')
-        ) {
-          const webhookResponse = await handleClerkWebhook(request, env, requestOrigin);
-          return maybeCompressJsonResponse(request, webhookResponse);
-        }
+        // Public, signature-verified webhook endpoints (see
+        // PUBLIC_WEBHOOK_HANDLERS). Dispatched before the API routes because
+        // they authenticate by signature rather than by session.
+        const webhookHandler =
+          method === 'POST' ? PUBLIC_WEBHOOK_HANDLERS.get(pathname) : undefined;
 
-        // Stripe webhook endpoint (public, signature-verified).
-        //
-        // Dispatched here rather than from MINIMAL_API_ROUTES for the same
-        // reason the Clerk one is: every handler in that table runs behind
-        // `authenticateApiRequest`, and a webhook carries no session -- its
-        // caller is authenticated by the HMAC over the raw body, not by a token.
-        // Both spellings are accepted because the Clerk endpoint accepts both
-        // and an endpoint URL registered with a payment provider is an
-        // expensive thing to get subtly wrong.
-        if (
-          method === 'POST' &&
-          (pathname === '/api/webhooks/stripe' || pathname === '/webhooks/stripe')
-        ) {
-          const webhookResponse = await handleStripeWebhook(request, env, requestOrigin);
+        if (webhookHandler) {
+          const webhookResponse = await webhookHandler(request, env, requestOrigin);
           return maybeCompressJsonResponse(request, webhookResponse);
         }
 

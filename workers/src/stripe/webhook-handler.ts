@@ -233,11 +233,25 @@ async function processSubscriptionEvent(
   });
 }
 
-export async function handleStripeWebhook(
+interface AcceptedStripeEvent {
+  event: StripeEventEnvelope;
+  eventId: string;
+  eventType: string;
+}
+
+/**
+ * Everything that must succeed before the event is allowed to touch the
+ * database: configuration, signature, payload, idempotency key.
+ *
+ * Returns a `Response` for every refusal, following the same `Response | value`
+ * idiom `authenticateApiRequest` uses, so the caller stays a straight line and
+ * no refusal can be mistaken for a parsed event.
+ */
+async function acceptStripeEvent(
   request: Request,
   env: Env,
   requestOrigin?: string,
-): Promise<Response> {
+): Promise<AcceptedStripeEvent | Response> {
   const signatureHeader = request.headers.get('stripe-signature') || '';
 
   if (!signatureHeader) {
@@ -274,13 +288,58 @@ export async function handleStripeWebhook(
   }
 
   const eventId = asString(event.id);
-  const eventType = asString(event.type) ?? 'unknown';
 
   if (!eventId) {
     // Without an id there is no idempotency key, and processing an event that
     // cannot be deduplicated is how double side effects happen.
     return errorResponse('Webhook payload has no event id', 400, env, requestOrigin);
   }
+
+  return { event, eventId, eventType: asString(event.type) ?? 'unknown' };
+}
+
+/**
+ * Apply an event that has already been verified and claimed.
+ *
+ * Split out so the claim/release bookkeeping in the caller is not interleaved
+ * with the decision about what each event type means.
+ */
+async function applyClaimedStripeEvent(
+  sql: SqlClient,
+  eventId: string,
+  eventType: string,
+  event: StripeEventEnvelope,
+): Promise<void> {
+  if (!SUBSCRIPTION_EVENT_TYPES.has(eventType)) {
+    // Acknowledged, not dropped silently. An event type nobody has decided
+    // about should be visible in the logs, so that adding a handler is a
+    // decision made from evidence.
+    console.log('[STRIPE_WEBHOOK] Unhandled event type acknowledged', { eventId, eventType });
+    return;
+  }
+
+  const subscription = event.data?.object;
+
+  if (!subscription) {
+    console.error('[STRIPE_WEBHOOK] Subscription event carries no object', { eventId, eventType });
+    return;
+  }
+
+  await processSubscriptionEvent(sql, eventType, eventId, subscription);
+}
+
+export async function handleStripeWebhook(
+  request: Request,
+  env: Env,
+  requestOrigin?: string,
+): Promise<Response> {
+  const accepted = await acceptStripeEvent(request, env, requestOrigin);
+
+  if (accepted instanceof Response) {
+    return accepted;
+  }
+
+  const { event, eventId, eventType } = accepted;
 
   try {
     const db = createWorkersDatabase(env);
@@ -321,24 +380,7 @@ export async function handleStripeWebhook(
     }
 
     try {
-      if (SUBSCRIPTION_EVENT_TYPES.has(eventType)) {
-        const subscription = event.data?.object;
-
-        if (!subscription) {
-          console.error('[STRIPE_WEBHOOK] Subscription event carries no object', {
-            eventId,
-            eventType,
-          });
-        } else {
-          await processSubscriptionEvent(db.sql, eventType, eventId, subscription);
-        }
-      } else {
-        // Acknowledged, not dropped silently. An event type nobody has decided
-        // about should be visible in the logs, so that adding a handler is a
-        // decision made from evidence.
-        console.log('[STRIPE_WEBHOOK] Unhandled event type acknowledged', { eventId, eventType });
-      }
-
+      await applyClaimedStripeEvent(db.sql, eventId, eventType, event);
       await completeStripeWebhookEvent(db.sql, eventId);
       return jsonResponse({ received: true }, 200, env, requestOrigin);
     } catch (processingError) {

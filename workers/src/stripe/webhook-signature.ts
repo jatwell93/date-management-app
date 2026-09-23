@@ -66,6 +66,26 @@ export interface ParsedStripeSignatureHeader {
 }
 
 /**
+ * `Number.parseInt` stops at the first non-digit, so `t=12abc` yields 12 rather
+ * than NaN. Insisting the whole value is digits is what stops a malformed
+ * header from being verified against a silently truncated timestamp.
+ */
+const isUnixTimestamp = (value: string): boolean => /^\d+$/.test(value);
+
+const isHexDigest = (value: string): boolean => /^[a-f0-9]+$/i.test(value);
+
+/** Split one `key=value` element; `null` for an element with no `=` at all. */
+function splitSignaturePart(part: string): [key: string, value: string] | null {
+  const separator = part.indexOf('=');
+
+  if (separator === -1) {
+    return null;
+  }
+
+  return [part.slice(0, separator).trim(), part.slice(separator + 1).trim()];
+}
+
+/**
  * Split `t=...,v1=...,v1=...` into its parts.
  *
  * Returns `null` for anything unparseable rather than throwing, so the caller
@@ -76,22 +96,17 @@ export function parseStripeSignatureHeader(header: string): ParsedStripeSignatur
   const v1Signatures: string[] = [];
 
   for (const part of header.split(',')) {
-    const separator = part.indexOf('=');
-    if (separator === -1) {
+    const element = splitSignaturePart(part);
+
+    if (element === null) {
       continue;
     }
 
-    const key = part.slice(0, separator).trim();
-    const value = part.slice(separator + 1).trim();
+    const [key, value] = element;
 
-    if (key === 't') {
-      const parsed = Number.parseInt(value, 10);
-      // `Number.parseInt` stops at the first non-digit, so `t=12abc` would give
-      // 12 rather than NaN. Insist the value is digits and nothing else.
-      if (/^\d+$/.test(value) && Number.isFinite(parsed)) {
-        timestamp = parsed;
-      }
-    } else if (key === 'v1' && /^[a-f0-9]+$/i.test(value)) {
+    if (key === 't' && isUnixTimestamp(value)) {
+      timestamp = Number.parseInt(value, 10);
+    } else if (key === 'v1' && isHexDigest(value)) {
       v1Signatures.push(value.toLowerCase());
     }
   }
