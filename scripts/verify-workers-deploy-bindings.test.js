@@ -148,6 +148,10 @@ test('synthetic: missing binding step is reported', () => {
         steps: [
           { name: 'Setup Node.js', run: 'node --version' },
           {
+            name: 'Bind FRONTEND_URL secret to worker',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put FRONTEND_URL --env production',
+          },
+          {
             name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
             run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
           },
@@ -168,6 +172,10 @@ test('synthetic: binding step after deploy is reported as ordering violation', (
       'deploy-production': {
         steps: [
           { name: 'Setup Node.js', run: 'node --version' },
+          {
+            name: 'Bind FRONTEND_URL secret to worker',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put FRONTEND_URL --env production',
+          },
           {
             name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
             run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',

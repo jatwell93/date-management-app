@@ -2634,7 +2634,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       it reproduces today on any persistent 4xx and survives Phase 4 — so the durable fix (a
       per-operation attempt cap, then drop-with-report or a visible dead-letter list) belongs in its
       own issue, not in this change.
-- [ ] 3.8 Before implementation, record the currently registered production Stripe endpoint, the
+- [x] 3.8 Before implementation, record the currently registered production Stripe endpoint, the
       deployment that receives it, and the exact rollback target; do not assume the undeployed Express
       reference backend is reachable. Then cut Stripe webhooks over as a production change: add typed
       secret/config, raw-byte signature verification, supported-event contract, durable event
@@ -2642,6 +2642,60 @@ equivalent, a relocated home, or an explicit retirement decision.
       cutover, and rollback. Keep a deployable rollback receiver—normally the previous Worker
       deployment/route, or a deliberately temporary receiver—until Stripe delivery to the new Worker
       handler is confirmed.
+      <br>**Executed 2026-09-23.** The pre-implementation record, which this task rightly demanded
+      first, contradicted the assumption the work had been planned against — worth stating plainly,
+      because the plan said "expect no endpoint registered":
+      <br>*Registered endpoint (pre-existing):* `we_1TI49EBnbrSGlpmz5l1bJ5Qc`, **enabled** since
+      2026-04-03, already pointing at `https://api.expirymate.com.au/api/webhooks/stripe` — the exact
+      URL 3.1.m built. A second endpoint, `we_1SzvhPBnbrSGlpmz6eTuVdO9`, is **disabled** and points
+      at an ngrok tunnel from the Express era; it was left alone.
+      *Deployment receiving it:* the `date-management-api-prod` Worker.
+      *Rollback target:* Worker version `8a74f5b9-7f19-46c1-97f1-a05f30c0eb98` (the 3.1.m deploy,
+      2026-09-23T02:07Z); the live version after cutover is
+      `f4fc938e-660a-4e4e-bc9b-c0b8984925bb`. **The faster rollback is disabling the Stripe endpoint
+      in the Dashboard, not reverting the Worker** — secrets are bound independently of code
+      versions, so a version rollback does not unbind `STRIPE_WEBHOOK_SECRET`.
+      <br>**The blast radius of the gap was zero, and that is measured rather than assumed.** Between
+      3.1.m deploying and the secret being bound, the Worker answered `503` to this enabled endpoint.
+      `stripe events list --type customer.subscription.*` returns **zero events, ever** on this
+      account, so nothing was missed. The account is in test mode throughout (`livemode: false`, and
+      `STRIPE_SECRET_KEY` is pinned to `sk_test_` by a deploy guard).
+      <br>**Two preconditions were already satisfied and needed no change.** All four launch prices
+      already carry `metadata.tier` (`starter`/`starter`/`professional`/`professional`) — exactly the
+      vocabulary `mapStripePriceTier` maps natively, so the silent-downgrade path that function
+      exists to prevent was never reachable here. And `STRIPE_WEBHOOK_SECRET` was already present in
+      both Doppler configs, identical in each; it proved to be the enabled endpoint's real secret.
+      <br>**The missing piece was the binding, not the secret** (PR #527). `wrangler deploy` does not
+      upload shell env vars as Worker secrets, so the Doppler value had never reached the Worker.
+      Diagnosed by probe rather than inference: a signature bearing a 1970 timestamp fails on skew
+      *after* the secret check and *before* any database access, so `503` versus `400 Webhook
+      timestamp outside allowed window` distinguishes unbound from bound with no side effects.
+      Before #527 deployed: `503`. After: `400`.
+      <br>**Supported-event contract narrowed at the source.** The endpoint had been subscribed to
+      ten event types; it is now the three the handler acts on. The other seven were never dropped
+      silently — they were acknowledged and logged — but Stripe's delivery history now reflects only
+      events that do something.
+      <br>**Verification.** A Dashboard test webhook produced `200 {"received":true}`, which is the
+      only available proof that the bound secret is the *endpoint's* secret: Stripe never returns a
+      signing secret after creation, so it cannot be compared any other way. Confirmed independently
+      in production Postgres — `processed_webhook_events` went from 0 rows to 2, both with
+      `completed_at` set, which is the claim-before-work mechanism from migration 0015 running for
+      real — and **zero** rows were written to `subscription_tiers` for the synthetic subscription,
+      because the event carried no resolvable organization and the handler refuses to guess rather
+      than inventing state. That refusal is the behaviour most worth having proven in production.
+      <br>**Two design decisions confirmed by the real payload rather than by reading docs.**
+      `current_period_end` arrived on `items.data[0]` and was absent from the subscription itself —
+      the endpoint is pinned to `2026-01-28.clover`, after the "basil" move — so the item-level
+      fallback in `extractCurrentPeriodEnd` is the *live* path, not a defensive extra. And the
+      subscription's `metadata` was `{}`, confirming from the wire what the Express source showed:
+      `organizationId` is set on the Stripe **customer**, never on the subscription.
+      <br>**Carry-forward, not done here.** Because `organizationId` lives only on the customer, a
+      genuinely new subscription cannot be attributed from its first event alone unless the row
+      already carries `stripe_customer_id`. The fix belongs with whoever rehomes checkout (still open
+      in 3.1): set `subscription_data.metadata.organizationId` on the Checkout Session and `metadata`
+      on `subscriptions.create`. Until then the webhook is correct but under-supplied. The Dashboard
+      test also left a synthetic test-mode subscription (`sub_1UIo4u…`) in the account; harmless, and
+      cancellable whenever convenient.
 - [ ] 3.9 Add one required database-conformance workflow triggered by `workers/**`, `shared/**`,
       authoritative migrations/schemas, and relevant root package/lock files. Run the Worker PGlite
       conformance job and the migration-runner job against an ephemeral PostgreSQL service with no

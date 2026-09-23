@@ -249,6 +249,87 @@ function findStepIndex(steps, nameSubstring) {
  * `wrangler deploy`. Returns an array of assertion errors (empty if all
  * pass) so callers can render a useful summary.
  */
+/**
+ * One secret's binding contract: the step exists, it really invokes
+ * `wrangler secret put <NAME>`, and it runs before `wrangler deploy`.
+ *
+ * Extracted because this triple was being copy-pasted per secret, and the
+ * copies had already started to drift. `consequence` is a per-secret sentence
+ * appended to the "missing step" error — the whole value of these errors is
+ * telling the reader what breaks, and that differs per secret, so it is a
+ * parameter rather than something the helper flattens away.
+ *
+ * `stepName` is matched as a SUBSTRING of the workflow step's name
+ * (`findStepIndex` uses `String.includes`), so it need not repeat any trailing
+ * qualifier such as "(when configured)".
+ */
+function verifySecretBoundBeforeDeploy(steps, deployIdx, spec, errors) {
+  const { stepName, secretName, consequence } = spec;
+  const idx = findStepIndex(steps, stepName);
+
+  if (idx === -1) {
+    errors.push(new Error(`Missing step '${stepName}' in deploy-production. ${consequence}`));
+    return;
+  }
+
+  const run = steps[idx].run || '';
+  if (!new RegExp(`wrangler\\s+secret\\s+put\\s+${secretName}`).test(run)) {
+    errors.push(
+      new Error(
+        `'${stepName}' step does not invoke ` +
+          `\`wrangler secret put ${secretName}\`. Found run: ` +
+          JSON.stringify(run),
+      ),
+    );
+  }
+
+  if (deployIdx !== -1 && idx >= deployIdx) {
+    errors.push(
+      new Error(
+        `'${stepName}' (step ${idx + 1}) must run ` +
+          `BEFORE 'Deploy production worker' (step ${deployIdx + 1}).`,
+      ),
+    );
+  }
+}
+
+/**
+ * Every Worker secret the production deploy must bind before it deploys.
+ *
+ * FRONTEND_URL is checked here as well as in the test file. It was previously
+ * asserted only by a test, which left the exported verifier claiming less than
+ * the suite actually enforced.
+ */
+const PRODUCTION_SECRET_BINDINGS = [
+  {
+    stepName: 'Bind NEON_CONNECTION_STRING secret to worker',
+    secretName: 'NEON_CONNECTION_STRING',
+    consequence:
+      'wrangler deploy does not upload shell env as Worker secrets; an explicit ' +
+      'wrangler secret put step is required before deploy.',
+  },
+  {
+    stepName: 'Bind FRONTEND_URL secret to worker',
+    secretName: 'FRONTEND_URL',
+    consequence:
+      'Without it a fresh Worker comes up with no FRONTEND_URL and silently breaks ' +
+      'CORS and Clerk authorizedParties.',
+  },
+  {
+    // Optional secret: the Stripe receiver ships inert ahead of the endpoint
+    // registration (task 3.8), so the step is allowed to no-op when Doppler has
+    // no value. What must not regress is the step's existence and its position —
+    // a binding that runs after `wrangler deploy`, or not at all, leaves
+    // `POST /api/webhooks/stripe` answering 503 while every other signal says
+    // the deploy succeeded.
+    stepName: 'Bind STRIPE_WEBHOOK_SECRET secret to worker',
+    secretName: 'STRIPE_WEBHOOK_SECRET',
+    consequence:
+      'wrangler deploy does not upload shell env as Worker secrets, so without this ' +
+      'step the Stripe webhook receiver can never leave its 503 state.',
+  },
+];
+
 function verifyProductionBindingOrder(workflow = loadWorkflow()) {
   const errors = [];
   const job = workflow.jobs && workflow.jobs['deploy-production'];
@@ -262,84 +343,13 @@ function verifyProductionBindingOrder(workflow = loadWorkflow()) {
     return errors;
   }
 
-  const bindIdx = findStepIndex(steps, 'Bind NEON_CONNECTION_STRING secret to worker');
-  if (bindIdx === -1) {
-    errors.push(
-      new Error(
-        "Missing step 'Bind NEON_CONNECTION_STRING secret to worker' in deploy-production. " +
-          'wrangler deploy does not upload shell env as Worker secrets; an explicit ' +
-          'wrangler secret put step is required before deploy.',
-      ),
-    );
-  }
-
   const deployIdx = findStepIndex(steps, 'Deploy production worker');
   if (deployIdx === -1) {
     errors.push(new Error("Missing step 'Deploy production worker' in deploy-production"));
   }
 
-  if (bindIdx !== -1 && deployIdx !== -1 && bindIdx >= deployIdx) {
-    errors.push(
-      new Error(
-        `'Bind NEON_CONNECTION_STRING secret to worker' (step ${bindIdx + 1}) must run ` +
-          `BEFORE 'Deploy production worker' (step ${deployIdx + 1}). ` +
-          'A deploy without a fresh secret binding could ship a Worker bound to a stale credential.',
-      ),
-    );
-  }
-
-  // The binding step must actually invoke `wrangler secret put` for
-  // NEON_CONNECTION_STRING — a renamed or no-op step would otherwise
-  // satisfy the name check above.
-  if (bindIdx !== -1) {
-    const bindStep = steps[bindIdx];
-    const run = bindStep.run || '';
-    if (!/wrangler\s+secret\s+put\s+NEON_CONNECTION_STRING/.test(run)) {
-      errors.push(
-        new Error(
-          `'Bind NEON_CONNECTION_STRING secret to worker' step does not invoke ` +
-            '`wrangler secret put NEON_CONNECTION_STRING`. Found run: ' +
-            JSON.stringify(run),
-        ),
-      );
-    }
-  }
-
-  // STRIPE_WEBHOOK_SECRET is bound the same way and for the same reason.
-  // It differs in being optional — the receiver ships inert ahead of the
-  // Stripe endpoint registration (task 3.8) — so the step is allowed to
-  // no-op when Doppler has no value. What must NOT regress is the step's
-  // existence and its position: a binding that runs after `wrangler
-  // deploy`, or not at all, leaves `POST /api/webhooks/stripe` answering
-  // 503 while every other signal says the deploy succeeded.
-  const stripeIdx = findStepIndex(steps, 'Bind STRIPE_WEBHOOK_SECRET secret to worker');
-  if (stripeIdx === -1) {
-    errors.push(
-      new Error(
-        "Missing step 'Bind STRIPE_WEBHOOK_SECRET secret to worker' in deploy-production. " +
-          'wrangler deploy does not upload shell env as Worker secrets, so without this ' +
-          'step the Stripe webhook receiver can never leave its 503 state.',
-      ),
-    );
-  } else {
-    const run = steps[stripeIdx].run || '';
-    if (!/wrangler\s+secret\s+put\s+STRIPE_WEBHOOK_SECRET/.test(run)) {
-      errors.push(
-        new Error(
-          `'Bind STRIPE_WEBHOOK_SECRET secret to worker' step does not invoke ` +
-            '`wrangler secret put STRIPE_WEBHOOK_SECRET`. Found run: ' +
-            JSON.stringify(run),
-        ),
-      );
-    }
-    if (deployIdx !== -1 && stripeIdx >= deployIdx) {
-      errors.push(
-        new Error(
-          `'Bind STRIPE_WEBHOOK_SECRET secret to worker' (step ${stripeIdx + 1}) must run ` +
-            `BEFORE 'Deploy production worker' (step ${deployIdx + 1}).`,
-        ),
-      );
-    }
+  for (const spec of PRODUCTION_SECRET_BINDINGS) {
+    verifySecretBoundBeforeDeploy(steps, deployIdx, spec, errors);
   }
 
   // The deploy step must actually invoke `wrangler deploy` (not just
@@ -425,6 +435,7 @@ function verifyRoleCheckIsolation(
 }
 
 module.exports = {
+  PRODUCTION_SECRET_BINDINGS,
   REPO_ROOT,
   WORKFLOW_PATH,
   WRANGLER_PATH,
