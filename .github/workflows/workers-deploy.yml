@@ -151,6 +151,28 @@ jobs:
             fi
           done
 
+      # Same binding as production below. The development Worker is the
+      # shadow-verification target named in task 3.8, and `stripe listen
+      # --forward-to <dev worker>/api/webhooks/stripe` issues its own signing
+      # secret — so this environment needs the binding to be exercisable at all.
+      - name: Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run -- bash -lc '
+            if [ -z "${STRIPE_WEBHOOK_SECRET:-}" ]; then
+              echo "STRIPE_WEBHOOK_SECRET is not set in Doppler; leaving the Worker binding untouched."
+              echo "POST /api/webhooks/stripe will answer 503 until task 3.8 registers an endpoint."
+              exit 0
+            fi
+            if [[ "${STRIPE_WEBHOOK_SECRET}" != whsec_* ]]; then
+              echo "::error::STRIPE_WEBHOOK_SECRET must be a Stripe signing secret (whsec_...)."
+              echo "::error::A Stripe API key (sk_/rk_) or an endpoint id (we_) here fails every signature check."
+              exit 1
+            fi
+            printf "%s" "${STRIPE_WEBHOOK_SECRET}" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env development
+          '
+
       - name: Deploy development worker
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
@@ -338,6 +360,42 @@ jobs:
           set -euo pipefail
           doppler run -- npx wrangler secret list --env production --format json \
             | node ../scripts/check-observability.js --no-ingest-check
+
+      # Bind STRIPE_WEBHOOK_SECRET the same way FRONTEND_URL and
+      # NEON_CONNECTION_STRING are bound above, and for the same reason:
+      # `wrangler deploy` does NOT upload surrounding-shell env vars as Worker
+      # secret bindings, so a value living only in Doppler never reaches the
+      # Worker and `POST /api/webhooks/stripe` answers 503 forever.
+      #
+      # Unlike those two this secret is OPTIONAL, because the receiver ships
+      # ahead of the Stripe endpoint registration (task 3.8) and is deliberately
+      # inert until one exists. An unset value is therefore a normal state, not
+      # a failure: the step leaves any existing binding alone and says so. That
+      # is why it does not `printf ""` — writing an empty secret would look
+      # identical to "configured" in `wrangler secret list` while still failing
+      # every request.
+      #
+      # The `whsec_` check catches the one mistake that is otherwise silent: a
+      # Stripe API key or an endpoint id (`we_...`) pasted in place of the
+      # signing secret binds fine and then fails every signature verification,
+      # which reads exactly like a misconfigured endpoint on Stripe's side.
+      - name: Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run -- bash -lc '
+            if [ -z "${STRIPE_WEBHOOK_SECRET:-}" ]; then
+              echo "STRIPE_WEBHOOK_SECRET is not set in Doppler; leaving the Worker binding untouched."
+              echo "POST /api/webhooks/stripe will answer 503 until task 3.8 registers an endpoint."
+              exit 0
+            fi
+            if [[ "${STRIPE_WEBHOOK_SECRET}" != whsec_* ]]; then
+              echo "::error::STRIPE_WEBHOOK_SECRET must be a Stripe signing secret (whsec_...)."
+              echo "::error::A Stripe API key (sk_/rk_) or an endpoint id (we_) here fails every signature check."
+              exit 1
+            fi
+            printf "%s" "${STRIPE_WEBHOOK_SECRET}" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production
+          '
 
       - name: Deploy production worker
         env:

@@ -116,12 +116,41 @@ test('real workflow: FRONTEND_URL binding step also precedes wrangler deploy', (
   assert.ok(feIdx < deployIdx, 'FRONTEND_URL binding must precede deploy');
 });
 
+test('real workflow: STRIPE_WEBHOOK_SECRET binding step also precedes wrangler deploy', () => {
+  // Without this binding the Stripe receiver stays at 503 while every other
+  // deploy signal reports success — the failure mode this guard exists for.
+  const workflow = loadWorkflow();
+  const job = workflow.jobs['deploy-production'];
+  const steps = job.steps;
+  const stripeIdx = findStepIndex(steps, 'Bind STRIPE_WEBHOOK_SECRET secret to worker');
+  const deployIdx = findStepIndex(steps, 'Deploy production worker');
+  assert.notEqual(stripeIdx, -1, 'STRIPE_WEBHOOK_SECRET binding step must exist');
+  assert.notEqual(deployIdx, -1, 'deploy step must exist');
+  assert.ok(stripeIdx < deployIdx, 'STRIPE_WEBHOOK_SECRET binding must precede deploy');
+});
+
+test('real workflow: the Stripe binding tolerates an unset secret but rejects a non-whsec value', () => {
+  // The receiver ships inert ahead of task 3.8, so "not configured" is a
+  // normal state and must not fail the deploy. A value that is present but is
+  // not a signing secret is the opposite: it binds cleanly and then fails
+  // every signature check, which reads like a Stripe-side misconfiguration.
+  const workflow = loadWorkflow();
+  const steps = workflow.jobs['deploy-production'].steps;
+  const run = steps[findStepIndex(steps, 'Bind STRIPE_WEBHOOK_SECRET secret to worker')].run || '';
+  assert.match(run, /exit 0/, 'an unset secret must be a no-op, not a deploy failure');
+  assert.match(run, /whsec_\*/, 'a non-signing-secret value must be rejected');
+});
+
 test('synthetic: missing binding step is reported', () => {
   const workflow = {
     jobs: {
       'deploy-production': {
         steps: [
           { name: 'Setup Node.js', run: 'node --version' },
+          {
+            name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
+          },
           { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
         ],
       },
@@ -139,6 +168,10 @@ test('synthetic: binding step after deploy is reported as ordering violation', (
       'deploy-production': {
         steps: [
           { name: 'Setup Node.js', run: 'node --version' },
+          {
+            name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
+          },
           { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
           {
             name: 'Bind NEON_CONNECTION_STRING secret to worker',
@@ -228,6 +261,10 @@ test('synthetic: well-formed workflow returns no errors', () => {
           {
             name: 'Bind NEON_CONNECTION_STRING secret to worker',
             run: 'printf \'%s\' "$X" | npx wrangler secret put NEON_CONNECTION_STRING --env production',
+          },
+          {
+            name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
           },
           { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
         ],
