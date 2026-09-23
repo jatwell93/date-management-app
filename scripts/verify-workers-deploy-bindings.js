@@ -1,7 +1,8 @@
 /**
  * Static assertion over `.github/workflows/workers-deploy.yml` that the
- * production deploy job binds NEON_CONNECTION_STRING as a Worker secret
- * (via `wrangler secret put`) BEFORE running `wrangler deploy`.
+ * production deploy job binds its Worker secrets (via `wrangler secret
+ * put`) BEFORE running `wrangler deploy` — NEON_CONNECTION_STRING,
+ * FRONTEND_URL and STRIPE_WEBHOOK_SECRET.
  *
  * Why this exists: `wrangler deploy` does NOT upload surrounding-shell
  * env vars as Worker secret bindings — it only registers what is in
@@ -299,6 +300,43 @@ function verifyProductionBindingOrder(workflow = loadWorkflow()) {
           `'Bind NEON_CONNECTION_STRING secret to worker' step does not invoke ` +
             '`wrangler secret put NEON_CONNECTION_STRING`. Found run: ' +
             JSON.stringify(run),
+        ),
+      );
+    }
+  }
+
+  // STRIPE_WEBHOOK_SECRET is bound the same way and for the same reason.
+  // It differs in being optional — the receiver ships inert ahead of the
+  // Stripe endpoint registration (task 3.8) — so the step is allowed to
+  // no-op when Doppler has no value. What must NOT regress is the step's
+  // existence and its position: a binding that runs after `wrangler
+  // deploy`, or not at all, leaves `POST /api/webhooks/stripe` answering
+  // 503 while every other signal says the deploy succeeded.
+  const stripeIdx = findStepIndex(steps, 'Bind STRIPE_WEBHOOK_SECRET secret to worker');
+  if (stripeIdx === -1) {
+    errors.push(
+      new Error(
+        "Missing step 'Bind STRIPE_WEBHOOK_SECRET secret to worker' in deploy-production. " +
+          'wrangler deploy does not upload shell env as Worker secrets, so without this ' +
+          'step the Stripe webhook receiver can never leave its 503 state.',
+      ),
+    );
+  } else {
+    const run = steps[stripeIdx].run || '';
+    if (!/wrangler\s+secret\s+put\s+STRIPE_WEBHOOK_SECRET/.test(run)) {
+      errors.push(
+        new Error(
+          `'Bind STRIPE_WEBHOOK_SECRET secret to worker' step does not invoke ` +
+            '`wrangler secret put STRIPE_WEBHOOK_SECRET`. Found run: ' +
+            JSON.stringify(run),
+        ),
+      );
+    }
+    if (deployIdx !== -1 && stripeIdx >= deployIdx) {
+      errors.push(
+        new Error(
+          `'Bind STRIPE_WEBHOOK_SECRET secret to worker' (step ${stripeIdx + 1}) must run ` +
+            `BEFORE 'Deploy production worker' (step ${deployIdx + 1}).`,
         ),
       );
     }
