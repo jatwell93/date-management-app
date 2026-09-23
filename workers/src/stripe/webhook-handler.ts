@@ -233,12 +233,24 @@ async function processSubscriptionEvent(
   const cancelAtPeriodEnd = subscription.cancel_at_period_end === true;
 
   if (eventType === 'customer.subscription.deleted') {
-    await markSubscriptionCanceledFromStripe(sql, {
+    const canceled = await markSubscriptionCanceledFromStripe(sql, {
       organizationId,
       stripeSubscriptionId,
       currentPeriodEndSeconds,
       cancelAtPeriodEnd,
     });
+
+    if (!canceled) {
+      // The organization's row is for a different subscription, so this event
+      // is a late delivery about one that has already been superseded. Doing
+      // nothing is the correct outcome; saying nothing would not be.
+      console.warn('[STRIPE_WEBHOOK] Cancellation skipped: subscription already superseded', {
+        eventId,
+        organizationId,
+        stripeSubscriptionId,
+      });
+      return;
+    }
 
     console.log('[STRIPE_WEBHOOK] Subscription canceled', {
       eventId,
@@ -250,7 +262,7 @@ async function processSubscriptionEvent(
 
   const tier = resolveEventTier(subscription, { eventId, eventType, organizationId });
 
-  await upsertSubscriptionFromStripe(sql, {
+  const synced = await upsertSubscriptionFromStripe(sql, {
     organizationId,
     tier,
     stripeSubscriptionId,
@@ -261,6 +273,19 @@ async function processSubscriptionEvent(
     currentPeriodEndSeconds,
     cancelAtPeriodEnd,
   });
+
+  if (!synced) {
+    // The organization is already committed to a different live subscription,
+    // so this is a late delivery about one that has been superseded. Leaving
+    // the row alone is correct; leaving it unsaid is not.
+    console.warn('[STRIPE_WEBHOOK] Sync skipped: organization holds a different subscription', {
+      eventId,
+      eventType,
+      organizationId,
+      stripeSubscriptionId,
+    });
+    return;
+  }
 
   console.log('[STRIPE_WEBHOOK] Subscription synced', {
     eventId,

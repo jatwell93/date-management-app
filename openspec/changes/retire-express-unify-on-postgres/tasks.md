@@ -2473,16 +2473,47 @@ equivalent, a relocated home, or an explicit retirement decision.
             `trial_will_end` (an email; changes no state anything reads) and the two
             `payment_intent.*` (audit rows nothing gates on). Unhandled types are acknowledged and
             logged, never dropped silently.
-            <br>**Coverage, mutation-verified.** 13 signature tests and 19 real-SQL (pglite) handler
-            tests. Ten mutations, each caught: dropping the `pro` case (2 fail), Express's
+            <br>**Coverage, mutation-verified.** 13 signature tests and 23 real-SQL (pglite)
+            handler tests. Thirteen mutations, each caught: dropping the `pro` case (2 fail), Express's
             unknown-tier `free` default (1), Express's cancellation downgrade (1), resetting
             `past_due_since` on every retry (1), acknowledging an in-flight claim with 200 (1),
             removing the staleness takeover (1), trusting metadata `organizationId` unchecked (1),
             base64-decoding the secret Clerk-style (6 of 13), accepting only the first `v1` during a
-            key rotation (1), and deleting the dispatch from `index-minimal.ts`
+            key rotation (1), dropping the cancellation's subscription-id guard (1), dropping the
+            sync's superseded-subscription guard (1), making that guard over-strict so a legitimate
+            resubscribe is refused (1), and deleting the dispatch from `index-minimal.ts`
             (`test:build-artifact` throws). As in the Clerk suite there is deliberately **no**
             `Promise.all` concurrency test: pglite serializes statements, so it would be green the
             harness cannot turn red.
+            <br>**A fourth defect, found by review, and its whole class.** Sentry's bot flagged
+            `markSubscriptionCanceledFromStripe` as CRITICAL: the UPDATE was scoped to
+            `organization_id` alone, so a retried deletion could cancel the *wrong* subscription.
+            The sequence is real — `sub_OLD` is deleted, processing fails and the claim is
+            released, the organization resubscribes as `sub_NEW`, and the retry can no longer match
+            `sub_OLD` so attribution falls back to the customer id (same customer, so the
+            organization resolves correctly) and the organization-only UPDATE cancels the live
+            `sub_NEW`. A paying customer downgraded to `free` by the deletion of a subscription they
+            had already replaced, with no later event to correct it. Fixed by scoping the UPDATE to
+            the subscription the event names, and returning whether a row matched so the handler
+            reports a no-op rather than a silent success.
+            <br>**Sentry reported this same finding as "Resolved in `1e79325`". It was not.**
+            `git log -L` on the function body shows it had only ever been changed in `426b8ba`;
+            `1e79325` merely moved lines around it, and Sentry read the move as a fix. This is
+            exactly the caution the previous session recorded about Sentry's resolution claims, and
+            it is the second time it has been earned — verify against current code, never the label.
+            <br>**The class, not the instance** (the lesson from the credit-claim CAS rounds): the
+            same staleness hole existed on the *sync* path, because attribution falls back to a
+            customer id that outlives any one subscription. Worse, it compounded — a stale
+            `customer.subscription.updated` would rewrite `stripe_subscription_id` back to the old
+            subscription, after which a stale *deletion* for it would satisfy the new cancellation
+            guard, so two stale events in sequence defeated a fix applied only to the cancel path.
+            The conflict branch of `upsertSubscriptionFromStripe` now refuses to let a *different*
+            subscription take the row over unless the stored id is NULL (a trial row awaiting its
+            first real subscription), is the same subscription (the ordinary update, including plan
+            changes — Stripe keeps the id across those), or names a subscription that is already
+            finished (the genuine resubscribe). Both directions are tested and mutation-verified:
+            dropping the guard fails the staleness test, and making it over-strict fails the
+            resubscribe test.
             <br>**Harness drift found and closed.** `workers/src/__tests__/pglite-db.ts` had no
             `processed_webhook_events` table at all and no `subscription_tiers.stripe_customer_id`,
             so these tests could not have run against it.

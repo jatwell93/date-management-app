@@ -324,17 +324,43 @@ export async function resolveOrganizationIdForStripeEvent(
  * that does not identify a recognisable tier must not downgrade anyone. On
  * insert there is no prior value, so `free` is the only available floor and the
  * caller logs it.
+ *
+ * **The `WHERE` on the conflict branch closes the same staleness hole as the
+ * guard in `markSubscriptionCanceledFromStripe`**, which is worth stating
+ * plainly because finding it required re-deriving the class rather than fixing
+ * the one instance a review reported. Attribution falls back to the customer id,
+ * and a customer outlives any one of its subscriptions — so a late delivery
+ * about a *superseded* subscription still resolves to the right organization and
+ * would otherwise overwrite the live row, rewriting `stripe_subscription_id`
+ * back to the old subscription. That is worse than a single bad write: once the
+ * link points at the old subscription again, a later stale *deletion* for it
+ * matches the cancellation guard and cancels a live subscription after all. Two
+ * stale events in sequence would defeat a fix applied only to the cancel path.
+ *
+ * The rule is that a *different* subscription may take the row over only when
+ * the row is not already committed to a live one:
+ *
+ * - the stored id is NULL — a trial row from `ensureTrialSubscription`, which
+ *   the first real Stripe subscription is supposed to claim;
+ * - the stored id is this same subscription — the ordinary update;
+ * - the stored subscription is finished — the genuine resubscribe, where a
+ *   cancelled subscription is replaced by a new one.
+ *
+ * Stripe keeps the subscription id across a plan change (it updates the items),
+ * so an upgrade or downgrade is the second case and is unaffected. Returning
+ * whether the write applied lets the caller report a refusal rather than log a
+ * success that did not happen.
  */
 export async function upsertSubscriptionFromStripe(
   sql: SqlClient,
   sync: StripeSubscriptionSync,
-): Promise<void> {
+): Promise<boolean> {
   const trialEnd = sync.trialEndSeconds === null ? null : new Date(sync.trialEndSeconds * 1000);
   const periodEnd =
     sync.currentPeriodEndSeconds === null ? null : new Date(sync.currentPeriodEndSeconds * 1000);
   const isPastDue = sync.status === 'past_due';
 
-  await sql`
+  const rows = await sql`
     INSERT INTO subscription_tiers (
       organization_id,
       tier_level,
@@ -380,7 +406,13 @@ export async function upsertSubscriptionFromStripe(
             ELSE NULL
           END,
           updated_at = NOW()
+      WHERE subscription_tiers.stripe_subscription_id IS NULL
+         OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+         OR subscription_tiers.status IN ('canceled', 'cancelled', 'incomplete_expired')
+    RETURNING organization_id
   `;
+
+  return rows.length > 0;
 }
 
 /**
@@ -406,6 +438,29 @@ export async function upsertSubscriptionFromStripe(
  * `past_due_since` is cleared because a cancelled subscription is no longer in
  * dunning; the `past_due` branch is unreachable for this row either way, so this
  * only keeps the row honest for anyone reading it directly.
+ *
+ * **The `stripe_subscription_id` term in the WHERE clause is load-bearing, not
+ * belt-and-braces.** Without it the cancellation applies to whatever
+ * subscription the organization currently has, which is not necessarily the one
+ * the event is about. The sequence that breaks it:
+ *
+ * 1. `sub_OLD` is deleted; the event fails processing and the claim is released.
+ * 2. Before Stripe retries, the organization subscribes again as `sub_NEW`, and
+ *    the row's `stripe_subscription_id` becomes `sub_NEW`.
+ * 3. The retry arrives. Attribution by subscription id no longer matches, so it
+ *    falls back to the customer id — which still matches, because it is the same
+ *    customer — and resolves the organization correctly.
+ * 4. An organization-only UPDATE then cancels `sub_NEW`: a paying customer
+ *    downgraded to `free` by the deletion of a subscription they had already
+ *    replaced, with no later event to correct it.
+ *
+ * Scoping the UPDATE to the subscription the event names makes step 4 a no-op
+ * instead. Returning whether a row matched lets the caller say so rather than
+ * report a silent success.
+ *
+ * Found by Sentry's bot review on PR #526. Note it also reported itself
+ * *"Resolved in 1e79325"*, which was false — that commit only moved lines around
+ * this function.
  */
 export async function markSubscriptionCanceledFromStripe(
   sql: SqlClient,
@@ -415,13 +470,13 @@ export async function markSubscriptionCanceledFromStripe(
     currentPeriodEndSeconds: number | null;
     cancelAtPeriodEnd: boolean;
   },
-): Promise<void> {
+): Promise<boolean> {
   const periodEnd =
     options.currentPeriodEndSeconds === null
       ? null
       : new Date(options.currentPeriodEndSeconds * 1000);
 
-  await sql`
+  const rows = await sql`
     UPDATE subscription_tiers
     SET status = 'canceled',
         trial_end_date = NULL,
@@ -430,5 +485,9 @@ export async function markSubscriptionCanceledFromStripe(
         current_period_end = COALESCE(${periodEnd}, current_period_end),
         updated_at = NOW()
     WHERE organization_id = ${options.organizationId}
+      AND stripe_subscription_id = ${options.stripeSubscriptionId}
+    RETURNING organization_id
   `;
+
+  return rows.length > 0;
 }

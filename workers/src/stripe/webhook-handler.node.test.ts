@@ -357,10 +357,13 @@ describe('POST /api/webhooks/stripe', () => {
 
     it('cancels without discarding the tier the customer has paid through', async () => {
       const periodEnd = Math.floor(Date.now() / 1000) + 10 * 24 * 60 * 60;
+      // The subscription id matters: a real cancellation always follows a
+      // created/updated event that stored it, and the UPDATE is scoped to it.
       await sql`
         INSERT INTO subscription_tiers
-          (organization_id, tier_level, status, stripe_customer_id, updated_at)
-        VALUES (${ORG}, 'professional', 'active', ${CUSTOMER}, NOW())
+          (organization_id, tier_level, status, stripe_customer_id,
+           stripe_subscription_id, updated_at)
+        VALUES (${ORG}, 'professional', 'active', ${CUSTOMER}, ${SUBSCRIPTION}, NOW())
       `;
 
       const request = await stripeRequest(
@@ -384,6 +387,102 @@ describe('POST /api/webhooks/stripe', () => {
       expect(row.tier_level).toBe('professional');
       expect(row.cancel_at_period_end).toBe(true);
       expect(row.current_period_end).not.toBeNull();
+    });
+
+    it('does not let a superseded subscription overwrite the live one', async () => {
+      // The same class as the cancellation race, on the sync path. If a stale
+      // update could rewrite stripe_subscription_id back to the old
+      // subscription, a later stale deletion for it would then satisfy the
+      // cancellation guard — two stale events in sequence defeating a fix
+      // applied only to the cancel path.
+      await sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, stripe_customer_id,
+           stripe_subscription_id, updated_at)
+        VALUES (${ORG}, 'professional', 'active', ${CUSTOMER}, 'sub_NEW', NOW())
+      `;
+
+      const staleUpdate = await stripeRequest(
+        subscriptionEvent({
+          id: 'evt_stale_update',
+          type: 'customer.subscription.updated',
+          subscriptionId: 'sub_OLD',
+          tier: 'free',
+          status: 'canceled',
+        }),
+      );
+
+      expect((await handleStripeWebhook(staleUpdate, ENV)).status).toBe(200);
+
+      const row = await subscriptionRow();
+      expect(row.stripe_subscription_id).toBe('sub_NEW');
+      expect(row.status).toBe('active');
+      expect(row.tier_level).toBe('professional');
+    });
+
+    it('lets a new subscription take over a row whose subscription was cancelled', async () => {
+      // The other side of that guard: a genuine resubscribe must still work, or
+      // the fix would lock an organization out of ever buying again.
+      await sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, stripe_customer_id,
+           stripe_subscription_id, updated_at)
+        VALUES (${ORG}, 'free', 'canceled', ${CUSTOMER}, 'sub_OLD', NOW())
+      `;
+
+      const resubscribe = await stripeRequest(
+        subscriptionEvent({
+          id: 'evt_resubscribe',
+          type: 'customer.subscription.created',
+          subscriptionId: 'sub_NEW',
+          tier: 'professional',
+        }),
+      );
+
+      expect((await handleStripeWebhook(resubscribe, ENV)).status).toBe(200);
+
+      const row = await subscriptionRow();
+      expect(row.stripe_subscription_id).toBe('sub_NEW');
+      expect(row.status).toBe('active');
+      expect(row.tier_level).toBe('professional');
+    });
+
+    it('does not cancel a subscription that has already replaced the deleted one', async () => {
+      // The race Sentry's bot review found on PR #526 (CRITICAL):
+      //   1. sub_OLD is deleted; the event fails and the claim is released.
+      //   2. The organization resubscribes as sub_NEW before Stripe retries.
+      //   3. The retry cannot match sub_OLD, falls back to the customer id —
+      //      same customer, so the organization resolves correctly.
+      //   4. An organization-only UPDATE would then cancel sub_NEW.
+      // Step 4 is what the stripe_subscription_id term in the WHERE prevents.
+      await sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, stripe_customer_id,
+           stripe_subscription_id, updated_at)
+        VALUES (${ORG}, 'professional', 'active', ${CUSTOMER}, 'sub_NEW', NOW())
+      `;
+
+      const staleDeletion = await stripeRequest(
+        subscriptionEvent({
+          id: 'evt_stale_delete',
+          type: 'customer.subscription.deleted',
+          subscriptionId: 'sub_OLD',
+        }),
+      );
+
+      const response = await handleStripeWebhook(staleDeletion, ENV);
+
+      // Acknowledged — the event is genuinely finished with, and retrying it
+      // could never produce a different answer.
+      expect(response.status).toBe(200);
+
+      const row = await subscriptionRow();
+      // The live subscription is untouched. Before the fix this row read
+      // status 'canceled', downgrading a paying customer on the strength of a
+      // subscription they had already replaced, with no later event to correct it.
+      expect(row.status).toBe('active');
+      expect(row.stripe_subscription_id).toBe('sub_NEW');
+      expect(row.tier_level).toBe('professional');
     });
 
     it('reads the period end from the subscription item when Stripe omits the top-level field', async () => {
