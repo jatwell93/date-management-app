@@ -231,6 +231,38 @@ function respondToExistingClaim(
   return null;
 }
 
+/**
+ * Apply a claimed event, and hand the claim back if applying it fails.
+ *
+ * The release is what makes a failure retryable *promptly*: without it the row
+ * sits claimed until the staleness window expires, so Stripe's next retry finds
+ * the event in flight and is refused rather than re-driving it.
+ *
+ * A failure to release is swallowed after logging, deliberately. The original
+ * processing error is the one worth surfacing, and the claim is not lost either
+ * way — the staleness window still frees it, just later.
+ */
+async function applyClaimedEventOrReleaseClaim(
+  sql: SqlClient,
+  eventId: string,
+  eventType: string,
+  event: StripeEventEnvelope,
+): Promise<void> {
+  try {
+    await applyClaimedStripeEvent(sql, eventId, eventType, event);
+    await completeStripeWebhookEvent(sql, eventId);
+  } catch (processingError) {
+    await releaseStripeWebhookEventClaim(sql, eventId).catch((releaseError) => {
+      console.error('[STRIPE_WEBHOOK] Failed to release claim after a processing failure', {
+        eventId,
+        eventType,
+        message: releaseError instanceof Error ? releaseError.message : String(releaseError),
+      });
+    });
+    throw processingError;
+  }
+}
+
 export async function handleStripeWebhook(
   request: Request,
   env: Env,
@@ -259,22 +291,9 @@ export async function handleStripeWebhook(
       return alreadyClaimed;
     }
 
-    try {
-      await applyClaimedStripeEvent(db.sql, eventId, eventType, event);
-      await completeStripeWebhookEvent(db.sql, eventId);
-      return jsonResponse({ received: true }, 200, env, requestOrigin);
-    } catch (processingError) {
-      // Release the claim so Stripe's next retry re-drives the event at once
-      // rather than waiting out the staleness window.
-      await releaseStripeWebhookEventClaim(db.sql, eventId).catch((releaseError) => {
-        console.error('[STRIPE_WEBHOOK] Failed to release claim after a processing failure', {
-          eventId,
-          eventType,
-          message: releaseError instanceof Error ? releaseError.message : String(releaseError),
-        });
-      });
-      throw processingError;
-    }
+    await applyClaimedEventOrReleaseClaim(db.sql, eventId, eventType, event);
+
+    return jsonResponse({ received: true }, 200, env, requestOrigin);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[STRIPE_WEBHOOK] Error processing webhook event', {
