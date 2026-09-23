@@ -92,30 +92,26 @@ function splitSignaturePart(part: string): [key: string, value: string] | null {
  * reports one signature failure shape for every malformed header.
  */
 export function parseStripeSignatureHeader(header: string): ParsedStripeSignatureHeader | null {
-  let timestamp: number | null = null;
-  const v1Signatures: string[] = [];
+  const elements = header
+    .split(',')
+    .map(splitSignaturePart)
+    .filter((element): element is [string, string] => element !== null);
 
-  for (const part of header.split(',')) {
-    const element = splitSignaturePart(part);
+  const timestamp = elements.find(([key, value]) => key === 't' && isUnixTimestamp(value));
 
-    if (element === null) {
-      continue;
-    }
+  // Every `v1` is kept, not just the first: Stripe sends one per active endpoint
+  // secret while a secret is being rotated, and ours may not be the first.
+  // Schemes other than `v1` are ignored rather than rejected — `v0` exists for
+  // other products, and a future scheme must not make this throw.
+  const v1Signatures = elements
+    .filter(([key, value]) => key === 'v1' && isHexDigest(value))
+    .map(([, value]) => value.toLowerCase());
 
-    const [key, value] = element;
-
-    if (key === 't' && isUnixTimestamp(value)) {
-      timestamp = Number.parseInt(value, 10);
-    } else if (key === 'v1' && isHexDigest(value)) {
-      v1Signatures.push(value.toLowerCase());
-    }
-  }
-
-  if (timestamp === null || v1Signatures.length === 0) {
+  if (timestamp === undefined || v1Signatures.length === 0) {
     return null;
   }
 
-  return { timestamp, v1Signatures };
+  return { timestamp: Number.parseInt(timestamp[1], 10), v1Signatures };
 }
 
 /**
@@ -156,9 +152,16 @@ export async function verifyStripeSignature(
     await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload)),
   );
 
-  // Every candidate is compared, and the comparison is not short-circuited on
-  // the first match, because Stripe sends one `v1` per active endpoint secret
-  // during a key rotation.
+  // Every candidate is *considered*, rather than only the first element of the
+  // header, because Stripe sends one `v1` per active endpoint secret during a
+  // key rotation and ours may not be first.
+  //
+  // `some` does stop at the first match, and that is fine: the constant-time
+  // property that matters is inside each comparison, which is why
+  // `timingSafeEqual` runs the full length of the digest rather than returning
+  // at the first differing character. How many candidates were examined before a
+  // match leaks nothing secret — the signatures are public, and an attacker
+  // supplies them.
   const isValid = parsed.v1Signatures.some((signature) =>
     timingSafeEqual(signature, expectedSignature),
   );

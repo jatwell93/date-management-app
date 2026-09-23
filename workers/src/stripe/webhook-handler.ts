@@ -52,14 +52,15 @@ import { errorResponse, jsonResponse } from '../utils/worker-response';
 import {
   claimStripeWebhookEvent,
   completeStripeWebhookEvent,
-  mapStripePriceTier,
-  markSubscriptionCanceledFromStripe,
   releaseStripeWebhookEventClaim,
-  resolveOrganizationIdForStripeEvent,
-  upsertSubscriptionFromStripe,
   type SqlClient,
+  type StripeWebhookClaimOutcome,
 } from './stripe-persistence';
-import type { LaunchTier } from '../utils/usage-limits';
+import {
+  processSubscriptionEvent,
+  SUBSCRIPTION_EVENT_TYPES,
+  type StripeSubscriptionObject,
+} from './subscription-events';
 import { verifyStripeSignature } from './webhook-signature';
 
 /**
@@ -76,58 +77,13 @@ interface StripeEventEnvelope {
   data?: { object?: StripeSubscriptionObject };
 }
 
-interface StripeSubscriptionObject {
-  id?: unknown;
-  customer?: unknown;
-  status?: unknown;
-  trial_end?: unknown;
-  cancel_at_period_end?: unknown;
-  current_period_end?: unknown;
-  metadata?: Record<string, unknown>;
-  items?: {
-    data?: Array<{
-      price?: {
-        metadata?: Record<string, unknown>;
-        recurring?: { interval?: unknown };
-      };
-      current_period_end?: unknown;
-    }>;
-  };
-}
 
-const SUBSCRIPTION_EVENT_TYPES = new Set([
-  'customer.subscription.created',
-  'customer.subscription.updated',
-  'customer.subscription.deleted',
-]);
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-function asUnixSeconds(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
 
-/**
- * Stripe's period end moved from the subscription to its items in the
- * 2025-03-31 API version, and an account can receive either shape depending on
- * the version pinned on the endpoint. Read the subscription-level field first
- * and fall back to the first item, so the Worker is correct on both without the
- * endpoint's API version having to be remembered.
- */
-function extractCurrentPeriodEnd(subscription: StripeSubscriptionObject): number | null {
-  return (
-    asUnixSeconds(subscription.current_period_end) ??
-    asUnixSeconds(subscription.items?.data?.[0]?.current_period_end)
-  );
-}
-
-function extractBillingCycle(subscription: StripeSubscriptionObject): 'monthly' | 'annual' {
-  return subscription.items?.data?.[0]?.price?.recurring?.interval === 'year'
-    ? 'annual'
-    : 'monthly';
-}
 
 /**
  * Apply one `customer.subscription.*` event.
@@ -138,163 +94,9 @@ function extractBillingCycle(subscription: StripeSubscriptionObject): 'monthly' 
  * acknowledges the event and the error is carried by the log line — the same
  * judgement Express encodes in `isNonRecoverableStripeWebhookError`.
  */
-/** The subscription id and organization an event applies to, once both are known. */
-interface AttributedSubscription {
-  organizationId: string;
-  stripeSubscriptionId: string;
-  stripeCustomerId: string | null;
-}
 
-/**
- * Work out which organization and subscription an event is about.
- *
- * `null` means the event cannot be attributed and must not be applied. Both
- * refusals are non-recoverable — a Stripe redelivery carries an identical body,
- * so a 5xx would loop without ever succeeding — which is why they are logged
- * here and reported as an absence rather than thrown.
- */
-async function attributeSubscriptionEvent(
-  sql: SqlClient,
-  eventType: string,
-  eventId: string,
-  subscription: StripeSubscriptionObject,
-): Promise<AttributedSubscription | null> {
-  const stripeSubscriptionId = asString(subscription.id);
-  const stripeCustomerId = asString(subscription.customer);
 
-  if (!stripeSubscriptionId) {
-    console.error('[STRIPE_WEBHOOK] Subscription event carries no subscription id', {
-      eventId,
-      eventType,
-    });
-    return null;
-  }
 
-  const organizationId = await resolveOrganizationIdForStripeEvent(sql, {
-    metadataOrganizationId: subscription.metadata?.organizationId,
-    stripeSubscriptionId,
-    stripeCustomerId,
-  });
-
-  if (!organizationId) {
-    // Refused rather than guessed. Writing subscription state onto the wrong
-    // organization is worse than not writing it, and a genuine mis-registration
-    // must be visible instead of absorbed.
-    console.error('[STRIPE_WEBHOOK] Could not attribute event to an organization', {
-      eventId,
-      eventType,
-      stripeSubscriptionId,
-      stripeCustomerId,
-    });
-    return null;
-  }
-
-  return { organizationId, stripeSubscriptionId, stripeCustomerId };
-}
-
-/**
- * Read the tier out of price metadata, logging when the event does not name one.
- *
- * Loud on purpose. Express writes `free` in this situation and reports success,
- * so a typo in Stripe price metadata silently downgrades a paying customer.
- * `null` instead means the write below keeps whatever tier the organization
- * already had; the rest of the event is still worth recording.
- */
-function resolveEventTier(
-  subscription: StripeSubscriptionObject,
-  context: { eventId: string; eventType: string; organizationId: string },
-): LaunchTier | null {
-  const tier = mapStripePriceTier(subscription.items?.data?.[0]?.price?.metadata?.tier);
-
-  if (tier === null) {
-    console.error(
-      '[STRIPE_WEBHOOK] Price metadata names no recognizable tier; keeping stored tier',
-      context,
-    );
-  }
-
-  return tier;
-}
-
-async function processSubscriptionEvent(
-  sql: SqlClient,
-  eventType: string,
-  eventId: string,
-  subscription: StripeSubscriptionObject,
-): Promise<void> {
-  const attributed = await attributeSubscriptionEvent(sql, eventType, eventId, subscription);
-
-  if (attributed === null) {
-    return;
-  }
-
-  const { organizationId, stripeSubscriptionId, stripeCustomerId } = attributed;
-  const currentPeriodEndSeconds = extractCurrentPeriodEnd(subscription);
-  const cancelAtPeriodEnd = subscription.cancel_at_period_end === true;
-
-  if (eventType === 'customer.subscription.deleted') {
-    const canceled = await markSubscriptionCanceledFromStripe(sql, {
-      organizationId,
-      stripeSubscriptionId,
-      currentPeriodEndSeconds,
-      cancelAtPeriodEnd,
-    });
-
-    if (!canceled) {
-      // The organization's row is for a different subscription, so this event
-      // is a late delivery about one that has already been superseded. Doing
-      // nothing is the correct outcome; saying nothing would not be.
-      console.warn('[STRIPE_WEBHOOK] Cancellation skipped: subscription already superseded', {
-        eventId,
-        organizationId,
-        stripeSubscriptionId,
-      });
-      return;
-    }
-
-    console.log('[STRIPE_WEBHOOK] Subscription canceled', {
-      eventId,
-      organizationId,
-      stripeSubscriptionId,
-    });
-    return;
-  }
-
-  const tier = resolveEventTier(subscription, { eventId, eventType, organizationId });
-
-  const synced = await upsertSubscriptionFromStripe(sql, {
-    organizationId,
-    tier,
-    stripeSubscriptionId,
-    stripeCustomerId,
-    status: asString(subscription.status) ?? 'active',
-    billingCycle: extractBillingCycle(subscription),
-    trialEndSeconds: asUnixSeconds(subscription.trial_end),
-    currentPeriodEndSeconds,
-    cancelAtPeriodEnd,
-  });
-
-  if (!synced) {
-    // The organization is already committed to a different live subscription,
-    // so this is a late delivery about one that has been superseded. Leaving
-    // the row alone is correct; leaving it unsaid is not.
-    console.warn('[STRIPE_WEBHOOK] Sync skipped: organization holds a different subscription', {
-      eventId,
-      eventType,
-      organizationId,
-      stripeSubscriptionId,
-    });
-    return;
-  }
-
-  console.log('[STRIPE_WEBHOOK] Subscription synced', {
-    eventId,
-    eventType,
-    organizationId,
-    stripeSubscriptionId,
-    tier,
-  });
-}
 
 interface AcceptedStripeEvent {
   event: StripeEventEnvelope;
@@ -391,6 +193,44 @@ async function applyClaimedStripeEvent(
   await processSubscriptionEvent(sql, eventType, eventId, subscription);
 }
 
+/**
+ * Turn a claim we did not win into the response that delivery deserves.
+ *
+ * `null` means the claim was taken and the caller should do the work.
+ *
+ * The two outcomes differ in a way worth keeping explicit, because getting it
+ * backwards is silent: a *completed* event is a replay of finished work, so 200
+ * correctly ends Stripe's retry chain; an *in-flight* event must NOT be
+ * acknowledged, because if the claim holder dies without releasing (eviction or
+ * runtime kill, with no 500 to trigger a retry) the only thing that can re-drive
+ * the event is a later redelivery arriving after the staleness window. A
+ * retryable status keeps that delivery alive, and if the sibling succeeds the
+ * retry finds `completed` and acknowledges then.
+ */
+function respondToExistingClaim(
+  claim: StripeWebhookClaimOutcome,
+  context: { eventId: string; eventType: string },
+  env: Env,
+  requestOrigin?: string,
+): Response | null {
+  if (claim === 'completed') {
+    console.log('[STRIPE_WEBHOOK] Skipping replay of a completed event', context);
+    return jsonResponse({ received: true }, 200, env, requestOrigin);
+  }
+
+  if (claim === 'in_flight') {
+    console.log('[STRIPE_WEBHOOK] Event claimed by another delivery; asking for a retry', context);
+    return errorResponse(
+      'Webhook event is already being processed; retry shortly',
+      503,
+      env,
+      requestOrigin,
+    );
+  }
+
+  return null;
+}
+
 export async function handleStripeWebhook(
   request: Request,
   env: Env,
@@ -413,33 +253,10 @@ export async function handleStripeWebhook(
     // marker row while the side effects still run twice (issue #472's shape).
     const claim = await claimStripeWebhookEvent(db.sql, eventId, eventType);
 
-    if (claim === 'completed') {
-      // A replay of work that finished. Acknowledging ends the retry chain,
-      // which is exactly right: there is nothing left to do for this event.
-      console.log('[STRIPE_WEBHOOK] Skipping replay of a completed event', {
-        eventId,
-        eventType,
-      });
-      return jsonResponse({ received: true }, 200, env, requestOrigin);
-    }
+    const alreadyClaimed = respondToExistingClaim(claim, { eventId, eventType }, env, requestOrigin);
 
-    if (claim === 'in_flight') {
-      // A sibling delivery holds the claim. This must NOT be acknowledged: a 200
-      // ends Stripe's retry chain for this delivery, and if the claim holder dies
-      // without releasing (eviction, runtime kill -- no 500 to retry), the only
-      // thing that can re-drive the event is a later redelivery arriving after
-      // the staleness window. A retryable status keeps the delivery alive; if the
-      // sibling succeeds, the retry finds `completed` and acknowledges then.
-      console.log('[STRIPE_WEBHOOK] Event claimed by another delivery; asking for a retry', {
-        eventId,
-        eventType,
-      });
-      return errorResponse(
-        'Webhook event is already being processed; retry shortly',
-        503,
-        env,
-        requestOrigin,
-      );
+    if (alreadyClaimed) {
+      return alreadyClaimed;
     }
 
     try {
