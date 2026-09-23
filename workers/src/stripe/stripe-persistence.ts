@@ -236,38 +236,35 @@ async function confirmOrganizationExists(
   return rows.length > 0 ? organizationId : null;
 }
 
-/** The organization already linked to a Stripe subscription id, if any. */
-async function organizationIdByStripeSubscription(
+/**
+ * The organization already linked to either Stripe id, preferring the
+ * subscription match.
+ *
+ * One query rather than two sequential lookups. A null parameter contributes
+ * nothing on its own: `column = NULL` evaluates to NULL, never true, so an
+ * absent id simply matches no row and needs no guard of its own. The `ORDER BY`
+ * is what keeps the precedence explicit — a row matched on subscription id
+ * sorts ahead of one matched only on customer id, so the more specific link
+ * wins even when the two point at different organizations.
+ */
+async function organizationIdByStripeIds(
   sql: SqlClient,
   stripeSubscriptionId: string | null | undefined,
-): Promise<string | null> {
-  if (!stripeSubscriptionId) {
-    return null;
-  }
-
-  const rows = await sql`
-    SELECT organization_id
-    FROM subscription_tiers
-    WHERE stripe_subscription_id = ${stripeSubscriptionId}
-    LIMIT 1
-  `;
-
-  return rows.length > 0 ? String(rows[0].organization_id) : null;
-}
-
-/** The organization already linked to a Stripe customer id, if any. */
-async function organizationIdByStripeCustomer(
-  sql: SqlClient,
   stripeCustomerId: string | null | undefined,
 ): Promise<string | null> {
-  if (!stripeCustomerId) {
+  const subscriptionId = stripeSubscriptionId ?? null;
+  const customerId = stripeCustomerId ?? null;
+
+  if (subscriptionId === null && customerId === null) {
     return null;
   }
 
   const rows = await sql`
     SELECT organization_id
     FROM subscription_tiers
-    WHERE stripe_customer_id = ${stripeCustomerId}
+    WHERE stripe_subscription_id = ${subscriptionId}
+       OR stripe_customer_id = ${customerId}
+    ORDER BY (stripe_subscription_id = ${subscriptionId}) DESC NULLS LAST
     LIMIT 1
   `;
 
@@ -282,12 +279,11 @@ export async function resolveOrganizationIdForStripeEvent(
     stripeCustomerId?: string | null;
   },
 ): Promise<string | null> {
-  // `??` short-circuits, so each lookup runs only when the more specific ones
-  // above it came back empty. The order is the precedence described above.
+  // `??` short-circuits, so the stored-id lookup runs only when the event did
+  // not name a usable organization itself.
   return (
     (await confirmOrganizationExists(sql, options.metadataOrganizationId)) ??
-    (await organizationIdByStripeSubscription(sql, options.stripeSubscriptionId)) ??
-    (await organizationIdByStripeCustomer(sql, options.stripeCustomerId))
+    (await organizationIdByStripeIds(sql, options.stripeSubscriptionId, options.stripeCustomerId))
   );
 }
 

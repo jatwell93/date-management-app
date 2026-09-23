@@ -59,6 +59,7 @@ import {
   upsertSubscriptionFromStripe,
   type SqlClient,
 } from './stripe-persistence';
+import type { LaunchTier } from '../utils/usage-limits';
 import { verifyStripeSignature } from './webhook-signature';
 
 /**
@@ -137,23 +138,36 @@ function extractBillingCycle(subscription: StripeSubscriptionObject): 'monthly' 
  * acknowledges the event and the error is carried by the log line — the same
  * judgement Express encodes in `isNonRecoverableStripeWebhookError`.
  */
-async function processSubscriptionEvent(
+/** The subscription id and organization an event applies to, once both are known. */
+interface AttributedSubscription {
+  organizationId: string;
+  stripeSubscriptionId: string;
+  stripeCustomerId: string | null;
+}
+
+/**
+ * Work out which organization and subscription an event is about.
+ *
+ * `null` means the event cannot be attributed and must not be applied. Both
+ * refusals are non-recoverable — a Stripe redelivery carries an identical body,
+ * so a 5xx would loop without ever succeeding — which is why they are logged
+ * here and reported as an absence rather than thrown.
+ */
+async function attributeSubscriptionEvent(
   sql: SqlClient,
   eventType: string,
   eventId: string,
   subscription: StripeSubscriptionObject,
-): Promise<void> {
+): Promise<AttributedSubscription | null> {
   const stripeSubscriptionId = asString(subscription.id);
   const stripeCustomerId = asString(subscription.customer);
 
   if (!stripeSubscriptionId) {
-    // Unattributable and unretryable: a redelivery carries the same body, so
-    // returning 5xx would only loop. Signalled to the caller as a hard refusal.
     console.error('[STRIPE_WEBHOOK] Subscription event carries no subscription id', {
       eventId,
       eventType,
     });
-    return;
+    return null;
   }
 
   const organizationId = await resolveOrganizationIdForStripeEvent(sql, {
@@ -172,9 +186,49 @@ async function processSubscriptionEvent(
       stripeSubscriptionId,
       stripeCustomerId,
     });
+    return null;
+  }
+
+  return { organizationId, stripeSubscriptionId, stripeCustomerId };
+}
+
+/**
+ * Read the tier out of price metadata, logging when the event does not name one.
+ *
+ * Loud on purpose. Express writes `free` in this situation and reports success,
+ * so a typo in Stripe price metadata silently downgrades a paying customer.
+ * `null` instead means the write below keeps whatever tier the organization
+ * already had; the rest of the event is still worth recording.
+ */
+function resolveEventTier(
+  subscription: StripeSubscriptionObject,
+  context: { eventId: string; eventType: string; organizationId: string },
+): LaunchTier | null {
+  const tier = mapStripePriceTier(subscription.items?.data?.[0]?.price?.metadata?.tier);
+
+  if (tier === null) {
+    console.error(
+      '[STRIPE_WEBHOOK] Price metadata names no recognizable tier; keeping stored tier',
+      context,
+    );
+  }
+
+  return tier;
+}
+
+async function processSubscriptionEvent(
+  sql: SqlClient,
+  eventType: string,
+  eventId: string,
+  subscription: StripeSubscriptionObject,
+): Promise<void> {
+  const attributed = await attributeSubscriptionEvent(sql, eventType, eventId, subscription);
+
+  if (attributed === null) {
     return;
   }
 
+  const { organizationId, stripeSubscriptionId, stripeCustomerId } = attributed;
   const currentPeriodEndSeconds = extractCurrentPeriodEnd(subscription);
   const cancelAtPeriodEnd = subscription.cancel_at_period_end === true;
 
@@ -194,23 +248,7 @@ async function processSubscriptionEvent(
     return;
   }
 
-  const tier = mapStripePriceTier(subscription.items?.data?.[0]?.price?.metadata?.tier);
-
-  if (tier === null) {
-    // Loud on purpose. Express would have written `free` here and reported
-    // success, so a typo in Stripe price metadata silently downgraded a paying
-    // customer. The write still proceeds — status and period dates are worth
-    // recording — but the tier column is left alone.
-    console.error(
-      '[STRIPE_WEBHOOK] Price metadata names no recognizable tier; keeping stored tier',
-      {
-        eventId,
-        eventType,
-        organizationId,
-        stripeSubscriptionId,
-      },
-    );
-  }
+  const tier = resolveEventTier(subscription, { eventId, eventType, organizationId });
 
   await upsertSubscriptionFromStripe(sql, {
     organizationId,

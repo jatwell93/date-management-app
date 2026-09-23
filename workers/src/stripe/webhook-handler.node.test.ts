@@ -427,6 +427,42 @@ describe('POST /api/webhooks/stripe', () => {
       expect((await subscriptionRow()).tier_level).toBe('enterprise');
     });
 
+    it('prefers the subscription-id match when the two ids point at different orgs', async () => {
+      // Both links are resolved by one query, so the ORDER BY is the only thing
+      // deciding which row wins. Without it the answer would be whatever the
+      // planner returned first, and the event could land on the wrong tenant.
+      await sql`
+        INSERT INTO organizations (id, name, slug)
+        VALUES ('org_other', 'Other Org', 'other-org')
+      `;
+      await sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, stripe_customer_id, updated_at)
+        VALUES ('org_other', 'starter', 'active', ${CUSTOMER}, NOW())
+      `;
+      await sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, stripe_subscription_id, updated_at)
+        VALUES (${ORG}, 'starter', 'active', ${SUBSCRIPTION}, NOW())
+      `;
+
+      const request = await stripeRequest(
+        subscriptionEvent({
+          id: 'evt_precedence',
+          type: 'customer.subscription.updated',
+          tier: 'enterprise',
+        }),
+      );
+
+      expect((await handleStripeWebhook(request, ENV)).status).toBe(200);
+
+      expect((await subscriptionRow()).tier_level).toBe('enterprise');
+      const other = await sql`
+        SELECT tier_level FROM subscription_tiers WHERE organization_id = 'org_other'
+      `;
+      expect(other[0].tier_level).toBe('starter');
+    });
+
     it('refuses to guess an organization it cannot attribute the event to', async () => {
       const request = await stripeRequest(
         subscriptionEvent({
