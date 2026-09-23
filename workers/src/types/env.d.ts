@@ -48,6 +48,17 @@ export interface Env {
   // Clerk Svix webhook signing secret (whsec_...)
   CLERK_WEBHOOK_SECRET: string;
 
+  // Stripe webhook endpoint signing secret (whsec_...).
+  //
+  // Optional, and the receiver is inert without it: `handleStripeWebhook`
+  // answers 503 and writes nothing until an endpoint has actually been
+  // registered against this Worker (task 3.8). Unlike CLERK_WEBHOOK_SECRET this
+  // is used verbatim as the HMAC key -- Stripe does not base64-encode it.
+  //
+  // Note there is deliberately no STRIPE_SECRET_KEY: the handler never calls the
+  // Stripe API, resolving the organization from local columns instead.
+  STRIPE_WEBHOOK_SECRET?: string;
+
   // Cloudflare R2 credentials
   R2_ACCOUNT_ID: string;
   R2_ACCESS_KEY_ID: string;

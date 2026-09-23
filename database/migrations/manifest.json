@@ -345,6 +345,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0015",
+      "forward": "0015_stripe_webhook_claim.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0015_stripe_webhook_claim.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }

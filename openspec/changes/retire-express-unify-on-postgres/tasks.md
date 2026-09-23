@@ -2418,6 +2418,109 @@ equivalent, a relocated home, or an explicit retirement decision.
             bundle; because the route is a RegExp its slashes are escaped in the built artifact, so
             the guard matches `\/api\/storage-quota\/` and not the plain path. That guard was
             mutation-verified too.
+      - [x] 3.1.m **Build `POST /api/webhooks/stripe` in the live Worker** — the inbound Stripe
+            receiver 3.1 names as net-new rather than a port, since the Worker has only ever handled
+            Clerk webhooks. **The code lands here; the production cutover stays with 3.8**, which is
+            explicit that the currently registered production endpoint, the deployment receiving it
+            and the exact rollback target must be recorded *before* the switch is thrown. The
+            handler is therefore inert on arrival: with no `STRIPE_WEBHOOK_SECRET` it answers 503 and
+            writes nothing, so deploying it changes no behaviour until 3.8 registers an endpoint.
+            <br>**Migration 0015** gives `processed_webhook_events` the `completed_at` column, which
+            is the same fix migration 0012 made to `clerk_webhook_events` and for the same reason:
+            without it the row is a receipt written after the fact, which forces the check-then-act
+            sequence Express uses (`isNewEvent` → `handleEvent` → `markEventProcessed`) and lets two
+            concurrent deliveries of one event id both run the side effects. 3.1.b's closing note
+            directed the Stripe handler to copy `claimClerkWebhookEvent`; this column is what that
+            copy rests on. Backfill is by DDL-time column default, not an UPDATE, exactly as 0012
+            argued — every pre-existing row records finished work. **Carry forward: any future
+            writer of this table must name `completed_at`,** or its row is born completed and the
+            event it represents is never processed.
+            <br>**Three defects a literal port would have shipped.**
+            (a) *Tier vocabulary.* Express reads the tier from `price.metadata.tier` in its own
+            `{free, pro, enterprise}` vocabulary. `normalizeLaunchTier` has no case for `pro`, so it
+            falls through to its `free` default — a price tagged `pro` would be stored verbatim and
+            read back by every usage gate as *free*, downgrading a paying organization to the 1 GiB
+            / 500-SKU caps on the strength of the event confirming their payment.
+            `mapStripePriceTier` translates at the boundary and stores the canonical spelling. This
+            is the same clash 3.1.l dissolved for storage quota, in a place where it silently costs
+            money.
+            (b) *Unknown tier.* Express's `extractTierFromSubscriptionPrice` returns `free` for
+            missing metadata, an unknown value and a subscription with no line items alike, so a
+            metadata typo downgrades a customer while the webhook reports success. The Worker returns
+            `null` and the write keeps the tier the organization already had, logging loudly.
+            (c) *Cancellation.* Express writes `tier_level = 'free'` on
+            `customer.subscription.deleted`. In this Worker that is a live defect:
+            `deriveSubscriptionAccess` honours the paid-through window by returning the *stored*
+            tier, so writing `free` hands a mid-period canceller a window that grants nothing. The
+            tier is left intact and the downgrade becomes derived — once `current_period_end` passes,
+            the derivation lapses them to free with no writer involved, which is the same move
+            `subscription-status.ts` was built on and why this Worker needs no cron here.
+            <br>**Deliberate divergences beyond those.** No Stripe SDK — `webhooks.constructEvent` is
+            sync and wants Node `crypto`, and the scheme is forty lines of Web Crypto; note Stripe
+            signs `${t}.${body}`, uses the secret as a literal UTF-8 string (Svix base64-decodes it)
+            and encodes hex (Svix base64), so copying the Clerk verifier would reject every genuine
+            delivery. No `STRIPE_SECRET_KEY`: Express resolves the organization with a live
+            `customers.retrieve` ("DECISION 17.5.5"), which puts a third-party round trip in the
+            critical path of every webhook; the Worker resolves it locally from event metadata,
+            `stripe_subscription_id` or `stripe_customer_id`, and refuses rather than guessing when
+            it cannot. `organization_usage` limits are **not** written — those counter columns are
+            dead and were removed from the Worker's read paths on purpose. Four Express event types
+            are not handled: `checkout.session.completed` (duplicated by
+            `customer.subscription.created`, and handling both races on one row),
+            `invoice.payment_failed` (the status carries it, and deriving `past_due_since` from the
+            status also fixes Express's half-fix — Express sets that column from this event but
+            clears it only from a nightly dunning job this Worker has no cron to run),
+            `trial_will_end` (an email; changes no state anything reads) and the two
+            `payment_intent.*` (audit rows nothing gates on). Unhandled types are acknowledged and
+            logged, never dropped silently.
+            <br>**Coverage, mutation-verified.** 13 signature tests and 23 real-SQL (pglite)
+            handler tests. Thirteen mutations, each caught: dropping the `pro` case (2 fail), Express's
+            unknown-tier `free` default (1), Express's cancellation downgrade (1), resetting
+            `past_due_since` on every retry (1), acknowledging an in-flight claim with 200 (1),
+            removing the staleness takeover (1), trusting metadata `organizationId` unchecked (1),
+            base64-decoding the secret Clerk-style (6 of 13), accepting only the first `v1` during a
+            key rotation (1), dropping the cancellation's subscription-id guard (1), dropping the
+            sync's superseded-subscription guard (1), making that guard over-strict so a legitimate
+            resubscribe is refused (1), and deleting the dispatch from `index-minimal.ts`
+            (`test:build-artifact` throws). As in the Clerk suite there is deliberately **no**
+            `Promise.all` concurrency test: pglite serializes statements, so it would be green the
+            harness cannot turn red.
+            <br>**A fourth defect, found by review, and its whole class.** Sentry's bot flagged
+            `markSubscriptionCanceledFromStripe` as CRITICAL: the UPDATE was scoped to
+            `organization_id` alone, so a retried deletion could cancel the *wrong* subscription.
+            The sequence is real — `sub_OLD` is deleted, processing fails and the claim is
+            released, the organization resubscribes as `sub_NEW`, and the retry can no longer match
+            `sub_OLD` so attribution falls back to the customer id (same customer, so the
+            organization resolves correctly) and the organization-only UPDATE cancels the live
+            `sub_NEW`. A paying customer downgraded to `free` by the deletion of a subscription they
+            had already replaced, with no later event to correct it. Fixed by scoping the UPDATE to
+            the subscription the event names, and returning whether a row matched so the handler
+            reports a no-op rather than a silent success.
+            <br>**Sentry reported this same finding as "Resolved in `1e79325`". It was not.**
+            `git log -L` on the function body shows it had only ever been changed in `426b8ba`;
+            `1e79325` merely moved lines around it, and Sentry read the move as a fix. This is
+            exactly the caution the previous session recorded about Sentry's resolution claims, and
+            it is the second time it has been earned — verify against current code, never the label.
+            <br>**The class, not the instance** (the lesson from the credit-claim CAS rounds): the
+            same staleness hole existed on the *sync* path, because attribution falls back to a
+            customer id that outlives any one subscription. Worse, it compounded — a stale
+            `customer.subscription.updated` would rewrite `stripe_subscription_id` back to the old
+            subscription, after which a stale *deletion* for it would satisfy the new cancellation
+            guard, so two stale events in sequence defeated a fix applied only to the cancel path.
+            The conflict branch of `upsertSubscriptionFromStripe` now refuses to let a *different*
+            subscription take the row over unless the stored id is NULL (a trial row awaiting its
+            first real subscription), is the same subscription (the ordinary update, including plan
+            changes — Stripe keeps the id across those), or names a subscription that is already
+            finished (the genuine resubscribe). Both directions are tested and mutation-verified:
+            dropping the guard fails the staleness test, and making it over-strict fails the
+            resubscribe test.
+            <br>**Harness drift found and closed.** `workers/src/__tests__/pglite-db.ts` had no
+            `processed_webhook_events` table at all and no `subscription_tiers.stripe_customer_id`,
+            so these tests could not have run against it.
+            <br>**The e2e probe migration was renumbered 0015 → 0016** (a real 0015 now exists, and
+            `loadMigrationHistory` rejects a duplicate id). That is twelve sites, not the three the
+            checklist records; running `test:migrations:e2e` locally against a throwaway cluster
+            caught the two that a grep of the obvious patterns missed.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
