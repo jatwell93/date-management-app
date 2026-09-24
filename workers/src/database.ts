@@ -114,6 +114,8 @@ export interface Database {
   ): Promise<Product[]>;
   findProductById(organizationId: string, id: number): Promise<Product | null>;
   countProducts(organizationId: string, search?: string): Promise<number>;
+  findExcessProducts(organizationId: string, maxSkus: number): Promise<ExcessProduct[]>;
+  deleteProduct(organizationId: string, id: number): Promise<DeleteProductResult>;
 
   // Inventory queries
   findInventoryItems(
@@ -634,6 +636,44 @@ export interface UsageCounts {
   users: number;
   activeExpiries: number;
 }
+
+/**
+ * One row of `GET /api/products/export-excess`. Mirrors the field set Express
+ * exported (`product.controller.ts` `sendExcessProductsCsv`) because the CSV
+ * header row is published in `docs/tier-downgrade-guide.md` and customers have
+ * been told what the file contains.
+ */
+export interface ExcessProduct {
+  id: number;
+  sku: string | null;
+  name: string;
+  barcode: string | null;
+  costPrice: number;
+  createdAt: string;
+  inventoryCount: number;
+}
+
+/**
+ * Why this is a three-way outcome rather than a boolean.
+ *
+ * `inventory_items_product_id_fkey` is `ON DELETE RESTRICT`, so a product
+ * referenced by any inventory item cannot be deleted. Express discovered that
+ * by letting the constraint fire: `ProductService.deleteProduct` catches only
+ * Prisma's P2025 (not-found), so the P2003 fell through to `next(error)` and
+ * the customer got a 500 with no indication of what was wrong -- on the exact
+ * products `export-excess` had just listed for them, since that export carries
+ * an `inventoryCount` column.
+ *
+ * The blocker is therefore counted explicitly rather than inferred from a
+ * raised constraint, which also makes it testable: the pglite harness declares
+ * `inventory_items.product_id` with no foreign key at all, so a "refuses when
+ * inventory exists" test resting on a raised FK would be green because the
+ * harness cannot turn red.
+ */
+export type DeleteProductResult =
+  | { outcome: 'deleted' }
+  | { outcome: 'not_found' }
+  | { outcome: 'blocked'; inventoryCount: number };
 
 export interface MonthlyExpiryReport {
   month: string;
@@ -2604,6 +2644,102 @@ export function createWorkersDatabase(env: Env): Database {
                   created_at as "createdAt", updated_at as "updatedAt"
       `;
       return (rows[0] as Product) ?? null;
+    },
+
+    /**
+     * The products beyond the organization's SKU cap, oldest kept and newest
+     * exported -- the ordering Express used (`product.repository.ts`
+     * `findExcessProductsByOrganization`: `orderBy createdAt asc, skip maxSkus`).
+     *
+     * **`id` is added as a tiebreaker, which Express did not have.** Bulk CSV
+     * import writes hundreds of rows inside one statement, so identical
+     * `created_at` values are the norm here rather than an edge case, and
+     * Postgres is free to order ties differently between two executions of the
+     * same query. Without the tiebreaker a customer could export one backup,
+     * delete from it, and find they had deleted a product the export never
+     * listed -- while a product that *was* over the cap stayed. `id` is the
+     * insertion order within a tied batch, so it keeps "oldest survives".
+     */
+    async findExcessProducts(organizationId: string, maxSkus: number): Promise<ExcessProduct[]> {
+      const rows = await sql`
+        SELECT
+          p.id,
+          p.sku,
+          p.name,
+          p.barcode,
+          COALESCE(p.cost_price, 0) AS "costPrice",
+          p.created_at AS "createdAt",
+          (
+            SELECT COUNT(*)::int
+            FROM inventory_items i
+            WHERE i.product_id = p.id
+          ) AS "inventoryCount"
+        FROM products p
+        WHERE p.organization_id = ${organizationId}
+        ORDER BY p.created_at ASC, p.id ASC
+        OFFSET ${maxSkus}
+      `;
+
+      return rows.map((row) => ({
+        id: Number(row.id),
+        sku: (row.sku as string | null) ?? null,
+        name: String(row.name),
+        barcode: (row.barcode as string | null) ?? null,
+        costPrice: Number(row.costPrice ?? 0),
+        createdAt: new Date(row.createdAt as string | Date).toISOString(),
+        inventoryCount: Number(row.inventoryCount ?? 0),
+      }));
+    },
+
+    /**
+     * Delete one product, refusing rather than failing when inventory items
+     * still reference it. See {@link DeleteProductResult} for why the refusal
+     * is counted instead of caught.
+     *
+     * Single statement so the count and the delete cannot separate: a
+     * count-then-delete would let an inventory item land in the gap and hit the
+     * `ON DELETE RESTRICT` constraint anyway, turning the considered 409 back
+     * into the 500 this replaces. Note this closes the FK race, not a business
+     * race -- an inventory item created against a product deleted in the same
+     * instant still loses, which is what the constraint is for.
+     *
+     * The blocking count is scoped to `product_id` alone, with no
+     * `organization_id` predicate, because that is exactly the constraint's own
+     * scope. Adding the org filter would let a cross-tenant row (which should
+     * not exist, but whose existence is the only case where the two scopes
+     * differ) pass the check and then raise the FK. The *delete* stays
+     * org-scoped, so this reads no other tenant's data -- it only counts.
+     */
+    async deleteProduct(organizationId: string, id: number): Promise<DeleteProductResult> {
+      const rows = await sql`
+        WITH blocking AS (
+          SELECT COUNT(*)::int AS n
+          FROM inventory_items
+          WHERE product_id = ${id}
+        ), target AS (
+          SELECT id FROM products
+          WHERE id = ${id} AND organization_id = ${organizationId}
+        ), deleted AS (
+          DELETE FROM products
+          WHERE id = ${id}
+            AND organization_id = ${organizationId}
+            AND (SELECT n FROM blocking) = 0
+          RETURNING id
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM target) AS found,
+          (SELECT n FROM blocking) AS "inventoryCount",
+          (SELECT COUNT(*)::int FROM deleted) AS removed
+      `;
+
+      const row = rows[0];
+      if (Number(row?.removed ?? 0) > 0) {
+        return { outcome: 'deleted' };
+      }
+      if (Number(row?.found ?? 0) === 0) {
+        return { outcome: 'not_found' };
+      }
+      return { outcome: 'blocked', inventoryCount: Number(row?.inventoryCount ?? 0) };
     },
 
     // ---- Inventory CRUD ----

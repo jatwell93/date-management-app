@@ -20,12 +20,14 @@ import {
 } from './utils/inventory-field-mapping';
 import {
   applyCorsHeaders,
+  csvResponse,
   errorResponse,
   getCorsHeaders,
   handleOptions,
   jsonResponse,
   maybeCompressJsonResponse,
 } from './utils/worker-response';
+import { buildCsv } from '../../shared/domain/csv-injection';
 import {
   applyRateLimitHeaders,
   checkRateLimit,
@@ -250,6 +252,11 @@ const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-correction
 // Deliberately `[^/]+` and not `\d+`: a non-numeric id must reach the handler
 // and get Express's 400, rather than missing every route and returning 404.
 const RE_STORAGE_QUOTA_USER = /^\/api\/storage-quota\/[^/]+$/;
+// Same `[^/]+` reasoning. Safe to leave loose despite the sibling
+// `/api/products/export-excess` route above it: that one is GET, this is
+// DELETE, so `DELETE /api/products/export-excess` correctly reaches this
+// handler and gets a 400 for a non-numeric id rather than a 404.
+const RE_PRODUCT_ID = /^\/api\/products\/[^/]+$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
@@ -261,9 +268,11 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['DELETE', RE_USER_ID, handleDeleteUser, 'path'],
   ['GET', '/api/products', handleGetProducts],
   ['POST', '/api/products', handleCreateProduct],
+  ['GET', '/api/products/export-excess', handleExportExcessProducts],
   ['GET', /^\/api\/products\/by-barcode\/[^/]+$/, handleGetProductByBarcode, 'path'],
   ['GET', /^\/api\/products\/by-sku\/[^/]+$/, handleGetProductBySku, 'path'],
   ['GET', /^\/api\/products\/\d+$/, handleGetProduct, 'path'],
+  ['DELETE', RE_PRODUCT_ID, handleDeleteProduct, 'path'],
   ['GET', '/api/inventory-items', handleGetInventory],
   ['POST', '/api/inventory-items', handleCreateInventoryItem],
   ['GET', /^\/api\/inventory-items\/by-barcode\/[^/]+$/, handleGetInventoryByBarcode, 'path'],
@@ -2815,6 +2824,158 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
     console.error('handleCreateProduct error:', error);
     return errorResponse('Internal server error', 500, env);
   }
+}
+
+/**
+ * GET /api/products/export-excess
+ *
+ * Ports Express's `product.controller.ts` `exportExcess`. This route has no
+ * code call site in either frontend, which is why the 2.1 audit first marked it
+ * `mounted+unconsumed` and proposed retiring it. Its consumer is a customer
+ * following written instructions: it is step 2 of the tier-downgrade
+ * remediation flow (`docs/tier-downgrade-guide.md`), repeated in
+ * `docs/trial-expiration-faq.md` and in in-product copy at
+ * `frontend/src/components/TrialFAQ.tsx`. Retiring it would 404 a documented
+ * procedure at the moment a locked-out customer is most likely to follow it
+ * (2.5 Finding 26).
+ *
+ * **`currentSkus` is counted live, and this is the whole reason the port is not
+ * a copy.** Express read it from `organization_usage.total_skus`, a counter it
+ * maintained only because its increment sat inside the same Prisma
+ * `$transaction` as the product insert (`product.service.ts:165`/`:243`). The
+ * Worker caps SKUs inside the INSERT itself and writes no counter, so that
+ * column stops advancing the moment Express is deleted. A literal port would
+ * read a frozen number, compute `excessCount <= 0`, and answer a locked-out
+ * customer with "you are within your limits, there is nothing to export" --
+ * failing silently, in the one place where the customer has already been told
+ * something is wrong. `db.getUsageCounts` counts `products` rows directly, the
+ * same source `GET /api/organization/usage` reports from, so the count the
+ * customer is shown and the count they are locked out by are one number.
+ *
+ * **The CSV is opt-in via `?format=csv` or `Accept: text/csv`, as Express had
+ * it.** The published `curl` example sends neither and therefore received JSON
+ * into a file named `.csv`; that is a documentation defect and is fixed in the
+ * guide rather than by changing the default here, because the JSON shape is the
+ * more useful of the two and nothing can be shown to depend on either.
+ */
+async function handleExportExcessProducts(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+  const maxSkus = resolveMaxSkus(tier, env);
+  const currentSkus = await db.countProducts(auth.organizationId);
+
+  // `resolveMaxSkus` always returns a finite cap, so there is no unlimited tier
+  // to special-case the way Express's `TIER_LIMITS[tier].max_skus === null`
+  // branch did. An organization under its cap still gets a well-formed empty
+  // export rather than an error: the customer asked for a backup of their
+  // excess, and "you have none" is a successful answer to that question.
+  const excessCount = Math.max(0, currentSkus - maxSkus);
+  const products = excessCount > 0 ? await db.findExcessProducts(auth.organizationId, maxSkus) : [];
+
+  const url = new URL(request.url);
+  const wantsCsv =
+    url.searchParams.get('format') === 'csv' ||
+    (request.headers.get('Accept') || '').includes('text/csv');
+
+  if (wantsCsv) {
+    const body = buildCsv(EXCESS_PRODUCT_CSV_HEADERS, products);
+    return csvResponse(body, `excess-products-${auth.organizationId}.csv`, 200, env);
+  }
+
+  return jsonResponse(
+    {
+      metadata: {
+        organizationId: auth.organizationId,
+        tier,
+        maxSkus,
+        currentSkus,
+        excessCount,
+      },
+      products,
+    },
+    200,
+    env,
+  );
+}
+
+/**
+ * The published CSV header row. `docs/tier-downgrade-guide.md` tells customers
+ * what columns to expect, so this list is a contract, not an implementation
+ * detail. (The guide also promised a `Category` column, which has never existed
+ * on `products` in any migration; the guide is corrected rather than the
+ * export invented.)
+ */
+const EXCESS_PRODUCT_CSV_HEADERS = [
+  'id',
+  'sku',
+  'name',
+  'barcode',
+  'costPrice',
+  'createdAt',
+  'inventoryCount',
+] as const;
+
+/**
+ * DELETE /api/products/:id
+ *
+ * Step 4 of the same documented remediation flow as the export above, and
+ * rehomed for the same reason: no code call site, but `docs/tier-downgrade-guide.md`
+ * hands customers the `curl` verbatim.
+ *
+ * **One deliberate divergence from Express: 409, not 500, when inventory items
+ * still reference the product.** `inventory_items_product_id_fkey` is
+ * `ON DELETE RESTRICT`, and Express caught only Prisma's P2025, so the P2003
+ * reached the generic error middleware and the customer saw a bare 500. The
+ * products this fires on are precisely the ones the export lists with a
+ * non-zero `inventoryCount`, so a customer working the documented flow top to
+ * bottom hits it on their first attempt. The 409 names the count so the next
+ * step is obvious. See `database.ts` `DeleteProductResult` for why the blocker
+ * is counted in the statement rather than caught from the constraint.
+ *
+ * Matched as `[^/]+` rather than `\d+` so a non-numeric id reaches this handler
+ * and gets Express's 400 (`product.controller.ts` `parseProductId`) instead of
+ * missing every route and returning 404 -- the same choice, for the same
+ * reason, as `RE_STORAGE_QUOTA_USER`.
+ */
+async function handleDeleteProduct(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/products\/([^/]+)$/);
+  const id = match ? parsePositiveInt(match[1]) : null;
+  if (id === null) {
+    return errorResponse('Invalid product id', 400, env);
+  }
+
+  const result = await db.deleteProduct(auth.organizationId, id);
+
+  if (result.outcome === 'not_found') {
+    return errorResponse('Product not found', 404, env);
+  }
+
+  if (result.outcome === 'blocked') {
+    return jsonResponse(
+      {
+        error: `Product has ${result.inventoryCount} inventory item(s) and cannot be deleted. Remove its inventory items first.`,
+        inventoryCount: result.inventoryCount,
+      },
+      409,
+      env,
+    );
+  }
+
+  return jsonResponse({ message: 'Product deleted successfully' }, 200, env);
 }
 
 /**

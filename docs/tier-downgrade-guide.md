@@ -152,6 +152,21 @@ If you prefer to stay on your current tier, you must delete enough products/inve
      https://api.yourdomain.com/api/products/123
    ```
 
+   **A product still held by inventory items cannot be deleted.** The request
+   returns `409 Conflict` and names how many items are in the way:
+
+   ```json
+   {
+     "error": "Product has 3 inventory item(s) and cannot be deleted. Remove its inventory items first.",
+     "inventoryCount": 3
+   }
+   ```
+
+   Delete or expire those inventory items first, then retry. The
+   `inventoryCount` column in the export above tells you in advance which
+   products this will apply to — a product with `inventoryCount` of `0` deletes
+   straight away, which is why step 3 recommends starting with those.
+
 5. **Verify lock removal**:
    After deletion, check usage again. Once `totalSkus <= maxSkus`, the lock is automatically removed.
 
@@ -174,8 +189,30 @@ Before deleting products, we recommend exporting a backup. The system provides a
 
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  https://api.yourdomain.com/api/products/export-excess \
+  "https://api.yourdomain.com/api/products/export-excess?format=csv" \
   -o excess-products-backup.csv
+```
+
+`?format=csv` is required for a CSV file (`-H "Accept: text/csv"` works too).
+Without it the endpoint returns JSON, which is the more useful format if you are
+scripting against it:
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  https://api.yourdomain.com/api/products/export-excess
+```
+
+```json
+{
+  "metadata": {
+    "organizationId": "org_123",
+    "tier": "free",
+    "maxSkus": 500,
+    "currentSkus": 502,
+    "excessCount": 2
+  },
+  "products": [...]
+}
 ```
 
 The export includes:
@@ -183,11 +220,13 @@ The export includes:
 - Product ID
 - SKU
 - Name
-- Category
 - Barcode
 - Cost price
 - Created date
-- Inventory count (how many areas it's stored in)
+- Inventory count (how many inventory items reference the product)
+
+Products are selected oldest-first: the oldest products up to your tier limit
+are kept, and everything created after that point is what the export lists.
 
 ### Via CLI Script (Admins)
 
@@ -203,10 +242,13 @@ This generates a CSV file with all products sorted by creation date (oldest firs
 ### CSV Export Format
 
 ```csv
-id,sku,name,category,barcode,costPrice,createdAt,inventoryCount
-123,ASPIRIN-500,Aspirin 500mg,Pharmaceuticals,123456789,12.99,2024-01-15T10:30:00Z,3
-124,IBUPROFEN-200,Ibuprofen 200mg,Pharmaceuticals,987654321,8.50,2024-01-16T14:22:00Z,0
+id,sku,name,barcode,costPrice,createdAt,inventoryCount
+123,ASPIRIN-500,Aspirin 500mg,123456789,12.99,2024-01-15T10:30:00Z,3
+124,IBUPROFEN-200,Ibuprofen 200mg,987654321,8.50,2024-01-16T14:22:00Z,0
 ```
+
+There is no `category` column: products have never carried a category field.
+(Earlier revisions of this guide listed one.)
 
 ---
 

@@ -739,6 +739,240 @@ describe('minimal API route table', () => {
     });
   });
 
+  describe('GET /api/products/export-excess', () => {
+    const tierRows = { 'FROM subscription_tiers': [{ tier_level: 'free' }] };
+    const excessRow = {
+      id: 12,
+      sku: 'SKU-12',
+      name: 'Baked Beans',
+      barcode: 'BAR-12',
+      costPrice: 1.5,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      inventoryCount: 0,
+    };
+
+    it('counts SKUs live rather than reading the frozen usage counter', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const countProducts = vi.fn().mockResolvedValue(502);
+      const findExcessProducts = vi.fn().mockResolvedValue([excessRow]);
+      const dbWithRows = createAuthenticatedOrgDatabase(tierRows, {
+        countProducts,
+        findExcessProducts,
+      });
+
+      const response = await resolveMinimalGet('/api/products/export-excess', dbWithRows);
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toEqual({
+        metadata: {
+          organizationId: 'org_123',
+          tier: 'free',
+          maxSkus: 500,
+          currentSkus: 502,
+          excessCount: 2,
+        },
+        products: [excessRow],
+      });
+      // The counter column Express read (`organization_usage.total_skus`) is
+      // maintained by no Worker write path, so reading it would report 0 here
+      // and tell a locked-out customer they have nothing to export.
+      expect(countProducts).toHaveBeenCalledWith('org_123');
+      expect(findExcessProducts).toHaveBeenCalledWith('org_123', 500);
+    });
+
+    it('reports an empty export without querying when the organization is within its cap', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const findExcessProducts = vi.fn();
+      const dbWithRows = createAuthenticatedOrgDatabase(tierRows, {
+        countProducts: vi.fn().mockResolvedValue(12),
+        findExcessProducts,
+      });
+
+      const response = await resolveMinimalGet('/api/products/export-excess', dbWithRows);
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toMatchObject({
+        metadata: { currentSkus: 12, excessCount: 0 },
+        products: [],
+      });
+      expect(findExcessProducts).not.toHaveBeenCalled();
+    });
+
+    it('serves CSV for ?format=csv, as an attachment with the published headers', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const dbWithRows = createAuthenticatedOrgDatabase(tierRows, {
+        countProducts: vi.fn().mockResolvedValue(501),
+        findExcessProducts: vi.fn().mockResolvedValue([excessRow]),
+      });
+
+      const response = await resolveMinimalGet(
+        '/api/products/export-excess',
+        dbWithRows,
+        '/api/products/export-excess?format=csv',
+      );
+
+      expect(response?.status).toBe(200);
+      expect(response?.headers.get('Content-Type')).toContain('text/csv');
+      expect(response?.headers.get('Content-Disposition')).toBe(
+        'attachment; filename="excess-products-org_123.csv"',
+      );
+      // The header row is published in docs/tier-downgrade-guide.md, so it is a
+      // contract. Note there is no `category` column -- the guide promised one
+      // that has never existed on `products` in any migration.
+      const body = await response?.text();
+      expect(body?.split('\r\n')[0]).toBe('id,sku,name,barcode,costPrice,createdAt,inventoryCount');
+      expect(body?.split('\r\n')[1]).toBe('12,SKU-12,Baked Beans,BAR-12,1.5,2026-01-01T00:00:00.000Z,0');
+    });
+
+    it('serves CSV for an Accept: text/csv request', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const dbWithRows = createAuthenticatedOrgDatabase(tierRows, {
+        countProducts: vi.fn().mockResolvedValue(501),
+        findExcessProducts: vi.fn().mockResolvedValue([excessRow]),
+      });
+
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request('https://example.com/api/products/export-excess', {
+          headers: { Accept: 'text/csv' },
+        }),
+        pathname: '/api/products/export-excess',
+        method: 'GET',
+        db: dbWithRows,
+        env,
+      });
+
+      expect(response?.headers.get('Content-Type')).toContain('text/csv');
+    });
+
+    it('neutralizes a product name that would evaluate as a spreadsheet formula', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      // `POST /api/products` stores `name` verbatim -- it reaches neither
+      // upload parser -- so the export cannot assume its inputs were escaped
+      // on the way in.
+      const dbWithRows = createAuthenticatedOrgDatabase(tierRows, {
+        countProducts: vi.fn().mockResolvedValue(501),
+        findExcessProducts: vi
+          .fn()
+          .mockResolvedValue([{ ...excessRow, name: '=HYPERLINK("http://evil")' }]),
+      });
+
+      const response = await resolveMinimalGet(
+        '/api/products/export-excess',
+        dbWithRows,
+        '/api/products/export-excess?format=csv',
+      );
+
+      const body = await response?.text();
+      expect(body).toContain('"\'=HYPERLINK(""http://evil"")"');
+      expect(body).not.toContain(',=HYPERLINK');
+    });
+
+    it('registers the export route documented in the tier-downgrade guide', () => {
+      // No code call site exists in either frontend: the consumer is a customer
+      // following docs/tier-downgrade-guide.md. Nothing else would notice this
+      // route disappearing (2.5 Finding 26).
+      expect(getMinimalRoutes()).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining(['GET', '/api/products/export-excess']),
+        ]),
+      );
+    });
+  });
+
+  describe('DELETE /api/products/:id', () => {
+    const resolveDelete = (pathname: string, database: Database) =>
+      resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request(`https://example.com${pathname}`, { method: 'DELETE' }),
+        pathname,
+        method: 'DELETE',
+        db: database,
+        env,
+      });
+
+    it('deletes a product that nothing references', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const deleteProduct = vi.fn().mockResolvedValue({ outcome: 'deleted' });
+      const database = createAuthenticatedOrgDatabase({}, { deleteProduct });
+
+      const response = await resolveDelete('/api/products/12', database);
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toEqual({
+        message: 'Product deleted successfully',
+      });
+      expect(deleteProduct).toHaveBeenCalledWith('org_123', 12);
+    });
+
+    it('answers 404 when the product is absent or belongs to another organization', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const database = createAuthenticatedOrgDatabase(
+        {},
+        { deleteProduct: vi.fn().mockResolvedValue({ outcome: 'not_found' }) },
+      );
+
+      const response = await resolveDelete('/api/products/12', database);
+
+      expect(response?.status).toBe(404);
+    });
+
+    it('answers 409 naming the inventory count, not Express 500', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const database = createAuthenticatedOrgDatabase(
+        {},
+        { deleteProduct: vi.fn().mockResolvedValue({ outcome: 'blocked', inventoryCount: 3 }) },
+      );
+
+      // `inventory_items_product_id_fkey` is ON DELETE RESTRICT. Express caught
+      // only Prisma's P2025, so the P2003 reached the generic error middleware
+      // and the customer saw a bare 500 -- on exactly the products the export
+      // had just listed with a non-zero inventoryCount.
+      const response = await resolveDelete('/api/products/12', database);
+
+      expect(response?.status).toBe(409);
+      await expect(response?.json()).resolves.toEqual({
+        error:
+          'Product has 3 inventory item(s) and cannot be deleted. Remove its inventory items first.',
+        inventoryCount: 3,
+      });
+    });
+
+    it('answers a non-numeric id with 400 rather than falling through to 404', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const deleteProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { deleteProduct });
+
+      // Pins the route pattern: `[^/]+`, not `\d+`, so a bad id reaches the
+      // handler and gets Express's 400 instead of missing every route.
+      const response = await resolveDelete('/api/products/not-a-number', database);
+
+      expect(response?.status).toBe(400);
+      expect(deleteProduct).not.toHaveBeenCalled();
+    });
+
+    it('does not let a DELETE reach the export-excess route', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const deleteProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { deleteProduct });
+
+      // The loose `[^/]+` id pattern also matches `/api/products/export-excess`.
+      // That is intended -- the export route is GET-only, so a DELETE to it is
+      // a bad product id and 400 is the honest answer -- but it must not run a
+      // delete for a product named after the route.
+      const response = await resolveDelete('/api/products/export-excess', database);
+
+      expect(response?.status).toBe(400);
+      expect(deleteProduct).not.toHaveBeenCalled();
+    });
+
+    it('registers the delete route documented in the tier-downgrade guide', () => {
+      expect(getMinimalRoutes()).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining(['DELETE', /^\/api\/products\/[^/]+$/]),
+        ]),
+      );
+    });
+  });
+
   it('loads supplier credit read data from the authenticated organization', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithSupplierCredits = {

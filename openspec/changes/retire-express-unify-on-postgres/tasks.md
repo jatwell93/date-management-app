@@ -2521,6 +2521,97 @@ equivalent, a relocated home, or an explicit retirement decision.
             `loadMigrationHistory` rejects a duplicate id). That is twelve sites, not the three the
             checklist records; running `test:migrations:e2e` locally against a throwaway cluster
             caught the two that a grep of the obvious patterns missed.
+      - [x] 3.1.n **Rehome `GET /api/products/export-excess` and `DELETE /api/products/{id}`** —
+            steps 2 and 4 of the documented tier-downgrade remediation flow, which 2.5 Finding 26
+            reversed from retire because their consumer is a customer following written
+            instructions rather than any call site. **DONE 2026-09-24.**
+            <br>**The port is not a port. Five defects a literal copy would have shipped or kept,
+            three of which break the documented flow.**
+            <br>(a) *`currentSkus` from a counter the Worker never writes.* Express took it from
+            `organization_usage.total_skus`, a column it maintained only because the increment sat
+            inside the same Prisma `$transaction` as the product insert
+            (`product.service.ts:165`/`:243`). The Worker caps SKUs inside the INSERT and writes no
+            counter, so that column stops advancing the moment Express is deleted. A literal port
+            would compute `excessCount <= 0` from a frozen number and answer a locked-out customer
+            with "you are within your limits, there is nothing to export" — failing silently in the
+            one place the customer has already been told something is wrong. Counted live via
+            `db.getUsageCounts`' source, so the number shown and the number enforced against are
+            one. This is the third appearance of the counter-vs-live-count class (after 3.1.a and
+            3.1.j) and the first where the counter was *correct in Express*, which is why "rehome"
+            was not by itself the whole decision: a saved route reading a counter only the deleted
+            backend maintained survives into production and lies.
+            <br>(b) *Step 4 500s on exactly the products step 2 lists.*
+            `inventory_items_product_id_fkey` is `ON DELETE RESTRICT` — the only FK onto `products`;
+            `catalogue_corrections` is `SET NULL` — and `ProductService.deleteProduct` catches only
+            Prisma P2025, so the P2003 fell through `handleRouteError` to `next(error)` and returned
+            a bare 500. The export carries an `inventoryCount` column and the guide's step 3 says to
+            prefer products without inventory items, so the hole was half-known and never stated.
+            The Worker returns **409 naming the count** (Josh's call; the alternatives considered
+            were strict 500 parity and cascading the delete, which would destroy expiry history the
+            customer did not ask to lose). The guide now documents it.
+            <br>(c) *No formula-injection escaping on export.* `escapeCSVValue`
+            (`backend/src/utils/csv.ts:7`) does RFC 4180 quoting only, and `handleCreateProduct`
+            stores `name` verbatim, so a product named `=HYPERLINK(...)` exported as a live formula.
+            #473 restored this control at *ingestion*, and `shared/domain/csv-injection.ts` argues
+            in its header that ingestion is the right place — sound, but it does not cover
+            `POST /api/products`, which reaches neither parser. New `toCsvField`/`buildCsv` in that
+            module escape then quote, **in that order**: quoting first yields `"=SUM(A1)"`, whose
+            first character is a quote, so the formula check no longer fires. Two correct transforms
+            in the wrong order are a live vulnerability, so they are one function.
+            <br>(d) *The published `curl` returns JSON.* `docs/tier-downgrade-guide.md` gave
+            `curl … -o excess-products-backup.csv`; curl sends `Accept: */*` and the endpoint emits
+            CSV only on `Accept: text/csv` or `?format=csv`, so the customer got JSON in a file named
+            `.csv`. Fixed in the guide rather than by changing the default, since the JSON shape is
+            the more useful of the two and nothing depends on either.
+            <br>(e) *The guide promised a `Category` column* that has never existed on `products` in
+            any migration. Removed. `buildCsv` is generic over the row type, so a header list can no
+            longer name a column the rows lack.
+            <br>**One improvement beyond parity.** Express selected excess rows with
+            `orderBy createdAt asc, skip maxSkus` and no tiebreaker. Bulk CSV import writes hundreds
+            of rows in one statement, so tied `created_at` values are the norm here, and `id ASC` is
+            added. Writing that test the obvious way produced a green that proved nothing — running
+            the query twice is stable, and so is running it after an UPDATE, even though the updated
+            tuple demonstrably moves to the heap tail (ctid `(0,1)` → `(0,6)`). Only after `VACUUM`
+            does the un-tiebroken order actually change, to `3,4,5,1,2`. Autovacuum runs
+            continuously in production, so the test does the vacuum.
+            <br>**Coverage, mutation-verified.** 12 real-SQL (pglite) tests in
+            `database.product-excess-delete.pglite.node.test.ts`, 12 route tests in
+            `minimal-api-routes.test.ts`, 10 unit tests in `csv-export.test.ts`. **Seventeen
+            mutations, each caught**: dropping the id tiebreaker, the org predicate in
+            `findExcessProducts`, the `inventoryCount` correlation, the blocking guard in the
+            DELETE, the org predicate in the DELETE, the org predicate in the not-found probe,
+            formula escaping, escape/quote ordering, the null guard, CRLF line endings, the live SKU
+            count, both route registrations, tightening the delete route to `\d+`, the CSV format
+            check, the 409 branch, and the within-cap short circuit.
+            <br>**Harness drift found and recorded.** `__tests__/pglite-db.ts` declares
+            `inventory_items.product_id` as a nullable integer with **no foreign key**, where
+            production has `INTEGER NOT NULL ... ON DELETE RESTRICT`. This is load-bearing: a
+            "refuses to delete a held product" test resting on a raised constraint would be green
+            because the harness cannot raise one. `deleteProduct` therefore counts blockers inside
+            its own statement — which is also what lets it report *how many* are in the way. The FK
+            is not added to the harness because existing tests insert inventory items with no
+            matching product; the divergence is commented instead.
+            <br>**An Express expectation that was an artefact of mocking.**
+            `product.routes.test.ts:602` asserts 403 for deleting another organization's product.
+            That cannot happen: `ProductService.getProductById` calls
+            `productRepo.findById(id, organizationId)`, so a foreign product returns null and
+            Express answers 404 — `assertProductBelongsToOrganization` is unreachable. The test only
+            sees 403 because it mocks the service and hands the controller a product the real
+            repository would never return. The Worker answers 404, matching real Express behaviour
+            and not confirming the row exists. Recorded on the manifest row so nobody ports the 403.
+            <br>**Audit reconciliation.** `2.1-route-matrix.md:135`/`:139` had already been corrected
+            to `rehome` on 2026-08-28, but fourteen rows in `2.2-test-manifest-part2.md` and its
+            section preamble still said the export-excess feature "has no Worker analogue" and
+            carried `retire` on that premise — the two documents disagreed for four weeks. All
+            fourteen are updated: eleven to `worker-equivalent-exists`, three still `retire` but
+            each now recording the real reason (no unlimited Worker tier; no "subscription missing"
+            state, since `getOrganizationLaunchTier` resolves an absent row to `free`), and one
+            **reopened** as genuinely uncovered rather than claimed — export-excess error
+            propagation has no test, because the handler has no try/catch and reaches 500 by default
+            rather than by design. That belongs to 3.2, which owns the negative/error gate, together
+            with the identical `deleteProduct throws error for other database errors` row.
+            <br>**Left for 2.5 §I:** `docs/tier-downgrade-guide.md` still documents an admin CLI
+            step as `cd backend && npm run export:excess-products`, which dies with Phase 4.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,

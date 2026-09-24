@@ -43,3 +43,68 @@ export function escapeSpreadsheetFormula(value: string): string {
   }
   return value;
 }
+
+/**
+ * Serialize one value as a CSV field: formula-escaped, then RFC 4180 quoted.
+ *
+ * **The order is the point, and it is why this lives here rather than beside a
+ * generic CSV writer.** Quoting first would produce `"=SUM(A1)"`, whose first
+ * character is a quote, so the formula check would no longer fire and the cell
+ * would still evaluate when the file is opened. Escaping first produces
+ * `'=SUM(A1)`, which then quotes only if it contains a delimiter. Two correct
+ * transforms in the wrong order are a live vulnerability, so they are one
+ * function and cannot be composed wrongly at a call site.
+ *
+ * **This escapes at export, which the note at the top of this file argues
+ * against.** That argument holds where ingestion covers every write path, and
+ * for the catalogue it does. It does not hold for products: `POST
+ * /api/products` (`index-minimal.ts` `handleCreateProduct`) stores `name`
+ * verbatim, reaching neither parser, so a manually created product carries an
+ * unescaped payload to any consumer. Until that write path escapes on the way
+ * in, an export whose entire purpose is to hand a customer a file and tell them
+ * to open it in a spreadsheet cannot assume its inputs are clean. Escaping
+ * twice is harmless -- {@link escapeSpreadsheetFormula} adds at most one
+ * apostrophe and an already-escaped value starts with `'`, which is not a
+ * formula prefix.
+ */
+export function toCsvField(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const escaped = escapeSpreadsheetFormula(String(value));
+
+  if (/[",\n\r]/.test(escaped)) {
+    return '"' + escaped.replace(/"/g, '""') + '"';
+  }
+  return escaped;
+}
+
+/**
+ * Build a CSV document from a header row and the rows beneath it, every field
+ * passed through {@link toCsvField}.
+ *
+ * CRLF line endings per RFC 4180: Excel on Windows treats a bare LF inside a
+ * quoted field inconsistently, and a product name with an embedded newline is
+ * exactly the kind of value this export carries.
+ *
+ * `headers` is constrained to keys of the row type so a published header list
+ * cannot name a column the rows do not have. That is not hypothetical here:
+ * `docs/tier-downgrade-guide.md` promised customers a `Category` column that
+ * has never existed on `products` in any migration, and a header list typed as
+ * `string[]` would have let it be added and emitted as a column of blanks.
+ */
+export function buildCsv<Row extends object>(
+  headers: ReadonlyArray<keyof Row & string>,
+  rows: readonly Row[],
+): string {
+  const lines = [
+    headers.map((header) => toCsvField(header)).join(','),
+    ...rows.map((row) =>
+      headers
+        .map((header) => toCsvField(row[header] as string | number | null | undefined))
+        .join(','),
+    ),
+  ];
+  return lines.join('\r\n');
+}

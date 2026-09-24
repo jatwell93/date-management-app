@@ -190,6 +190,20 @@ const SCHEMA_SQL = `
   CREATE TABLE inventory_items (
     id SERIAL PRIMARY KEY,
     organization_id TEXT NOT NULL,
+    -- DRIFT, deliberate and load-bearing: production declares this
+    -- INTEGER NOT NULL with inventory_items_product_id_fkey ... ON DELETE
+    -- RESTRICT (see the 20260227113208 migration). Here it is nullable with no
+    -- foreign key, because existing tests insert inventory items without a
+    -- matching product row.
+    --
+    -- The consequence for anything testing a product delete: this harness
+    -- CANNOT raise the constraint violation production would. A test that
+    -- asserts "deleting a held product is refused" by expecting a raised FK is
+    -- green no matter what the code does. database.deleteProduct therefore
+    -- counts the blocking rows inside its own statement rather than catching a
+    -- constraint, which is both the testable shape and the one that can report
+    -- how many items are in the way -- see
+    -- database.product-excess-delete.pglite.node.test.ts.
     product_id INTEGER,
     location_id INTEGER,
     expiry_date DATE,

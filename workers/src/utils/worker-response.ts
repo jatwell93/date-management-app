@@ -39,6 +39,37 @@ export function jsonResponse(
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+/**
+ * A downloadable CSV document.
+ *
+ * `Content-Disposition: attachment` is what makes the browser save rather than
+ * render, and the filename is what the customer ends up with on disk. Note
+ * `maybeCompressJsonResponse` deliberately does not touch this: it gates on
+ * `application/json`, so a CSV goes out uncompressed. That is the right default
+ * for a file a customer downloads once.
+ *
+ * The filename is quoted and stripped of anything that could break out of the
+ * quoted string -- it is built from an organization id, and a header value is
+ * not a place to interpolate untrusted text unfiltered.
+ */
+export function csvResponse(
+  body: string,
+  filename: string,
+  status = 200,
+  env?: Env,
+  requestOrigin?: string,
+): Response {
+  const safeFilename = filename.replace(/[^A-Za-z0-9._-]/g, '_');
+
+  const headers: HeadersInit = {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': `attachment; filename="${safeFilename}"`,
+    ...(env ? getCorsHeaders(env, requestOrigin) : {}),
+  };
+
+  return new Response(body, { status, headers });
+}
+
 export function errorResponse(
   message: string,
   status = 500,
