@@ -28,8 +28,44 @@ describe('toCsvField', () => {
   it('neutralizes a leading formula character', () => {
     expect(toCsvField('=SUM(A1:A9)')).toBe("'=SUM(A1:A9)");
     expect(toCsvField('+1234')).toBe("'+1234");
-    expect(toCsvField('-1234')).toBe("'-1234");
+    // Not a bare `-1234`: that is a numeric literal and is exempt (see below).
+    expect(toCsvField('-1234+A1')).toBe("'-1234+A1");
     expect(toCsvField('@import')).toBe("'@import");
+  });
+
+  it('does not corrupt a negative number into text', () => {
+    // `-` is a formula prefix, so a naive application of the control turns a
+    // cost price of -5.99 into the string `'-5.99` and the backup stops
+    // round-tripping. Express never hit this because its export did RFC 4180
+    // quoting only. Found in review of PR #529.
+    expect(toCsvField(-5.99)).toBe('-5.99');
+    expect(toCsvField(-12)).toBe('-12');
+    // The stringified form too: a Postgres driver may hand back a NUMERIC
+    // column as a string, and safety must not depend on which side of that
+    // coercion the caller is on.
+    expect(toCsvField('-5.99')).toBe('-5.99');
+  });
+
+  it('still escapes anything that only looks numeric', () => {
+    // The exemption is for complete numeric literals. Everything below
+    // evaluates to something other than itself in a spreadsheet, which is
+    // exactly what the control exists to stop.
+    expect(toCsvField('-1+1')).toBe("'-1+1");
+    expect(toCsvField('-2+3')).toBe("'-2+3");
+    expect(toCsvField('-A1')).toBe("'-A1");
+    expect(toCsvField("-1+cmd|'/c calc'!A1")).toBe("'-1+cmd|'/c calc'!A1");
+    // Leading whitespace must not launder a formula. The prefix list carries
+    // `\t` and `\r` for exactly this reason; a plain space was missing from it,
+    // and the export -- unlike the two parsers -- does not trim before
+    // escaping. The original spacing is preserved, only the decision changes.
+    expect(toCsvField(' -1+1')).toBe("' -1+1");
+    expect(toCsvField('  =SUM(A1)')).toBe("'  =SUM(A1)");
+    expect(toCsvField('\t=A1')).toBe("'\t=A1");
+    // `Number()` would accept all of these; the stricter regex does not.
+    expect(toCsvField('-0x10')).toBe("'-0x10");
+    expect(toCsvField('-1e5')).toBe("'-1e5");
+    expect(toCsvField('-Infinity')).toBe("'-Infinity");
+    expect(toCsvField(-Infinity)).toBe("'-Infinity");
   });
 
   it('leaves a non-leading operator alone', () => {

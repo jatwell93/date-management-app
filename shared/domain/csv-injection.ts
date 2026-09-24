@@ -45,6 +45,15 @@ export function escapeSpreadsheetFormula(value: string): string {
 }
 
 /**
+ * A complete numeric literal, optionally signed, with no exponent and no
+ * leading/trailing space. Deliberately stricter than `Number()`, which accepts
+ * `0x10`, `1e5`, `Infinity`, surrounding whitespace and the empty string --
+ * none of which is a shape worth exempting, and whitespace in particular would
+ * let ` -1+1` through as " a number".
+ */
+const NUMERIC_LITERAL = /^-?\d+(\.\d+)?$/;
+
+/**
  * Serialize one value as a CSV field: formula-escaped, then RFC 4180 quoted.
  *
  * **The order is the point, and it is why this lives here rather than beside a
@@ -72,7 +81,46 @@ export function toCsvField(value: string | number | null | undefined): string {
     return '';
   }
 
-  const escaped = escapeSpreadsheetFormula(String(value));
+  // A complete numeric literal is exempt, and this is a correctness fix rather
+  // than a loosening of the control. `-` is a formula prefix, so without this a
+  // cost price of -5.99 exports as the text `'-5.99` -- the apostrophe is
+  // retained on import by most spreadsheets, so a backup taken with this export
+  // no longer round-trips as a number. Express never hit it (`escapeCSVValue`
+  // did RFC 4180 quoting only), so this would have been a regression introduced
+  // by adding the control at export.
+  //
+  // **Why exempting numbers cannot reopen the hole.** The attack needs the cell
+  // to evaluate to something other than itself, which takes an operator, a call,
+  // or a reference: `-1+cmd|'/c calc'!A1`, `-2+3`, `-A1`. None of those match a
+  // numeric literal. `-5.99` evaluates to -5.99 whether the spreadsheet treats
+  // it as text or as a formula, so there is nothing to neutralize.
+  //
+  // Both the typed and the stringified form are exempted. The typed one is the
+  // ordinary case; the string one matters because a Postgres driver may hand
+  // back a NUMERIC column as a string, and a value's safety should not depend
+  // on which side of that coercion the caller happens to be on. Non-finite
+  // numbers deliberately fall through: `String(-Infinity)` is `-Infinity`,
+  // which is a leading `-` in front of a name, not a literal.
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === 'string' && NUMERIC_LITERAL.test(value)) {
+    return value;
+  }
+
+  // Leading whitespace is not a defence, and this export cannot rely on its
+  // caller having trimmed. The prefix list already carries `\t` and `\r` on the
+  // stated grounds that importers discard them, so `\t=A1` arrives as `=A1`; a
+  // plain leading space is the same shape, and it is not on the list. The
+  // parsers reach `escapeSpreadsheetFormula` having trimmed, which is why the
+  // gap never mattered before -- an export reads stored values verbatim.
+  //
+  // The dangerousness test runs against the leading-whitespace-stripped value
+  // while the ORIGINAL is what gets written, so a value's own spacing survives
+  // intact and only the decision changes.
+  const raw = String(value);
+  const probe = raw.replace(/^\s+/, '');
+  const escaped = escapeSpreadsheetFormula(probe) === probe ? raw : "'" + raw;
 
   if (/[",\n\r]/.test(escaped)) {
     return '"' + escaped.replace(/"/g, '""') + '"';

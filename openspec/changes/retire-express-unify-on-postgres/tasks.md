@@ -2610,8 +2610,46 @@ equivalent, a relocated home, or an explicit retirement decision.
             propagation has no test, because the handler has no try/catch and reaches 500 by default
             rather than by design. That belongs to 3.2, which owns the negative/error gate, together
             with the identical `deleteProduct throws error for other database errors` row.
+            <br>**A sixth defect, found by review, and its class.** Sentry's bot flagged that
+            `toCsvField` corrupts negative numbers: `-` is a formula prefix, so a cost price of
+            `-5.99` exported as the text `'-5.99`, and the apostrophe survives import in most
+            spreadsheets — a file the guide calls a backup stops round-tripping. The finding was
+            real and **introduced by this task**: Express's `escapeCSVValue` did RFC 4180 quoting
+            only, so adding the control at export added the corruption with it. Exempting a
+            complete numeric literal cannot reopen the hole, because the attack needs the cell to
+            evaluate to something other than itself — that takes an operator, a call or a reference
+            (`-1+cmd|'/c calc'!A1`, `-2+3`, `-A1`), none of which is a numeric literal. The
+            exemption covers both the typed and the stringified form, since a Postgres driver may
+            return a NUMERIC column either way and safety should not depend on which side of that
+            coercion the caller is on. `NUMERIC_LITERAL` is deliberately stricter than `Number()`,
+            which would accept `0x10`, `1e5`, `Infinity` and surrounding whitespace.
+            <br>**The class, not the instance** — the same lesson as 3.1.m's cancellation race.
+            The report named one instance of "the prefix check does not match what a spreadsheet
+            will parse"; writing the test for it surfaced a second. **A leading space defeats the
+            control entirely**: `' -1+1'` starts with a space, which is not in
+            `CSV_INJECTION_PREFIXES`, so nothing escapes it. The list carries `\t` and `\r`
+            precisely because importers discard them, and the module's own header notes that "both
+            call sites trim before escaping" — true of the two parsers, and false of an export that
+            reads stored values verbatim. `toCsvField` now runs the dangerousness test against the
+            leading-whitespace-stripped value while writing the original, so a value's own spacing
+            survives and only the decision changes. Six further mutations, all caught (dropping the
+            exemption, exempting typed numbers only, widening it to anything `Number()` accepts,
+            exempting non-finite numbers, probing the raw value, and writing the probe instead of
+            the original) — **23 mutations across the task.**
+            <br>**Carried out of this task rather than fixed in it (parity regression, independent
+            of the migration).** Express validated `costPrice` with
+            `z.number().nonnegative().max(10000)` (`backend/src/schemas/index.ts:101`); the Worker's
+            `handleCreateProduct` has no check at all (`index-minimal.ts:2794`), so negative and
+            absurd cost prices are already reachable in production today. That is what makes the
+            CSV instance above reachable, but it is not caused by this task and it is wider than
+            CSV — a negative cost feeds the markdown and loss reports. It belongs with the
+            business-rule-integrity §F gap, which now has its first concrete instance. Note the
+            Worker has no product PUT route, so create is the only path.
             <br>**Left for 2.5 §I:** `docs/tier-downgrade-guide.md` still documents an admin CLI
             step as `cd backend && npm run export:excess-products`, which dies with Phase 4.
+            <br>**Environment note:** `npx tsc` in `workers/` may resolve a TypeScript newer than
+            the pinned 6.0.3 and then reject `ignoreDeprecations: "6.0"` with TS5103 against an
+            unmodified tsconfig. Use `node node_modules/typescript/bin/tsc` to gate.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,

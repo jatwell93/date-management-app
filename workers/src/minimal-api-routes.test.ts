@@ -867,6 +867,29 @@ describe('minimal API route table', () => {
       expect(body).not.toContain(',=HYPERLINK');
     });
 
+    it('exports a negative cost price as a number, not as escaped text', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      // The Worker's create path has no `nonnegative` check -- Express's
+      // productSchema did (`backend/src/schemas/index.ts:101`) -- so negative
+      // cost prices are reachable. `-` is a formula prefix, so escaping every
+      // field indiscriminately would write `'-5.99` into a file the guide calls
+      // a backup. Found by review on PR #529.
+      const dbWithRows = createAuthenticatedOrgDatabase(tierRows, {
+        countProducts: vi.fn().mockResolvedValue(501),
+        findExcessProducts: vi.fn().mockResolvedValue([{ ...excessRow, costPrice: -5.99 }]),
+      });
+
+      const response = await resolveMinimalGet(
+        '/api/products/export-excess',
+        dbWithRows,
+        '/api/products/export-excess?format=csv',
+      );
+
+      const body = await response?.text();
+      expect(body?.split('\r\n')[1]).toContain(',-5.99,');
+      expect(body).not.toContain("'-5.99");
+    });
+
     it('registers the export route documented in the tier-downgrade guide', () => {
       // No code call site exists in either frontend: the consumer is a customer
       // following docs/tier-downgrade-guide.md. Nothing else would notice this
