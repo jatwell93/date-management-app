@@ -42,6 +42,14 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     await sql`DELETE FROM expired_item_transactions`;
     await sql`DELETE FROM inventory_items`;
     await sql`DELETE FROM products`;
+    // store_areas was left behind between tests, which only worked because the
+    // harness was missing production's
+    // `store_areas_organization_id_name_sub_department_key`
+    // (`database/migrations/0000_baseline.up.sql:397`). Three tests here insert
+    // ('Shelf', 'Grocery') for the same organization -- rows production would
+    // have refused. With the index in place the leak is a duplicate-key error,
+    // so the rows are cleared like every other table.
+    await sql`DELETE FROM store_areas`;
   });
 
   // Seeds a product + inventory item N days from expiry and returns the item id.

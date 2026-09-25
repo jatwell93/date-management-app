@@ -148,6 +148,15 @@ const SCHEMA_SQL = `
 
   CREATE INDEX idx_store_areas_parent_id ON store_areas (parent_id);
 
+  -- Production carries this unique index (database/migrations/0000_baseline.up.sql:397)
+  -- and the harness did not. That drift is load-bearing for anything using
+  -- ON CONFLICT on this table: with no index there is nothing to conflict
+  -- against, so a duplicate insert succeeds and a test asserting "seeding twice
+  -- creates nothing the second time" passes against code carrying no conflict
+  -- clause at all. seedDemoData depends on it.
+  CREATE UNIQUE INDEX store_areas_organization_id_name_sub_department_key
+    ON store_areas (organization_id, name, sub_department);
+
   CREATE TABLE check_cycles (
     id SERIAL PRIMARY KEY,
     organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,

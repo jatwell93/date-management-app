@@ -968,7 +968,7 @@ equivalent, a relocated home, or an explicit retirement decision.
 > Build the Worker up beside the still-running SQLite Express backend. Coverage is written **once**,
 > Worker-shaped — never the Express-shaped Postgres detour.
 
-- [ ] 3.1 Implement Worker handlers + routes for each Express-only endpoint from the audit. **Must
+- [x] 3.1 Implement Worker handlers + routes for each Express-only endpoint from the audit. **Must
       include the Stripe webhook inbound handler** (`POST /api/webhooks/stripe`) — the Worker handles Clerk
       webhooks only today, so this is net-new, not a port.
       **Two routes are documented to customers and must be rehomed, not retired (2.5 Finding 26).**
@@ -1052,6 +1052,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       "...before Express is retired", so every rehome row was silently reclassified. It now parses
       the leading disposition token only. A classifier over prose is a place to check the totals
       against something independent before believing them.
+      <br>**CLOSED 2026-09-26 by 3.1.r.** `python scripts/reconcile-route-matrix.py` reports two
+      absent routes, `GET /live` and `GET /ready`, and this task's own reconciliation above assigns
+      both to 3.9 rather than here. Both non-route items are settled: business-rule integrity
+      closed with #530 in 3.1.q (there was no separate layer to port -- Express's
+      `validateBusinessRules` is dead code), and the `requireOrgRole(admin, manager)` gap closed in
+      3.1.r, with `bay-checks` left ungated as a recorded divergence rather than an oversight. The
+      four `PROPOSED: unknown` auth rows stay open as a product decision about legacy JWT, not as
+      missing implementation.
       - [x] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
             `workers/build.js:11` bundles `workers/src/index-minimal.ts` and `workers/wrangler.toml:2`
             deploys that bundle, so nothing reachable only from `workers/src/index.ts` runs in
@@ -2947,6 +2955,105 @@ equivalent, a relocated home, or an explicit retirement decision.
             `GET /api/store-areas/:id`, `GET /api/reports/usage`, `GET /api/reports/analytics`,
             `POST /api/organization/seed-demo-data`, and the `GET /live` / `GET /ready` probes.
             Plus the `requireOrgRole(admin, manager)` gap. #530 closes with this task.
+      - [x] 3.1.r **Rehome the last four Express-only routes and close the
+            `requireOrgRole(admin, manager)` gap.** **DONE 2026-09-26.**
+            `GET /api/store-areas/:id`, `GET /api/reports/usage`, `GET /api/reports/analytics` and
+            `POST /api/organization/seed-demo-data` are live in `index-minimal.ts` over four new
+            `database.ts` methods. The reconciler now reports **2** absent routes, both of them the
+            `/live` and `/ready` probes that belong to 3.9, so 3.1's route surface is closed.
+            <br>**Only one of the four had a live caller, and the matrix said the opposite about
+            all four.** Every consumer citation on these rows was wrong, and each was checked
+            rather than read:
+            <br>*`seed-demo-data`* — cited `useOrgBootstrap.ts:69`, which calls
+            `/api/organization/bootstrap`, a different route. The real caller is
+            `frontend/src/pages/OnboardingPage.tsx:88`, the "Load Demo Data" button on the routed
+            `/onboarding` page (`App.tsx:361`). So onboarding's demo-data path has been returning
+            404 since cutover. This is the only one of the four that was broken for a user.
+            <br>*`GET /api/store-areas/:id`* — cited `useStoreAreaManagement.ts:266`, which is the
+            `apiService.put` on that path. No GET-by-id caller exists in either frontend.
+            <br>*`/reports/usage` and `/reports/analytics`* — cited `UsageReportPage.tsx` and
+            `ReportsPage.tsx`. Neither string appears anywhere in `frontend/src`: UsageReportPage
+            calls `daily-usage`, `items-by-user`, `items-by-date` and `store-walk-audit`, and
+            ReportsPage calls `expiry`, `expiry-overall` and `sell-through` — all separate live
+            routes. Both rows are corrected to `mounted+unconsumed` and rehomed anyway, on the
+            `export-excess` precedent.
+            <br>**The analytics feature gate is deliberately NOT ported.** Express wrapped the
+            route in `requireFeature('advanced_analytics')`
+            (`backend/src/routes/report.routes.ts:139`), and the `tier_feature_flags` rows are real
+            — `starter` false, `professional`/`premium`/`concierge` true
+            (`backend/scripts/migrate-production.ts:114-145`). Porting it is not a port: the Worker
+            has no feature-flag mechanism at all, and the flag rows are keyed by a tier vocabulary
+            that does not match the one `normalizeLaunchTier` produces, so the gate needs both a
+            new mechanism and a cross-vocabulary mapping — the four-copies-of-a-table shape that
+            produced #517 — for a route with no caller. It is also the smaller half of what is
+            already free: the live, ungated `GET /api/dashboard` serves two of the same six
+            counters. Filed as an issue, with the mapping named as the open question, and pinned by
+            a route test that fails if a gate is added silently.
+            <br>**The role gate is built, and applied to three of four candidate writes.**
+            `hasOrgRole` in `shared/domain/roles.ts` is the shared decision (normalizing first, so
+            a stored `'Manager'` or `'org:admin'` resolves rather than matching nothing — the #517
+            failure); `requireOrgRole` in `index-minimal.ts` is the Worker's refusal. Applied to
+            `seed-demo-data` and to the two supervisory store-walk writes
+            (`POST /api/store-areas/check-cycles`, `.../check-cycles/:id/complete`).
+            <br>**`POST /api/store-areas/bay-checks` is left ungated on purpose, and this is a
+            divergence from Express.** In production the Worker's role vocabulary is `admin` and
+            `team_member` only (`ROLES_PROD`, `index-minimal.ts:150`); `manager` is dev-only and
+            production Clerk does not issue it. So Express's own `admin, manager` argument list is
+            **admin-only in production**, and applying it to all three store-walk writes would have
+            made recording a bay check — the floor task the whole store walk is built around —
+            admin-only, immediately before an in-store trial. Express has not served these routes
+            since cutover and the Worker never gated them, so the permissive behaviour is the
+            production baseline and narrowing it is a new restriction on live traffic, not a
+            restoration. Starting and completing a cycle are supervisory acts and are gated; the
+            floor task is not. The two reopened 2.2 role rows are resolved against this, with the
+            divergence recorded on them.
+            <br>**Usage limits do not apply to seeding**, decided explicitly: the interactive
+            create path enforces the tier product cap inside its INSERT, seeding does not, so
+            onboarding cannot fail on a cap the operator has had no chance to raise. The next
+            interactive create is what refuses.
+            <br>**Neon has no transaction, so the seed is one statement.** Express wrapped ~20
+            statements in a Prisma `$transaction` (`backend/src/services/seed.service.ts:325`);
+            this is a chain of CTEs, which gets the same atomicity from the implicit transaction
+            every statement already has. Idempotency moved from Express's check-then-act
+            (`findBySku` then create — two clicks of the button both read "absent" and both insert)
+            onto the unique indexes, with `ON CONFLICT DO NOTHING` left **untargeted** because
+            `products` has two unique indexes: a targeted `(organization_id, sku)` lets a barcode
+            collision raise and take the whole seed down, which a test pins. One leg is still
+            unprotected — `inventory_items` has no unique index over
+            (organization_id, product_id, location_id) in production either — so its idempotency is
+            a `NOT EXISTS` guard: atomic within the statement, not isolated against a concurrent
+            seed. That is no worse than Express and closing it properly is a migration.
+            <br>**A harness gap made one class of test a placebo, and fixing it exposed three
+            pre-existing tests seeding impossible data.** The pglite harness was missing
+            `store_areas_organization_id_name_sub_department_key`, which production has carried
+            since the baseline (`0000_baseline.up.sql:397`). Without it `ON CONFLICT DO NOTHING`
+            has nothing to conflict against, so "seeding twice creates nothing" would have passed
+            against code with no conflict clause at all. Adding the index then failed two tests in
+            `database.disposition.pglite.node.test.ts`: three of its cases insert
+            ('Shelf', 'Grocery') for the same organization because its `beforeEach` never cleared
+            `store_areas` — rows production would have refused. The suite now clears the table.
+            <br>**Coverage, mutation-verified.** 8 real-SQL pglite tests for `seedDemoData`, 13 for
+            the three read methods, 16 route tests. Fifteen mutations applied and each caught —
+            except one that was not, which is the finding below.
+            <br>**One first-draft test could not fail, and only a mutation showed it.** Dropping
+            `ep.organization_id = ...` from the seed's product resolver left all seven other tests
+            green. The reason is structural: on a FIRST seed every insert succeeds, so
+            `COALESCE(inserted.id, existing.id)` never consults the existing-row side, and a
+            two-organization test that seeds each once cannot reach the untenanted join. The test
+            added for it re-seeds the second organization — the inserts are then skipped, the
+            fallback is the only source of ids, and a join on sku alone matches both
+            organizations' rows. It catches the same mutation on the store-area resolver too.
+            <br>**And one comment was wrong in a way that changed the code.** The first cut used
+            `ILIKE` on `change_description`, justified as necessary because "the rows this Worker
+            writes are capitalized". They are not: the Worker writes `'inventory item created'`
+            (`database.ts:3052`) and Express wrote `'Inventory item created with expiry date ...'`
+            (`backend/src/services/inventory.service.ts:185`) — capitalized on the noun, so the
+            lower-case verb matches a case-sensitive `LIKE` either way. `ILIKE` was a widening
+            resting on a false premise, and it also disagreed with the three sibling live report
+            queries (`getDailyUsageReport`, `getItemsByUserReport`, `getItemsByDateReport`) that
+            already use case-sensitive `LIKE` on the same column. Reverted to `LIKE`, and the test
+            now seeds both writers' exact strings so rewording an audit description fails the test
+            instead of silently zeroing a report.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,

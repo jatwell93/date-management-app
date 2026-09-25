@@ -130,3 +130,27 @@ export function normalizeRole(role: string | null | undefined): RoleValue {
 export function isCanonicalRole(role: string): role is RoleValue {
   return (CANONICAL_ROLES as readonly string[]).includes(role);
 }
+
+/**
+ * Does `role` resolve to one of `allowedRoles`?
+ *
+ * The decision half of Express's `requireOrgRole(...)`
+ * (`backend/src/middleware/requireOrgRole.ts:35`), extracted so the Worker can
+ * apply the same gate without importing Express middleware. Only the decision
+ * is shared — the denial response, the denial telemetry and the request
+ * patching stay with each backend, because a `Response` and an Express `res`
+ * have no common shape worth abstracting over.
+ *
+ * `normalizeRole` runs first, so a stored `'Manager'` is compared as
+ * `'manager'` rather than matching nothing, which was half of #517.
+ *
+ * **An absent role is refused, not admitted.** `normalizeRole` maps `null`,
+ * `undefined` and any unrecognized spelling to `team_member`, so a caller with
+ * no role fails every gate that does not list `team_member` explicitly. Express
+ * distinguishes that case in its *message* ('No role assigned' rather than
+ * 'Insufficient permissions'); the outcome is the same refusal, and the
+ * message is the caller's to choose.
+ */
+export function hasOrgRole(role: string | null | undefined, ...allowedRoles: RoleValue[]): boolean {
+  return allowedRoles.includes(normalizeRole(role));
+}

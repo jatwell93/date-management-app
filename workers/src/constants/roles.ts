@@ -16,6 +16,7 @@ export {
   ROLE_ALIASES,
   normalizeRole,
   isCanonicalRole,
+  hasOrgRole,
 } from '../../../shared/domain/roles';
 export type { RoleValue } from '../../../shared/domain/roles';
 
