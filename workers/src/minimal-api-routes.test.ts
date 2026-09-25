@@ -1044,6 +1044,173 @@ describe('minimal API route table', () => {
     });
   });
 
+  describe('PUT /api/products/:id', () => {
+    const resolvePut = (pathname: string, body: unknown, database: Database) =>
+      resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request(`https://example.com${pathname}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: typeof body === 'string' ? body : JSON.stringify(body),
+        }),
+        pathname,
+        method: 'PUT',
+        db: database,
+        env,
+      });
+
+    const updatedProduct = {
+      id: 12,
+      name: 'Renamed',
+      barcode: '12345678',
+      sku: 'SKU-1',
+      costPrice: 4.5,
+      notes: '',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-09-25T00:00:00Z'),
+    };
+
+    it('passes only the supplied fields through to the update', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn().mockResolvedValue(updatedProduct);
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/12', { name: 'Renamed' }, database);
+
+      expect(response?.status).toBe(200);
+      // Exact argument, not `objectContaining`: a handler that forwarded
+      // `{ name, barcode: undefined, ... }` would overwrite nothing today but
+      // would the moment `db.updateProduct` stopped coalescing, and this is the
+      // assertion that would notice.
+      expect(updateProduct).toHaveBeenCalledWith('org_123', 12, { name: 'Renamed' });
+    });
+
+    it('refuses a negative cost price before it reaches the database', async () => {
+      // Issue #530. The Worker accepted this where Express refused it, and a
+      // negative cost_price is summed as a signed value by the loss reports.
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/12', { costPrice: -5 }, database);
+
+      expect(response?.status).toBe(400);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('refuses a cost price above the ceiling', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/12', { costPrice: 10001 }, database);
+
+      expect(response?.status).toBe(400);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('coerces the string cost price rather than storing zero', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn().mockResolvedValue(updatedProduct);
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      await resolvePut('/api/products/12', { costPrice: '12.50' }, database);
+
+      expect(updateProduct).toHaveBeenCalledWith('org_123', 12, { costPrice: 12.5 });
+    });
+
+    it('answers 404 when the product is absent or belongs to another organization', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const database = createAuthenticatedOrgDatabase(
+        {},
+        { updateProduct: vi.fn().mockResolvedValue(null) },
+      );
+
+      // 404 and not 403 for the cross-tenant case: a 403 confirms the id
+      // exists, which is a cross-tenant leak when ids are sequential.
+      const response = await resolvePut('/api/products/12', { name: 'x' }, database);
+
+      expect(response?.status).toBe(404);
+    });
+
+    it('answers 409 on a barcode or sku collision', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const conflict = Object.assign(new Error('duplicate key'), { code: '23505' });
+      const database = createAuthenticatedOrgDatabase(
+        {},
+        { updateProduct: vi.fn().mockRejectedValue(conflict) },
+      );
+
+      const response = await resolvePut('/api/products/12', { barcode: '12345678' }, database);
+
+      expect(response?.status).toBe(409);
+    });
+
+    it('answers 400 for a body naming no updatable field', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      // Deliberate divergence: Express's service returns null for an empty
+      // change set and its controller renders that as 404 "Product not found"
+      // -- on a row it fetched and confirmed exists two lines earlier.
+      const response = await resolvePut('/api/products/12', { retailPrice: 3 }, database);
+
+      expect(response?.status).toBe(400);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('answers 400 for a malformed body rather than throwing', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      for (const body of ['not json', '[]', '"a string"']) {
+        const response = await resolvePut('/api/products/12', body, database);
+        expect(response?.status, body).toBe(400);
+      }
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('answers a non-numeric id with 400 rather than falling through to 404', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/not-a-number', { name: 'x' }, database);
+
+      expect(response?.status).toBe(400);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('does not let a PUT reach the export-excess route', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/export-excess', { name: 'x' }, database);
+
+      expect(response?.status).toBe(400);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('requires authentication', async () => {
+      // An unauthenticated request is a 401 *Response* from
+      // `authenticateClerkRequest`, not a null -- mocking null models a state
+      // the real function never produces and crashes the handler instead of
+      // testing it.
+      mockedAuthenticateClerkRequest.mockResolvedValue(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }) as never,
+      );
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/12', { name: 'x' }, database);
+
+      expect(response?.status).toBe(401);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+  });
+
   it('loads supplier credit read data from the authenticated organization', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithSupplierCredits = {
@@ -1409,6 +1576,70 @@ describe('minimal API route table', () => {
       }),
       ...overrides,
     }) as unknown as Database;
+
+  const resolveCreate = (body: unknown, database: Database) =>
+    resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/products', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+      pathname: '/api/products',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+  it('refuses a product create with a negative cost price', async () => {
+    // Issue #530, on the path that actually has a caller: ScanPage's
+    // "add new product" form. Express refused this with a 400 through
+    // `validateRequest(productSchema)`; the cutover kept neither the schema nor
+    // the middleware, and a negative cost_price is summed as a signed value by
+    // the loss reports.
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createProduct = vi.fn();
+    const database = tierDatabase('free', { createProduct });
+
+    const response = await resolveCreate(
+      { barcode: 'BAR-1', name: 'Milk', costPrice: -5 },
+      database,
+    );
+
+    expect(response?.status).toBe(400);
+    expect(createProduct).not.toHaveBeenCalled();
+  });
+
+  it('stores a string cost price as its number, not as zero', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createProduct = vi.fn().mockResolvedValue({ id: 1 });
+    const database = tierDatabase('free', { createProduct });
+
+    // The handler previously read `typeof costPrice === 'number' ? costPrice : 0`,
+    // so a client sending the string form created a product costing zero, with
+    // no error anywhere -- and every markdown and loss figure computed from it
+    // was then wrong.
+    await resolveCreate({ barcode: 'BAR-1', name: 'Milk', costPrice: '12.50' }, database);
+
+    expect(createProduct).toHaveBeenCalledWith(
+      'org_123',
+      expect.objectContaining({ costPrice: 12.5 }),
+      expect.anything(),
+    );
+  });
+
+  it('accepts a short barcode, which Express would have refused', async () => {
+    // Pins the deliberate non-port. `4011` is the PLU for a loose banana; the
+    // 8-character floor in Express's schema would refuse it. The Worker, not
+    // Express, has served this route since cutover, so enforcing that floor now
+    // would be a new restriction rather than a restoration.
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createProduct = vi.fn().mockResolvedValue({ id: 1 });
+    const database = tierDatabase('free', { createProduct });
+
+    const response = await resolveCreate({ barcode: '4011', name: 'Banana' }, database);
+
+    expect(response?.status).toBe(201);
+    expect(createProduct).toHaveBeenCalled();
+  });
 
   it('refuses a product create that would exceed the tier SKU cap', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);

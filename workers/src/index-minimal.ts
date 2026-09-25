@@ -103,6 +103,11 @@ import {
   type MarkdownMatrixSet,
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
+import {
+  ProductValidationError,
+  validateProductWrite,
+  type ProductWriteInput,
+} from '../../shared/domain/product-validation';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
 import { isUniqueViolation } from './db-errors';
@@ -280,6 +285,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', /^\/api\/products\/by-barcode\/[^/]+$/, handleGetProductByBarcode, 'path'],
   ['GET', /^\/api\/products\/by-sku\/[^/]+$/, handleGetProductBySku, 'path'],
   ['GET', /^\/api\/products\/\d+$/, handleGetProduct, 'path'],
+  ['PUT', RE_PRODUCT_ID, handleUpdateProduct, 'path'],
   ['DELETE', RE_PRODUCT_ID, handleDeleteProduct, 'path'],
   ['GET', '/api/inventory-items', handleGetInventory],
   ['POST', '/api/inventory-items', handleCreateInventoryItem],
@@ -2868,12 +2874,15 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
+  // `costPrice` is deliberately `unknown` and not `number`: callers do send the
+  // string form, and typing it as a number hid that from the compiler while the
+  // code below silently substituted zero for it.
   const body = (await request.json()) as {
     barcode?: string;
     sku?: string | null;
     name?: string;
-    costPrice?: number;
-    notes?: string;
+    costPrice?: unknown;
+    notes?: unknown;
   };
 
   if (!body.barcode || typeof body.barcode !== 'string') {
@@ -2883,16 +2892,35 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
     return errorResponse('Missing required field: name', 400, env);
   }
 
+  // Express applied `validateRequest(productSchema)` to this route as well as
+  // to the update; the cutover kept neither. Issue #530 is the half that
+  // matters most -- `cost_price` is summed as a signed value by the loss
+  // reports, so a negative one quietly offsets real losses in the same total.
+  let validated;
+  try {
+    validated = validateProductWrite(body as ProductWriteInput);
+  } catch (error) {
+    if (error instanceof ProductValidationError) {
+      return errorResponse(error.message, 400, env);
+    }
+    throw error;
+  }
+
   try {
     const tier = await getOrganizationLaunchTier(auth.organizationId, db);
     const maxSkus = resolveMaxSkus(tier, env);
     const enforced = isUsageEnforcementEnabled(env);
     const input = {
       barcode: body.barcode,
-      sku: body.sku ?? null,
+      sku: validated.sku ?? null,
       name: body.name,
-      costPrice: typeof body.costPrice === 'number' ? body.costPrice : 0,
-      notes: typeof body.notes === 'string' ? body.notes : '',
+      // Previously `typeof body.costPrice === 'number' ? body.costPrice : 0`,
+      // which turned a string `'12.50'` into a product costing zero -- no
+      // error, and a wrong number in every report downstream. The validator
+      // coerces the string form the way Express's schema did
+      // (`.transform(parseFloat)`) and refuses what will not coerce.
+      costPrice: validated.costPrice ?? 0,
+      notes: validated.notes ?? '',
     };
 
     let product = await db.createProduct(auth.organizationId, input, maxSkus);
@@ -3076,6 +3104,102 @@ async function handleDeleteProduct(
   }
 
   return jsonResponse({ message: 'Product deleted successfully' }, 200, env);
+}
+
+/**
+ * PUT /api/products/:id
+ *
+ * Ports Express's `product.controller.ts` `updateProduct`. The 2.1 matrix row
+ * called this `mounted+consumed` by "the ScanPage update flow"; that is not so.
+ * ScanPage only reads products and creates them -- the sole PUT-to-products in
+ * either frontend is the offline replay queue (`frontend/src/lib/offline-sync.ts:368`),
+ * and `addOperation`, the only thing that feeds that queue, is called nowhere
+ * outside its own tests. So this route has no live caller today and the row is
+ * corrected to `mounted+unconsumed`.
+ *
+ * It is rehomed rather than retired on the `export-excess` precedent from
+ * 3.1.n: with no product-edit surface anywhere in the product, a cost price
+ * mistyped at scan time is currently uncorrectable by any means short of SQL,
+ * and a cost price is what the loss and markdown reports are computed from.
+ *
+ * Divergence from Express, deliberate: an update naming no known field answers
+ * 400 rather than 404. Express's service returns null for an empty change set
+ * (`product.service.ts:180`) and the controller renders that as "Product not
+ * found" -- on a product it has already fetched and confirmed exists two lines
+ * earlier. That answer is simply wrong, and nothing depends on it.
+ */
+async function handleUpdateProduct(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/products\/([^/]+)$/);
+  const id = match ? parsePositiveInt(match[1]) : null;
+  if (id === null) {
+    return errorResponse('Invalid product id', 400, env);
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON body', 400, env);
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return errorResponse('Request body must be an object', 400, env);
+  }
+
+  let validated;
+  try {
+    validated = validateProductWrite(body as ProductWriteInput);
+  } catch (error) {
+    if (error instanceof ProductValidationError) {
+      return errorResponse(error.message, 400, env);
+    }
+    throw error;
+  }
+
+  // `sku: null` means "derive from barcode" on create; on update there is no
+  // barcode to derive from and the column cannot be cleared (see
+  // `db.updateProduct`), so it is refused rather than silently ignored.
+  if (validated.sku === null) {
+    return errorResponse('SKU cannot be cleared', 400, env);
+  }
+
+  const changes = {
+    ...(validated.barcode !== undefined ? { barcode: validated.barcode } : {}),
+    ...(validated.sku !== undefined ? { sku: validated.sku } : {}),
+    ...(validated.name !== undefined ? { name: validated.name } : {}),
+    ...(validated.costPrice !== undefined ? { costPrice: validated.costPrice } : {}),
+    ...(validated.notes !== undefined ? { notes: validated.notes } : {}),
+  };
+
+  if (Object.keys(changes).length === 0) {
+    return errorResponse('No updatable fields provided', 400, env);
+  }
+
+  try {
+    const product = await db.updateProduct(auth.organizationId, id, changes);
+
+    // A product belonging to another organization is reported as 404 rather
+    // than 403, for the reason `handleGetProduct` gives: a 403 confirms the id
+    // exists, which is itself a cross-tenant leak when ids are sequential.
+    if (!product) {
+      return errorResponse('Product not found', 404, env);
+    }
+
+    return jsonResponse(product, 200, env);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return errorResponse('Product with this barcode or SKU already exists', 409, env);
+    }
+    console.error('handleUpdateProduct error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
 }
 
 /**

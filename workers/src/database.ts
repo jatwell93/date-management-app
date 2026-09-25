@@ -301,6 +301,17 @@ export interface Database {
     },
     maxSkus: number,
   ): Promise<Product | null>;
+  updateProduct(
+    organizationId: string,
+    id: number,
+    data: {
+      barcode?: string;
+      sku?: string;
+      name?: string;
+      costPrice?: number;
+      notes?: string;
+    },
+  ): Promise<Product | null>;
 
   // Inventory CRUD
   findInventoryItemById(organizationId: string, id: number): Promise<InventoryItem | null>;
@@ -2639,6 +2650,54 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE (
           SELECT COUNT(*) FROM products WHERE organization_id = ${organizationId}
         ) < ${maxSkus}
+        RETURNING id, name, barcode, sku,
+                  cost_price as "costPrice", notes,
+                  created_at as "createdAt", updated_at as "updatedAt"
+      `;
+      return (rows[0] as Product) ?? null;
+    },
+
+    /**
+     * Partial update of a product, scoped to the organization.
+     *
+     * Every field is optional and only the ones supplied move. The `COALESCE`
+     * form expresses that in a single statement: a parameter left `null` falls
+     * back to the column's current value, so there is no dynamic SQL and no
+     * read-then-write pair for the Neon HTTP driver to lose a transaction
+     * around (same constraint `createProduct` above works within).
+     *
+     * **The consequence is that no column here can be set to NULL** -- a null
+     * parameter means "leave alone", so the two meanings collide. That is
+     * acceptable only because nothing needs to clear these fields: Express's
+     * `buildProductUpdateData` (`product.controller.ts:77`) copies a key only
+     * when it is not `undefined` and its typed shape never carries null, so
+     * clearing was not expressible there either. If a "clear the SKU" case ever
+     * arrives, this needs a separate explicit sentinel, not a looser COALESCE.
+     *
+     * Returns null when no row matched -- either the id does not exist, or it
+     * belongs to another organization. The caller must not distinguish those
+     * two in its response (see `handleUpdateProduct`).
+     */
+    async updateProduct(
+      organizationId: string,
+      id: number,
+      data: {
+        barcode?: string;
+        sku?: string;
+        name?: string;
+        costPrice?: number;
+        notes?: string;
+      },
+    ): Promise<Product | null> {
+      const rows = await sql`
+        UPDATE products
+        SET barcode    = COALESCE(${data.barcode ?? null}, barcode),
+            sku        = COALESCE(${data.sku ?? null}, sku),
+            name       = COALESCE(${data.name ?? null}, name),
+            cost_price = COALESCE(${data.costPrice ?? null}, cost_price),
+            notes      = COALESCE(${data.notes ?? null}, notes),
+            updated_at = NOW()
+        WHERE id = ${id} AND organization_id = ${organizationId}
         RETURNING id, name, barcode, sku,
                   cost_price as "costPrice", notes,
                   created_at as "createdAt", updated_at as "updatedAt"
