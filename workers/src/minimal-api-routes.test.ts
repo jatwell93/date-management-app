@@ -1084,6 +1084,36 @@ describe('minimal API route table', () => {
       expect(updateProduct).toHaveBeenCalledWith('org_123', 12, { name: 'Renamed' });
     });
 
+    it('refuses blanking the barcode or the name', async () => {
+      // Without the unconditional empty guard in the shared validator, '' is a
+      // present string, so it survived the permissive identifier mode and was
+      // written straight through -- `COALESCE('', barcode)` is '', because
+      // COALESCE only falls back on NULL. That let this route produce a product
+      // with no scan key, invisible to every by-barcode lookup, in a state the
+      // create route refuses outright.
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn();
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      expect((await resolvePut('/api/products/12', { barcode: '' }, database))?.status).toBe(400);
+      expect((await resolvePut('/api/products/12', { name: '' }, database))?.status).toBe(400);
+      expect(updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('still allows a short legacy barcode to be edited', async () => {
+      // The guard above must refuse absence without refusing brevity: a row
+      // holding a four-digit PLU has to stay editable, which is the whole
+      // reason the length floor is off by default.
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateProduct = vi.fn().mockResolvedValue(updatedProduct);
+      const database = createAuthenticatedOrgDatabase({}, { updateProduct });
+
+      const response = await resolvePut('/api/products/12', { barcode: '4011' }, database);
+
+      expect(response?.status).toBe(200);
+      expect(updateProduct).toHaveBeenCalledWith('org_123', 12, { barcode: '4011' });
+    });
+
     it('refuses a negative cost price before it reaches the database', async () => {
       // Issue #530. The Worker accepted this where Express refused it, and a
       // negative cost_price is summed as a signed value by the loss reports.
@@ -1639,6 +1669,42 @@ describe('minimal API route table', () => {
 
     expect(response?.status).toBe(201);
     expect(createProduct).toHaveBeenCalled();
+  });
+
+  it('answers 400, not 500, for a create body that is not a JSON object', async () => {
+    // The create handler read `(await request.json())` bare, so a syntactically
+    // invalid body threw past it and the top-level catch rendered it as a 500
+    // `Unhandled error` -- a client mistake reported as a server fault, and
+    // paged as one. A JSON `null` was the same 500 by a different route:
+    // `body.barcode` on null is a TypeError.
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createProduct = vi.fn();
+    const database = tierDatabase('free', { createProduct });
+
+    for (const raw of ['{not json', 'null', '[]', '"a string"']) {
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request('https://example.com/api/products', { method: 'POST', body: raw }),
+        pathname: '/api/products',
+        method: 'POST',
+        db: database,
+        env,
+      });
+      expect(response?.status, raw).toBe(400);
+    }
+    expect(createProduct).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty barcode or name on create, as it always has', async () => {
+    // Pins the create-side half of the asymmetry the update guard closes: these
+    // are refused here by `requiredString`, which is why '' had to be refused
+    // in the shared validator too rather than only on the create path.
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createProduct = vi.fn();
+    const database = tierDatabase('free', { createProduct });
+
+    expect((await resolveCreate({ barcode: '', name: 'Milk' }, database))?.status).toBe(400);
+    expect((await resolveCreate({ barcode: 'BAR-1', name: '' }, database))?.status).toBe(400);
+    expect(createProduct).not.toHaveBeenCalled();
   });
 
   it('refuses a product create that would exceed the tier SKU cap', async () => {

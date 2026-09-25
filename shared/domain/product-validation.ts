@@ -105,6 +105,16 @@ function validateBarcode(value: unknown, strict: boolean): string {
   if (typeof value !== 'string') {
     throw new ProductValidationError('Barcode must be a string');
   }
+  // Refused regardless of `strict`. The permissive mode exists so that short
+  // legacy codes stay editable, and '' is not a short code -- it is the absence
+  // of one. Create already refuses it (`requiredString` in `index-minimal.ts`),
+  // so without this the update path could put a row into a state the create
+  // path cannot produce: a product with no scan key, invisible to every
+  // by-barcode lookup in the app. Only fields actually present are checked, so
+  // this still leaves a legacy four-digit barcode fully editable.
+  if (value.length === 0) {
+    throw new ProductValidationError('Barcode cannot be empty');
+  }
   if (!strict) {
     return value;
   }
@@ -124,6 +134,14 @@ function validateSku(value: unknown, strict: boolean): string {
   if (typeof value !== 'string') {
     throw new ProductValidationError('SKU must be a string');
   }
+  // Deliberately NOT given the empty-string guard that barcode and name carry.
+  // That guard is safe there because it only makes update agree with a rule
+  // create already enforces. Here there is no such rule to agree with: create
+  // derives the column as `${data.sku ?? data.barcode}` (`database.ts`), and
+  // '' is not nullish, so a create with `sku: ''` stores '' and has done since
+  // cutover. Refusing it here would be a new restriction on live traffic, not
+  // a restored one -- the same trap the header describes for the 8-character
+  // barcode floor. Closing it needs a census of live `products.sku` first.
   if (!strict) {
     return value;
   }
@@ -139,6 +157,11 @@ function validateSku(value: unknown, strict: boolean): string {
 function validateName(value: unknown, strict: boolean): string {
   if (typeof value !== 'string') {
     throw new ProductValidationError('Product name must be a string');
+  }
+  // As with barcode: create refuses '' via `requiredString`, so allowing it on
+  // update would let the update path produce a nameless row that create cannot.
+  if (value.length === 0) {
+    throw new ProductValidationError('Product name cannot be empty');
   }
   if (!strict) {
     return value;

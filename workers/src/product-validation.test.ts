@@ -118,6 +118,29 @@ describe('validateProductWrite', () => {
       // refusing it here.
       expect(validateProductWrite({ sku: null }).sku).toBeNull();
     });
+
+    it('refuses an empty barcode and an empty name even though it is permissive', () => {
+      // The permissive mode exists for short legacy codes, not for absent ones.
+      // Create refuses '' via `requiredString`, so allowing it here would let
+      // `PUT /api/products/:id` produce a row -- no scan key, or no name --
+      // that `POST /api/products` cannot.
+      expect(() => validateProductWrite({ barcode: '' })).toThrow(/Barcode cannot be empty/);
+      expect(() => validateProductWrite({ name: '' })).toThrow(/Product name cannot be empty/);
+      // One character is not empty, and stays accepted: the guard is about
+      // absence, not about length.
+      expect(validateProductWrite({ barcode: '4' }).barcode).toBe('4');
+    });
+
+    it('still accepts an empty sku, because create already stores one', () => {
+      // NOT an oversight, and deliberately unlike barcode/name above.
+      // `createProduct` writes `${data.sku ?? data.barcode}` and '' is not
+      // nullish, so a create with `sku: ''` has stored '' since cutover.
+      // Refusing it here would be a new restriction on live traffic rather
+      // than a restored one. If this test ever starts failing because the
+      // guard was added, the census of live `products.sku` is the prerequisite,
+      // not a test edit.
+      expect(validateProductWrite({ sku: '' }).sku).toBe('');
+    });
   });
 
   describe('identifiers, with strictIdentifiers ON (Express parity)', () => {
@@ -137,6 +160,16 @@ describe('validateProductWrite', () => {
           ProductValidationError,
         );
       }
+    });
+
+    it('refuses an empty name, which the length and angle-bracket rules let through', () => {
+      // Express's schema constrained the name to <=200 characters with no
+      // angle brackets, and '' satisfies both -- so strict mode accepted a
+      // nameless product until the unconditional guard was added. The guard
+      // is not Express parity; it is stricter than Express, on purpose.
+      expect(() => validateProductWrite({ name: '' }, strict)).toThrow(
+        /Product name cannot be empty/,
+      );
     });
 
     it('refuses over-long or non-alphanumeric skus', () => {

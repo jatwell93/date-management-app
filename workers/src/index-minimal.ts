@@ -2878,6 +2878,34 @@ function requiredString(value: unknown): string | null {
 }
 
 /**
+ * Parse a request body that must be a JSON object, or return the 400 to send.
+ *
+ * Most handlers in this file call `await request.json()` bare, so a body that
+ * is not valid JSON throws past the handler and is rendered by the top-level
+ * catch as a 500 `Unhandled error` -- a client mistake reported as a server
+ * fault, which also means it pages as one. That is a pre-existing pattern
+ * across ~23 other handlers and is not fixed here; what is fixed is the two
+ * product write paths disagreeing with each other, since this change exists to
+ * make them enforce one set of rules.
+ *
+ * Also rejects JSON that parses but is not an object -- `null`, `[]`, `"x"`,
+ * `7`. `null` is the one that mattered: `body.barcode` on it throws a
+ * TypeError, which is the same 500.
+ */
+async function readJsonObject(request: Request, env: Env): Promise<object | Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON body', 400, env);
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return errorResponse('Request body must be an object', 400, env);
+  }
+  return body;
+}
+
+/**
  * Validate a product write body, returning either the validated fields or the
  * 400 to send back.
  *
@@ -2904,10 +2932,13 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
+  const parsed = await readJsonObject(request, env);
+  if (parsed instanceof Response) return parsed;
+
   // `costPrice` is deliberately `unknown` and not `number`: callers do send the
   // string form, and typing it as a number hid that from the compiler while the
   // code below silently substituted zero for it.
-  const body = (await request.json()) as {
+  const body = parsed as {
     barcode?: unknown;
     sku?: unknown;
     name?: unknown;
@@ -3168,15 +3199,8 @@ async function handleUpdateProduct(
     return errorResponse('Invalid product id', 400, env);
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return errorResponse('Invalid JSON body', 400, env);
-  }
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    return errorResponse('Request body must be an object', 400, env);
-  }
+  const body = await readJsonObject(request, env);
+  if (body instanceof Response) return body;
 
   const validated = validateProductBody(body, env);
   if (validated instanceof Response) return validated;
