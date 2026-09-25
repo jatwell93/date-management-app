@@ -58,21 +58,61 @@ describe('Health Check API', () => {
     expect(data.docs).toBe('/api');
   });
 
+  // These two used `SELF.fetch`, which runs against the ambient test env --
+  // `wrangler.toml` `[vars]` and no secrets, so no JWT_SECRET and no database
+  // connection string. That was invisible until task 3.1.o made `/health`
+  // report configuration, at which point both started returning 503: correctly,
+  // because the environment they ran in was not one any deployment could serve
+  // from. They now pass an explicitly configured env, which is what they always
+  // meant to assert. (Supplying those two keys globally in `vitest.config.mts`
+  // is the tempting fix and the wrong one -- it breaks the /api/dashboard test
+  // below, which depends on the database config being absent.)
+  const configuredEnv = {
+    ...env,
+    JWT_SECRET: 'test-jwt-secret',
+    NEON_CONNECTION_STRING: 'postgresql://test:test@localhost/test',
+  } as unknown as Env;
+  const healthCtx = {
+    waitUntil: vi.fn(),
+    passThroughOnException: vi.fn(),
+  } as unknown as ExecutionContext;
+
   it('should return 200 OK for /health', async () => {
-    const response = await SELF.fetch('https://example.com/health');
+    const response = await worker.fetch(
+      new Request('https://example.com/health'),
+      configuredEnv,
+      healthCtx,
+    );
     expect(response.status).toBe(200);
 
     const data = (await response.json()) as any;
     expect(data.status).toBe('healthy');
     expect(data.checks.workers.status).toBe('pass');
+    expect(data.checks.config.status).toBe('pass');
   });
 
   it('should return 200 OK for /api/health', async () => {
-    const response = await SELF.fetch('https://example.com/api/health');
+    const response = await worker.fetch(
+      new Request('https://example.com/api/health'),
+      configuredEnv,
+      healthCtx,
+    );
     expect(response.status).toBe(200);
 
     const data = (await response.json()) as any;
     expect(data.status).toBe('healthy');
+  });
+
+  it('reports 503 from /health when required configuration is absent', async () => {
+    // The behaviour the two tests above were silently exercising before 3.1.o.
+    // Worth keeping explicitly: `post-deploy-smoke.js` requires 2xx from
+    // `/health?deep=true`, so this is what makes a misconfigured deploy fail
+    // its own gate instead of serving requests it cannot fulfil.
+    const response = await SELF.fetch('https://example.com/health');
+
+    expect(response.status).toBe(503);
+    const data = (await response.json()) as any;
+    expect(data.checks.config.status).toBe('fail');
   });
 
   it('serves manually gzipped JSON responses that decode correctly', async () => {

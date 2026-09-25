@@ -9,6 +9,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { Env } from './types/env';
+import { validateWorkerConfig } from './utils/env-validation';
 
 export interface HealthCheckResult {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -28,6 +29,17 @@ export interface HealthCheckResult {
       status: 'pass' | 'fail';
       responseTime?: number;
       error?: string;
+    };
+    /**
+     * Configuration validation. Always present, and evaluated without touching
+     * the network -- unlike `r2` and `database` it needs no `?deep=true`,
+     * because a missing secret is exactly what an operator needs to see on the
+     * cheap health call.
+     */
+    config: {
+      status: 'pass' | 'fail';
+      missingRequired?: string[];
+      missingFeatures?: string[];
     };
   };
 }
@@ -49,11 +61,46 @@ export async function healthCheck(
         status: 'pass',
         responseTime: 0,
       },
+      config: {
+        status: 'pass',
+      },
     },
   };
 
   // Workers service is always healthy if we got here
   result.checks.workers.responseTime = Date.now() - startTime;
+
+  // Configuration. A missing required capability makes the Worker unhealthy
+  // even though the isolate is running perfectly well: it is serving requests
+  // it cannot fulfil, which is precisely the state a deploy gate should catch.
+  // Missing *feature* keys are reported but do not change the status -- a
+  // deployment without RESEND_API_KEY is a valid deployment with email off, and
+  // flagging it would make the signal meaningless.
+  const configResult = validateWorkerConfig(env);
+  result.checks.config = {
+    status: configResult.ok ? 'pass' : 'fail',
+    ...(configResult.missingRequired.length > 0
+      ? { missingRequired: configResult.missingRequired }
+      : {}),
+    ...(configResult.missingFeatures.length > 0
+      ? { missingFeatures: configResult.missingFeatures }
+      : {}),
+  };
+  if (!configResult.ok) {
+    result.status = 'unhealthy';
+  }
+
+  // The R2 and database branches below assign `degraded` directly. Left as-is
+  // that would *downgrade* the `unhealthy` just set -- a missing
+  // NEON_CONNECTION_STRING would be reported as merely degraded the moment an
+  // unrelated R2 list also failed, which is the exact combination a broken
+  // deploy produces. `degrade` only ever moves the status in the worsening
+  // direction.
+  const degrade = () => {
+    if (result.status === 'healthy') {
+      result.status = 'degraded';
+    }
+  };
 
   // Optional: Check R2 connectivity
   if (includeConnectivity && env.CSV_UPLOADS) {
@@ -70,7 +117,7 @@ export async function healthCheck(
         status: 'fail',
         error: error instanceof Error ? error.message : 'Unknown error',
       };
-      result.status = 'degraded';
+      degrade();
     }
   }
 
@@ -120,7 +167,7 @@ export async function healthCheck(
         responseTime: Date.now() - dbStart,
         error: redactedMessage,
       };
-      result.status = 'degraded';
+      degrade();
     }
   }
 

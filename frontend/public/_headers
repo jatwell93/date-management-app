@@ -1,0 +1,57 @@
+# Cloudflare Pages response headers for the frontend.
+#
+# This file is the other half of task 3.1.o. The Worker got the API security
+# headers; these are the *page* headers, and they belong here rather than on the
+# Worker because the Worker serves no HTML.
+#
+# Express used to serve the frontend itself (`express.static` at
+# backend/src/index.ts:372, with an SPA `sendFile` fallback at :388), so the
+# `helmet()` CSP at :73-90 covered these documents. When the frontend moved to
+# Cloudflare Pages that coverage was lost silently -- no `_headers` file existed
+# until this one, so the built app has been served with no CSP, no HSTS and no
+# nosniff. Porting helmet's directives onto the Worker would not have restored
+# it: a page policy on a JSON API governs nothing.
+#
+# CRA copies `public/*` into `build/`, and `.github/workflows/pages-deploy.yml`
+# deploys `frontend/build`, so this file ships with the app.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()
+  X-Frame-Options: DENY
+
+# ---------------------------------------------------------------------------
+# CSP: deliberately Report-Only on this first deploy. Read before flipping.
+# ---------------------------------------------------------------------------
+# Every header above is safe to enforce immediately -- none of them can refuse a
+# request the app depends on. A CSP can, and this one names origins that CANNOT
+# be verified from the repository:
+#
+#   * The API origin is injected at build time from Doppler
+#     (REACT_APP_API_URL, see pages-deploy.yml:85) and differs between the
+#     preview and production configs, so it is not a constant anyone can read
+#     out of the source.
+#   * The Clerk frontend API origin is derived from the publishable key at
+#     runtime and is likewise not in the repo.
+#
+# A `connect-src` that misses either one does not degrade the app, it breaks it
+# completely -- every API call and the whole sign-in flow -- and no test in CI
+# exercises a real browser against real origins, so nothing here would catch it
+# before customers did. Report-Only gets the policy deployed and observable at
+# zero risk.
+#
+# TO ENFORCE (do this once, after checking):
+#   1. Load the deployed app, sign in, and exercise uploads and a report.
+#   2. Open the browser console and collect every
+#      "Report Only" violation -- each names the origin it would have blocked.
+#   3. Add those origins to the directives below.
+#   4. Rename the header to `Content-Security-Policy` and redeploy.
+#
+# The wildcards below are starting guesses, not verified values. In particular
+# `https://clerk.*` is a placeholder for whatever Clerk domain the instance
+# actually uses; replace it with the real one rather than shipping a wildcard.
+
+/*
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.workers.dev https://*.clerk.accounts.dev https://*.sentry.io; frame-src 'self' https://*.clerk.accounts.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'

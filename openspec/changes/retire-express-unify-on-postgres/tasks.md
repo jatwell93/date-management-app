@@ -2650,6 +2650,109 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>**Environment note:** `npx tsc` in `workers/` may resolve a TypeScript newer than
             the pinned 6.0.3 and then reject `ignoreDeprecations: "6.0"` with TS5103 against an
             unmodified tsconfig. Use `node node_modules/typescript/bin/tsc` to gate.
+      - [x] 3.1.o **Close three of the four §F edge gaps: security headers, environment
+            validation and a JSON body cap.** **DONE 2026-09-25.** Grouped into one change
+            because all three sit on the edge of the same request path and none depends on the
+            fourth gap (business-rule integrity), which is larger and stays open.
+            <br>**(a) Security headers — and the discovery that the control does not belong
+            here at all.** 2.5 §F records "helmet at `index.ts:73-74` — the live Worker sets no
+            `X-Content-Type-Options`, HSTS or CSP", implying a port. Reading what Express's CSP
+            was *protecting* changes the answer: Express served the frontend itself
+            (`express.static(frontendBuildDir)` at `index.ts:372`, SPA `sendFile` at `:388`), so
+            its `script-src` / `style-src` / `font-src` / `img-src` directives governed real HTML
+            documents. This Worker serves JSON and nothing else. Copying those directives onto it
+            would be ceremony that reads as protection while governing nothing.
+            <br>So the control **splits in two**. The Worker gets an API-appropriate policy —
+            `default-src 'none'; frame-ancestors 'none'`, plus `nosniff`, `Referrer-Policy` and
+            `Permissions-Policy` — and the *page* policy moves to a new
+            `frontend/public/_headers`, because the frontend is now served by Cloudflare Pages.
+            **That file did not exist**, which means the page CSP Express provided has been
+            absent from production ever since the frontend moved to Pages, and nobody noticed
+            because the audit row pointed at the Worker. CRA copies `public/*` into `build/` and
+            `pages-deploy.yml:122` deploys `frontend/build`, so it ships with the app.
+            <br>**The Pages CSP is deliberately `Content-Security-Policy-Report-Only`.** Every
+            other header there is safe to enforce immediately; a CSP is not. Its `connect-src`
+            must name the API origin, which is injected at build time from Doppler
+            (`REACT_APP_API_URL`) and differs between preview and production, and the Clerk
+            frontend origin, which is derived from the publishable key at runtime. Neither is
+            readable from the repository, no CI test drives a real browser against real origins,
+            and a `connect-src` that misses one does not degrade the app — it breaks every API
+            call and the whole sign-in flow. The file carries the four-step procedure for
+            flipping it to enforcing after reading the violations off a real deploy.
+            `X-Frame-Options` is omitted on the Worker (superseded by `frame-ancestors`) and kept
+            on Pages, where pre-CSP clients can still arrive.
+            <br>**(b) Environment validation — not a fail-fast, and the reason is structural.**
+            Express validated at boot and called `process.exit(1)`: the process refused to start
+            and no request was ever served by a misconfigured build. A Worker has no boot phase.
+            The literal equivalent — throwing at module scope — 500s *every* request including
+            `/health`, the one endpoint an operator would reach for to find out what is wrong,
+            and turns one mistyped secret into a total outage on a repo that auto-deploys
+            production from main. So the control is split by blast radius, generalizing what the
+            Worker already did ad hoc in two places (`JWT_SECRET` → 500, `STRIPE_WEBHOOK_SECRET`
+            → 503 from 3.1.m): required capabilities fail `/health` with 503, feature keys are
+            reported without changing status, and the picture is logged once per isolate.
+            <br>Two details that a naive list would have got wrong. **The database entry is a
+            capability check, not a key check** — `getConnectionString` accepts
+            `NEON_CONNECTION_STRING`, `DATABASE_URL` *or* `HYPERDRIVE.connectionString`, so
+            naming only the first would report a working Hyperdrive-only deployment as broken.
+            A false alarm is worse than no alarm: it trains an operator to ignore the output.
+            And **`/health`'s existing `result.status = 'degraded'` assignments would have
+            *downgraded* the new `unhealthy`** — since `/health` maps `degraded` to HTTP 200, a
+            missing connection string plus any unrelated R2 failure would have produced a green
+            gate on a dead deploy. `degrade()` now only ever worsens the status.
+            <br>**(c) JSON body cap: 1 MiB, not Express's 10 MB.** The largest payload this API
+            accepts by design is 500 integer ids (`isValidBulkIdBatch`), a few kilobytes, so 10 MB
+            bears no relationship to anything. The cap also matters *more* here than in Express:
+            `request.json()` buffers into a 128 MB isolate **shared with other tenants'
+            concurrent requests**, so an uncapped body is a tenant-fairness problem, not only an
+            abuse one. `Content-Length` only, and that limitation is documented rather than
+            hidden — a chunked request declares no length, but Cloudflare enforces its own
+            ceiling upstream and the alternative (streaming every body through a counter) is the
+            cost the cap exists to avoid.
+            <br>**A regression caught before it shipped.** The obvious placement — beside the
+            rate-limit check — would have 413'd legitimate 25 MB uploads, because uploads are
+            served at **both** `/upload/...` and `/api/upload/...` (`upload-router.ts:118`) and
+            the first draft excluded only the former. Rather than restate the router's path logic
+            (which would drift), the cap now runs *after* the upload router has declined the
+            request: reaching that line already means "not an upload", and the router matches
+            paths without reading bodies. Pinned by a test that asserts both prefixes are exempt.
+            <br>**Coverage, mutation-verified.** 31 unit tests across the three new modules plus
+            14 integration tests in `worker-edge-hardening.test.ts` that drive the **real entry
+            point** — the unit tests prove the modules behave, only these prove the wiring, and
+            the wiring is the whole claim. Each header case picks a response from a different
+            branch (root, health, 404, rejected API call, preflight). **Thirteen mutations, each
+            caught**, including removing either wrapper from the entry point.
+            <br>**The choke point is wrapped outside Sentry, and the handler body never moved.**
+            `fetch` has a dozen return points and only some route through `withCors`, so there
+            was no existing single exit. Renaming the handler object would have worked but
+            reflowed all ~200 lines of the body one nesting level (215/176 diff, measured);
+            wrapping the *result* of `Sentry.withSentry` instead leaves the body untouched
+            (55/1) and additionally hardens responses Sentry synthesizes itself. `workers/src` is
+            eslint-ignored, so that churn would have been permanent.
+            <br>**A test that could not fail, caught by mutation.** The first version of "an
+            unrelated degradation does not mask a config failure" was vacuous: it used an empty
+            connection string, but the database branch is guarded by
+            `includeConnectivity && connectionString`, so `degrade()` never ran and the assertion
+            passed with or without the guard. The status has to be *contested* — a required key
+            missing while a deep check genuinely fails.
+            <br>**Two existing health tests changed, and the reason is worth keeping.** They used
+            `SELF.fetch`, which runs against the ambient test env: `wrangler.toml` `[vars]` and no
+            secrets, so no `JWT_SECRET` and no connection string. They began failing with 503 —
+            *correctly*, because that environment is one no deployment could serve from. They now
+            pass an explicitly configured env. Supplying those two keys globally in
+            `vitest.config.mts` is the tempting fix and the wrong one: it breaks the
+            `/api/dashboard` test, which depends on the database config being **absent**. A note
+            in the config records that, since the next person will try it too.
+            <br>**Deploy-gate consequence, called out because it is behavioural.**
+            `post-deploy-smoke.js` requires 2xx from `/health?deep=true`, so a missing required
+            capability now fails the deploy gate. That is the intent. Note `JWT_SECRET` is bound
+            by neither the deploy workflow nor `wrangler.toml` (it is listed in a comment at
+            `wrangler.toml:212` as a manual `wrangler secret put`), so its presence in production
+            is inferred from the API being alive — every authenticated route already 500s without
+            it — rather than verified from the repository.
+            <br>**Still open from §F:** business-rule integrity (`validateBusinessRules`), whose
+            first concrete instance is now filed as **#530** (the Worker accepts negative and
+            unbounded `costPrice` where Express enforced `z.number().nonnegative().max(10000)`).
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
