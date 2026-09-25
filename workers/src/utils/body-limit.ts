@@ -25,6 +25,15 @@ import { errorResponse } from './worker-response';
  */
 export const DEFAULT_MAX_JSON_BODY_BYTES = 1024 * 1024;
 
+/**
+ * Methods that carry no body worth capping.
+ *
+ * A named set rather than a chain of `||` comparisons: the predicate is now
+ * stated once, in the place where the reason for it can be written down, and
+ * adding a method is a list edit rather than another clause.
+ */
+const BODYLESS_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 export function resolveMaxJsonBodyBytes(env: Env): number {
   const raw = (env as { MAX_JSON_BODY_BYTES?: string }).MAX_JSON_BODY_BYTES;
   if (!raw) {
@@ -66,7 +75,7 @@ export function enforceJsonBodyLimit(
 ): Response | null {
   // A body-less method has nothing to cap, and some clients send
   // `Content-Length: 0` on GET.
-  if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
+  if (BODYLESS_METHODS.has(request.method)) {
     return null;
   }
 

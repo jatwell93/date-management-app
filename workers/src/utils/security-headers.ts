@@ -95,23 +95,33 @@ export function applySecurityHeaders(response: Response, request: Request, _env?
   }
 
   try {
-    for (const [key, value] of Object.entries(headers)) {
-      if (!response.headers.has(key)) {
-        response.headers.set(key, value);
-      }
-    }
+    setMissing(response.headers, headers);
     return response;
   } catch {
     const merged = new Headers(response.headers);
-    for (const [key, value] of Object.entries(headers)) {
-      if (!merged.has(key)) {
-        merged.set(key, value);
-      }
-    }
+    setMissing(merged, headers);
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
       headers: merged,
     });
+  }
+}
+
+/**
+ * Copy `values` into `target`, skipping any key already present.
+ *
+ * Extracted because both branches above need exactly this and had it written
+ * out twice. The duplication was the kind that rots quietly: a later change to
+ * the merge rule -- skipping empty values, say, or logging an overwrite attempt
+ * -- would be applied to the in-place branch and missed on the rebuild branch,
+ * which only runs for responses with immutable headers and so is the branch
+ * least likely to be exercised by hand.
+ */
+function setMissing(target: Headers, values: Record<string, string>): void {
+  for (const [key, value] of Object.entries(values)) {
+    if (!target.has(key)) {
+      target.set(key, value);
+    }
   }
 }
