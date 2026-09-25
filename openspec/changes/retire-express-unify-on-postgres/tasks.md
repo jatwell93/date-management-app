@@ -1004,6 +1004,54 @@ equivalent, a relocated home, or an explicit retirement decision.
       the call site is one piece of work. **Its test pins the defect** —
       `__tests__/StorageQuotaWarning.test.tsx:54-55` asserts the literal relative path, so the
       corrected code fails that test until it is updated to assert the built URL.
+      **RECONCILIATION 2026-09-25 — what is actually left in 3.1.** Prompted by the question
+      "is business-rule integrity the last piece?", which the documents could not answer: the
+      2.1 matrix had drifted from the code. Seven rows still read `PROPOSED: rehome` for routes
+      that 3.1.d and 3.1.l had already shipped — those tasks changed the code and not the
+      disposition — so reading the matrix over-counted the remaining work while the §F list
+      under-counted it. Both are now corrected, and the check is automated:
+      **`python scripts/reconcile-route-matrix.py`** parses every matrix row, extracts the live
+      route surface (`MINIMAL_API_ROUTES` + the bootstrap dispatch + the webhook map + the upload
+      router) and exits non-zero while any row claims a route that does not exist or retires one
+      that does. 135 matrix rows against 97 live route entries; one row (the `*` SPA fallback)
+      has no parseable path and correctly retires, and two known false positives are listed in
+      the script with the reason each was dismissed.
+      <br>**No — business-rule integrity is not the last piece. Eleven routes have no Worker
+      handler:**
+      <br>*Subscription (4), and they are one cluster:* `POST /api/subscription/convert-trial`,
+      `create-checkout-session`, `cancel`, `create-portal-session`. **Take these together and
+      before the others** — `create-checkout-session` is where 3.1.m's carry-forward lands.
+      `organizationId` is attached to the Stripe *customer*, never the subscription, so a
+      genuinely new subscription cannot be attributed unless the row already carries
+      `stripe_customer_id`; the fix is `subscription_data.metadata.organizationId` on Checkout
+      plus `metadata` on `subscriptions.create`. The inbound webhook is correct but
+      under-supplied until that ships, so this is a half-built payments loop rather than four
+      more ports.
+      <br>*CRUD and reports (5):* `PUT /api/products/:id`, `GET /api/store-areas/:id`,
+      `GET /api/reports/usage`, `GET /api/reports/analytics`,
+      `POST /api/organization/seed-demo-data`.
+      <br>*Probes (2):* `GET /live` and `GET /ready`. Express has separate liveness and readiness
+      probes; the Worker has only `/health`. Small, and worth doing with 3.9 rather than alone.
+      <br>**Plus two non-route items.** The fourth §F gap, business-rule integrity
+      (`validateBusinessRules`), whose first concrete instance is now filed as **#530** — the
+      Worker accepts negative and unbounded `costPrice` where Express enforced
+      `z.number().nonnegative().max(10000)`, on two write paths, and a negative cost feeds the
+      loss reports as a signed `SUM`. And the `requireOrgRole(admin, manager)` gap from 3.1.0:
+      live Express middleware on `admin.metrics`, `database.backup`, `health`,
+      `organization-invite`, `store-area` and `user` routes, against three admin-only gates and
+      no admin+manager gate anywhere in the Worker. Two reopened 2.2 rows track it and it
+      resolves as the routes above gain handlers, so it is coupled to this work rather than
+      separate.
+      <br>**Four rows are `PROPOSED: unknown` and stay open deliberately** — `POST /api/auth/login`,
+      `POST /api/auth/register`, `GET /api/users/me`, `PUT /api/users/:id/reset-pin`. All four are
+      live in the Worker; the open question is whether legacy JWT auth retires at all, which is a
+      product decision, not missing implementation.
+      <br>**Method note.** The reconciler's first run reported zero `rehome` rows, which
+      contradicted a cruder count and was the tell. The cause was substring-matching the word
+      `retire` against the whole Decision cell — those cells are prose, and most of them contain
+      "...before Express is retired", so every rehome row was silently reclassified. It now parses
+      the leading disposition token only. A classifier over prose is a place to check the totals
+      against something independent before believing them.
       - [x] 3.1.0 **Delete the dead Worker API layer first, before any other 3.1 work** (2.5 Finding 22).
             `workers/build.js:11` bundles `workers/src/index-minimal.ts` and `workers/wrangler.toml:2`
             deploys that bundle, so nothing reachable only from `workers/src/index.ts` runs in
