@@ -2890,6 +2890,63 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>`scripts/reconcile-route-matrix.py` learned that a row can be `DONE` because it was
             **retired** rather than built; without that, a completed retirement reads as
             outstanding work.
+      - [x] 3.1.q **Rehome `PUT /api/products/:id`, and close the cost-price half of
+            business-rule integrity (#530).** **DONE 2026-09-25.** `handleUpdateProduct` in
+            `index-minimal.ts` over `db.updateProduct`, plus
+            `shared/domain/product-validation.ts` applied to **both** product write paths.
+            <br>**Two findings changed what this task was.**
+            <br>*(a) `validateBusinessRules` is dead code in Express, and has always been.* The 2.1
+            row lists it as validation on this route, and the §F "business-rule integrity" gap was
+            named after it. Its product branch reads
+            `if (req.path.includes('/products') && ...) { const { cost_price } = req.body; }` and
+            cannot fire, for two independent reasons. Inside a router mounted at `/api/products`
+            (`backend/src/index.ts:311`) `req.path` is stripped of the mount prefix — verified, not
+            assumed: a `PUT /api/products/7` arrives as
+            `{"path":"/7","url":"/7","originalUrl":"/api/products/7"}` — so the `includes` test is
+            false for every request. And the body key is `cost_price` where the schema, the
+            controller and the frontend all use `costPrice`. Its unit test
+            (`data-integrity.middleware.test.ts:284`) supplies both the path and the key production
+            never supplies, which is why it passes against a middleware that does nothing. **So
+            there is no separate business-rule layer to port.** What Express actually enforced is
+            `productSchema`, and #530 describes that accurately.
+            <br>*(b) This route has no consumer.* The matrix cited "the ScanPage update flow";
+            ScanPage only reads and creates. The one product PUT in either frontend is the offline
+            replay queue, whose `addOperation` has no production caller — the same ruling already
+            recorded on the DELETE row. Rehomed anyway on the `export-excess` precedent: nothing in
+            the product can correct a mistyped cost price, and cost price is what the loss and
+            markdown reports are computed from. The row is corrected to `mounted+unconsumed`.
+            <br>**The identifier rules are ported but left OFF, deliberately.** Express also
+            constrained barcode to 8–14 alphanumeric characters, sku to 50 and name to 200 without
+            angle brackets. Enabling those is not a restoration: Express has not served this route
+            since cutover, the Worker has, and this is a grocery expiry app where a PLU code on
+            loose produce is four or five digits and would be refused outright by the 8-character
+            floor. The repository's own fixtures agree — three of the four distinct barcodes in the
+            Worker suite are shorter than eight characters, and porting the rule failed eight
+            existing tests, which is how the problem surfaced. They live behind
+            `strictIdentifiers`, off by default; turning them on needs a census of live
+            `products.barcode` values, which is a production query, not a code decision. The
+            cost-price rules are **not** gated — a negative cost price has no legitimate form.
+            <br>**A second defect found while porting.** The create handler read
+            `typeof costPrice === 'number' ? costPrice : 0`, so a client sending the string
+            `'12.50'` created a product costing **zero**, with no error — and every markdown and
+            loss figure derived from it was then wrong. Express's schema coerced the string branch
+            with `.transform(parseFloat)`; the validator now does the same.
+            <br>**Coverage, mutation-verified.** 10 real-SQL pglite tests for `db.updateProduct`,
+            19 unit tests for the validator, 13 route tests. Five mutations applied, all caught
+            after the fixes below.
+            <br>**Two of the first-draft tests could not fail, and the mutations found both.**
+            Deleting `updated_at = NOW()` from the UPDATE left all 11 pglite tests green: the
+            timestamp assertion was `updatedAt >= before.updatedAt`, which a value that never moved
+            satisfies. It now compares `updated_at > created_at` **in SQL**, both because the
+            comparison must be strict and because Postgres keeps microseconds where `new Date()`
+            keeps milliseconds. And a "tenant isolation" test that seeded a row in each
+            organization was deleted outright — `products.id` is a single serial primary key, so
+            two organizations can never share an id and the query has exactly one candidate row
+            with or without the predicate.
+            <br>**Still absent after this task (reconciler output): 6.**
+            `GET /api/store-areas/:id`, `GET /api/reports/usage`, `GET /api/reports/analytics`,
+            `POST /api/organization/seed-demo-data`, and the `GET /live` / `GET /ready` probes.
+            Plus the `requireOrgRole(admin, manager)` gap. #530 closes with this task.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
