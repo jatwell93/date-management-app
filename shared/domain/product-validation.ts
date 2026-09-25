@@ -101,6 +101,26 @@ export interface ValidatedProductWrite {
   notes?: string;
 }
 
+// The three identifier validators below are each split in two, because the
+// file's central distinction is exactly that split: rules that hold of every
+// product regardless of mode, and Express's shape rules, which are optional
+// because the Worker has been serving these routes without them since cutover.
+// Keeping the second kind in its own function means the always-on rules are
+// readable without scrolling past constraints that usually do not apply.
+
+/** Express's barcode shape rules. Only reached when `strictIdentifiers` is on. */
+function assertExpressBarcodeShape(value: string): void {
+  if (value.length < MIN_BARCODE_LENGTH) {
+    throw new ProductValidationError(`Barcode must be at least ${MIN_BARCODE_LENGTH} characters`);
+  }
+  if (value.length > MAX_BARCODE_LENGTH) {
+    throw new ProductValidationError(`Barcode must be at most ${MAX_BARCODE_LENGTH} characters`);
+  }
+  if (!ALPHANUMERIC_WITH_HYPHENS.test(value)) {
+    throw new ProductValidationError('Barcode must be alphanumeric with optional hyphens');
+  }
+}
+
 function validateBarcode(value: unknown, strict: boolean): string {
   if (typeof value !== 'string') {
     throw new ProductValidationError('Barcode must be a string');
@@ -115,19 +135,20 @@ function validateBarcode(value: unknown, strict: boolean): string {
   if (value.length === 0) {
     throw new ProductValidationError('Barcode cannot be empty');
   }
-  if (!strict) {
-    return value;
-  }
-  if (value.length < MIN_BARCODE_LENGTH) {
-    throw new ProductValidationError(`Barcode must be at least ${MIN_BARCODE_LENGTH} characters`);
-  }
-  if (value.length > MAX_BARCODE_LENGTH) {
-    throw new ProductValidationError(`Barcode must be at most ${MAX_BARCODE_LENGTH} characters`);
-  }
-  if (!ALPHANUMERIC_WITH_HYPHENS.test(value)) {
-    throw new ProductValidationError('Barcode must be alphanumeric with optional hyphens');
+  if (strict) {
+    assertExpressBarcodeShape(value);
   }
   return value;
+}
+
+/** Express's sku shape rules. Only reached when `strictIdentifiers` is on. */
+function assertExpressSkuShape(value: string): void {
+  if (value.length > MAX_SKU_LENGTH) {
+    throw new ProductValidationError(`SKU must be at most ${MAX_SKU_LENGTH} characters`);
+  }
+  if (!ALPHANUMERIC_WITH_HYPHENS.test(value)) {
+    throw new ProductValidationError('SKU must be alphanumeric with optional hyphens');
+  }
 }
 
 function validateSku(value: unknown, strict: boolean): string {
@@ -142,16 +163,21 @@ function validateSku(value: unknown, strict: boolean): string {
   // cutover. Refusing it here would be a new restriction on live traffic, not
   // a restored one -- the same trap the header describes for the 8-character
   // barcode floor. Closing it needs a census of live `products.sku` first.
-  if (!strict) {
-    return value;
-  }
-  if (value.length > MAX_SKU_LENGTH) {
-    throw new ProductValidationError(`SKU must be at most ${MAX_SKU_LENGTH} characters`);
-  }
-  if (!ALPHANUMERIC_WITH_HYPHENS.test(value)) {
-    throw new ProductValidationError('SKU must be alphanumeric with optional hyphens');
+  if (strict) {
+    assertExpressSkuShape(value);
   }
   return value;
+}
+
+/** Express's name shape rules. Only reached when `strictIdentifiers` is on. */
+function assertExpressNameShape(value: string): void {
+  if (value.length > MAX_NAME_LENGTH) {
+    throw new ProductValidationError(`Product name must be at most ${MAX_NAME_LENGTH} characters`);
+  }
+  // Express's `.refine(val => !val.includes('<') && !val.includes('>'))`.
+  if (value.includes('<') || value.includes('>')) {
+    throw new ProductValidationError('Product name cannot contain HTML tags');
+  }
 }
 
 function validateName(value: unknown, strict: boolean): string {
@@ -163,15 +189,8 @@ function validateName(value: unknown, strict: boolean): string {
   if (value.length === 0) {
     throw new ProductValidationError('Product name cannot be empty');
   }
-  if (!strict) {
-    return value;
-  }
-  if (value.length > MAX_NAME_LENGTH) {
-    throw new ProductValidationError(`Product name must be at most ${MAX_NAME_LENGTH} characters`);
-  }
-  // Express's `.refine(val => !val.includes('<') && !val.includes('>'))`.
-  if (value.includes('<') || value.includes('>')) {
-    throw new ProductValidationError('Product name cannot contain HTML tags');
+  if (strict) {
+    assertExpressNameShape(value);
   }
   return value;
 }
