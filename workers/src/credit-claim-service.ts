@@ -500,12 +500,10 @@ export async function sendFollowUp(
     .addCreditClaimEvent(organizationId, id, 'FOLLOW_UP_SENT', null)
     .catch((error) => reportPostSendGap(organizationId, id, 'follow-up-event', error));
 
-  const updated = await db
-    .findCreditClaim(organizationId, id)
-    .catch((error) => {
-      reportPostSendGap(organizationId, id, 'follow-up-reload', error);
-      return null;
-    });
+  const updated = await db.findCreditClaim(organizationId, id).catch((error) => {
+    reportPostSendGap(organizationId, id, 'follow-up-reload', error);
+    return null;
+  });
   return {
     ok: true,
     value: updated ?? {

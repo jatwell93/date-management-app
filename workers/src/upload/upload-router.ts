@@ -10,24 +10,14 @@ export type WorkerUploadHandlers = {
     uploadRouteBase: '/upload' | '/api/upload',
     db: Database,
   ) => Promise<Response>;
-  handleUploadDirect: (
-    request: Request,
-    env: Env,
-    key: string,
-    db: Database,
-  ) => Promise<Response>;
+  handleUploadDirect: (request: Request, env: Env, key: string, db: Database) => Promise<Response>;
   handleUploadPresigned: (
     request: Request,
     env: Env,
     key: string,
     uploadToken: string | null,
   ) => Promise<Response>;
-  handleUploadStatus: (
-    request: Request,
-    env: Env,
-    key: string,
-    db: Database,
-  ) => Promise<Response>;
+  handleUploadStatus: (request: Request, env: Env, key: string, db: Database) => Promise<Response>;
   handleUploadErrorReport: (
     request: Request,
     env: Env,

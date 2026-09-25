@@ -23,15 +23,7 @@ export type ValidatedExpiryRow = ExpiryImportRow & { rowNumber: number };
 export const EXPIRY_HEADER_ALIASES = {
   sku: ['sku', 'itemcode', 'reordernumber', 'productcode', 'itemnumber'],
   itemDescription: ['name', 'itemdescription', 'productname', 'description', 'itemname'],
-  usedByDate: [
-    'usedbydate',
-    'usedby',
-    'usebydate',
-    'useby',
-    'expirydate',
-    'expiry',
-    'bestbefore',
-  ],
+  usedByDate: ['usedbydate', 'usedby', 'usebydate', 'useby', 'expirydate', 'expiry', 'bestbefore'],
   department: ['department', 'dept', 'location', 'storearea', 'area', 'section'],
 } as const;
 

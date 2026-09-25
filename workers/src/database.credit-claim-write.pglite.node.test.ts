@@ -774,7 +774,15 @@ describe('Workers credit-claim writes (real SQL)', () => {
       await sql`UPDATE credit_claims SET status = 'PARTIALLY_CREDITED' WHERE id = ${claimId}`;
 
       expect(
-        await db.recordClaimOutcome(ORG, claimId, 'CREDITED', 25, 'topped up', settledAt, deleteAfter),
+        await db.recordClaimOutcome(
+          ORG,
+          claimId,
+          'CREDITED',
+          25,
+          'topped up',
+          settledAt,
+          deleteAfter,
+        ),
       ).toBe(true);
       expect((await db.findCreditClaim(ORG, claimId))?.status).toBe('CREDITED');
     });

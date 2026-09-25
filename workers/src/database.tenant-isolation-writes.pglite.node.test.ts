@@ -348,20 +348,25 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
   });
 
   // These cases assert the cross-org reference checks fire BEFORE the insert, so
-// the tier cap must never be the reason a create fails here. A cap far above
-// any fixture count keeps the assertions about references, not quota.
-const UNCAPPED = 1_000_000;
+  // the tier cap must never be the reason a create fails here. A cap far above
+  // any fixture count keeps the assertions about references, not quota.
+  const UNCAPPED = 1_000_000;
 
-describe('createInventoryItem cross-org references', () => {
+  describe('createInventoryItem cross-org references', () => {
     it("refuses to create an item pointing at another organization's product", async () => {
       const db = makeDb();
 
       await expect(
-        db.createInventoryItem(ORG, ownUserId, {
-          productId: foreignProductId,
-          expiryDate: '2099-01-01',
-          locationId: ownAreaId,
-        }, UNCAPPED),
+        db.createInventoryItem(
+          ORG,
+          ownUserId,
+          {
+            productId: foreignProductId,
+            expiryDate: '2099-01-01',
+            locationId: ownAreaId,
+          },
+          UNCAPPED,
+        ),
       ).rejects.toThrow('Product does not exist');
 
       const rows = await sql`
@@ -374,11 +379,16 @@ describe('createInventoryItem cross-org references', () => {
       const db = makeDb();
 
       await expect(
-        db.createInventoryItem(ORG, ownUserId, {
-          productId: ownProductId,
-          expiryDate: '2099-01-01',
-          locationId: foreignAreaId,
-        }, UNCAPPED),
+        db.createInventoryItem(
+          ORG,
+          ownUserId,
+          {
+            productId: ownProductId,
+            expiryDate: '2099-01-01',
+            locationId: foreignAreaId,
+          },
+          UNCAPPED,
+        ),
       ).rejects.toThrow('Location does not exist');
     });
   });
@@ -401,20 +411,30 @@ describe('createInventoryItem cross-org references', () => {
       [
         'createInventoryItem, foreign product',
         () =>
-          makeDb().createInventoryItem(ORG, ownUserId, {
-            productId: foreignProductId,
-            expiryDate: '2099-01-01',
-            locationId: ownAreaId,
-          }, UNCAPPED),
+          makeDb().createInventoryItem(
+            ORG,
+            ownUserId,
+            {
+              productId: foreignProductId,
+              expiryDate: '2099-01-01',
+              locationId: ownAreaId,
+            },
+            UNCAPPED,
+          ),
       ],
       [
         'createInventoryItem, foreign location',
         () =>
-          makeDb().createInventoryItem(ORG, ownUserId, {
-            productId: ownProductId,
-            expiryDate: '2099-01-01',
-            locationId: foreignAreaId,
-          }, UNCAPPED),
+          makeDb().createInventoryItem(
+            ORG,
+            ownUserId,
+            {
+              productId: ownProductId,
+              expiryDate: '2099-01-01',
+              locationId: foreignAreaId,
+            },
+            UNCAPPED,
+          ),
       ],
       [
         'updateInventoryItem, foreign product',

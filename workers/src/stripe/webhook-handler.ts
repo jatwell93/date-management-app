@@ -77,13 +77,9 @@ interface StripeEventEnvelope {
   data?: { object?: StripeSubscriptionObject };
 }
 
-
-
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
-
-
 
 /**
  * Apply one `customer.subscription.*` event.
@@ -94,9 +90,6 @@ function asString(value: unknown): string | null {
  * acknowledges the event and the error is carried by the log line — the same
  * judgement Express encodes in `isNonRecoverableStripeWebhookError`.
  */
-
-
-
 
 interface AcceptedStripeEvent {
   event: StripeEventEnvelope;
@@ -285,7 +278,12 @@ export async function handleStripeWebhook(
     // marker row while the side effects still run twice (issue #472's shape).
     const claim = await claimStripeWebhookEvent(db.sql, eventId, eventType);
 
-    const alreadyClaimed = respondToExistingClaim(claim, { eventId, eventType }, env, requestOrigin);
+    const alreadyClaimed = respondToExistingClaim(
+      claim,
+      { eventId, eventType },
+      env,
+      requestOrigin,
+    );
 
     if (alreadyClaimed) {
       return alreadyClaimed;

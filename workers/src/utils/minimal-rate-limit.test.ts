@@ -35,10 +35,13 @@ describe('minimal Worker rate limit helpers', () => {
 
   it('uses the authenticated limit for presigned PUT uploads without Authorization', async () => {
     const store = createInMemoryRateLimitStore();
-    const request = new Request('https://example.com/api/upload/presigned/uploads%2Fuser-7%2Fbig.csv', {
-      method: 'PUT',
-      headers: { 'CF-Connecting-IP': '203.0.113.10' },
-    });
+    const request = new Request(
+      'https://example.com/api/upload/presigned/uploads%2Fuser-7%2Fbig.csv',
+      {
+        method: 'PUT',
+        headers: { 'CF-Connecting-IP': '203.0.113.10' },
+      },
+    );
 
     const decision = await checkRateLimit(request, createEnv(), store);
 

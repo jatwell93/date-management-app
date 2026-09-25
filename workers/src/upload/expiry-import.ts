@@ -110,7 +110,12 @@ async function importExpiryRow(
 ): Promise<void> {
   try {
     const productId = await getOrCreateExpiryProduct(db, organizationId, row, productIdBySku);
-    const alreadyImported = await inventoryItemExists(db, organizationId, productId, row.usedByDate);
+    const alreadyImported = await inventoryItemExists(
+      db,
+      organizationId,
+      productId,
+      row.usedByDate,
+    );
     if (alreadyImported) {
       summary.updatedCount += 1;
       return;
