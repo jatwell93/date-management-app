@@ -2801,6 +2801,97 @@ equivalent, a relocated home, or an explicit retirement decision.
             <br>**Still open from §F:** business-rule integrity (`validateBusinessRules`), whose
             first concrete instance is now filed as **#530** (the Worker accepts negative and
             unbounded `costPrice` where Express enforced `z.number().nonnegative().max(10000)`).
+      - [x] 3.1.p **Rehome the three customer-facing billing routes; retire the fourth.**
+            **DONE 2026-09-25.** `POST /api/subscription/create-checkout-session`, `.../cancel`
+            and `.../create-portal-session` now live in
+            `workers/src/stripe/billing-handlers.ts`.
+            <br>**These were not unported work — they were a live production defect.** All three
+            have frontend callers (`TrialUpgradeFlow.tsx:188`,
+            `SubscriptionSettingsPage.tsx:154`/`:195`, `ManageSubscriptionButton.tsx:31`) which
+            reach them through `buildApiUrl`; in production that resolves to the Worker, which
+            served only `/current` and `/trial-status`. So upgrade, cancel and "manage billing"
+            were answering 404 to real users. The matrix framed this as migration debt because it
+            asks "does a Worker route exist", never "does the frontend depend on one" — worth
+            remembering for the seven routes still outstanding. (Stated from code: production
+            probes are blocked from this session, so it was not confirmed against the live system.
+            One `curl -X POST .../api/subscription/cancel` settles it: 404 confirms, 401 refutes.)
+            <br>**`POST /api/subscription/convert-trial` is retired, and the matrix row that said
+            otherwise was wrong.** It cited `TrialUpgradeFlow.tsx:188` as the consumer; that line
+            calls `create-checkout-session`. The only `convert-trial` match anywhere in the
+            frontend is the string `"Failed to convert trial"` in an error branch at `:203`, which
+            is presumably what the original grep matched. No caller, no docs, no curl example —
+            unlike `export-excess` (3.1.n), where the consumer turned out to be a customer
+            following written instructions. Retiring removes a payment-method-taking,
+            Stripe-mutating endpoint nothing exercises.
+            <br>**No Stripe SDK** (Josh's call). `stripe/stripe-api.ts` is four form-encoded POSTs
+            over `fetch`, consistent with 3.1.m hand-rolling signature verification rather than
+            pulling the SDK into an isolate. What the SDK would have supplied is written out
+            explicitly: idempotency keys, a normalised error type, a **pinned `Stripe-Version`** so
+            a dashboard-level API upgrade cannot reshape responses under a deployed Worker, and
+            types for the handful of fields actually read.
+            <br>**Three fixes over Express, not ports.**
+            (a) *The 3.1.m carry-forward.* `subscription_data.metadata.organizationId` is now set
+            on the Checkout Session. Express set `metadata` only at session level, which does
+            **not** propagate to the subscription Stripe creates, so
+            `customer.subscription.created` arrived with no organization and the webhook could
+            attribute it only by `stripe_customer_id` — which a genuinely new subscriber does not
+            yet have. That is exactly the case a checkout session represents, so the inbound
+            receiver has been under-supplied since it shipped.
+            (b) *An Express leak.* `createCheckoutSession` persisted a newly created Stripe
+            customer only `if (subscription)`. With no `subscription_tiers` row it created a
+            Stripe customer, discarded the id, and did so again on every attempt — accumulating
+            orphan customers and guaranteeing customer-id attribution could never work. The Worker
+            refuses up front instead, and the write-back is conditional on
+            `stripe_customer_id IS NULL` so a concurrent create cannot clobber one just stored.
+            (c) *Error disclosure.* Stripe's own message is not forwarded: it can name internal
+            object ids and account configuration. A Stripe failure is a 502 with a generic body
+            and a structured log.
+            <br>**Two security controls moved to `shared/domain/billing-validation.ts`** rather
+            than reimplemented, the same reasoning as `csv-injection.ts`: a rule enforced in one
+            backend and not the other is a rule an attacker picks the backend for. The redirect
+            allowlist is open-redirect protection **on a payment flow** — `success_url` renders
+            immediately after a real charge, which is a good place to ask for a password, and
+            Stripe does not validate the domain. The price allowlist stops a caller checking out
+            against an arbitrary price in the account and being granted whatever tier the
+            resulting webhook reports. Two hardenings over Express: `//evil.example` is refused
+            (it starts with `/`, so Express's `startsWith('/')` early return allowed it straight
+            out of the origin), and the error no longer echoes the allowed hostnames back, which
+            handed an unauthenticated prober the deployment's domain configuration.
+            <br>**Status codes preserved deliberately.** 402 (not 404) with no billing account, so
+            the frontend can prompt to subscribe; 500 (not 400) when no prices are configured,
+            because an empty allowlist is the deployment's fault and blaming the customer's valid
+            upgrade sends them in circles; 503 when `STRIPE_SECRET_KEY` is absent, matching the
+            shape 3.1.m chose for the inert webhook receiver.
+            <br>**Coverage, mutation-verified.** 29 tests across `billing-validation.test.ts` and
+            `billing-handlers.test.ts`, plus 5 route-registration tests. `fetch` is stubbed rather
+            than an SDK mocked — with no SDK the outgoing request *is* the unit under test, so
+            several assertions read the form body directly;
+            `subscription_data[metadata][organizationId]` is invisible from the response and is the
+            whole point of (a). **Sixteen mutations, all caught.**
+            <br>**Two tests were green for the wrong reason, and mutation testing found both.**
+            Deleting the protocol check left `javascript:alert(1)` still refused — because that
+            payload parses to an *empty* hostname and the allowlist catches it, so the test said
+            nothing about the check it was named for. The payload that isolates it is
+            `javascript://app.example.com/%0aalert(1)`, whose hostname **is** allowlisted. And
+            deleting `toFormBody`'s null guard survived because no test passed a null value;
+            without it `String(null)` sends `email=null`, which Stripe accepts and stores as a
+            customer whose email is the four characters "null" — every receipt then goes nowhere,
+            silently.
+            <br>**Deploy binding.** `STRIPE_SECRET_KEY` and the four price IDs are bound from
+            Doppler in `workers-deploy.yml`, following the `STRIPE_WEBHOOK_SECRET` pattern
+            including its "optional, leave untouched when unset" shape. The key check prefers
+            `rk_` (restricted) and warns on `sk_`: these endpoints need write on Customers,
+            Checkout Sessions, Billing Portal Sessions and Subscriptions and nothing else, and a
+            standard key would let a compromised Worker issue refunds and read charge history. A
+            `whsec_` value is rejected outright — it binds fine and then 401s every call.
+            `test:build-artifact` gained all three routes.
+            <br>**Still absent after this task (reconciler output): 7.** `PUT /api/products/:id`,
+            `GET /api/store-areas/:id`, `GET /api/reports/usage`, `GET /api/reports/analytics`,
+            `POST /api/organization/seed-demo-data`, and the `GET /live` / `GET /ready` probes.
+            Plus business-rule integrity (#530) and the `requireOrgRole(admin, manager)` gap.
+            <br>`scripts/reconcile-route-matrix.py` learned that a row can be `DONE` because it was
+            **retired** rather than built; without that, a completed retirement reads as
+            outstanding work.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,

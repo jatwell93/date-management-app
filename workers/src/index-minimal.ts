@@ -89,6 +89,11 @@ import {
 import { handleClerkWebhook } from './clerk/webhook-handler';
 import { handleStripeWebhook } from './stripe/webhook-handler';
 import {
+  handleCancelSubscription,
+  handleCreateCheckoutSession,
+  handleCreatePortalSession,
+} from './stripe/billing-handlers';
+import {
   CREDIT_SCOPES,
   DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
   DEFAULT_MARKDOWN_MATRIX,
@@ -339,6 +344,9 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
+  ['POST', '/api/subscription/create-checkout-session', handleCheckoutSessionRoute],
+  ['POST', '/api/subscription/cancel', handleCancelSubscriptionRoute],
+  ['POST', '/api/subscription/create-portal-session', handlePortalSessionRoute],
   ['GET', '/api/organization/usage', handleGetOrganizationUsage],
   ['GET', RE_STORAGE_QUOTA_USER, handleGetStorageQuota, 'path'],
   ['GET', '/api/markdown-config', handleGetMarkdownConfig],
@@ -4244,6 +4252,42 @@ async function handleUpdateMarkdownConfig(
     ? { ...(await getOrganizationMarkdownMatrices(auth.organizationId, db)), NO_CREDIT: noCredit }
     : parsedMatrices.matrices;
   return jsonResponse({ matrices, matrix: matrices.NO_CREDIT, hasRetailData }, 200, env);
+}
+
+/**
+ * The three billing routes share one shape: authenticate, then delegate to
+ * `stripe/billing-handlers.ts` with the resolved organization. Kept as thin
+ * adapters here so the Stripe-facing logic stays in one module rather than
+ * growing `index-minimal.ts`, which is already a CodeScene hotspot.
+ */
+async function handleCheckoutSessionRoute(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return handleCreateCheckoutSession(request, db, env, auth.organizationId);
+}
+
+async function handleCancelSubscriptionRoute(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return handleCancelSubscription(request, db, env, auth.organizationId);
+}
+
+async function handlePortalSessionRoute(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return handleCreatePortalSession(request, db, env, auth.organizationId);
 }
 
 /**

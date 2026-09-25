@@ -60,6 +60,33 @@ export interface Env {
   // Stripe API, resolving the organization from local columns instead.
   STRIPE_WEBHOOK_SECRET?: string;
 
+  // Stripe API key, for the billing endpoints added in task 3.1.p
+  // (`create-checkout-session`, `cancel`, `create-portal-session`).
+  //
+  // 3.1.m recorded that there was "deliberately no STRIPE_SECRET_KEY" because
+  // the webhook receiver never calls the Stripe API; that stopped being true
+  // when those three routes moved here.
+  //
+  // **Should be a RESTRICTED key**, with write access to Customers, Checkout
+  // Sessions, Billing Portal Sessions and Subscriptions and nothing else. The
+  // Worker is internet-facing with a far broader route surface than the webhook
+  // receiver had, and none of these endpoints needs to read a charge, issue a
+  // refund, or touch payouts.
+  //
+  // Optional: absent, the three endpoints answer 503 and nothing else in the
+  // Worker changes behaviour.
+  STRIPE_SECRET_KEY?: string;
+
+  // Stripe price IDs sellable through checkout. The allowlist that stops a
+  // caller checking out against an arbitrary price in the account (for example
+  // a 1-cent test price) and being granted the tier the resulting webhook
+  // reports. Same four keys Express reads in
+  // `services/subscription-billing.helpers.ts`.
+  STRIPE_STARTER_MONTHLY_PRICE_ID?: string;
+  STRIPE_STARTER_ANNUAL_PRICE_ID?: string;
+  STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID?: string;
+  STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID?: string;
+
   // Cloudflare R2 credentials
   R2_ACCOUNT_ID: string;
   R2_ACCESS_KEY_ID: string;

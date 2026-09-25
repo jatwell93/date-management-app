@@ -127,7 +127,10 @@ for method, paths, decision, rawpath in rows:
     )
     claim = lead.group(1) if lead else 'other'
     if decision.startswith('DONE'):
-        claim = 'done'
+        # A row can be DONE because the route was built, or DONE because it was
+        # deliberately retired. Only the first should be live, so conflating
+        # them makes a completed retirement look like outstanding work.
+        claim = 'retire' if re.search(r'\bRETIRED\b', decision) else 'done'
 
     state = 'LIVE' if hit else 'ABSENT'
     verdicts[(claim, state)] = verdicts.get((claim, state), 0) + 1
