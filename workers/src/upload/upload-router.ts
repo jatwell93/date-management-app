@@ -1,6 +1,7 @@
 import type { Database } from '../database';
 import type { Env } from '../types/env';
 import { errorResponse } from '../utils/worker-response';
+import { enforceJsonBodyLimit } from '../utils/body-limit';
 
 export type WorkerUploadHandlers = {
   handleUploadInitiate: (
@@ -116,6 +117,28 @@ export async function handleWorkerUploadRoute({
   handlers,
 }: WorkerUploadRouteContext): Promise<Response | null> {
   const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
+
+  // `initiate` and `complete` take a small JSON body (filename/fileSize/
+  // contentType, and an upload id) and buffer it with `request.json()` before
+  // any size check -- `handleUploadInitiate`'s `fileSize` comparison validates a
+  // DECLARED FIELD, not the request body, so it does nothing about a multi-MB
+  // body. Both dispatch from here, which runs above the entry point's cap, so
+  // they were entirely uncapped. Found in review of PR #531, where a comment had
+  // claimed uploads were covered by "their own tier-aware cap": that cap governs
+  // the uploaded file's bytes on `/direct/` and `/presigned/`, not these two
+  // endpoints' JSON.
+  //
+  // Applied here rather than in each handler because this is the one place that
+  // already knows which upload routes are JSON-bodied and which carry a file.
+  // `/direct/` and `/presigned/` are deliberately excluded below: a large body
+  // is their entire purpose.
+  const jsonBodiedUploadRoutes = [`${uploadRouteBase}/initiate`, `${uploadRouteBase}/complete`];
+  if (method === 'POST' && jsonBodiedUploadRoutes.includes(pathname)) {
+    const oversized = enforceJsonBodyLimit(request, env, requestOrigin);
+    if (oversized) {
+      return oversized;
+    }
+  }
 
   if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
     return handlers.handleUploadInitiate(request, env, uploadRouteBase, getDb());

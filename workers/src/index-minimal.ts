@@ -28,6 +28,9 @@ import {
   maybeCompressJsonResponse,
 } from './utils/worker-response';
 import { buildCsv } from '../../shared/domain/csv-injection';
+import { applySecurityHeaders } from './utils/security-headers';
+import { enforceJsonBodyLimit } from './utils/body-limit';
+import { logConfigOnce } from './utils/env-validation';
 import {
   applyRateLimitHeaders,
   checkRateLimit,
@@ -374,7 +377,7 @@ const PUBLIC_WEBHOOK_HANDLERS = new Map<string, PublicWebhookHandler>([
   ['/webhooks/stripe', handleStripeWebhook],
 ]);
 
-export default Sentry.withSentry(
+const sentryWrappedHandlers = Sentry.withSentry(
   (env: any) => ({
     dsn: env.WORKERS_SENTRY_DSN,
     tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
@@ -382,6 +385,12 @@ export default Sentry.withSentry(
   {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
       const requestOrigin = request.headers.get('Origin') || '';
+
+      // Report the configuration picture once per isolate. Deliberately not a
+      // throw: a Worker has no boot phase, so a module-scope failure would 500
+      // `/health` too -- the one endpoint an operator would use to find out
+      // what is wrong. See `utils/env-validation.ts`.
+      logConfigOnce(env);
 
       // Belt-and-suspenders: ensure every response (including unhandled
       // exceptions and preflights) carries CORS headers. Without this an
@@ -516,6 +525,34 @@ export default Sentry.withSentry(
             return finalizeApiResponse(uploadResponse);
           }
 
+          // Refuse an oversized JSON body before the routes below buffer it.
+          //
+          // **Not a global guarantee**, and an earlier version of this comment
+          // wrongly claimed one ("before any handler buffers it"). Routes
+          // dispatched above this line are not covered:
+          // `POST /api/organization/bootstrap` goes through
+          // `resolveBootstrapApiRoute` and buffers with `request.text()`, so it
+          // calls `enforceJsonBodyLimit` itself; the signed webhook paths are
+          // excluded on purpose (see below).
+          //
+          // **Placed here, after the upload router has declined the request,
+          // rather than up beside the rate-limit check.** Uploads are served at
+          // BOTH `/upload/...` and `/api/upload/...` (`upload-router.ts`), so an
+          // earlier check would have to restate that path logic and would
+          // silently start 413-ing 25 MB uploads the day either prefix changed.
+          // Reaching this line already means "the upload router did not want
+          // this", which is the property the cap actually depends on, and the
+          // router only matches paths -- it reads no body -- so nothing has been
+          // buffered yet.
+          //
+          // The signed webhook paths dispatch above this whole branch and are
+          // likewise unaffected: refusing a Stripe or Clerk delivery unread
+          // would turn a provider retry loop into a silent data gap.
+          const oversizedBodyResponse = enforceJsonBodyLimit(request, env, requestOrigin);
+          if (oversizedBodyResponse) {
+            return finalizeApiResponse(oversizedBodyResponse);
+          }
+
           // Initialize database connection for remaining API endpoints
           db = getDb();
 
@@ -574,6 +611,31 @@ export default Sentry.withSentry(
     },
   },
 );
+
+/**
+ * The single place every response passes through.
+ *
+ * `fetch` above has a dozen return points and only some route through
+ * `withCors`, so there was no existing choke point to hang security headers on.
+ * Wrapping the whole handler rather than threading a call through each return
+ * keeps the guarantee provable by inspection: a response that reaches a client
+ * came out of `sentryWrappedHandlers.fetch`, and this is its only caller.
+ *
+ * Deliberately wrapping *outside* Sentry rather than inside, so a response
+ * Sentry itself synthesizes for an unhandled throw is hardened too.
+ *
+ * The body of `fetch` is untouched by this task, which is why the wrapper lives
+ * here instead of being introduced by renaming the handler object: moving that
+ * 200-line body one level of nesting reflows every line of it, and
+ * `workers/src` is eslint-ignored, so the churn would be permanent and would
+ * bury the ~40 real lines of this change.
+ */
+export default {
+  ...sentryWrappedHandlers,
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return applySecurityHeaders(await sentryWrappedHandlers.fetch(request, env, ctx), request);
+  },
+} satisfies ExportedHandler<Env>;
 
 export async function handleCatalogueImportQueue(
   batch: MessageBatch<unknown>,

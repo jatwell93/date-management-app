@@ -7,6 +7,12 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: './wrangler.toml' },
+      // No `miniflare.bindings` here on purpose. Supplying JWT_SECRET and
+      // NEON_CONNECTION_STRING globally looks like the obvious fix for the
+      // ambient env lacking secrets, and it breaks tests that depend on their
+      // ABSENCE -- `health.test.ts` asserts a 500 for /api/dashboard when no
+      // database config is present. Tests that care about configuration pass
+      // their own env to `worker.fetch` instead.
     }),
   ],
   test: {
