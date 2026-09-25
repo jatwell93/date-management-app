@@ -481,6 +481,18 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           doppler run -- bash -lc '
+            # `set -euo pipefail` matters more here than in the sibling secret
+            # steps. Those end with their single `wrangler` call, so its exit
+            # status is the script status. This one loops: without -e a failed
+            # binding is swallowed, the loop carries on, `bound` still
+            # increments (it would be counting attempts, not successes), and the
+            # step exits green having bound only some of the prices. The deploy
+            # then runs with a partial allowlist -- Starter checkout works,
+            # Professional answers 500 -- and the "nothing configured" warning
+            # below is suppressed because bound > 0. `pipefail` is what makes
+            # the `printf | wrangler` pipeline report wrangler failing rather
+            # than printf succeeding.
+            set -euo pipefail
             bound=0
             for key in STRIPE_STARTER_MONTHLY_PRICE_ID STRIPE_STARTER_ANNUAL_PRICE_ID \
                        STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID; do
@@ -494,6 +506,7 @@ jobs:
                 exit 1
               fi
               printf "%s" "${value}" | npx wrangler secret put "${key}" --env production
+              # Only reached when the binding succeeded, because of -e above.
               bound=$((bound + 1))
             done
             if [ "${bound}" -eq 0 ]; then

@@ -25,6 +25,12 @@
  * (Express: FRONTEND_URL + CORS_ORIGIN, plus localhost in dev; the Worker:
  * FRONTEND_URL, plus localhost when NODE_ENV is not production).
  */
+/**
+ * Base for resolving a relative redirect. `.invalid` is reserved by RFC 2606
+ * and can never be a real host, so nothing can be crafted to match it.
+ */
+const RELATIVE_SENTINEL_ORIGIN = 'https://relative-redirect.invalid';
+
 export function validateRedirectUrl(
   url: unknown,
   fieldName: string,
@@ -35,10 +41,31 @@ export function validateRedirectUrl(
   }
 
   if (url.startsWith('/')) {
-    // One exception worth naming: `//evil.com` is protocol-relative and leaves
-    // the origin despite starting with a slash. Express's version allowed it.
-    if (url.startsWith('//')) {
-      throw new BillingValidationError(`${fieldName} must not be protocol-relative`);
+    // **"Starts with a slash" does not mean "stays on this origin".** Resolve
+    // it and ask, rather than pattern-matching the ways it can escape -- a
+    // denylist here is a list of the tricks someone has thought of, and the
+    // measured set is larger than it looks. All of these begin with `/`, are
+    // not `//`, and resolve cross-origin under WHATWG parsing:
+    //
+    //     /\evil.com      -> https://evil.com/   (backslash is a slash in
+    //     /\/evil.com     -> https://evil.com/    special schemes)
+    //     /<TAB>/evil.com -> https://evil.com/   (tab, LF and CR are stripped
+    //     /<LF>/evil.com  -> https://evil.com/    before parsing, collapsing
+    //     /<CR>/evil.com  -> https://evil.com/    these into `//evil.com`)
+    //     //evil.com      -> https://evil.com/
+    //
+    // An earlier revision refused only the last of those, having reasoned about
+    // protocol-relative URLs and stopped there. Resolving against a sentinel
+    // origin and comparing is exact by construction: it refuses whatever a
+    // browser would treat as foreign, including shapes nobody enumerated.
+    let resolved: URL;
+    try {
+      resolved = new URL(url, RELATIVE_SENTINEL_ORIGIN);
+    } catch {
+      throw new BillingValidationError(`${fieldName} is not a valid URL`);
+    }
+    if (resolved.origin !== RELATIVE_SENTINEL_ORIGIN) {
+      throw new BillingValidationError(`${fieldName} must not leave the application origin`);
     }
     return;
   }

@@ -37,13 +37,38 @@ describe('validateRedirectUrl', () => {
     ).toThrow(BillingValidationError);
   });
 
-  it('rejects a protocol-relative URL that starts with a slash', () => {
-    // `//evil.example` looks relative to a `startsWith('/')` check and is not:
-    // the browser resolves it against the current scheme and leaves the origin.
-    // Express's version returned early here and allowed it.
-    expect(() => validateRedirectUrl('//evil.example/harvest', 'successUrl', ALLOWED)).toThrow(
-      BillingValidationError,
-    );
+  it('rejects every slash-prefixed form that resolves cross-origin', () => {
+    // All of these begin with `/` and are not `//`, so a `startsWith('//')`
+    // check passes them as "relative" -- and every one resolves to
+    // https://evil.example under WHATWG parsing. Backslash is a slash in
+    // special schemes; tab, LF and CR are stripped before parsing, which
+    // collapses the last three into `//evil.example`.
+    //
+    // An earlier revision refused only `//`, having reasoned about
+    // protocol-relative URLs and stopped there. Found in review of PR #534.
+    const escapes = [
+      '//evil.example/x',
+      '/\\evil.example/x',
+      '/\\/evil.example/x',
+      '/\t/evil.example/x',
+      '/\n/evil.example/x',
+      '/\r/evil.example/x',
+    ];
+
+    for (const payload of escapes) {
+      expect(() => validateRedirectUrl(payload, 'successUrl', ALLOWED), payload).toThrow(
+        BillingValidationError,
+      );
+    }
+  });
+
+  it('still accepts ordinary relative paths, including query and fragment', () => {
+    // The resolve-and-compare check must not be so strict it refuses the real
+    // callers: both send `${origin}/settings?upgraded=true`, and the relative
+    // equivalents have to keep working.
+    for (const ok of ['/settings', '/settings?upgraded=true', '/settings#billing', '/a/b/c']) {
+      expect(() => validateRedirectUrl(ok, 'returnUrl', ALLOWED), ok).not.toThrow();
+    }
   });
 
   it('rejects a javascript: URL whose hostname IS allowlisted', () => {

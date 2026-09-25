@@ -258,6 +258,74 @@ describe('handleCreateCheckoutSession', () => {
     expect(response.status).toBe(503);
   });
 
+  it('varies the idempotency key with the redirect URLs', async () => {
+    // The two live callers send the same successUrl and DIFFERENT cancelUrls
+    // (TrialUpgradeFlow `/upgrade`, SubscriptionSettingsPage `/settings`).
+    // Stripe answers a key reused with a different body with a 409
+    // idempotency_error, so a customer abandoning checkout on one page and
+    // retrying from the other inside the same minute would have got an opaque
+    // 502 instead of a session. Found in review of PR #534.
+    const seen: string[] = [];
+    for (const cancelUrl of [
+      'https://app.example.com/upgrade',
+      'https://app.example.com/settings',
+    ]) {
+      const calls = stubStripe([{ json: { id: 'cs_1', url: 'https://x' } }]);
+      const db = makeDb({
+        'FROM subscription_tiers': [
+          { id: 7, stripe_customer_id: 'cus_1', stripe_subscription_id: null },
+        ],
+      });
+      await handleCreateCheckoutSession(post({ ...validBody, cancelUrl }), db, baseEnv(), ORG);
+      seen.push(calls[0].headers.get('Idempotency-Key') ?? '');
+    }
+
+    expect(seen[0]).not.toBe(seen[1]);
+    // ...and both stay well inside Stripe's 255-character limit.
+    for (const key of seen) {
+      expect(key.length).toBeLessThan(255);
+    }
+  });
+
+  it('reuses the idempotency key for an identical repeat submit', async () => {
+    // The other half: a genuine double-click must still collapse, or the key
+    // buys nothing.
+    const seen: string[] = [];
+    for (let i = 0; i < 2; i += 1) {
+      const calls = stubStripe([{ json: { id: 'cs_1', url: 'https://x' } }]);
+      const db = makeDb({
+        'FROM subscription_tiers': [
+          { id: 7, stripe_customer_id: 'cus_1', stripe_subscription_id: null },
+        ],
+      });
+      await handleCreateCheckoutSession(post(validBody), db, baseEnv(), ORG);
+      seen.push(calls[0].headers.get('Idempotency-Key') ?? '');
+    }
+
+    expect(seen[0]).toBe(seen[1]);
+  });
+
+  it('answers 503, not 400, when FRONTEND_URL leaves the allowlist empty', async () => {
+    // Without this the allowlist is empty and every absolute redirect -- the
+    // frontend's own window.location.origin URLs included -- gets a 400 reading
+    // "domain is not allowed", i.e. all three billing endpoints down while
+    // blaming the customer. The rest of the Worker tolerates an unset
+    // FRONTEND_URL (getCorsHeaders degrades to allow-all), so the failure must
+    // name the deployment. Found in review of PR #534.
+    const calls = stubStripe([{ json: {} }]);
+    const db = makeDb({
+      'FROM subscription_tiers': [
+        { id: 7, stripe_customer_id: 'cus_1', stripe_subscription_id: null },
+      ],
+    });
+    const env = { ...baseEnv(), FRONTEND_URL: undefined } as unknown as Env;
+
+    const response = await handleCreateCheckoutSession(post(validBody), db, env, ORG);
+
+    expect(response.status).toBe(503);
+    expect(calls).toHaveLength(0);
+  });
+
   it('does not forward Stripe error text to the caller', async () => {
     stubStripe([
       { status: 400, json: { error: { message: 'No such price: price_x on account acct_9' } } },

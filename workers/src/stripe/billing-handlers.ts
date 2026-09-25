@@ -52,9 +52,8 @@ function allowedRedirectHostnames(env: Env): Set<string> {
     try {
       allowed.add(new URL(env.FRONTEND_URL).hostname);
     } catch {
-      // A malformed FRONTEND_URL must not widen the allowlist; it narrows it,
-      // and every absolute redirect is then refused. Loud failure beats a
-      // silently permissive redirect check on a payment flow.
+      // A malformed FRONTEND_URL must never widen the allowlist. It leaves it
+      // empty, which the check below turns into a deployment error.
     }
   }
   if (env.NODE_ENV !== 'production') {
@@ -62,7 +61,41 @@ function allowedRedirectHostnames(env: Env): Set<string> {
     allowed.add('127.0.0.1');
     allowed.add('[::1]');
   }
+
+  // An empty allowlist in production is a misconfiguration, not a bad request,
+  // and must be reported as one.
+  //
+  // An earlier revision let it through with a comment claiming "loud failure
+  // beats a silently permissive check". The check was not permissive -- but it
+  // was not loud either: every absolute redirect, including the frontend's own
+  // perfectly valid `window.location.origin` URLs, got a per-request 400
+  // reading "successUrl domain is not allowed". That is all three billing
+  // endpoints down, blaming the customer, over an unset FRONTEND_URL that the
+  // rest of the Worker tolerates (`getCorsHeaders` degrades to allow-all).
+  //
+  // Same contract the price allowlist already has: empty outside development
+  // is a config error, surfaced once as 5xx, never as a 400.
+  if (env.NODE_ENV === 'production' && allowed.size === 0) {
+    console.error(JSON.stringify({ event: 'billing_redirect_allowlist_empty' }));
+    throw new StripeNotConfiguredError();
+  }
+
   return allowed;
+}
+
+/**
+ * Short, stable digest for an idempotency key.
+ *
+ * SHA-256 truncated to 32 hex characters: collision-resistant enough to
+ * distinguish two checkout intents, and short enough that the assembled key
+ * stays far inside Stripe's 255-character limit however long the redirect URLs
+ * are.
+ */
+async function hashIdempotencyInput(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest).slice(0, 16))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /**
@@ -231,11 +264,22 @@ export async function handleCreateCheckoutSession(
         cancelUrl: body.cancelUrl as string,
         organizationId,
       },
-      // Deliberately NOT keyed on the organization alone: a customer who
-      // abandons checkout and returns must get a new session, and Stripe
-      // replays a reused key for 24 hours. Keyed on the intent instead, so only
-      // a genuine double-submit of the same upgrade collapses.
-      `checkout:${organizationId}:${body.priceId as string}:${Math.floor(Date.now() / 60000)}`,
+      // Keyed on the whole intent, redirect URLs included.
+      //
+      // Stripe answers a key reused with a *different* body with a 409
+      // `idempotency_error`, and the two live callers differ: TrialUpgradeFlow
+      // sends `cancelUrl: .../upgrade` while SubscriptionSettingsPage sends
+      // `.../settings`. A customer who abandons checkout on one page and
+      // retries from the other inside the same minute would have collided on
+      // an identical key with a different body -- surfacing here as an opaque
+      // 502 rather than a new session.
+      //
+      // Still minute-bucketed so a genuine double-submit of the same upgrade
+      // collapses, and hashed so the key stays well inside Stripe's 255-char
+      // limit regardless of how long the URLs are.
+      `checkout:${organizationId}:${await hashIdempotencyInput(
+        `${body.priceId as string}|${body.successUrl as string}|${body.cancelUrl as string}`,
+      )}:${Math.floor(Date.now() / 60000)}`,
     );
 
     return jsonResponse({ sessionId: session.id, url: session.url }, 200, env);
