@@ -89,6 +89,11 @@ import {
 import { handleClerkWebhook } from './clerk/webhook-handler';
 import { handleStripeWebhook } from './stripe/webhook-handler';
 import {
+  handleCancelSubscription,
+  handleCreateCheckoutSession,
+  handleCreatePortalSession,
+} from './stripe/billing-handlers';
+import {
   CREDIT_SCOPES,
   DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
   DEFAULT_MARKDOWN_MATRIX,
@@ -339,6 +344,9 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
+  ['POST', '/api/subscription/create-checkout-session', handleCheckoutSessionRoute],
+  ['POST', '/api/subscription/cancel', handleCancelSubscriptionRoute],
+  ['POST', '/api/subscription/create-portal-session', handlePortalSessionRoute],
   ['GET', '/api/organization/usage', handleGetOrganizationUsage],
   ['GET', RE_STORAGE_QUOTA_USER, handleGetStorageQuota, 'path'],
   ['GET', '/api/markdown-config', handleGetMarkdownConfig],
@@ -1091,6 +1099,17 @@ export async function resolveAuthenticatedUser(
  * both flag states and only the refusal itself is withheld, so what gets turned
  * on later is exactly what the measure-only period counted.
  */
+/**
+ * Paths the subscription gate must never refuse: the ones a lapsed customer
+ * uses to stop being lapsed. See the exemption in
+ * {@link checkOrganizationEntitlement}.
+ */
+const SUBSCRIPTION_GATE_EXEMPT_PATHS = new Set([
+  '/api/subscription/create-checkout-session',
+  '/api/subscription/create-portal-session',
+  '/api/subscription/cancel',
+]);
+
 function checkOrganizationEntitlement(
   request: Request,
   row: Record<string, unknown>,
@@ -1102,6 +1121,25 @@ function checkOrganizationEntitlement(
   // a row, so the join key has to say which it is. Without this an organization
   // with no subscription reports "unrecognized-status" instead of the missing
   // row it actually has, and the alert names the wrong problem.
+  // **Remediation endpoints are exempt, or the gate is a deadlock.**
+  // `SUBSCRIPTION_GATE_ENFORCE` refuses POSTs from a lapsed organization so
+  // they cannot create new records. Applied to the billing routes (3.1.p) that
+  // would also refuse the requests the customer makes to STOP being lapsed:
+  // opening a checkout session, or opening the billing portal to replace the
+  // expired card. The customer is then locked out of paying, by the control
+  // whose entire purpose is to make them pay.
+  //
+  // Latent rather than live today -- the flag is "false" in every environment
+  // (`wrangler.toml`) so the gate only logs -- which is exactly why it is worth
+  // closing now: the trap springs on whoever flips the flag, and it springs on
+  // the paying customers, silently.
+  //
+  // `cancel` is exempt on the same principle: a customer must be able to stop
+  // being billed regardless of their current state. Only creation is gated.
+  if (SUBSCRIPTION_GATE_EXEMPT_PATHS.has(new URL(request.url).pathname)) {
+    return null;
+  }
+
   const subscription = row.subscriptionId == null ? null : (row as SubscriptionAccessRow);
   const access = deriveSubscriptionAccess(subscription);
   if (request.method !== 'POST') {
@@ -4244,6 +4282,42 @@ async function handleUpdateMarkdownConfig(
     ? { ...(await getOrganizationMarkdownMatrices(auth.organizationId, db)), NO_CREDIT: noCredit }
     : parsedMatrices.matrices;
   return jsonResponse({ matrices, matrix: matrices.NO_CREDIT, hasRetailData }, 200, env);
+}
+
+/**
+ * The three billing routes share one shape: authenticate, then delegate to
+ * `stripe/billing-handlers.ts` with the resolved organization. Kept as thin
+ * adapters here so the Stripe-facing logic stays in one module rather than
+ * growing `index-minimal.ts`, which is already a CodeScene hotspot.
+ */
+async function handleCheckoutSessionRoute(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return handleCreateCheckoutSession(request, db, env, auth.organizationId);
+}
+
+async function handleCancelSubscriptionRoute(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return handleCancelSubscription(request, db, env, auth.organizationId);
+}
+
+async function handlePortalSessionRoute(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return handleCreatePortalSession(request, db, env, auth.organizationId);
 }
 
 /**

@@ -397,6 +397,124 @@ jobs:
             printf "%s" "${STRIPE_WEBHOOK_SECRET}" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production
           '
 
+      # Bind STRIPE_SECRET_KEY, for the billing endpoints added in task 3.1.p
+      # (`create-checkout-session`, `cancel`, `create-portal-session`). Same
+      # shape and same reason as the webhook secret above: `wrangler deploy`
+      # does not upload surrounding-shell env vars, so a Doppler-only value
+      # never reaches the Worker and all three answer 503.
+      #
+      # Optional for the same reason too -- the handlers are inert without it,
+      # so an unset value leaves the binding alone rather than failing the
+      # deploy.
+      #
+      # **The `rk_` preference is deliberate and is a real control, not style.**
+      # These endpoints need write access to Customers, Checkout Sessions,
+      # Billing Portal Sessions and Subscriptions and nothing else. A standard
+      # `sk_` key also permits refunds, payouts and full charge history from an
+      # internet-facing Worker with a far broader route surface than the webhook
+      # receiver had. A restricted key is accepted silently; a standard key
+      # warns loudly but does not fail, because refusing it would block a
+      # deployment over a hardening preference.
+      #
+      # `whsec_` is rejected outright: pasting the signing secret here binds
+      # fine and then fails every Stripe call with a 401 that reads like an
+      # account problem.
+      - name: Bind STRIPE_SECRET_KEY secret to worker (when configured)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run -- bash -lc '
+            if [ -z "${STRIPE_SECRET_KEY:-}" ]; then
+              echo "STRIPE_SECRET_KEY is not set in Doppler; leaving the Worker binding untouched."
+              echo "The billing endpoints (checkout/cancel/portal) will answer 503 until it is."
+              exit 0
+            fi
+            if [[ "${STRIPE_SECRET_KEY}" == whsec_* ]]; then
+              echo "::error::STRIPE_SECRET_KEY looks like a webhook signing secret (whsec_...)."
+              echo "::error::That binds fine and then fails every Stripe API call with a 401."
+              exit 1
+            fi
+            if [[ "${STRIPE_SECRET_KEY}" != rk_* && "${STRIPE_SECRET_KEY}" != sk_* ]]; then
+              echo "::error::STRIPE_SECRET_KEY must be a Stripe API key (rk_... restricted, or sk_...)."
+              exit 1
+            fi
+            if [[ "${STRIPE_SECRET_KEY}" == sk_* ]]; then
+              echo "::warning::STRIPE_SECRET_KEY is a STANDARD key (sk_). A restricted key (rk_) is"
+              echo "::warning::strongly preferred: scope it to write Customers, Checkout Sessions,"
+              echo "::warning::Billing Portal Sessions and Subscriptions only. A standard key lets a"
+              echo "::warning::compromised Worker issue refunds and read full charge history."
+            fi
+            # Mode is gated earlier by scripts/validate-stripe-deployment-config.js
+            # ("Validate Stripe test launch prices"), which fails the deploy on a
+            # live key. Restated as a warning here only because that step and this
+            # one read the same variable and previously disagreed: this check
+            # accepted rk_, that one required the literal sk_test_ prefix, so a
+            # restricted key passed here and failed there.
+            if [[ "${STRIPE_SECRET_KEY}" != *_test_* ]]; then
+              echo "::warning::STRIPE_SECRET_KEY is not a test-mode key. Production is expected to"
+              echo "::warning::stay in Stripe test mode until the launch gate moves."
+            fi
+            printf "%s" "${STRIPE_SECRET_KEY}" | npx wrangler secret put STRIPE_SECRET_KEY --env production
+          '
+
+      # The four checkout price IDs, from the same Doppler keys the backend
+      # reads (`services/subscription-billing.helpers.ts` STRIPE_PRICE_CATALOG).
+      #
+      # Bound as secrets rather than written into `[env.production.vars]` for
+      # two reasons: they differ between the Stripe test and live accounts, so
+      # committing them would pin one; and Doppler is already their source of
+      # truth for Express, so a second copy in wrangler.toml is a second thing
+      # to keep in sync.
+      #
+      # They are not confidential -- the frontend sends the chosen price ID on
+      # every checkout -- but they ARE a security control: the Worker refuses
+      # any price outside this allowlist, which is what stops a caller checking
+      # out against an arbitrary price in the account and being granted the tier
+      # the resulting webhook reports.
+      #
+      # **Checkout returns 500 until at least one is bound**, deliberately: an
+      # empty allowlist is a deployment fault, and answering 400 would blame the
+      # customer for a valid upgrade request. The summary line below is the
+      # signal an operator needs to see when that happens.
+      - name: Bind Stripe checkout price IDs to worker (when configured)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run -- bash -lc '
+            # `set -euo pipefail` matters more here than in the sibling secret
+            # steps. Those end with their single `wrangler` call, so its exit
+            # status is the script status. This one loops: without -e a failed
+            # binding is swallowed, the loop carries on, `bound` still
+            # increments (it would be counting attempts, not successes), and the
+            # step exits green having bound only some of the prices. The deploy
+            # then runs with a partial allowlist -- Starter checkout works,
+            # Professional answers 500 -- and the "nothing configured" warning
+            # below is suppressed because bound > 0. `pipefail` is what makes
+            # the `printf | wrangler` pipeline report wrangler failing rather
+            # than printf succeeding.
+            set -euo pipefail
+            bound=0
+            for key in STRIPE_STARTER_MONTHLY_PRICE_ID STRIPE_STARTER_ANNUAL_PRICE_ID \
+                       STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID; do
+              value="${!key:-}"
+              if [ -z "${value}" ]; then
+                echo "${key} is not set in Doppler; leaving the Worker binding untouched."
+                continue
+              fi
+              if [[ "${value}" != price_* ]]; then
+                echo "::error::${key} must be a Stripe price ID (price_...), got a value starting ${value:0:5}"
+                exit 1
+              fi
+              printf "%s" "${value}" | npx wrangler secret put "${key}" --env production
+              # Only reached when the binding succeeded, because of -e above.
+              bound=$((bound + 1))
+            done
+            if [ "${bound}" -eq 0 ]; then
+              echo "::warning::No Stripe price IDs are configured. POST /api/subscription/create-checkout-session"
+              echo "::warning::will answer 500 (billing not configured) for every request until at least one is set."
+            fi
+          '
+
       - name: Deploy production worker
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}

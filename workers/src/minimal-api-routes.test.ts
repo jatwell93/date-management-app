@@ -732,10 +732,60 @@ describe('minimal API route table', () => {
 
     it('registers the storage-quota route used by StorageQuotaWarning', () => {
       expect(getMinimalRoutes()).toEqual(
-        expect.arrayContaining([
-          expect.arrayContaining(['GET', /^\/api\/storage-quota\/[^/]+$/]),
-        ]),
+        expect.arrayContaining([expect.arrayContaining(['GET', /^\/api\/storage-quota\/[^/]+$/])]),
       );
+    });
+  });
+
+  describe('billing routes (3.1.p)', () => {
+    const billingRoutes = [
+      'POST /api/subscription/create-checkout-session',
+      'POST /api/subscription/cancel',
+      'POST /api/subscription/create-portal-session',
+    ];
+
+    it.each(billingRoutes)('registers %s', (spec) => {
+      // These were not merely unported: all three have live frontend callers
+      // (TrialUpgradeFlow, SubscriptionSettingsPage, ManageSubscriptionButton)
+      // that reach the Worker through buildApiUrl, so upgrade, cancel and
+      // "manage billing" were answering 404 to real users.
+      const [method, path] = spec.split(' ');
+      expect(getMinimalRoutes()).toEqual(
+        expect.arrayContaining([expect.arrayContaining([method, path])]),
+      );
+    });
+
+    it('does not register convert-trial, which is retired', () => {
+      // No caller. The 2.1 matrix cited TrialUpgradeFlow.tsx:188 as its
+      // consumer, but that line calls create-checkout-session; the only
+      // `convert-trial` match in the frontend is the string "Failed to convert
+      // trial" in an error branch at :203. Retiring removes a
+      // payment-method-taking, Stripe-mutating endpoint nothing exercises.
+      const paths = getMinimalRoutes().map((route) => String(route[1]));
+      expect(paths).not.toContain('/api/subscription/convert-trial');
+    });
+
+    it('refuses an unauthenticated billing request before reaching Stripe', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }) as never,
+      );
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request('https://example.com/api/subscription/cancel', {
+          method: 'POST',
+          body: '{}',
+        }),
+        pathname: '/api/subscription/cancel',
+        method: 'POST',
+        db: createAuthenticatedOrgDatabase({}),
+        env,
+      });
+
+      expect(response?.status).toBe(401);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
     });
   });
 
@@ -821,7 +871,9 @@ describe('minimal API route table', () => {
       // that has never existed on `products` in any migration.
       const body = await response?.text();
       expect(body?.split('\r\n')[0]).toBe('id,sku,name,barcode,costPrice,createdAt,inventoryCount');
-      expect(body?.split('\r\n')[1]).toBe('12,SKU-12,Baked Beans,BAR-12,1.5,2026-01-01T00:00:00.000Z,0');
+      expect(body?.split('\r\n')[1]).toBe(
+        '12,SKU-12,Baked Beans,BAR-12,1.5,2026-01-01T00:00:00.000Z,0',
+      );
     });
 
     it('serves CSV for an Accept: text/csv request', async () => {
@@ -895,9 +947,7 @@ describe('minimal API route table', () => {
       // following docs/tier-downgrade-guide.md. Nothing else would notice this
       // route disappearing (2.5 Finding 26).
       expect(getMinimalRoutes()).toEqual(
-        expect.arrayContaining([
-          expect.arrayContaining(['GET', '/api/products/export-excess']),
-        ]),
+        expect.arrayContaining([expect.arrayContaining(['GET', '/api/products/export-excess'])]),
       );
     });
   });
@@ -989,9 +1039,7 @@ describe('minimal API route table', () => {
 
     it('registers the delete route documented in the tier-downgrade guide', () => {
       expect(getMinimalRoutes()).toEqual(
-        expect.arrayContaining([
-          expect.arrayContaining(['DELETE', /^\/api\/products\/[^/]+$/]),
-        ]),
+        expect.arrayContaining([expect.arrayContaining(['DELETE', /^\/api\/products\/[^/]+$/])]),
       );
     });
   });

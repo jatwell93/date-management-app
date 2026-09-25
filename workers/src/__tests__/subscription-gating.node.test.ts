@@ -38,8 +38,8 @@ afterEach(async () => {
 const env = { SUBSCRIPTION_GATE_ENFORCE: 'true' } as unknown as Env;
 const measureOnlyEnv = {} as unknown as Env;
 
-function request(method: string): Request {
-  return new Request('https://api.test/api/products', { method });
+function request(method: string, pathname = '/api/products'): Request {
+  return new Request(`https://api.test${pathname}`, { method });
 }
 
 function daysFromNow(offset: number): Date {
@@ -87,10 +87,15 @@ async function seedSubscription(seed: SubscriptionSeed): Promise<void> {
 async function authenticate(
   method: string,
   withEnv: Env = env,
+  pathname?: string,
 ): Promise<Response | { organizationId: string }> {
-  return (await resolveAuthenticatedUser(request(method), harness.db, CLERK_USER, withEnv, '')) as
-    | Response
-    | { organizationId: string };
+  return (await resolveAuthenticatedUser(
+    request(method, pathname),
+    harness.db,
+    CLERK_USER,
+    withEnv,
+    '',
+  )) as Response | { organizationId: string };
 }
 
 async function bodyOf(response: Response): Promise<Record<string, unknown>> {
@@ -338,5 +343,61 @@ describe('organization entitlement gate (real SQL)', () => {
     expect(await authenticate('POST')).toMatchObject({ organizationId: ORG });
     expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('professional');
     expect(await getOrganizationLaunchTier('org_other', harness.db)).toBe('free');
+  });
+
+  describe('billing remediation routes are exempt (3.1.p)', () => {
+    // **The deadlock this prevents.** The gate refuses POSTs from a lapsed
+    // organization so it cannot create new records. Applied to the billing
+    // routes it would also refuse the requests a customer makes to STOP being
+    // lapsed -- opening checkout, or opening the portal to replace an expired
+    // card -- locking them out of paying, by the control whose purpose is to
+    // make them pay.
+    //
+    // Latent today (the flag is "false" everywhere), which is exactly why these
+    // tests matter: they are the thing standing between the flag flip and a
+    // silent lockout of the paying customers. Found in review of PR #534.
+    const REMEDIATION_PATHS = [
+      '/api/subscription/create-checkout-session',
+      '/api/subscription/create-portal-session',
+      '/api/subscription/cancel',
+    ];
+
+    beforeEach(async () => {
+      await seedOrganization();
+      await seedSubscription({
+        status: 'trialing',
+        tierLevel: 'professional',
+        trialEndDate: daysFromNow(-1),
+      });
+    });
+
+    it.each(REMEDIATION_PATHS)('allows POST %s for a lapsed organization', async (pathname) => {
+      // Enforcement ON, subscription lapsed: still allowed through.
+      expect(await authenticate('POST', env, pathname)).toMatchObject({ organizationId: ORG });
+    });
+
+    it('still refuses an ordinary POST for the same organization', async () => {
+      // The other half. Without this the exemption could be a gate that stopped
+      // working altogether and every test above would still pass.
+      const response = await authenticate('POST', env, '/api/products');
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(403);
+    });
+
+    it('also exempts a creation-locked organization from the billing routes', async () => {
+      // `is_creation_locked` is the other arm of the same refusal, and it has
+      // the same remedy: upgrade. Locking a customer out of checkout because
+      // they are over their tier limits is the deadlock in its purest form.
+      await harness.pg.query(`UPDATE organizations SET is_creation_locked = TRUE WHERE id = $1`, [
+        ORG,
+      ]);
+
+      expect(
+        await authenticate('POST', env, '/api/subscription/create-checkout-session'),
+      ).toMatchObject({ organizationId: ORG });
+      expect((await authenticate('POST', env, '/api/products')) as Response).toBeInstanceOf(
+        Response,
+      );
+    });
   });
 });
