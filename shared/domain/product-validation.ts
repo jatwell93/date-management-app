@@ -154,6 +154,27 @@ function validateName(value: unknown, strict: boolean): string {
 }
 
 /**
+ * "What number is this?", separated from "is that number allowed?".
+ *
+ * Express's schema expressed the same split as two zod branches -- a numeric
+ * one and a string one carrying `.transform(parseFloat)` -- and keeping them
+ * apart here means the range rules below are stated once rather than once per
+ * input type.
+ */
+function coerceCostPrice(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    throw new ProductValidationError('Cost price must be a number');
+  }
+  if (!DECIMAL_STRING.test(value)) {
+    throw new ProductValidationError('Cost price must be a valid number');
+  }
+  return parseFloat(value);
+}
+
+/**
  * The control issue #530 names.
  *
  * A negative cost price is not merely bad data: `cost_price` is summed as a
@@ -166,18 +187,7 @@ function validateName(value: unknown, strict: boolean): string {
  * number.
  */
 export function validateCostPrice(value: unknown): number {
-  let coerced: number;
-
-  if (typeof value === 'string') {
-    if (!DECIMAL_STRING.test(value)) {
-      throw new ProductValidationError('Cost price must be a valid number');
-    }
-    coerced = parseFloat(value);
-  } else if (typeof value === 'number') {
-    coerced = value;
-  } else {
-    throw new ProductValidationError('Cost price must be a number');
-  }
+  const coerced = coerceCostPrice(value);
 
   // Rejects NaN and both infinities. `NaN < 0` and `NaN > MAX` are both false,
   // so the two range checks below would each pass it through -- a hole worth

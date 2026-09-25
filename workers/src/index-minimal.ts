@@ -107,6 +107,7 @@ import {
   ProductValidationError,
   validateProductWrite,
   type ProductWriteInput,
+  type ValidatedProductWrite,
 } from '../../shared/domain/product-validation';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
@@ -2868,6 +2869,35 @@ async function handleGetProductBySku(
 }
 
 /**
+ * A non-empty string, or null. Both product write paths need "present and
+ * usable" for the two required fields, and `!value || typeof value !== 'string'`
+ * spelled inline twice per handler is the compound conditional CodeScene flags.
+ */
+function requiredString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Validate a product write body, returning either the validated fields or the
+ * 400 to send back.
+ *
+ * Shaped like `authenticateApiRequest`: a `Response` means stop and return it.
+ * Both product write paths need the identical try/catch around
+ * `validateProductWrite`, and a validation rule that is enforced on create but
+ * not on update is the kind of gap this whole change exists to close.
+ */
+function validateProductBody(body: unknown, env: Env): ValidatedProductWrite | Response {
+  try {
+    return validateProductWrite(body as ProductWriteInput);
+  } catch (error) {
+    if (error instanceof ProductValidationError) {
+      return errorResponse(error.message, 400, env);
+    }
+    throw error;
+  }
+}
+
+/**
  * POST /api/products
  */
 async function handleCreateProduct(request: Request, db: Database, env: Env): Promise<Response> {
@@ -2878,17 +2908,19 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
   // string form, and typing it as a number hid that from the compiler while the
   // code below silently substituted zero for it.
   const body = (await request.json()) as {
-    barcode?: string;
-    sku?: string | null;
-    name?: string;
+    barcode?: unknown;
+    sku?: unknown;
+    name?: unknown;
     costPrice?: unknown;
     notes?: unknown;
   };
 
-  if (!body.barcode || typeof body.barcode !== 'string') {
+  const barcode = requiredString(body.barcode);
+  if (barcode === null) {
     return errorResponse('Missing required field: barcode', 400, env);
   }
-  if (!body.name || typeof body.name !== 'string') {
+  const name = requiredString(body.name);
+  if (name === null) {
     return errorResponse('Missing required field: name', 400, env);
   }
 
@@ -2896,24 +2928,17 @@ async function handleCreateProduct(request: Request, db: Database, env: Env): Pr
   // to the update; the cutover kept neither. Issue #530 is the half that
   // matters most -- `cost_price` is summed as a signed value by the loss
   // reports, so a negative one quietly offsets real losses in the same total.
-  let validated;
-  try {
-    validated = validateProductWrite(body as ProductWriteInput);
-  } catch (error) {
-    if (error instanceof ProductValidationError) {
-      return errorResponse(error.message, 400, env);
-    }
-    throw error;
-  }
+  const validated = validateProductBody(body, env);
+  if (validated instanceof Response) return validated;
 
   try {
     const tier = await getOrganizationLaunchTier(auth.organizationId, db);
     const maxSkus = resolveMaxSkus(tier, env);
     const enforced = isUsageEnforcementEnabled(env);
     const input = {
-      barcode: body.barcode,
+      barcode,
       sku: validated.sku ?? null,
-      name: body.name,
+      name,
       // Previously `typeof body.costPrice === 'number' ? body.costPrice : 0`,
       // which turned a string `'12.50'` into a product costing zero -- no
       // error, and a wrong number in every report downstream. The validator
@@ -3153,15 +3178,8 @@ async function handleUpdateProduct(
     return errorResponse('Request body must be an object', 400, env);
   }
 
-  let validated;
-  try {
-    validated = validateProductWrite(body as ProductWriteInput);
-  } catch (error) {
-    if (error instanceof ProductValidationError) {
-      return errorResponse(error.message, 400, env);
-    }
-    throw error;
-  }
+  const validated = validateProductBody(body, env);
+  if (validated instanceof Response) return validated;
 
   // `sku: null` means "derive from barcode" on create; on update there is no
   // barcode to derive from and the column cannot be cleared (see
