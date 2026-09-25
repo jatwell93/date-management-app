@@ -210,10 +210,14 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   // The JSON body cap is enforced here rather than inherited from the entry
   // point. This route is dispatched by `resolveBootstrapApiRoute`
   // (index-minimal.ts) *above* that check -- bootstrap must precede the legacy
-  // `JWT_SECRET` check, which is pinned by a test -- so without this it is the
-  // one route that buffers an unbounded body into the isolate
-  // (`request.text()` below). Found in review of PR #531; the cap's comment
-  // had claimed a guarantee this route did not honour.
+  // `JWT_SECRET` check, which is pinned by a test -- so without this it would
+  // buffer an unbounded body into the isolate (`request.text()` below).
+  //
+  // It is not alone in that: `{/upload,/api/upload}/initiate` and `.../complete`
+  // also dispatch above the entry-point check and buffer `request.json()`. They
+  // are capped in `upload/upload-router.ts`. See `utils/body-limit.ts` for the
+  // full per-route map -- the cap is a per-route guarantee, not a global one,
+  // and successive revisions of that comment claimed otherwise twice.
   //
   // Placed before authentication deliberately. Clerk verification is a network
   // round trip, and there is no reason to spend one on a request already known

@@ -85,17 +85,31 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *
  *   * JSON API routes, from the entry point, after the upload router declines.
  *   * `POST /api/organization/bootstrap`, from inside
- *     `clerk/bootstrap-handler.ts` -- that route is dispatched above the
- *     entry-point check (it must precede the legacy `JWT_SECRET` check) and
- *     buffers with `request.text()`, so it enforces the cap itself.
+ *     `clerk/bootstrap-handler.ts` -- dispatched above the entry-point check
+ *     (it must precede the legacy `JWT_SECRET` check) and buffers with
+ *     `request.text()`, so it enforces the cap itself.
+ *   * `POST {/upload,/api/upload}/initiate` and `.../complete`, from
+ *     `upload/upload-router.ts` -- also dispatched above the entry-point check,
+ *     and they buffer `request.json()`. Note `handleUploadInitiate`'s
+ *     `fileSize` comparison validates a *declared field*, not the request body,
+ *     so it was never a body-size control.
  *
- * Not applied to uploads, which keep their own tier-aware cap
- * (`STANDARD_MAX_FILE_SIZE` / `getTierFileSizeLimit`) -- larger and correct for
- * their purpose -- nor to the signed webhook paths, because refusing a Stripe
- * or Clerk delivery unread turns a provider retry loop into a silent data gap.
+ * **Deliberately not applied**, with the reason for each:
+ *   * `POST .../direct/:key` and `PUT .../presigned/:key` carry the uploaded
+ *     file itself and are governed by the tier-aware
+ *     `STANDARD_MAX_FILE_SIZE` / `getTierFileSizeLimit` -- larger, and correct
+ *     for their purpose. `handleUploadDirect` does buffer `request.formData()`
+ *     before its size check, so a pre-read cap would still be an improvement
+ *     there; it needs the tier resolved first, so it rides with **#532**.
+ *   * The signed webhook paths, because refusing a Stripe or Clerk delivery
+ *     unread turns a provider retry loop into a silent data gap.
  *
  * **Any new handler that buffers a body must either sit behind the entry-point
- * check or call this itself.** The guarantee is per-route, not global.
+ * check or call this itself.** The guarantee is per-route, not global. Two
+ * earlier revisions of this comment asserted a broader guarantee than the code
+ * delivered -- first "before any handler buffers it", then an exclusion list
+ * that implied uploads were covered when only their file bytes were. Both were
+ * caught in review. Keep this list literal.
  */
 export function enforceJsonBodyLimit(
   request: Request,

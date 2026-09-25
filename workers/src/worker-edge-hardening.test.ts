@@ -42,8 +42,27 @@ const testEnv = () =>
     NEON_CONNECTION_STRING: 'postgresql://user:pw@example.com/app',
   }) as unknown as Env;
 
+/**
+ * Every request gets a unique client IP.
+ *
+ * The Worker's rate limiter keys on `CF-Connecting-IP` and keeps its counters
+ * in a module-level store that persists for the whole test file, so without
+ * this the tests share one bucket: adding a few cases to one `it` starts
+ * returning 429 from unrelated `it`s further down, and the failure looks like a
+ * bug in whatever was added last. Distinct IPs make each request independent of
+ * how many ran before it.
+ */
+let clientIpCounter = 0;
+const withUniqueClientIp = (request: Request): Request => {
+  clientIpCounter += 1;
+  const headers = new Headers(request.headers);
+  headers.set('CF-Connecting-IP', `203.0.113.${clientIpCounter % 254}`);
+  headers.set('X-Test-Seq', String(clientIpCounter));
+  return new Request(request, { headers });
+};
+
 const fetchWorker = (request: Request, overrides: Partial<Env> = {}) =>
-  worker.fetch(request, { ...testEnv(), ...overrides } as Env, ctx);
+  worker.fetch(withUniqueClientIp(request), { ...testEnv(), ...overrides } as Env, ctx);
 
 describe('security headers reach every branch of the entry point', () => {
   const expectHardened = (response: Response) => {
@@ -114,15 +133,47 @@ describe('JSON body cap, through the entry point', () => {
     });
   });
 
-  it('does NOT refuse an oversized body on an upload route', async () => {
-    // The regression this pins: uploads are served at BOTH `/upload/...` and
-    // `/api/upload/...`, and a cap placed before the upload router (or one that
-    // restated its path logic) would 413 a legitimate 25 MB upload. The cap
-    // runs only after the upload router has declined the request, so neither
-    // prefix can reach it.
-    for (const path of ['/api/upload/initiate', '/upload/initiate']) {
+  it('refuses an oversized JSON body on the upload initiate/complete routes', async () => {
+    // These take a small JSON body (filename/fileSize/contentType; an upload
+    // id) and buffer it with `request.json()`, but they dispatch from the
+    // upload router which runs above the entry-point cap -- so they were
+    // entirely uncapped. `handleUploadInitiate`'s `fileSize` check validates a
+    // declared field, not the body, so it was never a body-size control.
+    // Found in review of PR #531, where a comment had wrongly implied uploads
+    // were covered by their tier-aware cap.
+    for (const path of [
+      '/api/upload/initiate',
+      '/upload/initiate',
+      '/api/upload/complete',
+      '/upload/complete',
+    ]) {
       const response = await fetchWorker(bigJsonRequest(path));
-      expect(response.status).not.toBe(413);
+      expect(response.status, path).toBe(413);
+    }
+  });
+
+  it('does NOT refuse an oversized body on a file-carrying upload route', async () => {
+    // The regression this pins: a 1 MiB JSON cap must never reach the routes
+    // whose entire purpose is carrying a file. Those keep their own tier-aware
+    // cap (STANDARD_MAX_FILE_SIZE / getTierFileSizeLimit), which is larger and
+    // correct. Both prefixes, because uploads serve at `/upload/...` and
+    // `/api/upload/...` alike and an earlier draft of the cap knew only one.
+    const fileCarrying = [
+      { path: '/api/upload/direct/some-key', method: 'POST' },
+      { path: '/upload/direct/some-key', method: 'POST' },
+      { path: '/api/upload/presigned/some-key', method: 'PUT' },
+      { path: '/upload/presigned/some-key', method: 'PUT' },
+    ];
+
+    for (const { path, method } of fileCarrying) {
+      const response = await fetchWorker(
+        new Request(`https://api.example.com${path}`, {
+          method,
+          headers: { 'Content-Length': String(5 * 1024 * 1024) },
+          body: 'x',
+        }),
+      );
+      expect(response.status, path).not.toBe(413);
     }
   });
 
