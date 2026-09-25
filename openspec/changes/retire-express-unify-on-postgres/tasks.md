@@ -2812,9 +2812,7 @@ equivalent, a relocated home, or an explicit retirement decision.
             served only `/current` and `/trial-status`. So upgrade, cancel and "manage billing"
             were answering 404 to real users. The matrix framed this as migration debt because it
             asks "does a Worker route exist", never "does the frontend depend on one" — worth
-            remembering for the seven routes still outstanding. (Stated from code: production
-            probes are blocked from this session, so it was not confirmed against the live system.
-            One `curl -X POST .../api/subscription/cancel` settles it: 404 confirms, 401 refutes.)
+            remembering for the seven routes still outstanding. **Confirmed by Josh against production: `POST /api/subscription/cancel` returns 404.**
             <br>**`POST /api/subscription/convert-trial` is retired, and the matrix row that said
             otherwise was wrong.** It cited `TrialUpgradeFlow.tsx:188` as the consumer; that line
             calls `create-checkout-session`. The only `convert-trial` match anywhere in the

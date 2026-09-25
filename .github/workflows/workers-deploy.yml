@@ -444,6 +444,16 @@ jobs:
               echo "::warning::Billing Portal Sessions and Subscriptions only. A standard key lets a"
               echo "::warning::compromised Worker issue refunds and read full charge history."
             fi
+            # Mode is gated earlier by scripts/validate-stripe-deployment-config.js
+            # ("Validate Stripe test launch prices"), which fails the deploy on a
+            # live key. Restated as a warning here only because that step and this
+            # one read the same variable and previously disagreed: this check
+            # accepted rk_, that one required the literal sk_test_ prefix, so a
+            # restricted key passed here and failed there.
+            if [[ "${STRIPE_SECRET_KEY}" != *_test_* ]]; then
+              echo "::warning::STRIPE_SECRET_KEY is not a test-mode key. Production is expected to"
+              echo "::warning::stay in Stripe test mode until the launch gate moves."
+            fi
             printf "%s" "${STRIPE_SECRET_KEY}" | npx wrangler secret put STRIPE_SECRET_KEY --env production
           '
 

@@ -37,14 +37,44 @@ function findDuplicatePriceValue(values) {
 }
 
 // LAUNCH GATE: when live-mode Stripe is approved, this check must change to
-// require sk_live_ (see the launch gate in the add-queued-catalogue-imports
-// OpenSpec change). Until then prd intentionally stays on sk_test_.
+// require a *_live_ key (see the launch gate in the add-queued-catalogue-imports
+// OpenSpec change). Until then prd intentionally stays in test mode.
+//
+// **This gates the MODE, not the key type.** It previously required the literal
+// prefix `sk_test_`, which also -- unintentionally -- forbade a *restricted*
+// test key. Stripe writes those `rk_test_...`, and a restricted key is strictly
+// safer: task 3.1.p gave the Worker Stripe write access for checkout, cancel and
+// billing-portal, and a standard key would additionally let a compromised Worker
+// issue refunds, read full charge history and touch payouts. Rejecting the safer
+// credential was an accident of prefix-matching, not a decision.
+//
+// Both forms are accepted; both live forms are refused until the launch gate
+// moves.
+const TEST_MODE_KEY_PREFIXES = ['sk_test_', 'rk_test_'];
+
 function validateSecretKeyMode(config) {
   const secretKey = config.STRIPE_SECRET_KEY?.trim() || '';
-  if (!secretKey.startsWith('sk_test_')) {
-    return 'STRIPE_SECRET_KEY must use sk_test_ during the pre-launch test-mode rollout';
+
+  if (!secretKey) {
+    return 'STRIPE_SECRET_KEY is required';
   }
-  return null;
+
+  if (TEST_MODE_KEY_PREFIXES.some((prefix) => secretKey.startsWith(prefix))) {
+    return null;
+  }
+
+  // Name the live case separately: "must use a test-mode key" is confusing
+  // feedback when the operator has deliberately pasted a live key, and this is
+  // the moment to point at the launch gate rather than the prefix.
+  if (secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_')) {
+    return (
+      'STRIPE_SECRET_KEY is a LIVE key. Production intentionally stays in Stripe test mode ' +
+      'until the launch gate moves; see the launch gate in the add-queued-catalogue-imports ' +
+      'OpenSpec change.'
+    );
+  }
+
+  return `STRIPE_SECRET_KEY must be a test-mode Stripe key (${TEST_MODE_KEY_PREFIXES.join(' or ')})`;
 }
 
 function validateStripeDeploymentConfig(config) {
