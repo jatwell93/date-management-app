@@ -126,6 +126,17 @@ describe('JSON body cap, through the entry point', () => {
     }
   });
 
+  it('refuses an oversized body on the bootstrap route, which dispatches above the cap', async () => {
+    // `resolveBootstrapApiRoute` runs before the entry-point cap (bootstrap
+    // must precede the legacy JWT_SECRET check), and the handler buffers with
+    // `request.text()`. Without its own call to `enforceJsonBodyLimit` this is
+    // the one authenticated route that buffers an unbounded body. Found in
+    // review of PR #531.
+    const response = await fetchWorker(bigJsonRequest('/api/organization/bootstrap'));
+
+    expect(response.status).toBe(413);
+  });
+
   it('does not refuse a webhook delivery', async () => {
     // Refusing a Stripe or Clerk delivery unread turns a provider retry loop
     // into a silent data gap. Webhooks dispatch above the API branch entirely.
@@ -180,6 +191,26 @@ describe('configuration validation, through /health', () => {
     expect(body.checks.config.status).toBe('pass');
     expect(body.checks.config.missingFeatures).toContain('RESEND_API_KEY');
     expect(body.status).not.toBe('unhealthy');
+  });
+
+  it('runs the deep database check for a Hyperdrive-only deployment', async () => {
+    // The config check declares Hyperdrive a valid database source, so
+    // `/health?deep=true` must actually probe it. It did not: the deep check
+    // resolved `NEON_CONNECTION_STRING || DATABASE_URL` only, so a
+    // Hyperdrive-only deployment skipped `checks.database` entirely and
+    // reported `healthy` without ever touching the database. Both paths now go
+    // through `getConnectionString`. Found in review of PR #531.
+    const response = await fetchWorker(new Request('https://api.example.com/health?deep=true'), {
+      NEON_CONNECTION_STRING: '',
+      DATABASE_URL: '',
+      HYPERDRIVE: { connectionString: 'postgresql://user:pw@hyperdrive.example.com/app' },
+    } as unknown as Partial<Env>);
+    const body = (await response.json()) as any;
+
+    // Config is satisfied by Hyperdrive...
+    expect(body.checks.config.status).toBe('pass');
+    // ...and the deep check actually ran rather than being silently skipped.
+    expect(body.checks.database).toBeDefined();
   });
 
   it('does not let an unrelated degradation mask a required-config failure', async () => {

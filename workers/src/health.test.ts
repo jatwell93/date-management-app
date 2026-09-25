@@ -243,12 +243,32 @@ describe('healthCheck', () => {
     expect(result.checks.database?.error).toContain('[redacted]');
   });
 
-  it('omits the database check when no connection string is configured', async () => {
+  it('omits the database check when no connection string is configured by any route', async () => {
+    // HYPERDRIVE has to be cleared too. This test previously cleared only
+    // NEON_CONNECTION_STRING and DATABASE_URL, which passed because the deep
+    // check resolved just those two -- while `createEnv` supplies a Hyperdrive
+    // binding throughout. That was the bug: the config check counts Hyperdrive
+    // as a valid database source, so a Hyperdrive-only deployment reported
+    // `healthy` from `?deep=true` without the database ever being probed. Both
+    // paths now go through `getConnectionString`.
+    const result = await healthCheck(
+      createEnv({ NEON_CONNECTION_STRING: '', DATABASE_URL: undefined, HYPERDRIVE: undefined }),
+      true,
+    );
+    expect(result.checks.database).toBeUndefined();
+  });
+
+  it('probes the database through a Hyperdrive-only connection string', async () => {
+    const sqlMock = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
+    vi.mocked(neon).mockReturnValueOnce(sqlMock as never);
+
     const result = await healthCheck(
       createEnv({ NEON_CONNECTION_STRING: '', DATABASE_URL: undefined }),
       true,
     );
-    expect(result.checks.database).toBeUndefined();
+
+    expect(result.checks.database).toBeDefined();
+    expect(neon).toHaveBeenCalledWith('postgres://example');
   });
 });
 

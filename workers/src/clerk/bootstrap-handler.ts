@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
 import { getConnectionString } from '../utils/db-connection';
+import { enforceJsonBodyLimit } from '../utils/body-limit';
 import {
   deriveUsername,
   ensureTrialSubscription,
@@ -13,10 +14,7 @@ import {
   type SqlClient,
 } from './clerk-persistence';
 import { getClientIp } from '../utils/minimal-rate-limit';
-import {
-  ORG_AUDIT_EVENT_TYPES,
-  ORG_AUDIT_TRIGGERS,
-} from '../../../shared/domain/org-audit';
+import { ORG_AUDIT_EVENT_TYPES, ORG_AUDIT_TRIGGERS } from '../../../shared/domain/org-audit';
 import { isPlatformAdminUser } from '../../../shared/domain/platform-catalogue';
 import { normalizeRole, type RoleValue } from '../constants/roles';
 
@@ -206,11 +204,27 @@ async function getClerkUserProfile(
   };
 }
 
-export async function handleOrganizationBootstrap(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+export async function handleOrganizationBootstrap(request: Request, env: Env): Promise<Response> {
   const requestOrigin = request.headers.get('Origin') || '';
+
+  // The JSON body cap is enforced here rather than inherited from the entry
+  // point. This route is dispatched by `resolveBootstrapApiRoute`
+  // (index-minimal.ts) *above* that check -- bootstrap must precede the legacy
+  // `JWT_SECRET` check, which is pinned by a test -- so without this it is the
+  // one route that buffers an unbounded body into the isolate
+  // (`request.text()` below). Found in review of PR #531; the cap's comment
+  // had claimed a guarantee this route did not honour.
+  //
+  // Placed before authentication deliberately. Clerk verification is a network
+  // round trip, and there is no reason to spend one on a request already known
+  // to be refused; a 413 for an unauthenticated caller discloses nothing, since
+  // the size was in their own header. Nothing below reads the body before this
+  // point, so the ordering is safe.
+  const oversizedBody = enforceJsonBodyLimit(request, env, requestOrigin);
+  if (oversizedBody) {
+    return oversizedBody;
+  }
+
   const authResult = await authenticateClerkRequest(request, env, requestOrigin);
 
   if (authResult instanceof Response) {
@@ -294,10 +308,10 @@ export async function handleOrganizationBootstrap(
   const isNewOrg = existingOrg.length === 0;
   const organizationId = isNewOrg
     ? await findOrCreateOrganization(
-      sql,
-      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-      email,
-    )
+        sql,
+        { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
+        email,
+      )
     : String(existingOrg[0].id);
 
   // **This check-then-act race is accepted, not overlooked** (#474, task 3.1.h).

@@ -525,7 +525,15 @@ const sentryWrappedHandlers = Sentry.withSentry(
             return finalizeApiResponse(uploadResponse);
           }
 
-          // Refuse an oversized JSON body before any handler buffers it.
+          // Refuse an oversized JSON body before the routes below buffer it.
+          //
+          // **Not a global guarantee**, and an earlier version of this comment
+          // wrongly claimed one ("before any handler buffers it"). Routes
+          // dispatched above this line are not covered:
+          // `POST /api/organization/bootstrap` goes through
+          // `resolveBootstrapApiRoute` and buffers with `request.text()`, so it
+          // calls `enforceJsonBodyLimit` itself; the signed webhook paths are
+          // excluded on purpose (see below).
           //
           // **Placed here, after the upload router has declined the request,
           // rather than up beside the rate-limit check.** Uploads are served at
@@ -625,7 +633,7 @@ const sentryWrappedHandlers = Sentry.withSentry(
 export default {
   ...sentryWrappedHandlers,
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    return applySecurityHeaders(await sentryWrappedHandlers.fetch(request, env, ctx), request, env);
+    return applySecurityHeaders(await sentryWrappedHandlers.fetch(request, env, ctx), request);
   },
 } satisfies ExportedHandler<Env>;
 

@@ -35,7 +35,7 @@ export const DEFAULT_MAX_JSON_BODY_BYTES = 1024 * 1024;
 const BODYLESS_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export function resolveMaxJsonBodyBytes(env: Env): number {
-  const raw = (env as { MAX_JSON_BODY_BYTES?: string }).MAX_JSON_BODY_BYTES;
+  const raw = env.MAX_JSON_BODY_BYTES;
   if (!raw) {
     return DEFAULT_MAX_JSON_BODY_BYTES;
   }
@@ -51,22 +51,51 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *
  * Returns a 413 `Response` to return immediately, or `null` to proceed.
  *
- * **This checks `Content-Length` only, and that is a deliberate limitation
- * worth stating rather than hiding.** A chunked request sends no
- * `Content-Length`, so a client that wants past this can omit it. Two reasons
- * that is still the right trade here: Cloudflare terminates the connection and
- * enforces its own hard body ceiling well below the isolate's memory limit, so
- * the unbounded case is already bounded by the platform; and the alternative --
- * reading the body through a counting stream -- means this Worker buffers and
- * inspects every request body itself, which is the cost the cap exists to
- * avoid. The header check stops the ordinary large-payload case, including
- * every accidental one, at zero cost.
+ * **This checks `Content-Length` only, which leaves a real and reachable gap.**
+ * A chunked request sends no `Content-Length`, so `curl -H 'Transfer-Encoding:
+ * chunked'` walks straight past this check.
  *
- * Applied to JSON API routes only. Uploads keep their own tier-aware cap
- * (`STANDARD_MAX_FILE_SIZE` / `getTierFileSizeLimit`), which is both larger and
- * correct for their purpose, and the signed webhook paths are excluded because
- * refusing a Stripe or Clerk delivery unread turns a provider retry loop into a
- * silent data gap.
+ * An earlier version of this comment justified that by claiming Cloudflare's
+ * own body ceiling sits "well below the isolate's memory limit". **That is
+ * false**, and the correction matters because it was the only rationale given
+ * for the gap: the request-body ceiling is 100 MB on Free and Pro (200 MB
+ * Business, 500 MB Enterprise) against a 128 MB isolate, and `request.json()`
+ * holds the raw string and the parsed structure at the same time -- roughly
+ * 2-3x the body. A chunked body comfortably inside Cloudflare's ceiling can
+ * still exhaust the isolate (error 1102) and take out the other requests
+ * sharing it, which is precisely the tenant-fairness failure this cap exists to
+ * prevent. The same comment also mischaracterized the alternative: a
+ * pass-through counting `TransformStream` streams with backpressure and does
+ * not buffer the body, so "the cost the cap exists to avoid" does not apply to
+ * it.
+ *
+ * The gap is left open **in this change only**, deliberately and on narrower
+ * grounds: closing it means piping `request.body` through a counter and
+ * rebuilding the `Request`, and an over-limit stream then surfaces as a stream
+ * error inside whichever handler is reading it -- a 500 from the outer catch
+ * rather than this clean 413 -- which changes the failure mode of every POST on
+ * the Worker. That is its own change with its own tests, tracked as **#532**.
+ * The header check still removes every accidental large payload and every
+ * non-adversarial client at zero cost, which is strictly better than the
+ * nothing that was here before.
+ *
+ * **Where this is actually applied**, stated precisely because an earlier
+ * version of the call-site comment claimed a blanket "before any handler
+ * buffers it" that was not true:
+ *
+ *   * JSON API routes, from the entry point, after the upload router declines.
+ *   * `POST /api/organization/bootstrap`, from inside
+ *     `clerk/bootstrap-handler.ts` -- that route is dispatched above the
+ *     entry-point check (it must precede the legacy `JWT_SECRET` check) and
+ *     buffers with `request.text()`, so it enforces the cap itself.
+ *
+ * Not applied to uploads, which keep their own tier-aware cap
+ * (`STANDARD_MAX_FILE_SIZE` / `getTierFileSizeLimit`) -- larger and correct for
+ * their purpose -- nor to the signed webhook paths, because refusing a Stripe
+ * or Clerk delivery unread turns a provider retry loop into a silent data gap.
+ *
+ * **Any new handler that buffers a body must either sit behind the entry-point
+ * check or call this itself.** The guarantee is per-route, not global.
  */
 export function enforceJsonBodyLimit(
   request: Request,

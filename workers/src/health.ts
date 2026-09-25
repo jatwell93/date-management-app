@@ -10,6 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import { Env } from './types/env';
 import { validateWorkerConfig } from './utils/env-validation';
+import { getConnectionString } from './utils/db-connection';
 
 export interface HealthCheckResult {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -122,7 +123,16 @@ export async function healthCheck(
   }
 
   // Optional: Check database connectivity
-  const connectionString = env.NEON_CONNECTION_STRING || env.DATABASE_URL;
+  //
+  // Resolved through the shared `getConnectionString` rather than
+  // `NEON_CONNECTION_STRING || DATABASE_URL`, so this agrees with the config
+  // check above and with `createWorkersDatabase`. It did not: the config check
+  // (correctly) accepts a Hyperdrive-only deployment as valid, while this
+  // resolved only two of the three sources -- so such a deployment skipped
+  // `checks.database` entirely and reported `healthy` from `?deep=true`
+  // without ever touching the database. A false "healthy" is the exact failure
+  // the capability check was written to avoid.
+  const connectionString = getConnectionString(env);
   if (includeConnectivity && connectionString) {
     const dbStart = Date.now();
     try {

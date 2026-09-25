@@ -12,46 +12,76 @@
 # nosniff. Porting helmet's directives onto the Worker would not have restored
 # it: a page policy on a JSON API governs nothing.
 #
-# CRA copies `public/*` into `build/`, and `.github/workflows/pages-deploy.yml`
-# deploys `frontend/build`, so this file ships with the app.
+# Vite copies `publicDir` (this directory) into the build output, and
+# `.github/workflows/pages-deploy.yml:122` deploys `frontend/build`, so this
+# file ships with the app. Verified by building: `frontend/build/_headers`.
 
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()
   X-Frame-Options: DENY
+
+# `camera=()` is deliberately ABSENT from Permissions-Policy.
+#
+# An earlier revision of this file included it, copied from the Worker's policy
+# where it is correct (a JSON API needs no camera). On the frontend it is a
+# critical bug: this is a barcode-scanning app. `/scan` is the post-login
+# landing route (frontend/src/App.tsx:340, :419) and `CameraScanner.tsx:85-88`
+# drives Quagga with `inputStream: { type: 'LiveStream', constraints:
+# { facingMode: 'environment' } }`, i.e. getUserMedia. `camera=()` on the
+# top-level document makes getUserMedia reject with NotAllowedError *without
+# showing a prompt*, so every user would land in the scanner's error state.
+#
+# Unlike the CSP below, Permissions-Policy is enforced immediately -- it has no
+# Report-Only mode -- so this would have broken the primary flow on deploy with
+# no warning signal first. The other three directives are genuinely unused by
+# the app and stay.
+  Permissions-Policy: microphone=(), geolocation=(), browsing-topics=()
 
 # ---------------------------------------------------------------------------
 # CSP: deliberately Report-Only on this first deploy. Read before flipping.
 # ---------------------------------------------------------------------------
-# Every header above is safe to enforce immediately -- none of them can refuse a
-# request the app depends on. A CSP can, and this one names origins that CANNOT
-# be verified from the repository:
+# Every header above is safe to enforce immediately. A CSP is not, because its
+# `connect-src` must name origins that cannot all be verified from this
+# repository, and a miss does not degrade the app -- it breaks every API call
+# and the whole sign-in flow.
 #
-#   * The API origin is injected at build time from Doppler
-#     (REACT_APP_API_URL, see pages-deploy.yml:85) and differs between the
-#     preview and production configs, so it is not a constant anyone can read
-#     out of the source.
-#   * The Clerk frontend API origin is derived from the publishable key at
-#     runtime and is likewise not in the repo.
+# What IS known and already listed:
+#   * https://api.expirymate.com.au -- the production API origin. Named in
+#     .github/workflows/pages-deploy.yml:213, which fails the build if the
+#     production Doppler config points REACT_APP_API_URL anywhere else.
+#   * https://*.workers.dev -- preview deployments (pages-deploy.yml:93).
+#   * The inline `Array.prototype.at` polyfill at frontend/index.html:5-14 is
+#     allowed by its sha256 hash rather than by 'unsafe-inline'. Verified
+#     against the BUILT file (frontend/build/index.html), not the source: Vite
+#     copies it through byte-for-byte, so the hash is stable. If that polyfill
+#     is ever edited the hash must be recomputed, or the script is blocked on
+#     exactly the old browsers that need it (Safari <= 15.3, Chrome < 92).
 #
-# A `connect-src` that misses either one does not degrade the app, it breaks it
-# completely -- every API call and the whole sign-in flow -- and no test in CI
-# exercises a real browser against real origins, so nothing here would catch it
-# before customers did. Report-Only gets the policy deployed and observable at
-# zero risk.
+# What is NOT known, and is the only reason this is still Report-Only:
+#   * The Clerk frontend origin is derived from the publishable key at runtime.
+#     The `*.clerk.accounts.dev` entry below covers development instances; a
+#     production Clerk instance uses a custom domain (typically
+#     clerk.<your-domain>) that must be added before enforcing.
 #
-# TO ENFORCE (do this once, after checking):
-#   1. Load the deployed app, sign in, and exercise uploads and a report.
-#   2. Open the browser console and collect every
-#      "Report Only" violation -- each names the origin it would have blocked.
+# TO ENFORCE (once, after checking):
+#   1. Load the deployed app, sign in, and exercise the scanner, an upload and
+#      a report.
+#   2. Collect every "Report Only" violation from the browser console -- each
+#      names the origin it would have blocked.
 #   3. Add those origins to the directives below.
 #   4. Rename the header to `Content-Security-Policy` and redeploy.
 #
-# The wildcards below are starting guesses, not verified values. In particular
-# `https://clerk.*` is a placeholder for whatever Clerk domain the instance
-# actually uses; replace it with the real one rather than shipping a wildcard.
+# RECOMMENDED BEFORE STEP 1: add a reporting endpoint, so violations are
+# collected from all real traffic rather than only from whoever runs the
+# checklist by hand -- browsers, devices and the production Clerk domain that a
+# single scripted session will not cover. Sentry accepts CSP reports at
+#   https://<org-ingest-host>/api/<project-id>/security/?sentry_key=<public-key>
+# which is derivable from REACT_APP_SENTRY_FRONTEND_DSN (that secret lives in
+# Doppler, not this repo, which is why the directive is not filled in here).
+# Append `; report-uri <that-url>` to the header below. It only changes where
+# reports are sent, so it carries no risk of refusing a request.
 
 /*
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.workers.dev https://*.clerk.accounts.dev https://*.sentry.io; frame-src 'self' https://*.clerk.accounts.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-knCqSvgDjsOwNgTPb2+ztY1wa+3RkYnY20V/Hlkf9cY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.expirymate.com.au https://*.workers.dev https://*.clerk.accounts.dev https://*.sentry.io; frame-src 'self' https://*.clerk.accounts.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'

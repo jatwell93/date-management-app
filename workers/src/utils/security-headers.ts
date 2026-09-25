@@ -1,5 +1,3 @@
-import type { Env } from '../types/env';
-
 /**
  * Security response headers for the Worker API.
  *
@@ -88,7 +86,7 @@ export function shouldSendHsts(request: Request): boolean {
  * `maybeCompressJsonResponse` produces, which carries `encodeBody: 'manual'`
  * that a naive `new Response(res.body, res)` does not preserve.
  */
-export function applySecurityHeaders(response: Response, request: Request, _env?: Env): Response {
+export function applySecurityHeaders(response: Response, request: Request): Response {
   const headers: Record<string, string> = { ...SECURITY_HEADERS };
   if (shouldSendHsts(request)) {
     headers['Strict-Transport-Security'] = HSTS_HEADER;
