@@ -61,7 +61,9 @@ describe('worker response helpers', () => {
     expect(compressed.headers.get('Content-Encoding')).toBe('gzip');
     expect(compressed.headers.get('Vary')).toBe('accept-encoding');
     const decompressed = await new Response(
-      new Blob([await compressed.arrayBuffer()]).stream().pipeThrough(new DecompressionStream('gzip')),
+      new Blob([await compressed.arrayBuffer()])
+        .stream()
+        .pipeThrough(new DecompressionStream('gzip')),
     ).json();
     expect(decompressed).toMatchObject({ items: expect.any(Array) });
   });

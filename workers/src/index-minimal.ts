@@ -112,12 +112,7 @@ import {
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
 import { isUniqueViolation } from './db-errors';
-import {
-  recordOutcome,
-  sendClaim,
-  sendFollowUp,
-  uploadClaimPhoto,
-} from './credit-claim-service';
+import { recordOutcome, sendClaim, sendFollowUp, uploadClaimPhoto } from './credit-claim-service';
 
 /** Outcomes the outcome route accepts, matching the backend's `claimOutcomeSchema`. */
 const CLAIM_OUTCOMES: readonly ClaimOutcome[] = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED'];
@@ -2651,11 +2646,7 @@ function parseClaimLineInput(raw: unknown): { line: ClaimLineInput } | { error: 
  * claim to another user. Mirrors the Express controller, which passes `req.userId`
  * as a separate argument from the body.
  */
-async function handleBuildCreditClaim(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
+async function handleBuildCreditClaim(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
@@ -2799,11 +2790,7 @@ async function handleRecordCreditClaimOutcome(
   }
   const note = (body?.note as string | null | undefined) ?? null;
   if (note != null && note.length > MAX_CLAIM_NOTE_LENGTH) {
-    return errorResponse(
-      `Note must be at most ${MAX_CLAIM_NOTE_LENGTH} characters`,
-      400,
-      env,
-    );
+    return errorResponse(`Note must be at most ${MAX_CLAIM_NOTE_LENGTH} characters`, 400, env);
   }
 
   const result = await recordOutcome(

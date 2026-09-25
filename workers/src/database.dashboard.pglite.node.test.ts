@@ -145,12 +145,7 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
   });
 
   describe('getStockLossLast30Days', () => {
-    const seedTxn = (opts: {
-      org?: string;
-      action: string;
-      loss: number;
-      txnOffsetDays: number;
-    }) =>
+    const seedTxn = (opts: { org?: string; action: string; loss: number; txnOffsetDays: number }) =>
       sql`INSERT INTO expired_item_transactions
             (organization_id, inventory_item_id, action, financial_loss, transaction_date)
           VALUES (

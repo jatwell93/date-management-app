@@ -193,13 +193,16 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await postClaim({
+      const response = await postClaim(
+        {
           supplierId: 10,
           lines: [{ expiredItemTransactionId: 500 }],
           // The attack: attribute the claim to someone else.
           createdByUserId: 999,
           userId: 999,
-        }, db);
+        },
+        db,
+      );
 
       expect(response?.status).toBe(201);
       expect(buildCreditClaim).toHaveBeenCalledTimes(1);
@@ -216,7 +219,10 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500 }], organizationId: 'org_evil' }, db);
+      await postClaim(
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 500 }], organizationId: 'org_evil' },
+        db,
+      );
 
       expect(buildCreditClaim.mock.calls[0][0]).toBe(ORG);
     });
@@ -225,13 +231,16 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      await postClaim({
+      await postClaim(
+        {
           supplierId: 10,
           lines: [
             { expiredItemTransactionId: 500, unitsClaimed: 3, batchNumber: 'B-1' },
             { expiredItemTransactionId: 501 },
           ],
-        }, db);
+        },
+        db,
+      );
 
       expect(buildCreditClaim.mock.calls[0][1].lines).toEqual([
         { expiredItemTransactionId: 500, batchNumber: 'B-1', unitsClaimed: 3 },
@@ -251,7 +260,10 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn();
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber }] }, db);
+      const response = await postClaim(
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber }] },
+        db,
+      );
 
       expect(response?.status).toBe(400);
       expect(buildCreditClaim).not.toHaveBeenCalled();
@@ -263,7 +275,13 @@ describe('credit-claim write routes', () => {
       const buildCreditClaim = vi.fn().mockResolvedValue({ ok: true, value: draftClaim() });
       const db = createAuthenticatedDb({ buildCreditClaim });
 
-      const response = await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500, batchNumber: 'x'.repeat(120) }] }, db);
+      const response = await postClaim(
+        {
+          supplierId: 10,
+          lines: [{ expiredItemTransactionId: 500, batchNumber: 'x'.repeat(120) }],
+        },
+        db,
+      );
 
       expect(response?.status).toBe(201);
       expect(buildCreditClaim).toHaveBeenCalledTimes(1);
@@ -275,10 +293,7 @@ describe('credit-claim write routes', () => {
      */
     it.each([
       ['a string supplier id', { supplierId: '10', lines: [{ expiredItemTransactionId: 1 }] }],
-      [
-        'a string transaction id',
-        { supplierId: 10, lines: [{ expiredItemTransactionId: '1' }] },
-      ],
+      ['a string transaction id', { supplierId: 10, lines: [{ expiredItemTransactionId: '1' }] }],
       [
         'a string unitsClaimed',
         { supplierId: 10, lines: [{ expiredItemTransactionId: 1, unitsClaimed: '3' }] },
@@ -328,7 +343,10 @@ describe('credit-claim write routes', () => {
         buildCreditClaim: vi.fn().mockResolvedValue({ ok: false, code, message: 'nope' }),
       });
 
-      const response = await postClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 500 }] }, db);
+      const response = await postClaim(
+        { supplierId: 10, lines: [{ expiredItemTransactionId: 500 }] },
+        db,
+      );
 
       expect(response?.status).toBe(status);
     });
@@ -637,12 +655,7 @@ describe('credit-claim write routes', () => {
           .mockRejectedValueOnce(new Error('neon: transient'))
           .mockResolvedValue(undefined);
 
-        const result = await sendClaim(
-          sendingDb(finalizeSentClaim),
-          configuredEnv(),
-          ORG,
-          1,
-        );
+        const result = await sendClaim(sendingDb(finalizeSentClaim), configuredEnv(), ORG, 1);
 
         expect(result.ok).toBe(true);
         expect(finalizeSentClaim).toHaveBeenCalledTimes(2);
@@ -657,9 +670,7 @@ describe('credit-claim write routes', () => {
         const db = sendingDb(finalizeSentClaim);
         const errorSpy = captureErrors();
 
-        await expect(
-          sendClaim(db, configuredEnv(), ORG, 1),
-        ).rejects.toThrow();
+        await expect(sendClaim(db, configuredEnv(), ORG, 1)).rejects.toThrow();
 
         expect(db.revertClaimToDraft).not.toHaveBeenCalled();
         errorSpy.mockRestore();
@@ -672,12 +683,7 @@ describe('credit-claim write routes', () => {
         const finalizeSentClaim = vi.fn().mockRejectedValue(new Error('neon: down'));
 
         await expect(
-          sendClaim(
-            sendingDb(finalizeSentClaim),
-            configuredEnv(),
-            ORG,
-            1,
-          ),
+          sendClaim(sendingDb(finalizeSentClaim), configuredEnv(), ORG, 1),
         ).rejects.toThrow('neon: down');
 
         expect(finalizeSentClaim).toHaveBeenCalledTimes(2);
@@ -785,9 +791,11 @@ describe('credit-claim write routes', () => {
       const db = createAuthenticatedDb({
         findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
         reserveClaimForSending: vi.fn().mockResolvedValue(true),
-        listClaimPhotoKeys: vi.fn().mockResolvedValue([
-          { id: 1, claimLineId: 100, storageKey: 'gone', fileName: 'lot.jpg', sizeBytes: 5 },
-        ]),
+        listClaimPhotoKeys: vi
+          .fn()
+          .mockResolvedValue([
+            { id: 1, claimLineId: 100, storageKey: 'gone', fileName: 'lot.jpg', sizeBytes: 5 },
+          ]),
         revertClaimToDraft,
         finalizeSentClaim: vi.fn(),
       });
@@ -843,13 +851,7 @@ describe('credit-claim write routes', () => {
       });
 
       const sentAt = new Date('2026-09-22T10:00:00.000Z');
-      const result = await sendClaim(
-        db,
-        configuredEnv(bucket),
-        ORG,
-        1,
-        () => sentAt,
-      );
+      const result = await sendClaim(db, configuredEnv(bucket), ORG, 1, () => sentAt);
 
       expect(result.ok).toBe(true);
       expect(finalizeSentClaim).toHaveBeenCalledWith(ORG, 1, {
@@ -987,15 +989,13 @@ describe('credit-claim write routes', () => {
       const restoreFollowUpSchedule = vi.fn().mockResolvedValue(undefined);
       const addCreditClaimEvent = vi.fn();
       const db = createAuthenticatedDb({
-        findCreditClaim: vi
-          .fn()
-          .mockResolvedValue(
-            draftClaim({
-              status: 'SENT',
-              sentAt: '2026-09-22 10:00:00',
-              nextFollowUpAt: '2026-09-29 10:00:00',
-            }),
-          ),
+        findCreditClaim: vi.fn().mockResolvedValue(
+          draftClaim({
+            status: 'SENT',
+            sentAt: '2026-09-22 10:00:00',
+            nextFollowUpAt: '2026-09-29 10:00:00',
+          }),
+        ),
         reserveFollowUp: vi.fn().mockResolvedValue(true),
         listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
         restoreFollowUpSchedule,

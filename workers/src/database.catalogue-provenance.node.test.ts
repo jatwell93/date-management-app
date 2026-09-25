@@ -1,11 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Database } from './database';
 import type { Env } from './types/env';
-import {
-  createPgliteHarness,
-  createTaggedSql,
-  type PgliteHarness,
-} from './__tests__/pglite-db';
+import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('@neondatabase/serverless', () => ({

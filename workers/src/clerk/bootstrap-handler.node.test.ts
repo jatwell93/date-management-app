@@ -171,12 +171,7 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
     } as unknown as Env;
 
     await seedOrg('org-connection', 'clerk-org-connection', 'connection');
-    await seedUser(
-      'org-connection',
-      'clerk-connection-user',
-      'admin',
-      'connection@example.test',
-    );
+    await seedUser('org-connection', 'clerk-connection-user', 'admin', 'connection@example.test');
 
     const request = bootstrapRequest({
       sub: 'clerk-connection-user',

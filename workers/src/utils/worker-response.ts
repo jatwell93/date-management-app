@@ -79,11 +79,7 @@ export function errorResponse(
   return jsonResponse({ error: message }, status, env, requestOrigin);
 }
 
-export function applyCorsHeaders(
-  response: Response,
-  env: Env,
-  requestOrigin?: string,
-): Response {
+export function applyCorsHeaders(response: Response, env: Env, requestOrigin?: string): Response {
   if (response.headers.has('Access-Control-Allow-Origin')) {
     return response;
   }

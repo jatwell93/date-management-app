@@ -122,45 +122,41 @@ function logLoadTestMetrics(metrics: Record<string, number | string>): void {
 }
 
 describe.skipIf(!runLoadTest)('50k-row catalogue import load test', () => {
-  it(
-    'imports 50,000 rows using set-based batches (~50 upserts, not ~50,000)',
-    async () => {
-      const csv = generateCatalogueCsv(ROW_COUNT);
-      const sqlMetrics = instrumentSqlStatements(harness);
-      const queued: number[] = [];
-      const env = createLoadTestEnv(csv, queued);
-      const uploadId = await insertLoadTestUpload(harness);
+  it('imports 50,000 rows using set-based batches (~50 upserts, not ~50,000)', async () => {
+    const csv = generateCatalogueCsv(ROW_COUNT);
+    const sqlMetrics = instrumentSqlStatements(harness);
+    const queued: number[] = [];
+    const env = createLoadTestEnv(csv, queued);
+    const uploadId = await insertLoadTestUpload(harness);
 
-      const startMem = process.memoryUsage();
-      const start = Date.now();
-      const invocations = await executeCheckpoints(uploadId, env, queued);
-      const durationMs = Date.now() - start;
-      const endMem = process.memoryUsage();
-      const { upload, productCount } = await collectLoadTestResults(uploadId);
-      logLoadTestMetrics({
-        rows: ROW_COUNT,
-        durationMs,
-        invocations,
-        batchUpserts: sqlMetrics.batchUpserts,
-        totalStatements: sqlMetrics.totalStatements,
-        retryCount: Number(upload.retry_count),
-        status: upload.status,
-        productCount,
-        heapUsedDeltaMB: +((endMem.heapUsed - startMem.heapUsed) / 1024 / 1024).toFixed(1),
-        rssMB: +(endMem.rss / 1024 / 1024).toFixed(1),
-      });
+    const startMem = process.memoryUsage();
+    const start = Date.now();
+    const invocations = await executeCheckpoints(uploadId, env, queued);
+    const durationMs = Date.now() - start;
+    const endMem = process.memoryUsage();
+    const { upload, productCount } = await collectLoadTestResults(uploadId);
+    logLoadTestMetrics({
+      rows: ROW_COUNT,
+      durationMs,
+      invocations,
+      batchUpserts: sqlMetrics.batchUpserts,
+      totalStatements: sqlMetrics.totalStatements,
+      retryCount: Number(upload.retry_count),
+      status: upload.status,
+      productCount,
+      heapUsedDeltaMB: +((endMem.heapUsed - startMem.heapUsed) / 1024 / 1024).toFixed(1),
+      rssMB: +(endMem.rss / 1024 / 1024).toFixed(1),
+    });
 
-      expect(upload.status).toBe('completed');
-      expect(productCount).toBe(ROW_COUNT);
-      expect(Number(upload.rows_imported)).toBe(ROW_COUNT);
-      expect(Number(upload.retry_count)).toBe(0);
-      // 50,000 rows / 1,000 per batch = 50 set-based upserts (not 50,000 per-row calls).
-      expect(sqlMetrics.batchUpserts).toBe(50);
-      // 50k rows / 10k checkpoint = 5 queue deliveries.
-      expect(invocations).toBe(5);
-      // Total statements stay ~2 orders of magnitude below the row count.
-      expect(sqlMetrics.totalStatements).toBeLessThan(200);
-    },
-    120000,
-  );
+    expect(upload.status).toBe('completed');
+    expect(productCount).toBe(ROW_COUNT);
+    expect(Number(upload.rows_imported)).toBe(ROW_COUNT);
+    expect(Number(upload.retry_count)).toBe(0);
+    // 50,000 rows / 1,000 per batch = 50 set-based upserts (not 50,000 per-row calls).
+    expect(sqlMetrics.batchUpserts).toBe(50);
+    // 50k rows / 10k checkpoint = 5 queue deliveries.
+    expect(invocations).toBe(5);
+    // Total statements stay ~2 orders of magnitude below the row count.
+    expect(sqlMetrics.totalStatements).toBeLessThan(200);
+  }, 120000);
 });

@@ -13,16 +13,7 @@ export type ValidatedCatalogueRow = ProductCatalogRow & { rowNumber: number };
 export const PRODUCT_CATALOG_HEADER_ALIASES = {
   sku: ['sku', 'itemcode', 'reordernumber', 'productcode', 'itemnumber'],
   name: ['name', 'itemdescription', 'productname', 'description', 'itemname'],
-  cost: [
-    'cost',
-    'costprice',
-    'unitcost',
-    'costex',
-    'price',
-    'unitprice',
-    'costinc',
-    'itemcost',
-  ],
+  cost: ['cost', 'costprice', 'unitcost', 'costex', 'price', 'unitprice', 'costinc', 'itemcost'],
   // Retail/selling price, captured distinct from cost so a markdown band can be
   // taken off retail (issue #338). Optional — cost-only catalogues stay valid.
   retail: ['retailprice', 'sellingprice', 'sellprice', 'rrp', 'saleprice'],
