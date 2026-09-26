@@ -16,6 +16,8 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
+const { runMemvid: runMemvidShared } = require('./memvid-exec');
+
 // Recall runs offline lexical search (`--mode lex`) and needs no credentials, so we do
 // NOT load .env by default. Only when an explicit remote/embedding mode is requested
 // (MEM_RECALL_REMOTE=1) do we pull a key from the existing environment — never from .env.
@@ -33,9 +35,12 @@ if (REMOTE_MODE) {
 
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
-function escapeForShell(value) {
-  return String(value).replace(/"/g, '\\"');
-}
+// `escapeForShell` used to live here, quoting with the POSIX `\"` form on every
+// platform. That held multi-word queries together — which is why recall was the
+// one memory script that worked — but `cmd.exe` does not treat a backslash as an
+// escape, so a query containing a double quote was mangled on Windows. The
+// platform-aware version now lives in scripts/memvid-exec.js and is shared with
+// the three scripts that had no quoting at all.
 
 function ensureMemvidAvailable(env) {
   try {
@@ -53,13 +58,13 @@ function ensureMemvidAvailable(env) {
   }
 }
 
-// Helper to safely execute memvid with proper path resolution
+// Thin wrapper keeping this file's two call sites `(args, env)`, over the shared
+// quoting helper.
 function runMemvid(args, env) {
-  return execSync(`memvid ${args.map((arg) => `"${escapeForShell(arg)}"`).join(' ')}`, {
+  return runMemvidShared(args, {
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
     env,
-    shell: true,
   });
 }
 

@@ -22,6 +22,8 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { runMemvid } = require('./memvid-exec');
+
 // Load environment variables from .env file
 const envPath = path.join(__dirname, '..', '.env');
 require('dotenv').config({ path: envPath, override: true });
@@ -109,17 +111,16 @@ function logMemory(kind, title, message) {
   try {
     ensureMemvidAvailable(cleanEnv);
 
-    execFileSync(
-      'memvid',
-      ['put', MEMORY_FILE, '--title', title, '--kind', normalizedKind.toLowerCase()],
-      {
-        env: cleanEnv,
-        stdio: ['pipe', 'inherit', 'inherit'],
-        input: fullMessage,
-        shell: true,
-        windowsHide: true,
-      },
-    );
+    // Via runMemvid, not execFileSync + shell:true: the latter joined argv into a
+    // shell string without quoting, so every multi-word --title arrived as
+    // several arguments and the index update failed with "unexpected argument".
+    // memory.jsonl was written above and unaffected, so the failure surfaced only
+    // as a warning while mem-recall.js quietly stopped seeing new entries.
+    runMemvid(['put', MEMORY_FILE, '--title', title, '--kind', normalizedKind.toLowerCase()], {
+      env: cleanEnv,
+      stdio: ['pipe', 'inherit', 'inherit'],
+      input: fullMessage,
+    });
 
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);
   } catch (error) {
