@@ -161,8 +161,14 @@ jobs:
       # LF. That is not drift: git normalizes it on commit, so CI never sees it.
       # `.claude/hooks/format.sh` corrects it on edit; do not "fix" it by running
       # `prettier --write` over a CRLF checkout and committing the result.
+      # `npm run format:check`, not an inline `npx prettier`, so the command CI
+      # runs and the command a developer runs cannot drift apart — and so the
+      # binary comes from workers' own lockfile rather than whatever `npx`
+      # resolves. The glob covers the config files beside `src` too (build.js,
+      # esbuild.config.js, vitest.config.mts, vitest.node.config.mts): root
+      # ESLint excludes `**/workers/**`, so nothing else checks them.
       - name: Check formatting
-        run: npx prettier --check "src/**/*.ts"
+        run: npm run format:check
 
       # `health.test.ts` and `__tests__/auth-integration.test.ts` load the built
       # bundle (`dist/index.js`) through the workerd pool, so it must exist

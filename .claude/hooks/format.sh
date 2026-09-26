@@ -23,6 +23,13 @@
 #     `find_symbol` and `get_symbols_overview` also carry a `relative_path`, and
 #     this script rewrites files — a tool that merely reads one must not reach
 #     it, or looking at a file would reformat it.
+#   * `create_text_file` IS matched, along with the in-place editors. It writes
+#     through the same Python text mode, so a file it creates lands CRLF too.
+#   * `NotebookEdit` is deliberately NOT matched. Its input carries the path as
+#     `notebook_path`, which nothing here reads, and `.ipynb` is not in the type
+#     whitelist below — so matching it would advertise normalization this script
+#     does not perform. The repository contains no notebooks; add both the field
+#     and the extension together if that changes.
 
 payload=$(cat)
 
@@ -68,10 +75,23 @@ esac
 if ! LC_ALL=C tr -d $'\r' <"$f" | cmp -s - "$f" 2>/dev/null; then
   tmp=$(mktemp "$f.eol.XXXXXX" 2>/dev/null) || exit 0
   if LC_ALL=C tr -d $'\r' <"$f" >"$tmp" 2>/dev/null; then
-    mv "$tmp" "$f" 2>/dev/null || rm -f "$tmp"
-  else
-    rm -f "$tmp"
+    # `cat`, not `mv`: write the bytes back through the ORIGINAL inode.
+    #
+    # mktemp always creates its file 0600, and the template is in the same
+    # directory as the target, so `mv` is a plain rename — the temp file's mode
+    # and ownership become the target's. That silently clears the executable bit
+    # from a `.sh` in the whitelist above (scripts/setup-git-secrets.sh,
+    # scripts/pitr-drill.sh) and drops group/world read from everything else. A
+    # rename also replaces a symlinked path with a regular file rather than
+    # writing through to its target.
+    #
+    # The trade-off is atomicity: `cat` truncates before writing, so a crash
+    # mid-copy leaves the file short, where a rename never could. Accepted,
+    # because the bytes are already fully materialized in "$tmp" by the time this
+    # runs — this is a local file-to-file copy, not the stream that produced them.
+    cat "$tmp" >"$f" 2>/dev/null
   fi
+  rm -f "$tmp"
 fi
 
 # Formatting stays scoped to JS/TS, as before. Widening it to .md or .json would
