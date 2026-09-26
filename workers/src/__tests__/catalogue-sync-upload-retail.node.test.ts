@@ -17,6 +17,12 @@ let harness: PgliteHarness;
 
 beforeEach(async () => {
   harness = await createPgliteHarness();
+  // products.organization_id is a real FK — the upload path needs the org row.
+  await harness.pg.query(
+    `INSERT INTO organizations (id, name, slug, updated_at)
+     VALUES ($1, 'Sync Org', 'sync-org', NOW())`,
+    [ORG],
+  );
 });
 
 afterEach(async () => {
@@ -39,8 +45,8 @@ async function seedProduct(
   retail: number | null,
 ): Promise<void> {
   await harness.pg.query(
-    `INSERT INTO products (organization_id, sku, barcode, name, cost_price, retail_price)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO products (organization_id, sku, barcode, name, cost_price, retail_price, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
     [ORG, sku, barcode, `Name ${sku}`, cost, retail],
   );
 }

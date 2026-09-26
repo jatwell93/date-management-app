@@ -15,9 +15,9 @@ describe('Worker markdown credit-context projections', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
-    await sql`INSERT INTO organizations (id, name, slug)
-              VALUES ('scope-org', 'Scope Org', 'scope-org'),
-                     ('other-org', 'Other Org', 'other-org')`;
+    await sql`INSERT INTO organizations (id, name, slug, updated_at)
+              VALUES ('scope-org', 'Scope Org', 'scope-org', NOW()),
+                     ('other-org', 'Other Org', 'other-org', NOW())`;
   }, 30_000);
 
   afterAll(async () => harness.close());
@@ -40,10 +40,10 @@ describe('Worker markdown credit-context projections', () => {
       RETURNING id`;
     await sql`
       INSERT INTO products (
-        organization_id, barcode, sku, name, retail_price, supplier_id, brand_id
+        organization_id, barcode, sku, name, cost_price, retail_price, supplier_id, brand_id, updated_at
       )
-      VALUES ('scope-org', 'direct', 'direct', 'Direct', 19, ${suppliers[0].id}, ${brands[0].id}),
-             ('scope-org', 'reference', 'reference', 'Reference', 21, NULL, ${brands[0].id})`;
+      VALUES ('scope-org', 'direct', 'direct', 'Direct', 0, 19, ${suppliers[0].id}, ${brands[0].id}, NOW()),
+             ('scope-org', 'reference', 'reference', 'Reference', 0, 21, NULL, ${brands[0].id}, NOW())`;
 
     const db = createWorkersDatabase({ DATABASE_URL: 'postgres://test' } as never);
     await expect(db.findProductByBarcode('scope-org', 'direct')).resolves.toMatchObject({
@@ -70,18 +70,18 @@ describe('Worker markdown credit-context projections', () => {
       INSERT INTO brands (organization_id, name, supplier_id, source)
       VALUES ('scope-org', 'Confirmed Brand', ${suppliers[0].id}, 'CONFIRMED') RETURNING id`;
     const area = await sql`
-      INSERT INTO store_areas (organization_id, name) VALUES ('scope-org', 'Aisle') RETURNING id`;
+      INSERT INTO store_areas (organization_id, name, updated_at) VALUES ('scope-org', 'Aisle', NOW()) RETURNING id`;
     const products = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, supplier_id, brand_id)
-      VALUES ('scope-org', 'brand', 'brand', 'Brand Product', NULL, ${brand[0].id}),
-             ('scope-org', 'foreign', 'foreign', 'Foreign Product', ${suppliers[1].id}, NULL),
-             ('other-org', 'cross-product', 'cross-product', 'Cross Tenant Product', NULL, NULL)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, supplier_id, brand_id, updated_at)
+      VALUES ('scope-org', 'brand', 'brand', 'Brand Product', 0, NULL, ${brand[0].id}, NOW()),
+             ('scope-org', 'foreign', 'foreign', 'Foreign Product', 0, ${suppliers[1].id}, NULL, NOW()),
+             ('other-org', 'cross-product', 'cross-product', 'Cross Tenant Product', 0, NULL, NULL, NOW())
       RETURNING id`;
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date)
-      VALUES ('scope-org', ${products[1].id}, ${area[0].id}, CURRENT_DATE + INTERVAL '2 day'),
-             ('scope-org', ${products[0].id}, ${area[0].id}, CURRENT_DATE + INTERVAL '1 day'),
-             ('scope-org', ${products[2].id}, ${area[0].id}, CURRENT_DATE + INTERVAL '3 day')`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, updated_at)
+      VALUES ('scope-org', ${products[1].id}, ${area[0].id}, CURRENT_DATE + INTERVAL '2 day', NOW()),
+             ('scope-org', ${products[0].id}, ${area[0].id}, CURRENT_DATE + INTERVAL '1 day', NOW()),
+             ('scope-org', ${products[2].id}, ${area[0].id}, CURRENT_DATE + INTERVAL '3 day', NOW())`;
 
     const db = createWorkersDatabase({ DATABASE_URL: 'postgres://test' } as never);
     const rows = await db.getDetailedExpiryReport('scope-org');

@@ -19,6 +19,12 @@ let harness: PgliteHarness;
 
 beforeEach(async () => {
   harness = await createPgliteHarness();
+  // products.organization_id is a real FK — the upload path needs the org row.
+  await harness.pg.query(
+    `INSERT INTO organizations (id, name, slug, updated_at)
+     VALUES ($1, 'Test Org', 'test-org', NOW())`,
+    [ORG],
+  );
 });
 
 afterEach(async () => {
@@ -113,8 +119,8 @@ describe('processExpiryListUpload', () => {
 
   it('reuses an existing product instead of creating a duplicate', async () => {
     await harness.pg.query(
-      `INSERT INTO products (organization_id, sku, barcode, name, cost_price)
-       VALUES ($1, '1001', '9312345678900', 'Existing Vitamin C', 4.5)`,
+      `INSERT INTO products (organization_id, sku, barcode, name, cost_price, updated_at)
+       VALUES ($1, '1001', '9312345678900', 'Existing Vitamin C', 4.5, NOW())`,
       [ORG],
     );
 

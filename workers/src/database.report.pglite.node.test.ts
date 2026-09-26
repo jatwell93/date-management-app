@@ -15,7 +15,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -43,6 +48,8 @@ describe('Workers expiry report counts (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   });
 
   afterAll(async () => {
@@ -51,9 +58,28 @@ describe('Workers expiry report counts (real SQL)', () => {
 
   beforeEach(async () => {
     await sql`DELETE FROM inventory_items`;
+    await sql`DELETE FROM products`;
+    await sql`DELETE FROM store_areas`;
+    // inventory_items.product_id / location_id are NOT NULL real FKs — each
+    // org needs a product and a store area for its seeded items to hang on.
+    const productByOrg = new Map<string, number>();
+    const areaByOrg = new Map<string, number>();
+    for (const org of [ORG, OTHER_ORG]) {
+      const product = await sql`
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${org}, 'BAR-' || ${org}, 'SKU-' || ${org}, 'Product ' || ${org}, 10, NOW())
+        RETURNING id`;
+      productByOrg.set(org, Number(product[0].id));
+      const area = await sql`
+        INSERT INTO store_areas (organization_id, name, updated_at)
+        VALUES (${org}, 'Aisle ' || ${org}, NOW())
+        RETURNING id`;
+      areaByOrg.set(org, Number(area[0].id));
+    }
     const seed = async (org: string, offset: number) =>
-      sql`INSERT INTO inventory_items (organization_id, expiry_date)
-          VALUES (${org}, (CURRENT_DATE + ${offset} * INTERVAL '1 day')::date)`;
+      sql`INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, updated_at)
+          VALUES (${org}, ${productByOrg.get(org)}, ${areaByOrg.get(org)},
+                  (CURRENT_DATE + ${offset} * INTERVAL '1 day')::date, NOW())`;
     for (const offset of ORG_OFFSETS) await seed(ORG, offset);
     for (const offset of OTHER_OFFSETS) await seed(OTHER_ORG, offset);
   });

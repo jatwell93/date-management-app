@@ -9,8 +9,24 @@
  *
  * pglite is WASM and needs a Node runtime, so the tests using this harness run under the
  * dedicated `vitest.node.config.mts` project (matcher `*.node.test.ts`), not the workerd pool.
+ *
+ * The schema comes from `database/migrations/` — applied by the real migration
+ * runner (`src/database/migrations/runner.ts`) through the shared pglite
+ * adapter — and must never be restated here. If a test needs a table or column
+ * the migrations do not create, the test is wrong, not the harness.
+ *
+ * The migrated database is built once per `through` value per test process and
+ * cloned via `PGlite.create({ loadDataDir })`, so suites that create a harness
+ * in `beforeEach` pay the migration replay cost only once.
  */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
+import {
+  applyPendingMigrations,
+  loadMigrationHistory,
+} from '../../../src/database/migrations/runner';
+import { createPgliteMigrationClient } from '../../../src/database/migrations/pglite-client';
 import type { Database } from '../database';
 
 export interface PgliteHarness {
@@ -19,494 +35,45 @@ export interface PgliteHarness {
   close: () => Promise<void>;
 }
 
-const SCHEMA_SQL = `
-  CREATE TABLE products (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    barcode TEXT NOT NULL,
-    sku TEXT NOT NULL,
-    name TEXT NOT NULL,
-    -- Nullable to mirror production, where legacy rows can have a NULL cost_price
-    -- (all cost queries COALESCE it to 0). A NOT NULL harness previously hid a
-    -- write-off matcher bug that only manifested against real NULL data. #268
-    cost_price DOUBLE PRECISION DEFAULT 0,
-    -- Retail price distinct from cost, so a markdown band can discount off retail
-    -- (issue #338). Nullable: cost-only catalogues leave it NULL and fall back to cost.
-    retail_price DOUBLE PRECISION,
-    notes TEXT NOT NULL DEFAULT '',
-    -- Self-building supplier map (issue: supplier credit claims). Nullable = the
-    -- "needs supplier" triage bucket.
-    supplier_id INTEGER,
-    brand_id INTEGER,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (organization_id, sku),
-    UNIQUE (organization_id, barcode)
-  );
+const TEST_DEPLOYMENT_SHA = 'a'.repeat(40);
+const MIGRATIONS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../database/migrations',
+);
 
-  CREATE TABLE organization_markdown_config (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    credit_scope TEXT NOT NULL DEFAULT 'NO_CREDIT'
-      CHECK (credit_scope IN ('NO_CREDIT', 'FULL_CREDIT')),
-    band1_percentage DOUBLE PRECISION NOT NULL DEFAULT 50,
-    band2_percentage DOUBLE PRECISION NOT NULL DEFAULT 60,
-    band3_percentage DOUBLE PRECISION NOT NULL DEFAULT 75,
-    band1_basis TEXT NOT NULL DEFAULT 'cost',
-    band2_basis TEXT NOT NULL DEFAULT 'cost',
-    band3_basis TEXT NOT NULL DEFAULT 'cost',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (organization_id, credit_scope)
-  );
+// One migrated data directory per `through` value, shared by every harness in
+// this test process. Memoized as a promise so concurrent first callers share
+// the single replay.
+const snapshotPromises = new Map<string, Promise<Blob | File>>();
 
-  CREATE TABLE uploads (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    user_id INTEGER,
-    file_key TEXT,
-    file_name TEXT,
-    file_size_bytes INTEGER,
-    content_type TEXT,
-    status TEXT NOT NULL DEFAULT 'pending',
-    import_type TEXT NOT NULL DEFAULT 'product-catalog',
-    tier_snapshot TEXT,
-    max_skus_snapshot INTEGER,
-    max_active_expiries_snapshot INTEGER,
-    upload_progress INTEGER NOT NULL DEFAULT 0,
-    processing_message TEXT,
-    error_message TEXT,
-    rows_processed INTEGER NOT NULL DEFAULT 0,
-    rows_total INTEGER,
-    rows_imported INTEGER NOT NULL DEFAULT 0,
-    rows_updated INTEGER NOT NULL DEFAULT 0,
-    rows_unchanged INTEGER NOT NULL DEFAULT 0,
-    rows_skipped INTEGER NOT NULL DEFAULT 0,
-    row_error_count INTEGER NOT NULL DEFAULT 0,
-    row_errors TEXT,
-    processing_offset INTEGER NOT NULL DEFAULT 0,
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    failure_category TEXT,
-    error_report_key TEXT,
-    queued_at TIMESTAMPTZ,
-    validation_started_at TIMESTAMPTZ,
-    processing_started_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    failed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
+async function buildMigratedSnapshot(through: string | undefined): Promise<Blob | File> {
+  const history = await loadMigrationHistory(MIGRATIONS_DIR);
+  const selected =
+    through === undefined ? history : history.filter((migration) => migration.id <= through);
+  if (through !== undefined && !selected.some((migration) => migration.id === through)) {
+    throw new Error(`createPgliteHarness: unknown migration id in 'through': ${through}`);
+  }
+  const pg = await PGlite.create();
+  try {
+    await pg.exec(`SET TIME ZONE 'UTC'`);
+    await applyPendingMigrations(createPgliteMigrationClient(pg), selected, {
+      deploymentSha: TEST_DEPLOYMENT_SHA,
+    });
+    return await pg.dumpDataDir();
+  } finally {
+    await pg.close();
+  }
+}
 
-  CREATE UNIQUE INDEX uploads_one_active_catalogue_per_org
-    ON uploads (organization_id)
-    WHERE import_type = 'product-catalog'
-      AND status IN ('pending', 'queued', 'validating', 'processing');
-
-  CREATE TABLE organizations (
-    id TEXT PRIMARY KEY,
-    clerk_organization_id TEXT,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    contact_email TEXT,
-    is_creation_locked BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (clerk_organization_id),
-    UNIQUE (slug)
-  );
-
-  CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    clerk_user_id TEXT,
-    email TEXT,
-    username TEXT,
-    role TEXT NOT NULL,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE UNIQUE INDEX users_clerk_user_id_key ON users (clerk_user_id);
-  -- Production has this too (0000_baseline.up.sql:403). Without it here,
-  -- upsertClerkUser's 23505-on-email re-link branch could never fire in a test,
-  -- so the whole branch was structurally unreachable. NULL emails do not
-  -- collide, so placeholder rows are unaffected.
-  CREATE UNIQUE INDEX users_email_key ON users (email);
-
-  CREATE TABLE store_areas (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    parent_id INTEGER REFERENCES store_areas (id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    sub_department TEXT NOT NULL DEFAULT '',
-    last_checked TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CHECK (parent_id IS NULL OR parent_id <> id)
-  );
-
-  CREATE INDEX idx_store_areas_parent_id ON store_areas (parent_id);
-
-  -- Production carries this unique index (database/migrations/0000_baseline.up.sql:397)
-  -- and the harness did not. That drift is load-bearing for anything using
-  -- ON CONFLICT on this table: with no index there is nothing to conflict
-  -- against, so a duplicate insert succeeds and a test asserting "seeding twice
-  -- creates nothing the second time" passes against code carrying no conflict
-  -- clause at all. seedDemoData depends on it.
-  CREATE UNIQUE INDEX store_areas_organization_id_name_sub_department_key
-    ON store_areas (organization_id, name, sub_department);
-
-  CREATE TABLE check_cycles (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active',
-    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CHECK (status IN ('active', 'completed')),
-    CHECK (
-      (status = 'completed' AND completed_at IS NOT NULL)
-      OR (status = 'active' AND completed_at IS NULL)
-    )
-  );
-
-  CREATE UNIQUE INDEX one_active_cycle_per_org
-    ON check_cycles (organization_id)
-    WHERE status = 'active';
-
-  CREATE TABLE bay_checks (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    cycle_id INTEGER NOT NULL REFERENCES check_cycles (id) ON DELETE CASCADE,
-    store_area_id INTEGER NOT NULL REFERENCES store_areas (id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES users (id) ON DELETE SET NULL,
-    checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    items_added_count INTEGER NOT NULL DEFAULT 0,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CHECK (items_added_count >= 0)
-  );
-
-  CREATE INDEX idx_bay_checks_organization_id ON bay_checks (organization_id);
-  CREATE INDEX idx_bay_checks_cycle_id ON bay_checks (cycle_id);
-  CREATE INDEX idx_bay_checks_store_area_id ON bay_checks (store_area_id);
-  CREATE INDEX idx_bay_checks_checked_at ON bay_checks (checked_at);
-
-  CREATE TABLE inventory_items (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    -- DRIFT, deliberate and load-bearing: production declares this
-    -- INTEGER NOT NULL with inventory_items_product_id_fkey ... ON DELETE
-    -- RESTRICT (see the 20260227113208 migration). Here it is nullable with no
-    -- foreign key, because existing tests insert inventory items without a
-    -- matching product row.
-    --
-    -- The consequence for anything testing a product delete: this harness
-    -- CANNOT raise the constraint violation production would. A test that
-    -- asserts "deleting a held product is refused" by expecting a raised FK is
-    -- green no matter what the code does. database.deleteProduct therefore
-    -- counts the blocking rows inside its own statement rather than catching a
-    -- constraint, which is both the testable shape and the one that can report
-    -- how many items are in the way -- see
-    -- database.product-excess-delete.pglite.node.test.ts.
-    product_id INTEGER,
-    location_id INTEGER,
-    expiry_date DATE,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  -- Mirrors the production table (see the Neon export: nullable user_id and
-  -- inventory_item_id, NOT NULL organization_id/action/change_description, and
-  -- deliberately NO foreign key on inventory_item_id). The absent FK matters:
-  -- deleteInventoryItem writes its audit row in the same CTE that deletes the
-  -- item, so a FK would have to be deferrable for that statement to work at all.
-  --
-  -- Added when the write/delete isolation tests were written: updateInventoryItem
-  -- and deleteInventoryItem both INSERT here as part of their CTE, so without
-  -- this table neither method could be exercised under pglite at all -- which is
-  -- one reason the write paths had no real-SQL coverage.
-  CREATE TABLE audit_log (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    user_id INTEGER,
-    inventory_item_id INTEGER,
-    action TEXT NOT NULL,
-    change_description TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  -- Per-organization usage counters and tier caps. handleCreateLegacyUser reads
-  -- this before inserting a user, so the table has to exist even though nothing
-  -- increments the counters (limits that read these rows never fire in practice).
-  -- Shape mirrors 0000_baseline.up.sql:84.
-  CREATE TABLE organization_usage (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    active_users INTEGER NOT NULL DEFAULT 0,
-    max_users INTEGER NOT NULL,
-    total_skus INTEGER NOT NULL DEFAULT 0,
-    max_skus INTEGER NOT NULL,
-    total_inventory_items INTEGER NOT NULL DEFAULT 0,
-    max_inventory_items INTEGER,
-    storage_used_bytes INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  -- Organization RBAC audit trail (migration 0013). Distinct from audit_log,
-  -- which records inventory events: this one records authorization events —
-  -- who was granted which role, by whom, and by what path. The FK to
-  -- organizations is deliberately included (production has ON DELETE CASCADE),
-  -- so a test that writes an audit row for an unseeded organization fails here
-  -- exactly as it would in production rather than silently succeeding.
-  CREATE TABLE org_audit_log (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    event_type TEXT NOT NULL,
-    actor_user_id INTEGER,
-    actor_organization_id TEXT,
-    target_user_id INTEGER,
-    target_organization_id TEXT,
-    old_role TEXT,
-    new_role TEXT,
-    invite_id TEXT,
-    ip_address TEXT,
-    metadata TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE expired_item_transactions (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    inventory_item_id INTEGER NOT NULL,
-    user_id INTEGER,
-    action TEXT NOT NULL,
-    units_discarded INTEGER,
-    financial_loss DOUBLE PRECISION,
-    markdown_level SMALLINT,
-    credit_disposition TEXT NOT NULL DEFAULT 'PENDING'
-      CHECK (credit_disposition IN ('PENDING', 'DISPOSED')),
-    transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE subscription_tiers (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    tier_level TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active',
-    billing_cycle TEXT NOT NULL DEFAULT 'monthly',
-    trial_started_at TIMESTAMPTZ,
-    trial_end_date TIMESTAMPTZ,
-    trial_converted_at TIMESTAMPTZ,
-    stripe_subscription_id TEXT,
-    -- Baseline column. The Stripe webhook resolves an event's organization from
-    -- it rather than calling Stripe's API, so a harness missing it would make
-    -- that lookup untestable.
-    stripe_customer_id TEXT,
-    -- past_due_since is baseline; current_period_end and cancel_at_period_end
-    -- arrived in migration 0011. All three are inputs to the derived access
-    -- state (#489), so the harness carries them or its gating tests would pass
-    -- against a schema the production gate cannot actually query.
-    past_due_since TIMESTAMPTZ,
-    current_period_end TIMESTAMPTZ,
-    cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- Migration 0012: one subscription row per organization. Every reader in
-    -- both backends selects it with LIMIT 1, and ensureTrialSubscription's
-    -- ON CONFLICT relies on this constraint existing -- without it here the
-    -- idempotency tests would pass for the wrong reason (issue #472).
-    CONSTRAINT subscription_tiers_organization_id_key UNIQUE (organization_id)
-  );
-
-  -- Svix delivery ledger. completed_at (migration 0012) is what makes the row a
-  -- claim rather than a receipt: NULL = a delivery is processing it.
-  CREATE TABLE clerk_webhook_events (
-    id TEXT PRIMARY KEY,
-    event_type TEXT NOT NULL,
-    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- Defaulted, as 0012 leaves it: a row inserted without naming the column is
-    -- born completed, which is what makes an old Worker's post-hoc marker safe
-    -- during the deploy gap. The claim always writes NULL explicitly.
-    completed_at TIMESTAMPTZ DEFAULT NOW()
-  );
-
-  -- Stripe delivery ledger, the twin of clerk_webhook_events above.
-  -- completed_at arrived in migration 0015 for exactly the reason 0012 added it
-  -- to the Clerk table: without it the row is a receipt written after the fact,
-  -- which forces check-then-act and lets two concurrent deliveries of one event
-  -- id both run the side effects.
-  CREATE TABLE processed_webhook_events (
-    id TEXT PRIMARY KEY,
-    event_type TEXT NOT NULL,
-    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at TIMESTAMPTZ DEFAULT NOW()
-  );
-
-  CREATE TABLE suppliers (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    contact_email TEXT,
-    contact_phone TEXT,
-    credit_policy_note TEXT NOT NULL DEFAULT '',
-    credit_type TEXT NOT NULL DEFAULT 'NONE'
-      CHECK (credit_type IN ('NONE', 'FULL_CREDIT')),
-    policy_write_off_qty INTEGER,
-    policy_credit_qty INTEGER,
-    follow_up_days INTEGER NOT NULL DEFAULT 7,
-    representative_name TEXT,
-    representative_email TEXT,
-    policy_updated_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (organization_id, name)
-  );
-
-  CREATE TABLE brands (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    manufacturer_name TEXT,
-    suggested_supplier_name TEXT,
-    supplier_id INTEGER REFERENCES suppliers (id) ON DELETE SET NULL,
-    source TEXT NOT NULL DEFAULT 'REFERENCE'
-      CHECK (source IN ('REFERENCE', 'USER_ADDED', 'CONFIRMED')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (organization_id, name)
-  );
-
-  CREATE INDEX idx_brands_organization_id ON brands (organization_id);
-  CREATE INDEX idx_brands_supplier_id ON brands (supplier_id);
-  CREATE INDEX idx_products_brand_id ON products (brand_id);
-
-  CREATE TABLE master_catalogue_entries (
-    id SERIAL PRIMARY KEY,
-    barcode TEXT NOT NULL UNIQUE,
-    description TEXT NOT NULL,
-    api_sku TEXT,
-    sigma_sku TEXT,
-    ch2_sku TEXT,
-    brand_name TEXT NOT NULL,
-    manufacturer_name TEXT,
-    category TEXT,
-    sub_category TEXT,
-    rrp DOUBLE PRECISION,
-    metro_price DOUBLE PRECISION,
-    retired_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE INDEX idx_master_catalogue_entries_api_sku ON master_catalogue_entries (api_sku);
-  CREATE INDEX idx_master_catalogue_entries_sigma_sku ON master_catalogue_entries (sigma_sku);
-  CREATE INDEX idx_master_catalogue_entries_ch2_sku ON master_catalogue_entries (ch2_sku);
-
-  CREATE TABLE catalogue_seed_runs (
-    id SERIAL PRIMARY KEY,
-    version INTEGER NOT NULL UNIQUE,
-    seeded_at TIMESTAMPTZ NOT NULL,
-    source_file_name TEXT NOT NULL,
-    inserted INTEGER NOT NULL,
-    updated INTEGER NOT NULL,
-    unchanged INTEGER NOT NULL,
-    retired INTEGER NOT NULL,
-    reinstated INTEGER NOT NULL,
-    error_count INTEGER NOT NULL
-  );
-
-  CREATE TABLE catalogue_corrections (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-    product_id INTEGER,
-    brand_id INTEGER REFERENCES brands (id) ON DELETE SET NULL,
-    barcode TEXT,
-    entered_brand_name TEXT,
-    chosen_supplier_id INTEGER REFERENCES suppliers (id) ON DELETE SET NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('UNMATCHED', 'BRAND_ADDED', 'SUPPLIER_OVERRIDE')),
-    status TEXT NOT NULL DEFAULT 'PENDING'
-      CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED')),
-    created_by_user_id INTEGER REFERENCES users (id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE INDEX idx_catalogue_corrections_organization_id
-    ON catalogue_corrections (organization_id);
-  CREATE INDEX idx_catalogue_corrections_status ON catalogue_corrections (status);
-  CREATE INDEX idx_catalogue_corrections_product_id ON catalogue_corrections (product_id);
-  CREATE INDEX idx_catalogue_corrections_brand_id ON catalogue_corrections (brand_id);
-  CREATE INDEX idx_expired_transactions_credit_disposition
-    ON expired_item_transactions (credit_disposition);
-
-  -- The four credit_claim* tables use TIMESTAMP(3), not TIMESTAMPTZ, because that is
-  -- what migration 0005 declares. The distinction is load-bearing: the write path
-  -- casts an ISO string with an explicit ::timestamp, which a naive column stores
-  -- verbatim but a
-  -- TIMESTAMPTZ column re-interprets in the session timezone -- so a TIMESTAMPTZ
-  -- harness silently shifts every sent_at/settled_at by the runner's UTC offset and
-  -- fails tests the production schema would pass.
-  CREATE TABLE credit_claims (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    supplier_id INTEGER NOT NULL,
-    created_by_user_id INTEGER,
-    status TEXT NOT NULL DEFAULT 'DRAFT',
-    contact_email_snapshot TEXT,
-    expected_credit_units INTEGER,
-    expected_credit_value DOUBLE PRECISION,
-    credited_value DOUBLE PRECISION,
-    sent_at TIMESTAMP(3),
-    next_follow_up_at TIMESTAMP(3),
-    follow_up_count INTEGER NOT NULL DEFAULT 0,
-    settled_at TIMESTAMP(3),
-    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE credit_claim_lines (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    claim_id INTEGER NOT NULL REFERENCES credit_claims (id) ON DELETE CASCADE,
-    expired_item_transaction_id INTEGER NOT NULL UNIQUE,
-    batch_number TEXT,
-    units_claimed INTEGER NOT NULL,
-    expected_credit_units INTEGER,
-    expected_credit_value DOUBLE PRECISION,
-    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE credit_claim_photos (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    claim_line_id INTEGER NOT NULL REFERENCES credit_claim_lines (id) ON DELETE CASCADE,
-    storage_key TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    size_bytes INTEGER NOT NULL,
-    delete_after TIMESTAMP(3),
-    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE credit_claim_events (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    claim_id INTEGER NOT NULL REFERENCES credit_claims (id) ON DELETE CASCADE,
-    user_id INTEGER,
-    type TEXT NOT NULL,
-    note TEXT,
-    created_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
-  );
-`;
+function migratedSnapshot(through: string | undefined): Promise<Blob | File> {
+  const key = through ?? 'all';
+  let promise = snapshotPromises.get(key);
+  if (promise === undefined) {
+    promise = buildMigratedSnapshot(through);
+    snapshotPromises.set(key, promise);
+  }
+  return promise;
+}
 
 /**
  * Adapts a Neon-style tagged template (`sql\`... ${value} ...\``) to a pglite
@@ -528,9 +95,25 @@ export function createTaggedSql(pg: PGlite) {
   }) as unknown as Database['sql'];
 }
 
-export async function createPgliteHarness(): Promise<PgliteHarness> {
-  const pg = await PGlite.create();
-  await pg.exec(SCHEMA_SQL);
+/**
+ * Seed an organization row for tests — most tenant tables carry a real FK to
+ * `organizations(id)` now, so fixtures need the parent row first.
+ */
+export async function seedOrganization(pg: PGlite, id: string, name = id): Promise<void> {
+  await pg.query(
+    `INSERT INTO organizations (id, name, slug, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    [id, name, id.replace(/_/g, '-')],
+  );
+}
+
+export async function createPgliteHarness(options?: { through?: string }): Promise<PgliteHarness> {
+  const snapshot = await migratedSnapshot(options?.through);
+  const pg = await PGlite.create({ loadDataDir: snapshot });
+  // Production Neon sessions run in UTC; pin every harness connection the same
+  // way so TIMESTAMP(3)-without-tz values never depend on the machine's zone.
+  await pg.exec(`SET TIME ZONE 'UTC'`);
   const db = { sql: createTaggedSql(pg) } as unknown as Database;
   return {
     db,

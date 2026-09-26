@@ -8,19 +8,23 @@
  * and its 409 by a unique index. Against a stubbed driver every one of those
  * assertions would be a claim about the shape of a string.
  *
- * The harness declares the same two unique indexes production does
- * (`UNIQUE (organization_id, sku)` / `(organization_id, barcode)`, matching
- * `database/migrations/0000_baseline.up.sql:370,373`), so the conflict tests
- * here can actually fail -- unlike the delete-blocking tests in
- * `database.product-excess-delete.pglite.node.test.ts`, where the harness has
- * no foreign key and the check had to be made explicit in the query instead.
+ * The schema comes from `database/migrations/` (replayed through the real
+ * migration runner), so the two production unique indexes
+ * (`UNIQUE (organization_id, sku)` / `(organization_id, barcode)`,
+ * `database/migrations/0000_baseline.up.sql:370,373`) are present and the
+ * conflict tests here can actually fail.
  *
  * Runs under `vitest.node.config.mts` (`*.node.test.ts`, `npm run test:db`).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -43,6 +47,8 @@ describe('Workers product update (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   }, 30000); // pglite WASM cold-start can exceed the default 10s hook timeout
 
   afterAll(async () => {
@@ -63,9 +69,9 @@ describe('Workers product update (real SQL)', () => {
     notes?: string;
   }): Promise<number> => {
     const rows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes, updated_at)
       VALUES (${opts.organizationId ?? ORG}, ${opts.barcode}, ${opts.sku}, ${opts.name},
-              ${opts.costPrice ?? 5}, ${opts.notes ?? 'original notes'})
+              ${opts.costPrice ?? 5}, ${opts.notes ?? 'original notes'}, NOW())
       RETURNING id`;
     return Number(rows[0].id);
   };

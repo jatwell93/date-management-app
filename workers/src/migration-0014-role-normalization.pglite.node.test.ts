@@ -40,8 +40,16 @@ describe('migration 0014 — normalize non-canonical user roles (real SQL)', () 
   let sql: string;
 
   beforeAll(async () => {
-    harness = await createPgliteHarness();
+    // Stop before 0014/0015 so the migration under test can be applied by hand
+    // against exactly the schema it runs against in production.
+    harness = await createPgliteHarness({ through: '0013' });
     sql = await readFile(MIGRATION, 'utf8');
+    await harness.pg.query(
+      `INSERT INTO organizations (id, name, slug, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [ORG, 'Roles Org', 'roles-org'],
+    );
   });
 
   afterAll(async () => {

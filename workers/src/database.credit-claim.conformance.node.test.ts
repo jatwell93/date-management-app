@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-import { fileURLToPath, URL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
@@ -8,11 +6,6 @@ import {
   type ClaimableWriteOffRow,
   type ClaimablePoolGroup,
 } from '../../shared/domain/credit-claim';
-
-const backendRequire = createRequire(
-  fileURLToPath(new URL('../../backend/package.json', import.meta.url)),
-);
-const SQLiteDatabase = backendRequire('better-sqlite3') as typeof import('better-sqlite3');
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -25,100 +18,46 @@ import { createWorkersDatabase } from './database';
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';
 
-// Minimal SQLite schema for the claimable-pool join. Mirrors the runtime SQLite
-// migration 016 columns the query touches.
-function createSqliteDb(): import('better-sqlite3').Database {
-  const db = new SQLiteDatabase(':memory:');
-  db.exec(`
-    CREATE TABLE products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      barcode TEXT, sku TEXT, name TEXT,
-      cost_price REAL DEFAULT 0,
-      supplier_id INTEGER,
-      brand_id INTEGER
-    );
-    CREATE TABLE inventory_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      product_id INTEGER, location_id INTEGER,
-      expiry_date TEXT, status TEXT DEFAULT 'Active'
-    );
-    CREATE TABLE suppliers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL, name TEXT,
-      policy_write_off_qty INTEGER, policy_credit_qty INTEGER,
-      credit_policy_note TEXT
-    );
-    CREATE TABLE brands (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      suggested_supplier_name TEXT,
-      supplier_id INTEGER,
-      source TEXT NOT NULL DEFAULT 'REFERENCE'
-    );
-    CREATE TABLE expired_item_transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      inventory_item_id INTEGER NOT NULL,
-      action TEXT NOT NULL, units_discarded INTEGER,
-      credit_disposition TEXT NOT NULL DEFAULT 'PENDING'
-    );
-    CREATE TABLE credit_claims (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL, supplier_id INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'DRAFT'
-    );
-    CREATE TABLE credit_claim_lines (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      claim_id INTEGER NOT NULL,
-      expired_item_transaction_id INTEGER NOT NULL UNIQUE,
-      units_claimed INTEGER
-    );
-  `);
-  return db;
-}
-
-/** SQLite-side claimable pool: same join, fed to the same shared rollup. */
-function sqliteClaimablePool(
-  db: import('better-sqlite3').Database,
+/**
+ * The shared-TS half of the conformance check: run the same claimable-pool join
+ * through the Worker's tagged SQL and feed the raw rows to the shared rollup,
+ * so `getClaimablePool` is verified against `rollupClaimablePool` itself.
+ */
+async function sharedTsClaimablePool(
+  sql: NeonQueryFunction<false, false>,
   org: string,
-): ClaimablePoolGroup[] {
-  const rows = db
-    .prepare(
-      `SELECT eit.id AS transactionId,
-              s.id AS supplierId,
-              s.name AS supplierName,
-              s.policy_write_off_qty AS policyWriteOffQty,
-              s.policy_credit_qty AS policyCreditQty,
-              s.credit_policy_note AS creditPolicyNote,
-              b.id AS brandId, b.name AS brandName, b.source AS brandSource,
-              b.suggested_supplier_name AS suggestedSupplierName,
-              bs.id AS brandSupplierId, bs.name AS brandSupplierName,
-              bs.policy_write_off_qty AS brandPolicyWriteOffQty,
-              bs.policy_credit_qty AS brandPolicyCreditQty,
-              bs.credit_policy_note AS brandCreditPolicyNote,
-              p.id AS productId,
-              COALESCE(p.sku, '') AS sku,
-              p.name AS productName,
-              COALESCE(eit.units_discarded, 0) AS unitsDiscarded,
-              COALESCE(p.cost_price, 0) AS costPrice
-       FROM expired_item_transactions eit
-       JOIN inventory_items ii ON ii.id = eit.inventory_item_id
-       JOIN products p ON p.id = ii.product_id
-       LEFT JOIN suppliers s ON s.id = p.supplier_id
-       LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
-       LEFT JOIN suppliers bs ON bs.id = b.supplier_id
-       LEFT JOIN credit_claim_lines ccl ON ccl.expired_item_transaction_id = eit.id
-       WHERE eit.organization_id = ?
-         AND eit.action = 'expired'
-         AND eit.credit_disposition <> 'DISPOSED'
-         AND ccl.id IS NULL
-       ORDER BY eit.id ASC`,
-    )
-    .all(org) as ClaimableWriteOffRow[];
+): Promise<ClaimablePoolGroup[]> {
+  const rows = (await sql`
+    SELECT eit.id AS "transactionId",
+           s.id AS "supplierId",
+           s.name AS "supplierName",
+           s.policy_write_off_qty AS "policyWriteOffQty",
+           s.policy_credit_qty AS "policyCreditQty",
+           s.credit_policy_note AS "creditPolicyNote",
+           b.id AS "brandId", b.name AS "brandName", b.source AS "brandSource",
+           b.suggested_supplier_name AS "suggestedSupplierName",
+           bs.id AS "brandSupplierId", bs.name AS "brandSupplierName",
+           bs.policy_write_off_qty AS "brandPolicyWriteOffQty",
+           bs.policy_credit_qty AS "brandPolicyCreditQty",
+           bs.credit_policy_note AS "brandCreditPolicyNote",
+           p.id AS "productId",
+           COALESCE(p.sku, '') AS "sku",
+           p.name AS "productName",
+           COALESCE(eit.units_discarded, 0) AS "unitsDiscarded",
+           COALESCE(p.cost_price, 0) AS "costPrice"
+    FROM expired_item_transactions eit
+    JOIN inventory_items ii ON ii.id = eit.inventory_item_id
+    JOIN products p ON p.id = ii.product_id
+    LEFT JOIN suppliers s ON s.id = p.supplier_id
+    LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+    LEFT JOIN suppliers bs ON bs.id = b.supplier_id
+    LEFT JOIN credit_claim_lines ccl ON ccl.expired_item_transaction_id = eit.id
+    WHERE eit.organization_id = ${org}
+      AND eit.action = 'expired'
+      AND eit.credit_disposition <> 'DISPOSED'
+      AND ccl.id IS NULL
+    ORDER BY eit.id ASC
+  `) as unknown as ClaimableWriteOffRow[];
   return rollupClaimablePool(
     rows.map((r) => ({
       ...r,
@@ -128,22 +67,20 @@ function sqliteClaimablePool(
   );
 }
 
-describe('dual-backend claimable-pool conformance', () => {
+describe('Worker claimable-pool conformance (Postgres vs shared TS)', () => {
   let harness: PgliteHarness;
   let sql: NeonQueryFunction<false, false>;
-  let sqlite: import('better-sqlite3').Database;
 
   beforeAll(async () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
-    await sql`INSERT INTO organizations (id, name, slug)
-              VALUES (${ORG}, ${'Organization A'}, ${'organization-a'}),
-                     (${OTHER_ORG}, ${'Organization B'}, ${'organization-b'})`;
+    await sql`INSERT INTO organizations (id, name, slug, updated_at)
+              VALUES (${ORG}, ${'Organization A'}, ${'organization-a'}, NOW()),
+                     (${OTHER_ORG}, ${'Organization B'}, ${'organization-b'}, NOW())`;
   }, 30000);
 
   afterAll(async () => {
-    sqlite?.close();
     await harness.close();
   });
 
@@ -151,16 +88,20 @@ describe('dual-backend claimable-pool conformance', () => {
     for (const table of [
       'catalogue_corrections',
       'credit_claim_lines',
+      'credit_claims',
       'expired_item_transactions',
       'inventory_items',
+      'store_areas',
       'brands',
       'suppliers',
       'products',
     ]) {
       await sql([`DELETE FROM ${table}`] as unknown as TemplateStringsArray);
     }
-    sqlite?.close();
-    sqlite = createSqliteDb();
+    // inventory_items.location_id references store_areas — the write-offs below
+    // all point at location 1.
+    await sql`INSERT INTO store_areas (id, organization_id, name, updated_at)
+              VALUES (1, ${ORG}, 'Aisle 1', NOW())`;
   });
 
   async function seed(scenario: {
@@ -191,78 +132,36 @@ describe('dual-backend claimable-pool conformance', () => {
     for (const s of scenario.suppliers) {
       await sql`INSERT INTO suppliers (id, organization_id, name, policy_write_off_qty, policy_credit_qty)
                 VALUES (${s.id}, ${ORG}, ${s.name}, ${s.ratio?.[0] ?? null}, ${s.ratio?.[1] ?? null})`;
-      sqlite
-        .prepare(
-          'INSERT INTO suppliers (id, organization_id, name, policy_write_off_qty, policy_credit_qty) VALUES (?, ?, ?, ?, ?)',
-        )
-        .run(s.id, ORG, s.name, s.ratio?.[0] ?? null, s.ratio?.[1] ?? null);
     }
     for (const b of scenario.brands ?? []) {
       await sql`INSERT INTO brands (id, organization_id, name, suggested_supplier_name, supplier_id, source)
                 VALUES (${b.id}, ${ORG}, ${b.name}, ${b.suggestedSupplierName ?? null}, ${b.supplierId ?? null}, ${b.source ?? 'REFERENCE'})`;
-      sqlite
-        .prepare(
-          'INSERT INTO brands (id, organization_id, name, suggested_supplier_name, supplier_id, source) VALUES (?, ?, ?, ?, ?, ?)',
-        )
-        .run(
-          b.id,
-          ORG,
-          b.name,
-          b.suggestedSupplierName ?? null,
-          b.supplierId ?? null,
-          b.source ?? 'REFERENCE',
-        );
     }
-    // A parent claim (id=1) for the "already claimed" write-offs to reference — the
-    // pglite harness enforces the real credit_claim_lines.claim_id FK.
+    // A parent claim (id=1) for the "already claimed" write-offs to reference —
+    // the real schema enforces the credit_claim_lines.claim_id FK.
     if (scenario.writeOffs.some((w) => w.claimed) && scenario.suppliers[0]) {
       const supplierId = scenario.suppliers[0].id;
       await sql`INSERT INTO credit_claims (id, organization_id, supplier_id, status)
                 VALUES (1, ${ORG}, ${supplierId}, ${'SENT'})`;
-      sqlite
-        .prepare(
-          'INSERT INTO credit_claims (id, organization_id, supplier_id, status) VALUES (?, ?, ?, ?)',
-        )
-        .run(1, ORG, supplierId, 'SENT');
     }
     for (const p of scenario.products) {
-      await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price, supplier_id, brand_id)
-                VALUES (${p.id}, ${ORG}, ${p.sku}, ${p.sku}, ${'Item ' + p.sku}, ${p.cost}, ${p.supplierId}, ${p.brandId ?? null})`;
-      sqlite
-        .prepare(
-          'INSERT INTO products (id, organization_id, barcode, sku, name, cost_price, supplier_id, brand_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        )
-        .run(p.id, ORG, p.sku, p.sku, `Item ${p.sku}`, p.cost, p.supplierId, p.brandId ?? null);
+      await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price, supplier_id, brand_id, updated_at)
+                VALUES (${p.id}, ${ORG}, ${p.sku}, ${p.sku}, ${'Item ' + p.sku}, ${p.cost}, ${p.supplierId}, ${p.brandId ?? null}, NOW())`;
     }
     for (const w of scenario.writeOffs) {
       const org = w.org ?? ORG;
-      await sql`INSERT INTO inventory_items (id, organization_id, product_id, location_id, status)
-                VALUES (${w.txId}, ${org}, ${w.productId}, 1, ${'Expired'})`;
-      await sql`INSERT INTO expired_item_transactions (id, organization_id, inventory_item_id, action, units_discarded, credit_disposition)
-                VALUES (${w.txId}, ${org}, ${w.txId}, ${'expired'}, ${w.units}, ${w.disposed ? 'DISPOSED' : 'PENDING'})`;
-      sqlite
-        .prepare(
-          'INSERT INTO inventory_items (id, organization_id, product_id, location_id, status) VALUES (?, ?, ?, ?, ?)',
-        )
-        .run(w.txId, org, w.productId, 1, 'Expired');
-      sqlite
-        .prepare(
-          'INSERT INTO expired_item_transactions (id, organization_id, inventory_item_id, action, units_discarded, credit_disposition) VALUES (?, ?, ?, ?, ?, ?)',
-        )
-        .run(w.txId, org, w.txId, 'expired', w.units, w.disposed ? 'DISPOSED' : 'PENDING');
+      await sql`INSERT INTO inventory_items (id, organization_id, product_id, location_id, expiry_date, status, updated_at)
+                VALUES (${w.txId}, ${org}, ${w.productId}, 1, '2026-01-01', ${'Expired'}, NOW())`;
+      await sql`INSERT INTO expired_item_transactions (id, organization_id, inventory_item_id, action, units_discarded, credit_disposition, updated_at)
+                VALUES (${w.txId}, ${org}, ${w.txId}, ${'expired'}, ${w.units}, ${w.disposed ? 'DISPOSED' : 'PENDING'}, NOW())`;
       if (w.claimed) {
         await sql`INSERT INTO credit_claim_lines (organization_id, claim_id, expired_item_transaction_id, units_claimed)
                   VALUES (${org}, 1, ${w.txId}, ${w.units})`;
-        sqlite
-          .prepare(
-            'INSERT INTO credit_claim_lines (organization_id, claim_id, expired_item_transaction_id, units_claimed) VALUES (?, ?, ?, ?)',
-          )
-          .run(org, 1, w.txId, w.units);
       }
     }
   }
 
-  it('groups identically across Neon/pglite and SQLite, including order and totals', async () => {
+  it('groups identically to the shared rollup, including order and totals', async () => {
     await seed({
       suppliers: [
         { id: 10, name: 'Blackmores', ratio: [3, 1] },
@@ -283,9 +182,72 @@ describe('dual-backend claimable-pool conformance', () => {
 
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://x' } as never);
     const workersResult = await workersDb.getClaimablePool(ORG);
-    const sqliteResult = sqliteClaimablePool(sqlite, ORG);
 
-    expect(workersResult).toEqual(sqliteResult);
+    // Same join + shared rollup applied to the raw rows.
+    expect(workersResult).toEqual(await sharedTsClaimablePool(sql, ORG));
+    // Explicit expectation captured from the original dual-backend suite.
+    expect(workersResult).toEqual([
+      {
+        supplierId: 10,
+        supplierName: 'Blackmores',
+        items: [
+          {
+            transactionId: 1,
+            productId: 100,
+            sku: 'BM-1',
+            productName: 'Item BM-1',
+            unitsDiscarded: 6,
+            costPrice: 10,
+            expectedCreditUnits: 2,
+            expectedCreditValue: 20,
+            brandId: null,
+            brandName: null,
+          },
+        ],
+        expectedCreditValueTotal: 20,
+        state: 'CLAIMABLE',
+      },
+      {
+        supplierId: 20,
+        supplierName: 'Nature’s Own',
+        items: [
+          {
+            transactionId: 2,
+            productId: 200,
+            sku: 'NO-1',
+            productName: 'Item NO-1',
+            unitsDiscarded: 4,
+            costPrice: 5,
+            expectedCreditUnits: 2,
+            expectedCreditValue: 10,
+            brandId: null,
+            brandName: null,
+          },
+        ],
+        expectedCreditValueTotal: 10,
+        state: 'CLAIMABLE',
+      },
+      {
+        supplierId: null,
+        supplierName: null,
+        items: [
+          {
+            transactionId: 3,
+            productId: 300,
+            sku: 'X-1',
+            productName: 'Item X-1',
+            unitsDiscarded: 2,
+            costPrice: 8,
+            expectedCreditUnits: null,
+            expectedCreditValue: null,
+            brandId: null,
+            brandName: null,
+          },
+        ],
+        expectedCreditValueTotal: 0,
+        state: 'NEEDS_BRAND',
+      },
+    ]);
     // Sanity: real suppliers by name first, needs-supplier last; claimed row excluded.
     expect(workersResult.map((g) => g.supplierName)).toEqual(['Blackmores', 'Nature’s Own', null]);
     expect(workersResult[0].expectedCreditValueTotal).toBe(20); // floor(6/3)*1 * $10
@@ -299,7 +261,7 @@ describe('dual-backend claimable-pool conformance', () => {
     });
 
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://x' } as never);
-    expect(await workersDb.getClaimablePool(ORG)).toEqual(sqliteClaimablePool(sqlite, ORG));
+    expect(await workersDb.getClaimablePool(ORG)).toEqual(await sharedTsClaimablePool(sql, ORG));
     expect(await workersDb.getClaimablePool(ORG)).toEqual([]);
   });
 
@@ -334,7 +296,69 @@ describe('dual-backend claimable-pool conformance', () => {
 
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://x' } as never);
     const workersResult = await workersDb.getClaimablePool(ORG);
-    expect(workersResult).toEqual(sqliteClaimablePool(sqlite, ORG));
+    expect(workersResult).toEqual(await sharedTsClaimablePool(sql, ORG));
+    expect(workersResult).toEqual([
+      {
+        supplierId: 10,
+        supplierName: 'Brand Supplier',
+        items: [
+          {
+            transactionId: 1,
+            productId: 100,
+            sku: 'BRAND',
+            productName: 'Item BRAND',
+            unitsDiscarded: 1,
+            costPrice: 10,
+            expectedCreditUnits: null,
+            expectedCreditValue: null,
+            brandId: 30,
+            brandName: 'Confirmed Brand',
+          },
+        ],
+        expectedCreditValueTotal: 0,
+        state: 'NO_POLICY',
+      },
+      {
+        supplierId: 20,
+        supplierName: 'Override Supplier',
+        items: [
+          {
+            transactionId: 2,
+            productId: 200,
+            sku: 'OVERRIDE',
+            productName: 'Item OVERRIDE',
+            unitsDiscarded: 2,
+            costPrice: 8,
+            expectedCreditUnits: 1,
+            expectedCreditValue: 8,
+            brandId: 30,
+            brandName: 'Confirmed Brand',
+          },
+        ],
+        expectedCreditValueTotal: 8,
+        state: 'CLAIMABLE',
+      },
+      {
+        supplierId: null,
+        supplierName: 'Suggested Maker',
+        items: [
+          {
+            transactionId: 3,
+            productId: 300,
+            sku: 'PENDING',
+            productName: 'Item PENDING',
+            unitsDiscarded: 1,
+            costPrice: 4,
+            expectedCreditUnits: null,
+            expectedCreditValue: null,
+            brandId: 40,
+            brandName: 'Reference Brand',
+          },
+        ],
+        expectedCreditValueTotal: 0,
+        state: 'PENDING_CONFIRMATION',
+      },
+    ]);
     expect(workersResult.map((group) => group.state)).toEqual([
       'NO_POLICY',
       'CLAIMABLE',

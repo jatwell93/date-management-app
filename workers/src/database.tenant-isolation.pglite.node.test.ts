@@ -29,7 +29,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -60,6 +65,8 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   });
 
   afterAll(async () => {
@@ -75,34 +82,34 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
     // foreign row FIRST under `ORDER BY name ASC`, so an unscoped query cannot
     // accidentally satisfy a "first row is mine" assertion.
     const ownRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, 'BAR-OWN', 'SKU-OWN', 'Zulu Own Product', 10)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, 'BAR-OWN', 'SKU-OWN', 'Zulu Own Product', 10, NOW())
       RETURNING id`;
     ownProductId = Number(ownRows[0].id);
 
     const foreignRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${OTHER_ORG}, 'BAR-FOREIGN', 'SKU-FOREIGN', 'Alpha Foreign Product', 99)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${OTHER_ORG}, 'BAR-FOREIGN', 'SKU-FOREIGN', 'Alpha Foreign Product', 99, NOW())
       RETURNING id`;
     foreignProductId = Number(foreignRows[0].id);
 
     const ownArea = await sql`
-      INSERT INTO store_areas (organization_id, name) VALUES (${ORG}, 'Zulu Own Aisle')
+      INSERT INTO store_areas (organization_id, name, updated_at) VALUES (${ORG}, 'Zulu Own Aisle', NOW())
       RETURNING id`;
     ownAreaId = Number(ownArea[0].id);
 
     const foreignArea = await sql`
-      INSERT INTO store_areas (organization_id, name) VALUES (${OTHER_ORG}, 'Alpha Foreign Aisle')
+      INSERT INTO store_areas (organization_id, name, updated_at) VALUES (${OTHER_ORG}, 'Alpha Foreign Aisle', NOW())
       RETURNING id`;
     foreignAreaId = Number(foreignArea[0].id);
 
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${ownProductId}, ${ownAreaId}, CURRENT_DATE + 30, 'Active')`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${ownProductId}, ${ownAreaId}, CURRENT_DATE + 30, 'Active', NOW())`;
     // Earlier expiry, so it sorts first under `ORDER BY i.expiry_date ASC`.
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${OTHER_ORG}, ${foreignProductId}, ${foreignAreaId}, CURRENT_DATE + 1, 'Active')`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${OTHER_ORG}, ${foreignProductId}, ${foreignAreaId}, CURRENT_DATE + 1, 'Active', NOW())`;
   });
 
   describe('products', () => {
@@ -178,8 +185,8 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
      */
     it('does not splice in a product or area belonging to another organization', async () => {
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${foreignProductId}, ${foreignAreaId}, CURRENT_DATE + 60, 'Active')`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${foreignProductId}, ${foreignAreaId}, CURRENT_DATE + 60, 'Active', NOW())`;
 
       const items = await makeDb().findInventoryItems(ORG, {});
       const crossRef = items.find((i) => i.productId === foreignProductId);
