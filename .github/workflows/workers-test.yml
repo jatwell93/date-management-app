@@ -96,7 +96,12 @@ jobs:
             run_tests "git diff failed (${changed}); running workers tests."
           fi
 
-          if printf '%s\n' "$changed" | grep -qE '^(workers|shared)/'; then
+          # This workflow file is in the pattern on purpose: a change to the jobs
+          # below could not otherwise be exercised by the jobs below. Without it,
+          # editing a step here leaves `workers=false`, the test jobs skip, and
+          # `gate` reports success for a change nothing ran -- so a broken or
+          # no-op step lands looking green.
+          if printf '%s\n' "$changed" | grep -qE '^(workers|shared)/|^\.github/workflows/workers-test\.yml$'; then
             echo "workers=true" >> "$GITHUB_OUTPUT"
           else
             echo "workers=false" >> "$GITHUB_OUTPUT"
