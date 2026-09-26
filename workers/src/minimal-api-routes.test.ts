@@ -2160,4 +2160,259 @@ describe('minimal API route table', () => {
     expect(response).not.toBeNull();
     expect(response?.status).toBe(401);
   });
+
+  // --- Task 3.1.r: the last four Express-only routes, and the role gate -------
+
+  /** A database whose auth lookup returns `role`, plus the method overrides. */
+  function databaseWithRole(
+    role: string,
+    methodOverrides: Partial<Record<string, unknown>> = {},
+  ): Database {
+    return {
+      ...methodOverrides,
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role }]),
+    } as unknown as Database;
+  }
+
+  it('registers all four routes rehomed by 3.1.r', () => {
+    expect(getMinimalRoutes()).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(['POST', '/api/organization/seed-demo-data']),
+        expect.arrayContaining(['GET', '/api/reports/usage']),
+        expect.arrayContaining(['GET', '/api/reports/analytics']),
+      ]),
+    );
+    // The store-area read is registered by regex, so it is asserted by
+    // dispatching rather than by scanning the table for a literal.
+    expect(
+      getMinimalRoutes().some(
+        ([method, pattern]) =>
+          method === 'GET' && pattern instanceof RegExp && pattern.test('/api/store-areas/12'),
+      ),
+    ).toBe(true);
+  });
+
+  describe('GET /api/store-areas/:id', () => {
+    it('returns the area for its own organization', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const findStoreAreaById = vi.fn().mockResolvedValue({ id: 12, name: 'Chiller' });
+
+      const response = await resolveMinimalGet(
+        '/api/store-areas/12',
+        databaseWithRole('team_member', { findStoreAreaById }),
+      );
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toMatchObject({ id: 12, name: 'Chiller' });
+      // The organization comes from the session, never from the request.
+      expect(findStoreAreaById).toHaveBeenCalledWith('org_123', 12);
+    });
+
+    it('404s when the area is absent, matching the cross-tenant case', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+
+      const response = await resolveMinimalGet(
+        '/api/store-areas/12',
+        databaseWithRole('admin', { findStoreAreaById: vi.fn().mockResolvedValue(null) }),
+      );
+
+      expect(response?.status).toBe(404);
+    });
+
+    it('is readable by a team member, as in Express', async () => {
+      // Express gated this route on authentication alone
+      // (`backend/src/routes/store-area.routes.ts:77`). Asserted so a later
+      // sweep that adds `requireOrgRole` to every store-area route has to
+      // change a test that says why this one is different.
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const findStoreAreaById = vi.fn().mockResolvedValue({ id: 3 });
+
+      const response = await resolveMinimalGet(
+        '/api/store-areas/3',
+        databaseWithRole('team_member', { findStoreAreaById }),
+      );
+
+      expect(response?.status).not.toBe(403);
+      expect(findStoreAreaById).toHaveBeenCalled();
+    });
+  });
+
+  describe('the two rehomed report routes', () => {
+    it('returns the usage report', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const getUsageReport = vi
+        .fn()
+        .mockResolvedValue([
+          { role: 'admin', totalActivities: 2, creations: 1, updates: 1, deletions: 0 },
+        ]);
+
+      const response = await resolveMinimalGet(
+        '/api/reports/usage',
+        databaseWithRole('team_member', { getUsageReport }),
+      );
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toMatchObject([{ role: 'admin' }]);
+      expect(getUsageReport).toHaveBeenCalledWith('org_123');
+    });
+
+    it('returns analytics to a starter-tier team member, because the feature gate is not ported', async () => {
+      // Express refused this to any tier without `advanced_analytics`
+      // (`backend/src/routes/report.routes.ts:139`). The Worker has no
+      // feature-gate mechanism, so this asserts the divergence deliberately
+      // rather than leaving it to be discovered: if a gate is added later, this
+      // test fails and names the decision.
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const getDashboardAnalytics = vi.fn().mockResolvedValue({ totalProducts: 1 });
+
+      const response = await resolveMinimalGet(
+        '/api/reports/analytics',
+        databaseWithRole('team_member', { getDashboardAnalytics }),
+      );
+
+      expect(response?.status).toBe(200);
+      expect(getDashboardAnalytics).toHaveBeenCalledWith('org_123');
+    });
+  });
+
+  describe('POST /api/organization/seed-demo-data', () => {
+    const seedRequest = () =>
+      new Request('https://example.com/api/organization/seed-demo-data', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+
+    const dispatchSeed = (database: Database) =>
+      resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: seedRequest(),
+        pathname: '/api/organization/seed-demo-data',
+        method: 'POST',
+        db: database,
+        env,
+      });
+
+    it('seeds for an admin and returns the counts', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const seedDemoData = vi.fn().mockResolvedValue({
+        success: true,
+        productsCreated: 8,
+        areasCreated: 3,
+        inventoryItemsCreated: 8,
+      });
+
+      const response = await dispatchSeed(databaseWithRole('admin', { seedDemoData }));
+
+      expect(response?.status).toBe(200);
+      await expect(response?.json()).resolves.toMatchObject({ productsCreated: 8 });
+      expect(seedDemoData).toHaveBeenCalledWith('org_123');
+    });
+
+    it('admits a manager', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const seedDemoData = vi.fn().mockResolvedValue({ success: true });
+
+      const response = await dispatchSeed(databaseWithRole('manager', { seedDemoData }));
+
+      expect(response?.status).not.toBe(403);
+      expect(seedDemoData).toHaveBeenCalled();
+    });
+
+    it('refuses a team member before writing anything', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const seedDemoData = vi.fn();
+
+      const response = await dispatchSeed(databaseWithRole('team_member', { seedDemoData }));
+
+      expect(response?.status).toBe(403);
+      // Before, not after: a gate that refuses the response but still writes is
+      // the failure mode worth pinning.
+      expect(seedDemoData).not.toHaveBeenCalled();
+    });
+
+    it('admits a legacy Clerk admin spelling through the gate', async () => {
+      // `normalizeRole` inside `hasOrgRole` is the reason this passes; a raw
+      // comparison would refuse an actual admin (#517).
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const seedDemoData = vi.fn().mockResolvedValue({ success: true });
+
+      const response = await dispatchSeed(databaseWithRole('org:admin', { seedDemoData }));
+
+      expect(response?.status).not.toBe(403);
+      expect(seedDemoData).toHaveBeenCalled();
+    });
+  });
+
+  describe('the store-walk role gates', () => {
+    const dispatchPost = (pathname: string, database: Database, body: unknown = {}) =>
+      resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request(`https://example.com${pathname}`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+        pathname,
+        method: 'POST',
+        db: database,
+        env,
+      });
+
+    it('refuses a team member starting a walk, and does not write', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const createCheckCycle = vi.fn();
+
+      const response = await dispatchPost(
+        '/api/store-areas/check-cycles',
+        databaseWithRole('team_member', { createCheckCycle }),
+        { name: 'Monday walk' },
+      );
+
+      expect(response?.status).toBe(403);
+      expect(createCheckCycle).not.toHaveBeenCalled();
+    });
+
+    it('refuses a team member completing a walk, and does not write', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const completeCheckCycle = vi.fn();
+
+      const response = await dispatchPost(
+        '/api/store-areas/check-cycles/31/complete',
+        databaseWithRole('team_member', { completeCheckCycle }),
+      );
+
+      expect(response?.status).toBe(403);
+      expect(completeCheckCycle).not.toHaveBeenCalled();
+    });
+
+    it.each(['admin', 'manager'])('admits %s to start a walk', async (role) => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const createCheckCycle = vi.fn().mockResolvedValue({ id: 1, name: 'Monday walk' });
+
+      const response = await dispatchPost(
+        '/api/store-areas/check-cycles',
+        databaseWithRole(role, { createCheckCycle }),
+        { name: 'Monday walk' },
+      );
+
+      expect(response?.status).toBe(201);
+      expect(createCheckCycle).toHaveBeenCalled();
+    });
+
+    it('still lets a team member record a bay check', async () => {
+      // The deliberate divergence from Express, which gated all three writes
+      // `admin, manager`. In production `manager` does not exist, so gating this
+      // one would have made recording a bay check admin-only -- the floor task
+      // the store walk is built around. Starting and completing a cycle stay
+      // gated; this does not.
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const recordBayCheck = vi.fn().mockResolvedValue({ id: 5 });
+
+      const response = await dispatchPost(
+        '/api/store-areas/bay-checks',
+        databaseWithRole('team_member', { recordBayCheck }),
+        { storeAreaId: 3, itemsAddedCount: 0 },
+      );
+
+      expect(response?.status).not.toBe(403);
+      expect(recordBayCheck).toHaveBeenCalled();
+    });
+  });
 });

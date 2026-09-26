@@ -130,7 +130,7 @@ import {
   type PolicyFieldError,
   type SupplierPolicyRecord,
 } from '../../shared/domain/supplier-policy';
-import { normalizeRole, ROLES } from './constants/roles';
+import { hasOrgRole, normalizeRole, ROLES, type RoleValue } from './constants/roles';
 
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
@@ -181,6 +181,39 @@ function canManageUsers(role: string | undefined): boolean {
   // it; the role itself does not exist in production Clerk so this branch is
   // unreachable in prod.
   return normalized === ROLES.MANAGER;
+}
+
+/**
+ * Worker equivalent of Express's `requireOrgRole(...)` middleware
+ * (`backend/src/middleware/requireOrgRole.ts:35`). Returns a `Response` the
+ * caller must return immediately, or `null` when the request may proceed.
+ *
+ * The decision itself lives in `shared/domain/roles.ts` so the two backends
+ * cannot drift apart on it; only the refusal is expressed here, because a
+ * `Response` and an Express `res` share no shape.
+ *
+ * **`admin, manager` means admin-only in production, and that is the point to
+ * understand before adding a call.** `ROLES_PROD` above admits `admin` and
+ * `team_member` only -- `manager` is a dev-only role that production Clerk does
+ * not issue. So this gate, with Express's own argument list, refuses every
+ * non-admin in production. That is why the three live store-walk writes are not
+ * all gated the same way: `POST /api/store-areas/check-cycles` and its
+ * `/complete` sibling are supervisory acts and are gated, while
+ * `POST /api/store-areas/bay-checks` is the floor task every team member
+ * performs and is deliberately left to plain authentication. Express gated all
+ * three, but Express has not served them since cutover and the Worker never
+ * has, so the permissive behaviour is the production baseline and narrowing it
+ * is a new restriction on live traffic rather than a restoration.
+ */
+function requireOrgRole(
+  role: string | undefined,
+  env: Env,
+  ...allowedRoles: RoleValue[]
+): Response | null {
+  if (hasOrgRole(role, ...allowedRoles)) {
+    return null;
+  }
+  return errorResponse('Access denied: Insufficient permissions', 403, env);
 }
 
 /** Parse a path-segment into a positive integer or return null. */
@@ -301,6 +334,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', RE_STORE_AREA_CHECK_CYCLE_COMPLETE, handleCompleteCheckCycle, 'path'],
   ['POST', '/api/store-areas/bay-checks', handleRecordBayCheck],
   ['GET', '/api/store-areas/floor-progress', handleGetFloorProgress],
+  ['GET', RE_STORE_AREA_ID, handleGetStoreAreaById, 'path'],
   ['PUT', RE_STORE_AREA_ID, handleUpdateStoreArea, 'path'],
   ['DELETE', RE_STORE_AREA_ID, handleDeleteStoreArea, 'path'],
   ['GET', '/api/dashboard', handleGetDashboard],
@@ -315,6 +349,8 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/reports/loss-by-sku', handleGetLossBySkuReport],
   ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
   ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
+  ['GET', '/api/reports/usage', handleGetUsageReport],
+  ['GET', '/api/reports/analytics', handleGetAnalyticsReport],
   ['GET', '/api/expired-items', handleGetExpiredItems],
   ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
   ['GET', '/api/supplier-credits/suppliers', handleListSuppliers],
@@ -350,6 +386,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/subscription/cancel', handleCancelSubscriptionRoute],
   ['POST', '/api/subscription/create-portal-session', handlePortalSessionRoute],
   ['GET', '/api/organization/usage', handleGetOrganizationUsage],
+  ['POST', '/api/organization/seed-demo-data', handleSeedDemoData],
   ['GET', RE_STORAGE_QUOTA_USER, handleGetStorageQuota, 'path'],
   ['GET', '/api/markdown-config', handleGetMarkdownConfig],
   ['PUT', '/api/markdown-config', handleUpdateMarkdownConfig],
@@ -1325,6 +1362,42 @@ async function handleGetStoreAreas(request: Request, db: Database, env: Env): Pr
 }
 
 /**
+ * GET /api/store-areas/:id
+ *
+ * Authentication only, matching Express (`store-area.routes.ts:77`). No live
+ * caller: both frontends read the collection and then PUT or DELETE by id, so
+ * this is rehomed for the same reason `GET /api/products/export-excess` was --
+ * a 404 on a path a client may still hold is worse than a handler nothing
+ * calls.
+ */
+async function handleGetStoreAreaById(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/store-areas\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid store area id', 400, env);
+  }
+
+  const id = parsePositiveInt(match[1]);
+  if (id === null) {
+    return errorResponse('Invalid store area id', 400, env);
+  }
+
+  const area = await db.findStoreAreaById(auth.organizationId, id);
+  if (!area) {
+    return errorResponse('Store area not found', 404, env);
+  }
+
+  return jsonResponse(area, 200, env);
+}
+
+/**
  * GET /api/store-areas/check-cycles
  */
 async function handleListCheckCycles(request: Request, db: Database, env: Env): Promise<Response> {
@@ -1341,6 +1414,9 @@ async function handleListCheckCycles(request: Request, db: Database, env: Env): 
 async function handleCreateCheckCycle(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
+
+  const denied = requireOrgRole(auth.role, env, ROLES.ADMIN, ROLES.MANAGER);
+  if (denied) return denied;
 
   const body = (await request.json()) as { name?: string; startedAt?: string };
   if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
@@ -1374,6 +1450,9 @@ async function handleCompleteCheckCycle(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
+
+  const denied = requireOrgRole(auth.role, env, ROLES.ADMIN, ROLES.MANAGER);
+  if (denied) return denied;
 
   const match = pathname.match(/^\/api\/store-areas\/check-cycles\/(\d+)\/complete$/);
   if (!match) {
@@ -1627,6 +1706,50 @@ async function handleGetLossByDepartmentReport(
   if (auth instanceof Response) return auth;
   const report = await db.getLossByDepartmentReport(auth.organizationId);
   return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/usage
+ *
+ * Audit activity grouped by user role. Express gated this on authentication
+ * only (`backend/src/routes/report.routes.ts:65`), and so does this.
+ */
+async function handleGetUsageReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getUsageReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/analytics
+ *
+ * **Rehomed without Express's feature gate, deliberately.** Express wrapped
+ * this route in `requireFeature('advanced_analytics')`
+ * (`backend/src/routes/report.routes.ts:139`), which reads `tier_feature_flags`
+ * and is enabled for `professional`, `premium` and `concierge` but not
+ * `starter`. Porting that gate is not a port: the Worker has no feature-flag
+ * mechanism at all, and the flag rows are keyed by a tier vocabulary
+ * (`starter`/`professional`/`premium`/`concierge`) that does not match the one
+ * this Worker normalizes to via `normalizeLaunchTier`. Building the gate would
+ * mean inventing both the mechanism and a mapping across that boundary -- the
+ * four-copies-of-a-table shape that produced #517 -- for a route with no
+ * caller in either frontend.
+ *
+ * It is also the smaller half of what is already free: the live, ungated
+ * `GET /api/dashboard` returns `totalProducts` and `totalInventoryItems` from
+ * the same tables. The gate is filed as an issue instead, with the mapping
+ * decision named as the open question.
+ */
+async function handleGetAnalyticsReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const analytics = await db.getDashboardAnalytics(auth.organizationId);
+  return jsonResponse(analytics, 200, env);
 }
 
 /**
@@ -4095,6 +4218,33 @@ async function handleGetCurrentSubscription(
     200,
     env,
   );
+}
+
+/**
+ * POST /api/organization/seed-demo-data
+ *
+ * Seeds sample store areas, products and inventory items so a new organization
+ * has something to look at. Called by onboarding step 1's "Load Demo Data"
+ * button (`frontend/src/pages/OnboardingPage.tsx:88`) -- the one route in this
+ * batch with a live caller, and it has been 404ing since cutover.
+ *
+ * Gated `admin, manager`, matching Express (`org-bootstrap.routes.ts:55-61`).
+ * In production that is admin-only; see `requireOrgRole` above.
+ */
+async function handleSeedDemoData(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const denied = requireOrgRole(auth.role, env, ROLES.ADMIN, ROLES.MANAGER);
+  if (denied) return denied;
+
+  try {
+    const result = await db.seedDemoData(auth.organizationId);
+    return jsonResponse(result, 200, env);
+  } catch (error) {
+    console.error('handleSeedDemoData error:', error);
+    return errorResponse('Seeding failed', 500, env);
+  }
 }
 
 /**

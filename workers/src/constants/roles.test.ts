@@ -12,7 +12,14 @@
  * no live Worker path has that shape.
  */
 import { describe, expect, it } from 'vitest';
-import { isCanonicalRole, ROLE_ALIASES, ROLES, canUpload, normalizeRole } from './roles';
+import {
+  isCanonicalRole,
+  ROLE_ALIASES,
+  ROLES,
+  canUpload,
+  hasOrgRole,
+  normalizeRole,
+} from './roles';
 
 describe('normalizeRole', () => {
   it.each([
@@ -205,5 +212,46 @@ describe('the shared alias table', () => {
     expect(normalizeRole('Team Member')).toBe(ROLES.TEAM_MEMBER);
     expect(isCanonicalRole('Manager')).toBe(false);
     expect(isCanonicalRole('Team Member')).toBe(false);
+  });
+});
+
+describe('hasOrgRole', () => {
+  it('admits a listed role and refuses an unlisted one', () => {
+    expect(hasOrgRole('admin', ROLES.ADMIN, ROLES.MANAGER)).toBe(true);
+    expect(hasOrgRole('manager', ROLES.ADMIN, ROLES.MANAGER)).toBe(true);
+    expect(hasOrgRole('team_member', ROLES.ADMIN, ROLES.MANAGER)).toBe(false);
+  });
+
+  it('normalizes before comparing, so a stored or Clerk spelling still resolves', () => {
+    // The #517 failure was a raw comparison refusing an actual admin.
+    expect(hasOrgRole('org:admin', ROLES.ADMIN)).toBe(true);
+    expect(hasOrgRole('Manager', ROLES.ADMIN, ROLES.MANAGER)).toBe(true);
+    expect(hasOrgRole('owner', ROLES.ADMIN)).toBe(true);
+  });
+
+  /**
+   * The case `normalizeRole` alone gets wrong for a gate. `normalizeRole(null)`
+   * is `team_member` by design -- least privilege for a stored value -- so
+   * without an explicit guard, a gate listing `team_member` would admit a caller
+   * with no role at all. Express refuses a missing role ahead of the allow list
+   * in both of its decision paths (`requireOrgRole` at
+   * `backend/src/middleware/requireOrgRole.ts:40-43`, and `assertOrgRole` at
+   * `:19-20`), and this module exists to keep those two decisions from drifting.
+   *
+   * No Worker gate lists `team_member` today, so this pins a property rather
+   * than a behaviour any live route depends on -- which is exactly why it needs
+   * a test: nothing else would fail if the guard were dropped.
+   */
+  it('refuses an absent role even when team_member is allowed', () => {
+    expect(hasOrgRole(null, ROLES.TEAM_MEMBER)).toBe(false);
+    expect(hasOrgRole(undefined, ROLES.TEAM_MEMBER)).toBe(false);
+    expect(hasOrgRole('', ROLES.TEAM_MEMBER)).toBe(false);
+    // An unrecognized *string* still normalizes to team_member, as Express does:
+    // its guard is on absence, not on recognition.
+    expect(hasOrgRole('some-unknown-role', ROLES.TEAM_MEMBER)).toBe(true);
+  });
+
+  it('refuses everything when the allow list is empty', () => {
+    expect(hasOrgRole('admin')).toBe(false);
   });
 });

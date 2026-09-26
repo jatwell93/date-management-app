@@ -126,9 +126,16 @@ export interface Database {
 
   // Store area queries
   findStoreAreas(organizationId: string): Promise<StoreArea[]>;
+  findStoreAreaById(organizationId: string, id: number): Promise<StoreArea | null>;
 
   // Dashboard queries
   getDashboardStats(organizationId: string): Promise<DashboardStats>;
+  /** Counters behind GET /api/reports/analytics. */
+  getDashboardAnalytics(organizationId: string): Promise<DashboardAnalytics>;
+  /** Audit activity grouped by role, behind GET /api/reports/usage. */
+  getUsageReport(organizationId: string): Promise<UsageReportRow[]>;
+  /** Idempotently seed demo store areas, products and inventory items. */
+  seedDemoData(organizationId: string): Promise<SeedDemoDataResult>;
   /** Live counts backing GET /api/organization/usage. */
   getUsageCounts(organizationId: string): Promise<UsageCounts>;
   /**
@@ -634,6 +641,40 @@ export interface DashboardStats {
   totalInventoryItems: number;
   expiringItems: number;
   expiredActionItems: number;
+}
+
+/**
+ * The six counters behind `GET /api/reports/analytics`, ported from Express's
+ * `ReportRepository.getDashboardAnalytics` (`backend/src/repositories/report.repository.ts:405`).
+ *
+ * Overlaps `DashboardStats` on its first two fields on purpose: Express served
+ * two separate endpoints with two separate shapes, and the frontend reads
+ * neither of these four extra counters today.
+ */
+export interface DashboardAnalytics {
+  totalProducts: number;
+  totalInventoryItems: number;
+  activeItems: number;
+  expiredItems: number;
+  markdownItems: number;
+  upcomingExpiry: number;
+}
+
+/** One row of `GET /api/reports/usage`: audit activity grouped by user role. */
+export interface UsageReportRow {
+  role: string;
+  totalActivities: number;
+  creations: number;
+  updates: number;
+  deletions: number;
+}
+
+/** What `seedDemoData` created. Counts are of rows actually inserted. */
+export interface SeedDemoDataResult {
+  success: true;
+  productsCreated: number;
+  areasCreated: number;
+  inventoryItemsCreated: number;
 }
 
 export interface LastCatalogueUpload {
@@ -1243,6 +1284,115 @@ async function getProcessedItemIds(
  * Create database connection for Workers environment
  * Uses Hyperdrive connection string from env bindings
  */
+/**
+ * The demo catalogue `seedDemoData` writes, ported from Express's
+ * `SeedService.seedDemoData` (`backend/src/services/seed.service.ts:325`).
+ *
+ * Module scope rather than inline `VALUES` rows, because this is data: changing
+ * a price or adding a product should not mean editing a SQL statement, and the
+ * statement reads as one idea once the catalogue is lifted out of it.
+ *
+ * Products name their area rather than indexing it. The three area names are
+ * distinct, so the join needs no ordinal and no index arithmetic — and a row
+ * that says `areaName: 'Cooler'` cannot be silently misaligned by inserting a
+ * product above it, which an index column can.
+ *
+ * `monthsToExpiry` is a per-row constant where Express computed it as
+ * `areaIndex === 2 ? 6 : productsCreatedCount % 2 === 0 ? 3 : 18` — a counter of
+ * how many products that run had created SO FAR, so re-seeding a half-seeded
+ * organization gave the same product a different expiry date. Nothing depends on
+ * that; fixed values reproduce the same 3/6/18-month spread deterministically.
+ */
+const DEMO_STORE_AREAS = [
+  { name: 'Front Shelf', subDepartment: 'Over-the-Counter' },
+  { name: 'Back Storage', subDepartment: 'Prescription' },
+  { name: 'Cooler', subDepartment: 'Refrigerated' },
+] as const;
+
+const DEMO_PRODUCTS = [
+  {
+    sku: 'VIT-C-500',
+    name: 'Vitamin C 500mg',
+    barcode: '123456789012',
+    costPrice: 5.5,
+    areaName: 'Front Shelf',
+    monthsToExpiry: 3,
+  },
+  {
+    sku: 'IBU-200',
+    name: 'Ibuprofen 200mg',
+    barcode: '123456789013',
+    costPrice: 4.2,
+    areaName: 'Front Shelf',
+    monthsToExpiry: 18,
+  },
+  {
+    sku: 'PARA-500',
+    name: 'Paracetamol 500mg',
+    barcode: '123456789014',
+    costPrice: 3.8,
+    areaName: 'Front Shelf',
+    monthsToExpiry: 3,
+  },
+  {
+    sku: 'AMOX-250',
+    name: 'Amoxicillin 250mg',
+    barcode: '123456789015',
+    costPrice: 12.0,
+    areaName: 'Back Storage',
+    monthsToExpiry: 18,
+  },
+  {
+    sku: 'LISI-10',
+    name: 'Lisinopril 10mg',
+    barcode: '123456789016',
+    costPrice: 8.5,
+    areaName: 'Back Storage',
+    monthsToExpiry: 3,
+  },
+  {
+    sku: 'MET-500',
+    name: 'Metformin 500mg',
+    barcode: '123456789017',
+    costPrice: 6.0,
+    areaName: 'Back Storage',
+    monthsToExpiry: 18,
+  },
+  {
+    sku: 'INSU-GLA',
+    name: 'Insulin Glargine',
+    barcode: '123456789018',
+    costPrice: 45.0,
+    areaName: 'Cooler',
+    monthsToExpiry: 6,
+  },
+  {
+    sku: 'EPI-300',
+    name: 'EpiPen 0.3mg',
+    barcode: '123456789019',
+    costPrice: 150.0,
+    areaName: 'Cooler',
+    monthsToExpiry: 6,
+  },
+] as const;
+
+/**
+ * `DEMO_STORE_AREAS` and `DEMO_PRODUCTS` transposed into the parallel arrays the
+ * seed statement binds. Computed once at module load rather than per call: the
+ * catalogue is a constant, so rebuilding eight arrays on every seed was work
+ * done for nothing.
+ */
+const DEMO_SEED_COLUMNS = {
+  areaNames: DEMO_STORE_AREAS.map((area) => area.name),
+  areaSubDepartments: DEMO_STORE_AREAS.map((area) => area.subDepartment),
+  productSkus: DEMO_PRODUCTS.map((product) => product.sku),
+  productNames: DEMO_PRODUCTS.map((product) => product.name),
+  productBarcodes: DEMO_PRODUCTS.map((product) => product.barcode),
+  productCostPrices: DEMO_PRODUCTS.map((product) => product.costPrice),
+  productAreaNames: DEMO_PRODUCTS.map((product) => product.areaName),
+  productMonths: DEMO_PRODUCTS.map((product) => product.monthsToExpiry),
+} as const;
+
 export function createWorkersDatabase(env: Env): Database {
   // Neon serverless driver is most reliable with direct Neon connection strings.
   // Keep Hyperdrive as an emergency fallback when secrets are missing.
@@ -1489,6 +1639,20 @@ export function createWorkersDatabase(env: Env): Database {
       `) as StoreArea[];
     },
 
+    async findStoreAreaById(organizationId: string, id: number): Promise<StoreArea | null> {
+      const rows = await sql`
+        SELECT id, name,
+               parent_id as "parentId",
+               sub_department as "subDepartment",
+               last_checked as "lastChecked",
+               created_at as "createdAt", updated_at as "updatedAt"
+        FROM store_areas
+        WHERE id = ${id} AND organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      return (rows[0] as StoreArea | undefined) ?? null;
+    },
+
     // Dashboard queries
     async getDashboardStats(organizationId: string): Promise<DashboardStats> {
       // This app tracks expiry dates, not stock levels. `expiringItems` counts
@@ -1530,6 +1694,98 @@ export function createWorkersDatabase(env: Env): Database {
         expiringItems: expiring[0]?.count || 0,
         expiredActionItems: expiredAction[0]?.count || 0,
       };
+    },
+
+    async getDashboardAnalytics(organizationId: string): Promise<DashboardAnalytics> {
+      // Port of Express's `ReportRepository.getDashboardAnalytics`
+      // (`backend/src/repositories/report.repository.ts:405`), which issued six
+      // separate SQLite statements. Six statements see six snapshots, so its
+      // `activeItems + expiredItems` could disagree with its
+      // `totalInventoryItems` whenever a write landed mid-request. One statement
+      // is both a single round trip and a single snapshot.
+      //
+      // The status predicates are copied verbatim rather than rewritten against
+      // EXPIRED_WORKLIST_STATUSES: `activeItems` here means "not the literal
+      // string 'Expired'", so a 'Markdown 2' item counts as active AND as a
+      // markdown item. That double-count is Express's definition of these
+      // fields, and no caller reads them, so this is not the place to redefine
+      // them -- `getDashboardStats` above is where the non-overlapping,
+      // frontend-facing counts live.
+      //
+      // `LIKE 'Markdown%'` stays case-sensitive where SQLite's LIKE was not.
+      // The rows are written by code with exactly these spellings
+      // (`shared/domain/disposition.ts:11-16`), never typed by a human, so the
+      // two forms select the same rows; ILIKE would have widened the predicate
+      // rather than ported it.
+      const rows = await sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM products WHERE organization_id = ${organizationId})
+            AS "totalProducts",
+          COUNT(*)::int AS "totalInventoryItems",
+          COUNT(*) FILTER (WHERE status <> ${EXPIRED_STATUS})::int AS "activeItems",
+          COUNT(*) FILTER (WHERE status = ${EXPIRED_STATUS})::int AS "expiredItems",
+          COUNT(*) FILTER (WHERE status LIKE 'Markdown%')::int AS "markdownItems",
+          COUNT(*) FILTER (
+            WHERE expiry_date IS NOT NULL
+              AND expiry_date >= CURRENT_DATE
+              AND expiry_date <= CURRENT_DATE + INTERVAL '30 days'
+              AND status <> ${EXPIRED_STATUS}
+          )::int AS "upcomingExpiry"
+        FROM inventory_items
+        WHERE organization_id = ${organizationId}
+      `;
+
+      const row = rows[0] as DashboardAnalytics | undefined;
+      return {
+        totalProducts: row?.totalProducts ?? 0,
+        totalInventoryItems: row?.totalInventoryItems ?? 0,
+        activeItems: row?.activeItems ?? 0,
+        expiredItems: row?.expiredItems ?? 0,
+        markdownItems: row?.markdownItems ?? 0,
+        upcomingExpiry: row?.upcomingExpiry ?? 0,
+      };
+    },
+
+    async getUsageReport(organizationId: string): Promise<UsageReportRow[]> {
+      // Port of `ReportRepository.getUsageReport`
+      // (`backend/src/repositories/report.repository.ts:363`).
+      //
+      // `LIKE` is kept case-sensitive even though the SQLite original's LIKE was
+      // not, because every writer puts the verb in lower case: this Worker
+      // writes 'inventory item created' (:3052) and Express wrote 'Inventory
+      // item created with expiry date ...'
+      // (`backend/src/services/inventory.service.ts:185`) -- capitalized on the
+      // noun, not on the verb. The three sibling report queries below
+      // (getDailyUsageReport, getItemsByUserReport, getItemsByDateReport) are
+      // already case-sensitive against the same column, so one behaviour across
+      // all four readers is worth more than a widening that would only change
+      // which rows THIS one counts. The test pins the writers' exact strings, so
+      // rewording an audit description fails here instead of silently zeroing a
+      // report.
+      //
+      // One deliberate difference from Express: keys are camelCase, as every
+      // other Worker report is. Express returned `total_activities`; nothing
+      // consumes either spelling.
+      //
+      // The join is on `user_id` alone, matching Express. Adding
+      // `AND u.organization_id = al.organization_id` would look more careful and
+      // buy nothing: `users.id` is a single global SERIAL, so a user_id resolves
+      // to at most one row, and `audit_log` is already filtered to this
+      // organization. It would only change behaviour for a user row moved
+      // between organizations, which no path does.
+      return (await sql`
+        SELECT
+          COALESCE(u.role, 'Unknown') AS role,
+          COUNT(al.id)::int AS "totalActivities",
+          COUNT(*) FILTER (WHERE al.change_description LIKE '%created%')::int AS creations,
+          COUNT(*) FILTER (WHERE al.change_description LIKE '%updated%')::int AS updates,
+          COUNT(*) FILTER (WHERE al.change_description LIKE '%deleted%')::int AS deletions
+        FROM audit_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.organization_id = ${organizationId}
+        GROUP BY COALESCE(u.role, 'Unknown')
+        ORDER BY COALESCE(u.role, 'Unknown')
+      `) as UsageReportRow[];
     },
 
     async getUsageCounts(organizationId: string): Promise<UsageCounts> {
@@ -3011,6 +3267,141 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // ---- Store area CRUD ----
+    async seedDemoData(organizationId: string): Promise<SeedDemoDataResult> {
+      // Port of Express's `SeedService.seedDemoData`
+      // (`backend/src/services/seed.service.ts:325`), which wrapped ~20
+      // statements in a Prisma `$transaction`. Neon's HTTP driver has no
+      // transaction (see the note at :834), so the whole seed is ONE statement:
+      // a chain of CTEs runs inside the implicit transaction every statement
+      // already gets, which is the same atomicity without a session.
+      //
+      // **Idempotency rests on the unique indexes, not on read-then-write.**
+      // Express checked `findBySku` / `findByNameAndSubDepartment` first and
+      // inserted if absent, which is check-then-act: two clicks of "Load Demo
+      // Data" racing each other both read "absent" and both insert. Here the
+      // store-area and product legs are `ON CONFLICT DO NOTHING` against
+      // `store_areas_organization_id_name_sub_department_key` and
+      // `products_organization_id_sku_key`, so the database refuses the
+      // duplicate rather than the code hoping not to see one.
+      //
+      // The conflict clauses are deliberately untargeted. `products` carries
+      // TWO unique indexes -- sku and barcode -- and a targeted
+      // `ON CONFLICT (organization_id, sku)` would let a barcode collision
+      // (an existing product holding one of these demo barcodes under a
+      // different sku) raise and take the entire seed down. Untargeted, that
+      // row is skipped: `resolved_products` finds no id for it and the
+      // `WHERE rp.id IS NOT NULL` guard drops its inventory item too.
+      //
+      // **One leg is not constraint-protected.** `inventory_items` has no
+      // unique index over (organization_id, product_id, location_id), so its
+      // idempotency is the `NOT EXISTS` guard: atomic within this statement,
+      // but not isolated against a concurrent seed of the same organization.
+      // Two simultaneous seeds can each insert one inventory item per pair.
+      // That is strictly no worse than Express, whose `findFirst`-then-create
+      // had the same race inside its transaction under READ COMMITTED, and
+      // closing it properly means a new unique index, which is a migration.
+      //
+      // **Expiry months are per-row constants, where Express computed them.**
+      // Its expression was `areaIndex === 2 ? 6 : productsCreatedCount % 2 === 0 ? 3 : 18`
+      // -- a counter of how many products this run had created SO FAR, so a
+      // second run over a half-seeded organization gave the same product a
+      // different expiry date. Nothing depends on that; a fixed value per row
+      // reproduces the same spread (3, 6 and 18 months out) deterministically.
+      //
+      // **Usage limits do not apply.** The interactive create path enforces the
+      // tier product cap inside its INSERT; seeding deliberately does not, so
+      // onboarding cannot fail on a cap the operator has not yet had a chance
+      // to raise. An organization can therefore finish onboarding holding more
+      // products than its tier allows, and the next interactive create is what
+      // refuses.
+      //
+      // The catalogue is passed as the parallel arrays in `DEMO_SEED_COLUMNS`
+      // rather than as literal `VALUES` rows, so that it can live at module scope
+      // as data. `unnest` of several arrays is only legal in `FROM`, which is
+      // where both input CTEs use it, and the explicit casts are what give
+      // Postgres the column types the inserts need.
+      const seed = DEMO_SEED_COLUMNS;
+
+      const rows = await sql`
+        WITH area_input AS (
+          SELECT * FROM unnest(${seed.areaNames}::text[], ${seed.areaSubDepartments}::text[])
+                        AS t(name, sub_department)
+        ),
+        inserted_areas AS (
+          INSERT INTO store_areas (organization_id, name, sub_department, created_at, updated_at)
+          SELECT ${organizationId}, ai.name, ai.sub_department, NOW(), NOW()
+          FROM area_input ai
+          ON CONFLICT DO NOTHING
+          RETURNING id, name, sub_department
+        ),
+        areas AS (
+          SELECT ai.name, COALESCE(ins.id, ex.id) AS id
+          FROM area_input ai
+          LEFT JOIN inserted_areas ins
+            ON ins.name = ai.name AND ins.sub_department = ai.sub_department
+          LEFT JOIN store_areas ex
+            ON ex.organization_id = ${organizationId}
+           AND ex.name = ai.name
+           AND ex.sub_department = ai.sub_department
+        ),
+        product_input AS (
+          SELECT * FROM unnest(
+            ${seed.productSkus}::text[], ${seed.productNames}::text[], ${seed.productBarcodes}::text[],
+            ${seed.productCostPrices}::double precision[], ${seed.productAreaNames}::text[],
+            ${seed.productMonths}::int[]
+          ) AS t(sku, name, barcode, cost_price, area_name, months)
+        ),
+        inserted_products AS (
+          INSERT INTO products (organization_id, barcode, sku, name, cost_price, created_at, updated_at)
+          SELECT ${organizationId}, pi.barcode, pi.sku, pi.name, pi.cost_price, NOW(), NOW()
+          FROM product_input pi
+          ON CONFLICT DO NOTHING
+          RETURNING id, sku
+        ),
+        resolved_products AS (
+          SELECT pi.sku, pi.area_name, pi.months, COALESCE(ip.id, ep.id) AS id
+          FROM product_input pi
+          LEFT JOIN inserted_products ip ON ip.sku = pi.sku
+          LEFT JOIN products ep
+            ON ep.organization_id = ${organizationId} AND ep.sku = pi.sku
+        ),
+        inserted_items AS (
+          INSERT INTO inventory_items (
+            organization_id, product_id, location_id, expiry_date, status, created_at, updated_at
+          )
+          SELECT ${organizationId}, rp.id, a.id,
+                 CURRENT_DATE + (rp.months * INTERVAL '1 month'),
+                 'Normal', NOW(), NOW()
+          FROM resolved_products rp
+          JOIN areas a ON a.name = rp.area_name
+          WHERE rp.id IS NOT NULL
+            AND a.id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM inventory_items ii
+              WHERE ii.organization_id = ${organizationId}
+                AND ii.product_id = rp.id
+                AND ii.location_id = a.id
+            )
+          RETURNING id
+        )
+        SELECT
+          (SELECT COUNT(*) FROM inserted_areas)::int AS "areasCreated",
+          (SELECT COUNT(*) FROM inserted_products)::int AS "productsCreated",
+          (SELECT COUNT(*) FROM inserted_items)::int AS "inventoryItemsCreated"
+      `;
+
+      const row = rows[0] as
+        | { areasCreated: number; productsCreated: number; inventoryItemsCreated: number }
+        | undefined;
+
+      return {
+        success: true,
+        areasCreated: row?.areasCreated ?? 0,
+        productsCreated: row?.productsCreated ?? 0,
+        inventoryItemsCreated: row?.inventoryItemsCreated ?? 0,
+      };
+    },
+
     async createStoreArea(
       organizationId: string,
       data: { name: string; subDepartment?: string | null; parentId?: number | null },

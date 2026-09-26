@@ -130,3 +130,42 @@ export function normalizeRole(role: string | null | undefined): RoleValue {
 export function isCanonicalRole(role: string): role is RoleValue {
   return (CANONICAL_ROLES as readonly string[]).includes(role);
 }
+
+/**
+ * Does `role` resolve to one of `allowedRoles`?
+ *
+ * The decision half of Express's `requireOrgRole(...)`
+ * (`backend/src/middleware/requireOrgRole.ts:35`), extracted so the Worker can
+ * apply the same gate without importing Express middleware. Only the decision
+ * is shared — the denial response, the denial telemetry and the request
+ * patching stay with each backend, because a `Response` and an Express `res`
+ * have no common shape worth abstracting over.
+ *
+ * `normalizeRole` runs first, so a stored `'Manager'` is compared as
+ * `'manager'` rather than matching nothing, which was half of #517.
+ *
+ * **An absent role is refused before the allow list is consulted**, not
+ * normalized into one. `normalizeRole` maps `null`, `undefined` and `''` to
+ * `team_member` — least privilege for a *stored* value, but the wrong answer for
+ * a gate: without the explicit guard below, `hasOrgRole(null, ROLES.TEAM_MEMBER)`
+ * would return `true` and admit a caller carrying no role at all. No call site
+ * lists `team_member` today, so the guard changes nothing now; it exists because
+ * the first gate that does list it would otherwise diverge silently from
+ * Express, which refuses a missing role ahead of the allow list in **both** of
+ * its decision paths — `requireOrgRole`
+ * (`backend/src/middleware/requireOrgRole.ts:40-43`) and `assertOrgRole`
+ * (`:19-20`, `if (!rawRole || !allowedRoles.includes(canonical))`). A module
+ * whose whole purpose is keeping those two decisions from drifting is the wrong
+ * place to leave that to a future reader's attention.
+ *
+ * String inputs are untouched by the guard, so every existing call site keeps
+ * its behaviour. Express distinguishes the absent case in its *message* ('No
+ * role assigned' rather than 'Insufficient permissions'); the outcome is the
+ * same refusal and the message is each caller's to choose.
+ */
+export function hasOrgRole(role: string | null | undefined, ...allowedRoles: RoleValue[]): boolean {
+  if (typeof role !== 'string' || role === '') {
+    return false;
+  }
+  return allowedRoles.includes(normalizeRole(role));
+}
