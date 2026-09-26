@@ -48,11 +48,11 @@ function daysFromNow(offset: number): Date {
 
 async function seedOrganization(options: { creationLocked?: boolean } = {}): Promise<void> {
   await harness.pg.query(
-    `INSERT INTO organizations (id, name, slug, is_creation_locked) VALUES ($1, 'Gated Org', 'gated-org', $2)`,
+    `INSERT INTO organizations (id, name, slug, is_creation_locked, updated_at) VALUES ($1, 'Gated Org', 'gated-org', $2, NOW())`,
     [ORG, options.creationLocked === true],
   );
   await harness.pg.query(
-    `INSERT INTO users (organization_id, clerk_user_id, email, role) VALUES ($1, $2, 'owner@test.dev', 'admin')`,
+    `INSERT INTO users (organization_id, clerk_user_id, email, role, updated_at) VALUES ($1, $2, 'owner@test.dev', 'admin', NOW())`,
     [ORG, CLERK_USER],
   );
 }
@@ -70,8 +70,8 @@ async function seedSubscription(seed: SubscriptionSeed): Promise<void> {
   await harness.pg.query(
     `INSERT INTO subscription_tiers
        (organization_id, tier_level, status, trial_end_date, current_period_end,
-        cancel_at_period_end, past_due_since)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        cancel_at_period_end, past_due_since, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
     [
       ORG,
       seed.tierLevel ?? 'professional',
@@ -332,11 +332,11 @@ describe('organization entitlement gate (real SQL)', () => {
     await seedOrganization();
     await seedSubscription({ status: 'active', tierLevel: 'professional' });
     await harness.pg.query(
-      `INSERT INTO organizations (id, name, slug) VALUES ('org_other', 'Other', 'other')`,
+      `INSERT INTO organizations (id, name, slug, updated_at) VALUES ('org_other', 'Other', 'other', NOW())`,
     );
     await harness.pg.query(
-      `INSERT INTO subscription_tiers (organization_id, tier_level, status, trial_end_date)
-       VALUES ('org_other', 'free', 'trialing', $1)`,
+      `INSERT INTO subscription_tiers (organization_id, tier_level, status, trial_end_date, updated_at)
+       VALUES ('org_other', 'free', 'trialing', $1, NOW())`,
       [daysFromNow(-30)],
     );
 

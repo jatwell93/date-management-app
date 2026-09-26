@@ -42,6 +42,7 @@ describe('Workers tier usage limits (real SQL)', () => {
   let harness: PgliteHarness;
   let sql: NeonQueryFunction<false, false>;
   let locationId: number;
+  let uploaderId: number;
 
   const makeDb = () => createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
 
@@ -49,6 +50,11 @@ describe('Workers tier usage limits (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    // products/uploads/etc. carry real organization FKs.
+    await sql`INSERT INTO organizations (id, name, slug, updated_at)
+              VALUES (${ORG}, 'Org A', 'org-a', NOW()),
+                     (${OTHER_ORG}, 'Org B', 'org-b', NOW())
+              ON CONFLICT (id) DO NOTHING`;
   }, 30000); // pglite WASM cold-start can exceed the default 10s hook timeout
 
   afterAll(async () => {
@@ -63,16 +69,24 @@ describe('Workers tier usage limits (real SQL)', () => {
     await sql`DELETE FROM uploads`;
     await sql`DELETE FROM users`;
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name) VALUES (${ORG}, ${'Aisle 1'}) RETURNING id`;
+      INSERT INTO store_areas (organization_id, name, updated_at) VALUES (${ORG}, ${'Aisle 1'}, NOW()) RETURNING id`;
     locationId = Number(areaRows[0].id);
   });
+
+  // uploads.user_id is a real FK — seed lazily so usage counts stay honest.
+  const seedUploader = async () => {
+    const uploaderRows = await sql`
+      INSERT INTO users (organization_id, username, role, updated_at)
+      VALUES (${ORG}, ${'uploader'}, ${'admin'}, NOW()) RETURNING id`;
+    uploaderId = Number(uploaderRows[0].id);
+  };
 
   const seedProducts = async (count: number, organizationId = ORG) => {
     for (let i = 0; i < count; i += 1) {
       await sql`
-        INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
         VALUES (${organizationId}, ${`BAR-${organizationId}-${i}`}, ${`SKU-${organizationId}-${i}`},
-                ${`Product ${i}`}, 1)`;
+                ${`Product ${i}`}, 1, NOW())`;
     }
   };
 
@@ -188,17 +202,21 @@ describe('Workers tier usage limits (real SQL)', () => {
 
     beforeEach(async () => {
       const rows = await sql`
-        INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-        VALUES (${ORG}, ${'BAR-INV'}, ${'SKU-INV'}, ${'Inventory product'}, 5)
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${ORG}, ${'BAR-INV'}, ${'SKU-INV'}, ${'Inventory product'}, 5, NOW())
         RETURNING id`;
       productId = Number(rows[0].id);
+      // audit_log.user_id is a real FK — createInventoryItem writes audit
+      // rows for USER_ID.
+      await sql`INSERT INTO users (id, organization_id, username, role, updated_at)
+                VALUES (${USER_ID}, ${ORG}, ${'actor'}, ${'admin'}, NOW())`;
     });
 
     const seedItems = async (count: number, status = 'Normal') => {
       for (let i = 0; i < count; i += 1) {
         await sql`
-          INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-          VALUES (${ORG}, ${productId}, ${locationId}, ${'2099-01-01'}, ${status})`;
+          INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+          VALUES (${ORG}, ${productId}, ${locationId}, ${'2099-01-01'}, ${status}, NOW())`;
       }
     };
 
@@ -292,19 +310,19 @@ describe('Workers tier usage limits (real SQL)', () => {
     it('counts SKUs, users and active expiries for the organization only', async () => {
       await seedProducts(3);
       await seedProducts(7, OTHER_ORG);
-      await sql`INSERT INTO users (organization_id, username, role) VALUES (${ORG}, ${'a'}, ${'admin'})`;
-      await sql`INSERT INTO users (organization_id, username, role) VALUES (${ORG}, ${'b'}, ${'team_member'})`;
-      await sql`INSERT INTO users (organization_id, username, role) VALUES (${OTHER_ORG}, ${'c'}, ${'admin'})`;
+      await sql`INSERT INTO users (organization_id, username, role, updated_at) VALUES (${ORG}, ${'a'}, ${'admin'}, NOW())`;
+      await sql`INSERT INTO users (organization_id, username, role, updated_at) VALUES (${ORG}, ${'b'}, ${'team_member'}, NOW())`;
+      await sql`INSERT INTO users (organization_id, username, role, updated_at) VALUES (${OTHER_ORG}, ${'c'}, ${'admin'}, NOW())`;
 
       const productRows = await sql`
         SELECT id FROM products WHERE organization_id = ${ORG} LIMIT 1`;
       const pid = Number(productRows[0].id);
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${pid}, ${locationId}, ${'2099-01-01'}, ${'Normal'})`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${pid}, ${locationId}, ${'2099-01-01'}, ${'Normal'}, NOW())`;
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${pid}, ${locationId}, ${'2099-01-01'}, ${'Discarded'})`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${pid}, ${locationId}, ${'2099-01-01'}, ${'Discarded'}, NOW())`;
 
       const counts = await makeDb().getUsageCounts(ORG);
 
@@ -318,18 +336,19 @@ describe('Workers tier usage limits (real SQL)', () => {
     });
 
     it('sums recorded upload bytes for the organization, ignoring deleted rows', async () => {
+      await seedUploader();
       await sql`
-        INSERT INTO uploads (organization_id, file_key, file_name, file_size_bytes, status)
-        VALUES (${ORG}, ${'k1'}, ${'a.csv'}, 1000, ${'completed'})`;
+        INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+        VALUES (${ORG}, ${uploaderId}, ${'k1'}, ${'a.csv'}, 1000, ${'completed'}, NOW())`;
       await sql`
-        INSERT INTO uploads (organization_id, file_key, file_name, file_size_bytes, status)
-        VALUES (${ORG}, ${'k2'}, ${'b.csv'}, 500, ${'completed'})`;
+        INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+        VALUES (${ORG}, ${uploaderId}, ${'k2'}, ${'b.csv'}, 500, ${'completed'}, NOW())`;
       await sql`
-        INSERT INTO uploads (organization_id, file_key, file_name, file_size_bytes, status)
-        VALUES (${ORG}, ${'k3'}, ${'gone.csv'}, 9999, ${'deleted'})`;
+        INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+        VALUES (${ORG}, ${uploaderId}, ${'k3'}, ${'gone.csv'}, 9999, ${'deleted'}, NOW())`;
       await sql`
-        INSERT INTO uploads (organization_id, file_key, file_name, file_size_bytes, status)
-        VALUES (${OTHER_ORG}, ${'k4'}, ${'other.csv'}, 7777, ${'completed'})`;
+        INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+        VALUES (${OTHER_ORG}, ${uploaderId}, ${'k4'}, ${'other.csv'}, 7777, ${'completed'}, NOW())`;
 
       expect(await makeDb().getStorageUsedBytes(ORG)).toBe(1500);
     });
@@ -345,11 +364,12 @@ describe('Workers tier usage limits (real SQL)', () => {
     // unfalsifiable from here. Verified by mutation -- removing the cast leaves
     // this test green. Do not read a passing run as cover for dropping it.
     it('sums past the 32-bit ceiling without wrapping', async () => {
+      await seedUploader();
       const hundredMb = 100 * 1024 * 1024;
       for (let i = 0; i < 30; i += 1) {
         await sql`
-          INSERT INTO uploads (organization_id, file_key, file_name, file_size_bytes, status)
-          VALUES (${ORG}, ${`big-${i}`}, ${`big${i}.csv`}, ${hundredMb}, ${'completed'})`;
+          INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+          VALUES (${ORG}, ${uploaderId}, ${`big-${i}`}, ${`big${i}.csv`}, ${hundredMb}, ${'completed'}, NOW())`;
       }
 
       const used = await makeDb().getStorageUsedBytes(ORG);

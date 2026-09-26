@@ -73,9 +73,7 @@ export interface ProductImportLookupProduct {
 }
 
 export type ProductImportOperation<TProduct extends ProductImportLookupProduct> =
-  | { type: 'create' }
-  | { type: 'update'; product: TProduct }
-  | { type: 'conflict'; error: string };
+  { type: 'create' } | { type: 'update'; product: TProduct } | { type: 'conflict'; error: string };
 
 export interface ProductImportOperationInput<TProduct extends ProductImportLookupProduct> {
   sku: string;

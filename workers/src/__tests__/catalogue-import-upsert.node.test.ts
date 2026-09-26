@@ -60,9 +60,16 @@ type SeedProductInput = {
 };
 
 async function seedProduct({ org, sku, barcode, name, cost }: SeedProductInput): Promise<void> {
+  // products.organization_id is a real FK — ensure the org row exists.
   await harness.pg.query(
-    `INSERT INTO products (organization_id, sku, barcode, name, cost_price)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO organizations (id, name, slug, updated_at)
+     VALUES ($1, 'Test Org', 'test-org', NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    [org],
+  );
+  await harness.pg.query(
+    `INSERT INTO products (organization_id, sku, barcode, name, cost_price, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
     [org, sku, barcode, name, cost],
   );
 }
@@ -75,10 +82,31 @@ async function insertUpload(overrides: Record<string, unknown> = {}): Promise<nu
     file_key: 'uploads/user-1/catalogue.csv',
     ...overrides,
   };
+  // uploads.user_id is a real FK chain: user -> organization. Ensure both.
+  await harness.pg.query(
+    `INSERT INTO organizations (id, name, slug, updated_at)
+     VALUES ($1, 'Test Org', 'test-org', NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    [ORG],
+  );
+  const users = await harness.pg.query(
+    `INSERT INTO users (organization_id, clerk_user_id, role, updated_at)
+     VALUES ($1, 'user-1', 'admin', NOW())
+     ON CONFLICT (clerk_user_id) DO UPDATE SET clerk_user_id = EXCLUDED.clerk_user_id
+     RETURNING id`,
+    [ORG],
+  );
   const result = await harness.pg.query(
-    `INSERT INTO uploads (organization_id, file_key, import_type, status, processing_offset, max_skus_snapshot)
-     VALUES ($1, $2, 'product-catalog', $3, $4, $5) RETURNING id`,
-    [ORG, row.file_key, row.status, row.processing_offset, row.max_skus_snapshot],
+    `INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, import_type, status, processing_offset, max_skus_snapshot, updated_at)
+     VALUES ($1, $2, $3, 'catalogue.csv', 128, 'product-catalog', $4, $5, $6, NOW()) RETURNING id`,
+    [
+      ORG,
+      Number((users.rows[0] as { id: number }).id),
+      row.file_key,
+      row.status,
+      row.processing_offset,
+      row.max_skus_snapshot,
+    ],
   );
   return Number((result.rows[0] as { id: number }).id);
 }
@@ -107,15 +135,15 @@ async function countProducts(org: string): Promise<number> {
 describe('processCatalogueImportJob (real SQL via pglite)', () => {
   it('ignores retired barcode and SKU matches while allowing an active shared SKU', async () => {
     await harness.pg.query(
-      `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,
+      `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Test Org', 'test-org', NOW())`,
       [ORG],
     );
     await harness.pg.query(`
       INSERT INTO master_catalogue_entries
-        (barcode, description, api_sku, brand_name, retired_at)
+        (barcode, description, api_sku, brand_name, retired_at, updated_at)
       VALUES
-        ('RETIRED-BARCODE', 'Retired barcode', 'RETIRED-SKU', 'Retired Brand', NOW()),
-        ('ACTIVE-BARCODE', 'Active shared SKU', 'RETIRED-SKU', 'Active Brand', NULL)
+        ('RETIRED-BARCODE', 'Retired barcode', 'RETIRED-SKU', 'Retired Brand', NOW(), NOW()),
+        ('ACTIVE-BARCODE', 'Active shared SKU', 'RETIRED-SKU', 'Active Brand', NULL, NOW())
     `);
     const csv = [
       'SKU,Name,Barcode,Cost',
@@ -147,19 +175,19 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
 
   it('enriches by barcode then wholesaler SKU, reuses org brands, and records true misses', async () => {
     await harness.pg.query(
-      `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,
+      `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Test Org', 'test-org', NOW())`,
       [ORG],
     );
     await harness.pg.query(`
       INSERT INTO master_catalogue_entries
-        (barcode, description, api_sku, sigma_sku, ch2_sku, brand_name, manufacturer_name)
+        (barcode, description, api_sku, sigma_sku, ch2_sku, brand_name, manufacturer_name, updated_at)
       VALUES
-        ('CAT-BARCODE', 'Barcode product', 'API-ONE', NULL, NULL, 'Shared Brand', 'Maker One'),
-        ('CAT-API', 'API product', 'API-TWO', NULL, NULL, 'Shared Brand', 'Maker One'),
-        ('CAT-SIGMA', 'Sigma product', NULL, 'SIGMA-ONE', NULL, 'Sigma Brand', 'Maker Two'),
-        ('CAT-CH2', 'CH2 product', NULL, NULL, 'CH2-ONE', 'CH2 Brand', 'Maker Three'),
-        ('AMB-1', 'Ambiguous one', 'AMBIGUOUS', NULL, NULL, 'Amb One', 'Maker Four'),
-        ('AMB-2', 'Ambiguous two', NULL, ' ambiguous ', NULL, 'Amb Two', 'Maker Five')
+        ('CAT-BARCODE', 'Barcode product', 'API-ONE', NULL, NULL, 'Shared Brand', 'Maker One', NOW()),
+        ('CAT-API', 'API product', 'API-TWO', NULL, NULL, 'Shared Brand', 'Maker One', NOW()),
+        ('CAT-SIGMA', 'Sigma product', NULL, 'SIGMA-ONE', NULL, 'Sigma Brand', 'Maker Two', NOW()),
+        ('CAT-CH2', 'CH2 product', NULL, NULL, 'CH2-ONE', 'CH2 Brand', 'Maker Three', NOW()),
+        ('AMB-1', 'Ambiguous one', 'AMBIGUOUS', NULL, NULL, 'Amb One', 'Maker Four', NOW()),
+        ('AMB-2', 'Ambiguous two', NULL, ' ambiguous ', NULL, 'Amb Two', 'Maker Five', NOW())
     `);
 
     const csv = [
@@ -437,7 +465,7 @@ describe('catalogue import stores escaped spreadsheet formulas (#473)', () => {
   // elsewhere is only the trigger — so the assertion has to be on the row.
   it('persists sku, name, and barcode apostrophe-escaped, all the way to products', async () => {
     await harness.pg.query(
-      `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,
+      `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Test Org', 'test-org', NOW())`,
       [ORG],
     );
     const csv = [

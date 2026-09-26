@@ -137,8 +137,8 @@ describe('POST /api/webhooks/stripe', () => {
     await sql`DELETE FROM subscription_tiers`;
     await sql`DELETE FROM organizations`;
     await sql`
-      INSERT INTO organizations (id, name, slug)
-      VALUES (${ORG}, 'Stripe Org', 'stripe-org')
+      INSERT INTO organizations (id, name, slug, updated_at)
+      VALUES (${ORG}, 'Stripe Org', 'stripe-org', NOW())
     `;
   });
 
@@ -531,8 +531,8 @@ describe('POST /api/webhooks/stripe', () => {
       // deciding which row wins. Without it the answer would be whatever the
       // planner returned first, and the event could land on the wrong tenant.
       await sql`
-        INSERT INTO organizations (id, name, slug)
-        VALUES ('org_other', 'Other Org', 'other-org')
+        INSERT INTO organizations (id, name, slug, updated_at)
+        VALUES ('org_other', 'Other Org', 'other-org', NOW())
       `;
       await sql`
         INSERT INTO subscription_tiers

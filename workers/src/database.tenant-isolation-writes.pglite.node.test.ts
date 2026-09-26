@@ -86,8 +86,8 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
     // check_cycles/bay_checks carry a real FK to organizations; the rest of the
     // tables here do not, but seeding both orgs keeps the fixture honest.
     await sql`
-      INSERT INTO organizations (id, name, slug)
-      VALUES (${ORG}, 'Org A', 'org-a'), (${OTHER_ORG}, 'Org B', 'org-b')
+      INSERT INTO organizations (id, name, slug, updated_at)
+      VALUES (${ORG}, 'Org A', 'org-a', NOW()), (${OTHER_ORG}, 'Org B', 'org-b', NOW())
       ON CONFLICT (id) DO NOTHING`;
   });
 
@@ -103,49 +103,49 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
     await sql`DELETE FROM users`;
 
     const ownProduct = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, 'BAR-OWN', 'SKU-OWN', 'Own Product', 10)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, 'BAR-OWN', 'SKU-OWN', 'Own Product', 10, NOW())
       RETURNING id`;
     ownProductId = Number(ownProduct[0].id);
 
     // Distinctive values: every assertion below checks that none of these ever
     // reaches org-a, so a leak is identifiable rather than merely a count.
     const foreignProduct = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${OTHER_ORG}, 'BAR-SECRET', 'SKU-SECRET', 'Secret Competitor Product', 999)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${OTHER_ORG}, 'BAR-SECRET', 'SKU-SECRET', 'Secret Competitor Product', 999, NOW())
       RETURNING id`;
     foreignProductId = Number(foreignProduct[0].id);
 
     const ownArea = await sql`
-      INSERT INTO store_areas (organization_id, name)
-      VALUES (${ORG}, 'Own Aisle') RETURNING id`;
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES (${ORG}, 'Own Aisle', NOW()) RETURNING id`;
     ownAreaId = Number(ownArea[0].id);
 
     const foreignArea = await sql`
-      INSERT INTO store_areas (organization_id, name)
-      VALUES (${OTHER_ORG}, 'Secret Aisle') RETURNING id`;
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES (${OTHER_ORG}, 'Secret Aisle', NOW()) RETURNING id`;
     foreignAreaId = Number(foreignArea[0].id);
 
     const ownItem = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${ownProductId}, ${ownAreaId}, '2099-01-01', 'Normal')
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${ownProductId}, ${ownAreaId}, '2099-01-01', 'Normal', NOW())
       RETURNING id`;
     ownItemId = Number(ownItem[0].id);
 
     const foreignItem = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${OTHER_ORG}, ${foreignProductId}, ${foreignAreaId}, '2099-06-15', 'Normal')
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${OTHER_ORG}, ${foreignProductId}, ${foreignAreaId}, '2099-06-15', 'Normal', NOW())
       RETURNING id`;
     foreignItemId = Number(foreignItem[0].id);
 
     const ownUser = await sql`
-      INSERT INTO users (organization_id, email, username, role)
-      VALUES (${ORG}, 'a@example.com', 'user-a', 'member') RETURNING id`;
+      INSERT INTO users (organization_id, email, username, role, updated_at)
+      VALUES (${ORG}, 'a@example.com', 'user-a', 'member', NOW()) RETURNING id`;
     ownUserId = Number(ownUser[0].id);
 
     const foreignUser = await sql`
-      INSERT INTO users (organization_id, email, username, role)
-      VALUES (${OTHER_ORG}, 'b@example.com', 'user-b', 'member') RETURNING id`;
+      INSERT INTO users (organization_id, email, username, role, updated_at)
+      VALUES (${OTHER_ORG}, 'b@example.com', 'user-b', 'member', NOW()) RETURNING id`;
     foreignUserId = Number(foreignUser[0].id);
   });
 
@@ -163,7 +163,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       // The return value alone is not enough: a method could report null and
       // still have written. Read the row back independently.
       const rows = await sql`
-        SELECT status, expiry_date::text AS expiry FROM inventory_items WHERE id = ${foreignItemId}`;
+        SELECT status, expiry_date::date::text AS expiry FROM inventory_items WHERE id = ${foreignItemId}`;
       expect(rows[0].status).toBe('Normal');
       expect(rows[0].expiry).toBe('2099-06-15');
     });
@@ -208,8 +208,8 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       // Guards against "fixing" isolation by rejecting everything: the three
       // tests above would all pass against a method that never updates at all.
       const second = await sql`
-        INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-        VALUES (${ORG}, 'BAR-OWN-2', 'SKU-OWN-2', 'Own Product 2', 20) RETURNING id`;
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${ORG}, 'BAR-OWN-2', 'SKU-OWN-2', 'Own Product 2', 20, NOW()) RETURNING id`;
       const secondId = Number(second[0].id);
 
       const result = await db.updateInventoryItem(ORG, ownUserId, ownItemId, {
@@ -255,11 +255,15 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       const rows = await sql`SELECT id FROM inventory_items WHERE id = ${ownItemId}`;
       expect(rows).toHaveLength(0);
 
+      // audit_log.inventory_item_id is ON DELETE SET NULL in the real schema,
+      // so the audit row keeps the org and action but its item pointer is
+      // nulled by the same delete it records.
       const audit = await sql`
-        SELECT organization_id, action FROM audit_log WHERE inventory_item_id = ${ownItemId}`;
+        SELECT organization_id, action, inventory_item_id FROM audit_log`;
       expect(audit).toHaveLength(1);
       expect(audit[0].organization_id).toBe(ORG);
       expect(audit[0].action).toBe('delete');
+      expect(audit[0].inventory_item_id).toBeNull();
     });
   });
 
@@ -297,8 +301,8 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       const db = makeDb();
 
       const spare = await sql`
-        INSERT INTO store_areas (organization_id, name)
-        VALUES (${ORG}, 'Spare Aisle') RETURNING id`;
+        INSERT INTO store_areas (organization_id, name, updated_at)
+        VALUES (${ORG}, 'Spare Aisle', NOW()) RETURNING id`;
 
       await expect(db.deleteStoreArea(ORG, Number(spare[0].id))).resolves.toBe(true);
     });
@@ -471,8 +475,8 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
      */
     it('does not leak a foreign product through the loss-by-SKU report', async () => {
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${foreignProductId}, ${ownAreaId}, '2000-01-01', 'Normal')`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${foreignProductId}, ${ownAreaId}, '2000-01-01', 'Normal', NOW())`;
 
       const report = await makeDb().getLossBySkuReport(ORG);
 
@@ -484,8 +488,8 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
 
     it('does not leak a foreign product through the expired-items worklist', async () => {
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${foreignProductId}, ${ownAreaId}, '2000-01-01', 'Normal')`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${foreignProductId}, ${ownAreaId}, '2000-01-01', 'Normal', NOW())`;
 
       const worklist = await makeDb().getExpiredItems(ORG);
 

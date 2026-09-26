@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 
+// Pin the test process to UTC before workers fork: the real schema uses
+// TIMESTAMP(3) without time zone, so values would otherwise shift by the
+// machine's UTC offset (dev machines are in Australia; CI is UTC).
+process.env.TZ = 'UTC';
+
 /**
  * Node-environment test project for DB integration tests that run real SQL against
  * pglite (WASM, needs Node — cannot run under the workerd vitest pool). Matches only

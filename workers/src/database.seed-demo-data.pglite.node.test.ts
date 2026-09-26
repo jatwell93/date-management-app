@@ -10,18 +10,22 @@
  * Against a stubbed driver all of that collapses into assertions about a
  * string.
  *
- * The harness gained `store_areas_organization_id_name_sub_department_key` for
- * these tests -- production has carried it since the baseline
- * (`database/migrations/0000_baseline.up.sql:397`) and the harness did not, so
- * before that fix the idempotency tests below would have passed against code
- * with no `ON CONFLICT` clause at all.
+ * The schema comes from `database/migrations/`, which carries
+ * `store_areas_organization_id_name_sub_department_key` (the baseline,
+ * `database/migrations/0000_baseline.up.sql:397`) -- the index the
+ * idempotency tests below depend on.
  *
  * Runs under `vitest.node.config.mts` (`*.node.test.ts`, `npm run test:db`).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -44,6 +48,8 @@ describe('Workers seedDemoData (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   }, 30000); // pglite WASM cold-start can exceed the default 10s hook timeout
 
   afterAll(async () => {
@@ -87,11 +93,10 @@ describe('Workers seedDemoData (real SQL)', () => {
   it('writes every inventory item at status Normal and at a future expiry, and spreads the dates', async () => {
     await makeDb().seedDemoData(ORG);
 
-    // Asserted in SQL rather than by comparing to a JS `new Date()`: the
-    // harness declares expiry_date as DATE where production declares
-    // TIMESTAMP(3), and Postgres keeps microseconds where `new Date()` keeps
-    // milliseconds. Both differences make a JS-side comparison a test of the
-    // conversion rather than of the data.
+    // Asserted in SQL rather than by comparing to a JS `new Date()`:
+    // Postgres TIMESTAMP(3) keeps microseconds where `new Date()` keeps
+    // milliseconds, so a JS-side comparison would test the conversion rather
+    // than the data.
     const rows = await sql`
       SELECT status,
              (expiry_date > CURRENT_DATE) AS "inFuture",
@@ -135,8 +140,8 @@ describe('Workers seedDemoData (real SQL)', () => {
     // would be NULL and their inventory items would be dropped by the
     // `WHERE a.id IS NOT NULL` guard -- 5 items instead of 8.
     const existing = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, 'Front Shelf', 'Over-the-Counter')
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, 'Front Shelf', 'Over-the-Counter', NOW())
       RETURNING id`;
     const existingId = Number(existing[0].id);
 
@@ -156,8 +161,8 @@ describe('Workers seedDemoData (real SQL)', () => {
     // does not collide, the barcode does, and one raised unique violation takes
     // down every other insert in the statement.
     await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, '123456789012', 'PRE-EXISTING-SKU', 'Customer product', 9.99)`;
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, '123456789012', 'PRE-EXISTING-SKU', 'Customer product', 9.99, NOW())`;
 
     const result = await makeDb().seedDemoData(ORG);
 
