@@ -146,6 +146,16 @@ jobs:
       # Runs before the build so a formatting failure is reported in seconds
       # rather than after a build and a test run.
       #
+      # `prettier` is an EXACT-pinned devDependency of workers/package.json, and
+      # that pin is what makes this step deterministic. Its first real run failed:
+      # workers declared no prettier, this job installs only workers' own
+      # dependencies, so `npx` fetched the newest published prettier (3.9.9) while
+      # the root install resolved 3.9.6. 3.9.x collapses a multi-line union type
+      # that fits on one line where 3.8.5 did not, so the same tree was "clean"
+      # locally and "3 files need formatting" here. A caret range reintroduces
+      # exactly that, one publish later; the pin matches the version the root
+      # lockfile resolves, so the editor hook and this check agree.
+      #
       # If this fails locally on Windows with one `Delete CR` error per line, the
       # working copy has CRLF where `.gitattributes` (`* text=auto eol=lf`) says
       # LF. That is not drift: git normalizes it on commit, so CI never sees it.
