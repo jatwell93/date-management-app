@@ -1,10 +1,5 @@
 export type TierLevel =
-  | 'free'
-  | 'starter'
-  | 'professional'
-  | 'enterprise'
-  | 'premium'
-  | 'concierge';
+  'free' | 'starter' | 'professional' | 'enterprise' | 'premium' | 'concierge';
 
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 

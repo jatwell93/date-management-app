@@ -283,8 +283,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
     `,
       )
       .get(startDate.toISOString(), endDate.toISOString()) as
-      | { retention_rate: number }
-      | undefined;
+      { retention_rate: number } | undefined;
 
     // Calculate PWA installation rate
     const totalUsers = this.db
@@ -354,8 +353,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
     `,
       )
       .get(eventType, startDate.toISOString(), endDate.toISOString()) as
-      | { count: number }
-      | undefined;
+      { count: number } | undefined;
 
     return result?.count || 0;
   }
