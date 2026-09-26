@@ -296,8 +296,7 @@ async function syncClerkUserFromEvent(
     ? data.organization_memberships
     : [];
   const firstMembership = memberships.find((item) => item && typeof item === 'object') as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const orgPayload =
     firstMembership && typeof firstMembership.organization === 'object'
       ? (firstMembership.organization as Record<string, unknown>)

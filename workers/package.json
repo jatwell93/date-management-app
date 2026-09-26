@@ -9,6 +9,8 @@
     "build:types": "tsc --noEmit -p tsconfig.deploy.json",
     "lint": "tsc --noEmit -p tsconfig.deploy.json",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "format": "prettier --write \"src/**/*.ts\" \"*.{js,mjs,cjs,mts,cts}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{js,mjs,cjs,mts,cts}\"",
     "deploy": "npm run build && wrangler deploy",
     "deploy:prod": "npm run build && wrangler deploy --env production",
     "deploy:dev": "npm run build && wrangler deploy --env development",
@@ -48,6 +50,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.2",
+    "prettier": "3.9.6",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11",
     "wrangler": "^4.129.1"

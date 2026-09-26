@@ -39,9 +39,7 @@ export type SubscriptionAccessRow = {
 };
 
 export type SubscriptionLapseReason =
-  | 'trial-expired'
-  | 'cancellation-window-elapsed'
-  | 'dunning-grace-elapsed';
+  'trial-expired' | 'cancellation-window-elapsed' | 'dunning-grace-elapsed';
 
 /**
  * Something the caller should log but not act on. Neither value denies access —
