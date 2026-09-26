@@ -10,6 +10,8 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { runMemvid } = require('./memvid-exec');
+
 const envPath = path.join(__dirname, '..', '.env');
 require('dotenv').config({ path: envPath, override: true });
 
@@ -89,28 +91,22 @@ function backfillMemoryJsonl() {
   const cleanEnv = { ...process.env };
   ensureMemvidAvailable(cleanEnv);
 
-  const stats = execFileSync('memvid', ['stats', MEMORY_FILE], {
+  // Quoted via runMemvid: MEMORY_FILE is an absolute path, and an unquoted one
+  // containing a space becomes two arguments. See scripts/memvid-exec.js.
+  const stats = runMemvid(['stats', MEMORY_FILE], {
     env: cleanEnv,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: true,
-    windowsHide: true,
   });
   const frameCount = parseFrameCount(stats);
   const records = [];
 
   for (let frameId = 0; frameId < frameCount; frameId += 1) {
-    const output = execFileSync(
-      'memvid',
-      ['view', MEMORY_FILE, '--frame-id', String(frameId), '--json'],
-      {
-        env: cleanEnv,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,
-        windowsHide: true,
-      },
-    );
+    const output = runMemvid(['view', MEMORY_FILE, '--frame-id', String(frameId), '--json'], {
+      env: cleanEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     records.push(frameToRecord(JSON.parse(output)));
   }

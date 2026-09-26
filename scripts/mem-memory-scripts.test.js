@@ -72,6 +72,52 @@ process.exit(1);
   assert.match(result.stderr, /Failed to update local memvid index/);
 });
 
+test('mem-log passes a multi-word title to memvid as one argument', () => {
+  // The companion to the rebuild assertion below. mem-log downgrades an index
+  // failure to a warning, so this bug was invisible here: memory.jsonl kept every
+  // entry while the local index — the thing mem-recall.js searches — silently
+  // stopped receiving them.
+  const tempDir = makeTempDir();
+  const memoryJsonl = path.join(tempDir, 'memory.jsonl');
+  const memoryFile = path.join(tempDir, 'project-memory.mv2');
+  const callsFile = path.join(tempDir, 'calls.jsonl');
+
+  writeFakeMemvid(
+    tempDir,
+    `
+const fs = require('node:fs');
+const callsFile = process.env.CALLS_FILE;
+const stdin = process.argv[2] === 'put' ? fs.readFileSync(0, 'utf8') : '';
+fs.appendFileSync(callsFile, JSON.stringify({ args: process.argv.slice(2), stdin }) + '\\n');
+process.exit(0);
+`,
+  );
+
+  const result = runNode('mem-log.js', ['FIX', 'Quoted Title With Spaces', 'body text'], {
+    PATH: `${tempDir}${path.delimiter}${process.env.PATH}`,
+    MEMORY_JSONL_PATH: memoryJsonl,
+    MEMORY_FILE_PATH: memoryFile,
+    CALLS_FILE: callsFile,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /Failed to update local memvid index/);
+
+  const put = fs
+    .readFileSync(callsFile, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((call) => call.args[0] === 'put');
+
+  assert.ok(put, 'expected a put call');
+  const titleIndex = put.args.indexOf('--title');
+  assert.notEqual(titleIndex, -1);
+  assert.equal(put.args[titleIndex + 1], 'Quoted Title With Spaces');
+  // And the argument after the title is the next flag, not a stray fragment of it.
+  assert.equal(put.args[titleIndex + 2], '--kind');
+});
+
 test('mem-rebuild regenerates the local mv2 index from memory.jsonl records', () => {
   const tempDir = makeTempDir();
   const memoryJsonl = path.join(tempDir, 'memory.jsonl');
@@ -123,6 +169,14 @@ process.exit(1);
   assert.equal(calls[2].args[0], 'put');
   assert.equal(calls[2].args[1], memoryFile);
   assert.equal(calls[2].stdin, '[PATTERN] Authentication uses JWT tokens');
+  // The title must arrive as ONE argument. This test already used a title with a
+  // space and asserted only args[0] and args[1], so it passed for months while
+  // `--title Auth Pattern` was reaching memvid as two arguments and every real
+  // rebuild died on "unexpected argument". Asserting the value is what makes the
+  // quoting in scripts/memvid-exec.js testable.
+  const titleIndex = calls[2].args.indexOf('--title');
+  assert.notEqual(titleIndex, -1);
+  assert.equal(calls[2].args[titleIndex + 1], 'Auth Pattern');
   const timestampIndex = calls[2].args.indexOf('--timestamp');
   assert.notEqual(timestampIndex, -1);
   assert.equal(

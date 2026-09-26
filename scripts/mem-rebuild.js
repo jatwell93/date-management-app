@@ -10,6 +10,8 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { runMemvid } = require('./memvid-exec');
+
 const envPath = path.join(__dirname, '..', '.env');
 require('dotenv').config({ path: envPath, override: true });
 
@@ -96,11 +98,12 @@ function rebuildMemory() {
     console.log(`Moved existing local index to ${backupPath}`);
   }
 
-  execFileSync('memvid', ['create', MEMORY_FILE], {
+  // MEMORY_FILE is an absolute path and MEMORY_FILE_PATH can point anywhere, so
+  // it goes through the quoting helper as well: a home directory containing a
+  // space would otherwise split it into two arguments.
+  runMemvid(['create', MEMORY_FILE], {
     env: cleanEnv,
     stdio: ['ignore', 'inherit', 'inherit'],
-    shell: true,
-    windowsHide: true,
   });
 
   records.forEach((record, index) => {
@@ -114,12 +117,15 @@ function rebuildMemory() {
         args.push('--timestamp', memvidTimestamp);
       }
 
-      execFileSync('memvid', args, {
+      // See scripts/memvid-exec.js. This call is where the unquoted-argv bug was
+      // fatal rather than merely warned about: the rebuild throws on the first
+      // failing record, so a single multi-word title stopped the whole index
+      // being rebuilt — `npm run mem:rebuild` died on record 1 of 285,
+      // "Project Overview".
+      runMemvid(args, {
         env: cleanEnv,
         stdio: ['pipe', 'inherit', 'inherit'],
         input: `[${kind}] ${message}`,
-        shell: true,
-        windowsHide: true,
       });
     } catch (error) {
       throw new Error(`Failed to rebuild memory record ${index + 1} (${title}): ${error.message}`);
