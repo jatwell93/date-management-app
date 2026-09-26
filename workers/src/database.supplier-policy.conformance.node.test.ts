@@ -138,8 +138,7 @@ function sqlitePolicyReview(
             id: Number(row.supplierId),
             name: String(row.supplierName),
             creditType: (row.creditType === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE') as
-              | 'FULL_CREDIT'
-              | 'NONE',
+              'FULL_CREDIT' | 'NONE',
             contactEmail: (row.contactEmail as string | null) ?? null,
             contactPhone: (row.contactPhone as string | null) ?? null,
             creditPolicyNote: String(row.creditPolicyNote ?? ''),

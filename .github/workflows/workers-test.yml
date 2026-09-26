@@ -96,7 +96,12 @@ jobs:
             run_tests "git diff failed (${changed}); running workers tests."
           fi
 
-          if printf '%s\n' "$changed" | grep -qE '^(workers|shared)/'; then
+          # This workflow file is in the pattern on purpose: a change to the jobs
+          # below could not otherwise be exercised by the jobs below. Without it,
+          # editing a step here leaves `workers=false`, the test jobs skip, and
+          # `gate` reports success for a change nothing ran -- so a broken or
+          # no-op step lands looking green.
+          if printf '%s\n' "$changed" | grep -qE '^(workers|shared)/|^\.github/workflows/workers-test\.yml$'; then
             echo "workers=true" >> "$GITHUB_OUTPUT"
           else
             echo "workers=false" >> "$GITHUB_OUTPUT"
@@ -130,6 +135,40 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # The only formatting gate on this tree. The root ESLint config carries the
+      # `prettier/prettier` rule but `eslint.ignores.js` excludes `**/workers/**`
+      # ("Workers has its own separate config"), and the Workers package's own
+      # `lint` script is `tsc --noEmit` — a type-check, not a linter. So nothing
+      # checked formatting here, and PR #537 had to reformat 17 drifted files in
+      # one go.
+      #
+      # Runs before the build so a formatting failure is reported in seconds
+      # rather than after a build and a test run.
+      #
+      # `prettier` is an EXACT-pinned devDependency of workers/package.json, and
+      # that pin is what makes this step deterministic. Its first real run failed:
+      # workers declared no prettier, this job installs only workers' own
+      # dependencies, so `npx` fetched the newest published prettier (3.9.9) while
+      # the root install resolved 3.9.6. 3.9.x collapses a multi-line union type
+      # that fits on one line where 3.8.5 did not, so the same tree was "clean"
+      # locally and "3 files need formatting" here. A caret range reintroduces
+      # exactly that, one publish later; the pin matches the version the root
+      # lockfile resolves, so the editor hook and this check agree.
+      #
+      # If this fails locally on Windows with one `Delete CR` error per line, the
+      # working copy has CRLF where `.gitattributes` (`* text=auto eol=lf`) says
+      # LF. That is not drift: git normalizes it on commit, so CI never sees it.
+      # `.claude/hooks/format.sh` corrects it on edit; do not "fix" it by running
+      # `prettier --write` over a CRLF checkout and committing the result.
+      # `npm run format:check`, not an inline `npx prettier`, so the command CI
+      # runs and the command a developer runs cannot drift apart — and so the
+      # binary comes from workers' own lockfile rather than whatever `npx`
+      # resolves. The glob covers the config files beside `src` too (build.js,
+      # esbuild.config.js, vitest.config.mts, vitest.node.config.mts): root
+      # ESLint excludes `**/workers/**`, so nothing else checks them.
+      - name: Check formatting
+        run: npm run format:check
 
       # `health.test.ts` and `__tests__/auth-integration.test.ts` load the built
       # bundle (`dist/index.js`) through the workerd pool, so it must exist
