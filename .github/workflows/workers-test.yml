@@ -131,6 +131,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The only formatting gate on this tree. The root ESLint config carries the
+      # `prettier/prettier` rule but `eslint.ignores.js` excludes `**/workers/**`
+      # ("Workers has its own separate config"), and the Workers package's own
+      # `lint` script is `tsc --noEmit` — a type-check, not a linter. So nothing
+      # checked formatting here, and PR #537 had to reformat 17 drifted files in
+      # one go.
+      #
+      # Runs before the build so a formatting failure is reported in seconds
+      # rather than after a build and a test run.
+      #
+      # If this fails locally on Windows with one `Delete CR` error per line, the
+      # working copy has CRLF where `.gitattributes` (`* text=auto eol=lf`) says
+      # LF. That is not drift: git normalizes it on commit, so CI never sees it.
+      # `.claude/hooks/format.sh` corrects it on edit; do not "fix" it by running
+      # `prettier --write` over a CRLF checkout and committing the result.
+      - name: Check formatting
+        run: npx prettier --check "src/**/*.ts"
+
       # `health.test.ts` and `__tests__/auth-integration.test.ts` load the built
       # bundle (`dist/index.js`) through the workerd pool, so it must exist
       # before vitest starts. A local run passes without this step only because
