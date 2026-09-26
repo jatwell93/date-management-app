@@ -1284,6 +1284,115 @@ async function getProcessedItemIds(
  * Create database connection for Workers environment
  * Uses Hyperdrive connection string from env bindings
  */
+/**
+ * The demo catalogue `seedDemoData` writes, ported from Express's
+ * `SeedService.seedDemoData` (`backend/src/services/seed.service.ts:325`).
+ *
+ * Module scope rather than inline `VALUES` rows, because this is data: changing
+ * a price or adding a product should not mean editing a SQL statement, and the
+ * statement reads as one idea once the catalogue is lifted out of it.
+ *
+ * Products name their area rather than indexing it. The three area names are
+ * distinct, so the join needs no ordinal and no index arithmetic — and a row
+ * that says `areaName: 'Cooler'` cannot be silently misaligned by inserting a
+ * product above it, which an index column can.
+ *
+ * `monthsToExpiry` is a per-row constant where Express computed it as
+ * `areaIndex === 2 ? 6 : productsCreatedCount % 2 === 0 ? 3 : 18` — a counter of
+ * how many products that run had created SO FAR, so re-seeding a half-seeded
+ * organization gave the same product a different expiry date. Nothing depends on
+ * that; fixed values reproduce the same 3/6/18-month spread deterministically.
+ */
+const DEMO_STORE_AREAS = [
+  { name: 'Front Shelf', subDepartment: 'Over-the-Counter' },
+  { name: 'Back Storage', subDepartment: 'Prescription' },
+  { name: 'Cooler', subDepartment: 'Refrigerated' },
+] as const;
+
+const DEMO_PRODUCTS = [
+  {
+    sku: 'VIT-C-500',
+    name: 'Vitamin C 500mg',
+    barcode: '123456789012',
+    costPrice: 5.5,
+    areaName: 'Front Shelf',
+    monthsToExpiry: 3,
+  },
+  {
+    sku: 'IBU-200',
+    name: 'Ibuprofen 200mg',
+    barcode: '123456789013',
+    costPrice: 4.2,
+    areaName: 'Front Shelf',
+    monthsToExpiry: 18,
+  },
+  {
+    sku: 'PARA-500',
+    name: 'Paracetamol 500mg',
+    barcode: '123456789014',
+    costPrice: 3.8,
+    areaName: 'Front Shelf',
+    monthsToExpiry: 3,
+  },
+  {
+    sku: 'AMOX-250',
+    name: 'Amoxicillin 250mg',
+    barcode: '123456789015',
+    costPrice: 12.0,
+    areaName: 'Back Storage',
+    monthsToExpiry: 18,
+  },
+  {
+    sku: 'LISI-10',
+    name: 'Lisinopril 10mg',
+    barcode: '123456789016',
+    costPrice: 8.5,
+    areaName: 'Back Storage',
+    monthsToExpiry: 3,
+  },
+  {
+    sku: 'MET-500',
+    name: 'Metformin 500mg',
+    barcode: '123456789017',
+    costPrice: 6.0,
+    areaName: 'Back Storage',
+    monthsToExpiry: 18,
+  },
+  {
+    sku: 'INSU-GLA',
+    name: 'Insulin Glargine',
+    barcode: '123456789018',
+    costPrice: 45.0,
+    areaName: 'Cooler',
+    monthsToExpiry: 6,
+  },
+  {
+    sku: 'EPI-300',
+    name: 'EpiPen 0.3mg',
+    barcode: '123456789019',
+    costPrice: 150.0,
+    areaName: 'Cooler',
+    monthsToExpiry: 6,
+  },
+] as const;
+
+/**
+ * `DEMO_STORE_AREAS` and `DEMO_PRODUCTS` transposed into the parallel arrays the
+ * seed statement binds. Computed once at module load rather than per call: the
+ * catalogue is a constant, so rebuilding eight arrays on every seed was work
+ * done for nothing.
+ */
+const DEMO_SEED_COLUMNS = {
+  areaNames: DEMO_STORE_AREAS.map((area) => area.name),
+  areaSubDepartments: DEMO_STORE_AREAS.map((area) => area.subDepartment),
+  productSkus: DEMO_PRODUCTS.map((product) => product.sku),
+  productNames: DEMO_PRODUCTS.map((product) => product.name),
+  productBarcodes: DEMO_PRODUCTS.map((product) => product.barcode),
+  productCostPrices: DEMO_PRODUCTS.map((product) => product.costPrice),
+  productAreaNames: DEMO_PRODUCTS.map((product) => product.areaName),
+  productMonths: DEMO_PRODUCTS.map((product) => product.monthsToExpiry),
+} as const;
+
 export function createWorkersDatabase(env: Env): Database {
   // Neon serverless driver is most reliable with direct Neon connection strings.
   // Keep Hyperdrive as an emergency fallback when secrets are missing.
@@ -3205,11 +3314,18 @@ export function createWorkersDatabase(env: Env): Database {
       // to raise. An organization can therefore finish onboarding holding more
       // products than its tier allows, and the next interactive create is what
       // refuses.
+      //
+      // The catalogue is passed as the parallel arrays in `DEMO_SEED_COLUMNS`
+      // rather than as literal `VALUES` rows, so that it can live at module scope
+      // as data. `unnest` of several arrays is only legal in `FROM`, which is
+      // where both input CTEs use it, and the explicit casts are what give
+      // Postgres the column types the inserts need.
+      const seed = DEMO_SEED_COLUMNS;
+
       const rows = await sql`
-        WITH area_input (idx, name, sub_department) AS (
-          VALUES (0, 'Front Shelf', 'Over-the-Counter'),
-                 (1, 'Back Storage', 'Prescription'),
-                 (2, 'Cooler', 'Refrigerated')
+        WITH area_input AS (
+          SELECT * FROM unnest(${seed.areaNames}::text[], ${seed.areaSubDepartments}::text[])
+                        AS t(name, sub_department)
         ),
         inserted_areas AS (
           INSERT INTO store_areas (organization_id, name, sub_department, created_at, updated_at)
@@ -3219,7 +3335,7 @@ export function createWorkersDatabase(env: Env): Database {
           RETURNING id, name, sub_department
         ),
         areas AS (
-          SELECT ai.idx, COALESCE(ins.id, ex.id) AS id
+          SELECT ai.name, COALESCE(ins.id, ex.id) AS id
           FROM area_input ai
           LEFT JOIN inserted_areas ins
             ON ins.name = ai.name AND ins.sub_department = ai.sub_department
@@ -3228,16 +3344,12 @@ export function createWorkersDatabase(env: Env): Database {
            AND ex.name = ai.name
            AND ex.sub_department = ai.sub_department
         ),
-        product_input (sku, name, barcode, cost_price, area_idx, months) AS (
-          VALUES
-            ('VIT-C-500', 'Vitamin C 500mg', '123456789012', 5.5, 0, 3),
-            ('IBU-200', 'Ibuprofen 200mg', '123456789013', 4.2, 0, 18),
-            ('PARA-500', 'Paracetamol 500mg', '123456789014', 3.8, 0, 3),
-            ('AMOX-250', 'Amoxicillin 250mg', '123456789015', 12.0, 1, 18),
-            ('LISI-10', 'Lisinopril 10mg', '123456789016', 8.5, 1, 3),
-            ('MET-500', 'Metformin 500mg', '123456789017', 6.0, 1, 18),
-            ('INSU-GLA', 'Insulin Glargine', '123456789018', 45.0, 2, 6),
-            ('EPI-300', 'EpiPen 0.3mg', '123456789019', 150.0, 2, 6)
+        product_input AS (
+          SELECT * FROM unnest(
+            ${seed.productSkus}::text[], ${seed.productNames}::text[], ${seed.productBarcodes}::text[],
+            ${seed.productCostPrices}::double precision[], ${seed.productAreaNames}::text[],
+            ${seed.productMonths}::int[]
+          ) AS t(sku, name, barcode, cost_price, area_name, months)
         ),
         inserted_products AS (
           INSERT INTO products (organization_id, barcode, sku, name, cost_price, created_at, updated_at)
@@ -3247,7 +3359,7 @@ export function createWorkersDatabase(env: Env): Database {
           RETURNING id, sku
         ),
         resolved_products AS (
-          SELECT pi.sku, pi.area_idx, pi.months, COALESCE(ip.id, ep.id) AS id
+          SELECT pi.sku, pi.area_name, pi.months, COALESCE(ip.id, ep.id) AS id
           FROM product_input pi
           LEFT JOIN inserted_products ip ON ip.sku = pi.sku
           LEFT JOIN products ep
@@ -3261,7 +3373,7 @@ export function createWorkersDatabase(env: Env): Database {
                  CURRENT_DATE + (rp.months * INTERVAL '1 month'),
                  'Normal', NOW(), NOW()
           FROM resolved_products rp
-          JOIN areas a ON a.idx = rp.area_idx
+          JOIN areas a ON a.name = rp.area_name
           WHERE rp.id IS NOT NULL
             AND a.id IS NOT NULL
             AND NOT EXISTS (

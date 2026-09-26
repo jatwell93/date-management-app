@@ -3054,6 +3054,22 @@ equivalent, a relocated home, or an explicit retirement decision.
             already use case-sensitive `LIKE` on the same column. Reverted to `LIKE`, and the test
             now seeds both writers' exact strings so rewording an audit description fails the test
             instead of silently zeroing a report.
+            <br>**Two review findings actioned on the PR.** (a) `hasOrgRole` admitted a caller with
+            **no** role whenever `team_member` was in the allow list, because
+            `normalizeRole(null)` is `team_member` by design — least privilege for a stored value,
+            the wrong answer for a gate. Express refuses a missing role ahead of the allow list in
+            both of its decision paths (`requireOrgRole` at
+            `backend/src/middleware/requireOrgRole.ts:40-43` and `assertOrgRole` at `:19-20`), and
+            the doc comment claimed this function did too, so the module written to stop those two
+            decisions drifting contained the drift. No call site lists `team_member`, so nothing
+            changed today; the guard and its test exist because the first gate that does list it
+            would otherwise diverge silently. Mutation-verified: removing the guard fails only the
+            new test, which is precisely why it needed one. (b) The demo catalogue moved from inline
+            `VALUES` rows to `DEMO_STORE_AREAS` / `DEMO_PRODUCTS` at module scope, bound through
+            `unnest` of parallel arrays transposed once at load rather than per call, and products
+            now name their area instead of indexing it — an index column can be silently misaligned
+            by inserting a row above it, a name cannot. Three of the seed mutations were re-applied
+            against the rewritten statement and still caught.
 - [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
