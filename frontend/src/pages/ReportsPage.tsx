@@ -54,9 +54,7 @@ function markdownLevelLabel(level: number | null): string {
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
 type RequiredOverallSummaryField =
-  | 'expiry_risk_count'
-  | 'next_month_markdown_count'
-  | 'active_expiry_stock_count';
+  'expiry_risk_count' | 'next_month_markdown_count' | 'active_expiry_stock_count';
 
 function formatReportDate(value: string) {
   const date = new Date(value);

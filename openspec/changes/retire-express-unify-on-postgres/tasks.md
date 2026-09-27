@@ -3137,12 +3137,31 @@ equivalent, a relocated home, or an explicit retirement decision.
       days / 10 files of retention — so with (b)'s 6-hour PITR reach and single snapshot,
       Neon-native alone is a reduction. The two current implementations also disagree on the backup
       destination path; settle that once.
-- [ ] 3.5 Initialize the pglite conformance harness from the **authoritative Phase 1 migrations/baseline**
+- [x] 3.5 Initialize the pglite conformance harness from the **authoritative Phase 1 migrations/baseline**
       instead of its embedded `SCHEMA_SQL`, and drop the SQLite comparison arm — conformance becomes "raw
       SQL vs shared TS on Postgres". The conformance tests already live in `workers/src/__tests__/`
       (`database.conformance.node.test.ts`, `database.credit-claim.conformance.node.test.ts`,
       `database.supplier-policy.conformance.node.test.ts`, etc.), so this is a workers-side edit. Add a
       fresh-database drift test so the harness stops being an independent schema source.
+      **Done.** `workers/src/__tests__/pglite-db.ts` no longer carries a schema: `createPgliteHarness()`
+      replays `database/migrations/` through the real runner (`applyPendingMigrations`) via the pglite
+      adapter now shared with `baseline.fingerprint.test.ts` (`src/database/migrations/pglite-client.ts`),
+      memoizes one migrated data dir per `through` value, and clones it per harness with `loadDataDir`.
+      `{ through: '<id>' }` stops early (used by the 0014 role-normalization test). Session and test
+      process are pinned to UTC (Workers and Neon both run UTC), which removes the `TIMESTAMP(3)` shift.
+      `pglite-harness-drift.node.test.ts` asserts the cloned catalog equals `catalog-fingerprint.json`
+      exactly and that the ledger holds every manifest id in order. The three conformance suites lost
+      their SQLite arm and backend imports; oracle outputs are now explicit literals (captured from the
+      SQLite run before removal, all still matching) plus `shared/domain` TS. The test-db CI job no longer
+      installs backend deps; `@types/better-sqlite3` dropped from workers.
+      Drift the old schema had been hiding, now fixed in fixtures only (no production Worker INSERT was
+      affected — all name `updated_at` explicitly): `updated_at` NOT NULL with no default, real FKs to
+      `organizations`/`users`/`products`/`store_areas`, `inventory_items.product_id`/`location_id` and
+      `uploads.user_id` NOT NULL. One assertion changed: the #268 "NULL `cost_price`" write-off test was
+      unreachable (`0000_baseline.up.sql:125` declares `cost_price NOT NULL`) and now asserts the schema
+      rejects the insert (23502); the production `COALESCE` guard is kept. Verified: test:db 318 passed /
+      1 skipped (317s, up from ~122s — one migration replay per fork), workerd 597 passed, root
+      `test:migrations` 95/95, typecheck/format/lint clean.
 - [ ] 3.6 Run the Worker locally (`wrangler dev`) as the dev API; verify the frontend works against it in
       local dev. Add the `wrangler dev` local config (`.dev.vars` / `wrangler.toml` dev section) pointing at
       a developer-owned Neon branch (vs production Hyperdrive), and document which behaviours need the Neon

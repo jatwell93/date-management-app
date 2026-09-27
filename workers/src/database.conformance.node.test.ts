@@ -1,19 +1,10 @@
-import { createRequire } from 'node:module';
-import { fileURLToPath, URL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
 import { DISPOSITIONED_STATUSES } from '../../shared/domain/disposition';
 import { MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
-import { ReportRepository } from '../../backend/src/repositories/report.repository';
-import type { FloorProgress } from '../../backend/src/models/store-area.model';
-
-const backendRequire = createRequire(
-  fileURLToPath(new URL('../../backend/package.json', import.meta.url)),
-);
-backendRequire('reflect-metadata');
-const SQLiteDatabase = backendRequire('better-sqlite3') as typeof import('better-sqlite3');
+import type { FloorProgress } from './database';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -35,135 +26,17 @@ interface SeededItem {
   creditContext?: 'DIRECT_FULL' | 'REFERENCE_FULL';
 }
 
-function createSqliteDb(): import('better-sqlite3').Database {
-  const db = new SQLiteDatabase(':memory:');
-  db.exec(`
-    CREATE TABLE products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      barcode TEXT NOT NULL,
-      sku TEXT NOT NULL,
-      name TEXT NOT NULL,
-      cost_price REAL NOT NULL DEFAULT 0,
-      retail_price REAL,
-      supplier_id INTEGER,
-      brand_id INTEGER
-    );
-    CREATE TABLE suppliers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      credit_policy_note TEXT,
-      credit_type TEXT NOT NULL DEFAULT 'NONE'
-    );
-    CREATE TABLE brands (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'REFERENCE',
-      suggested_supplier_name TEXT,
-      supplier_id INTEGER
-    );
-    CREATE TABLE store_areas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      parent_id INTEGER,
-      name TEXT NOT NULL,
-      sub_department TEXT,
-      last_checked TEXT
-    );
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      email TEXT,
-      username TEXT,
-      pin TEXT,
-      role TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE check_cycles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active',
-      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      completed_at TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE bay_checks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      cycle_id INTEGER NOT NULL,
-      store_area_id INTEGER NOT NULL,
-      user_id INTEGER,
-      checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      items_added_count INTEGER NOT NULL DEFAULT 0,
-      notes TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE inventory_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      product_id INTEGER NOT NULL,
-      location_id INTEGER NOT NULL,
-      expiry_date TEXT,
-      status TEXT NOT NULL DEFAULT 'Active',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE expired_item_transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organization_id TEXT NOT NULL,
-      inventory_item_id INTEGER NOT NULL,
-      user_id INTEGER,
-      action TEXT NOT NULL,
-      units_discarded INTEGER,
-      financial_loss REAL,
-      markdown_level INTEGER,
-      transaction_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  return db;
-}
-
-function toSqliteStatement(strings: TemplateStringsArray, values: unknown[]) {
-  let text = '';
-  strings.forEach((chunk, index) => {
-    text += chunk;
-    if (index < values.length) {
-      text += '?';
-    }
-  });
-  return text;
-}
-
-function createSqlitePrismaAdapter(db: import('better-sqlite3').Database) {
-  const runRaw = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const text = toSqliteStatement(strings, values);
-    return db.prepare(text).all(...values);
-  };
-
-  return {
-    $queryRaw: runRaw,
-    $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => {
-      const text = toSqliteStatement(strings, values);
-      return db.prepare(text).run(...values).changes;
-    },
-  };
-}
-
 function expiryDateForOffset(offsetDays: number): string {
   const now = new Date();
   const baseUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return new Date(baseUtc + offsetDays * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
-function normalizeDetailedRows(
-  rows: Awaited<ReturnType<ReportRepository['getDetailedExpiryReport']>>,
-) {
+type DetailedExpiryRow = Awaited<
+  ReturnType<ReturnType<typeof createWorkersDatabase>['getDetailedExpiryReport']>
+>;
+
+function normalizeDetailedRows(rows: DetailedExpiryRow) {
   return rows.map((row) => ({
     expiryDate: row.expiryDate.slice(0, 10),
     status: row.status,
@@ -177,7 +50,9 @@ function normalizeDetailedRows(
   }));
 }
 
-function normalizeSummary(report: Awaited<ReturnType<ReportRepository['getOverallExpiryReport']>>) {
+function normalizeSummary(
+  report: Awaited<ReturnType<ReturnType<typeof createWorkersDatabase>['getOverallExpiryReport']>>,
+) {
   return {
     total_expiring: Number(report.total_expiring),
     expired_count: Number(report.expired_count),
@@ -192,7 +67,9 @@ function normalizeSummary(report: Awaited<ReturnType<ReportRepository['getOveral
 }
 
 function normalizeSellThrough(
-  rows: Awaited<ReturnType<ReportRepository['getSellThroughByMarkdownLevel']>>,
+  rows: Awaited<
+    ReturnType<ReturnType<typeof createWorkersDatabase>['getSellThroughByMarkdownLevel']>
+  >,
 ) {
   return rows.map((row) => ({
     markdownLevel: row.markdownLevel === null ? null : Number(row.markdownLevel),
@@ -232,27 +109,27 @@ async function seedWorkersStoreWalkFloorProgress(sql: NeonQueryFunction<false, f
   await sql`DELETE FROM store_areas`;
   await sql`DELETE FROM users`;
   await sql`
-    INSERT INTO organizations (id, name, slug)
-    VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'})
+    INSERT INTO organizations (id, name, slug, updated_at)
+    VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'}, NOW())
     ON CONFLICT (id) DO NOTHING
   `;
   await sql`
-    INSERT INTO users (id, organization_id, email, username, role)
-    VALUES (${7}, ${ORG}, ${'checker@example.test'}, ${'Checker One'}, ${'team_member'})
+    INSERT INTO users (id, organization_id, email, username, role, updated_at)
+    VALUES (${7}, ${ORG}, ${'checker@example.test'}, ${'Checker One'}, ${'team_member'}, NOW())
   `;
   await sql`
-    INSERT INTO store_areas (id, organization_id, name, sub_department)
+    INSERT INTO store_areas (id, organization_id, name, sub_department, updated_at)
     VALUES
-      (${10}, ${ORG}, ${'Bakery'}, ${'Bakery'}),
-      (${20}, ${ORG}, ${'Dairy'}, ${'Dairy'})
+      (${10}, ${ORG}, ${'Bakery'}, ${'Bakery'}, NOW()),
+      (${20}, ${ORG}, ${'Dairy'}, ${'Dairy'}, NOW())
   `;
   await sql`
-    INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department, last_checked)
+    INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department, last_checked, updated_at)
     VALUES
-      (${12}, ${ORG}, ${10}, ${'Bakery Bay 2'}, ${'Bakery'}, ${null}),
-      (${11}, ${ORG}, ${10}, ${'Bakery Bay 1'}, ${'Bakery'}, ${'2026-07-09T07:00:00.000Z'}::timestamptz),
-      (${22}, ${ORG}, ${20}, ${'Dairy Bay 2'}, ${'Dairy'}, ${'2026-07-09T09:30:00.000Z'}::timestamptz),
-      (${21}, ${ORG}, ${20}, ${'Dairy Bay 1'}, ${'Dairy'}, ${'2026-07-09T06:00:00.000Z'}::timestamptz)
+      (${12}, ${ORG}, ${10}, ${'Bakery Bay 2'}, ${'Bakery'}, ${null}, NOW()),
+      (${11}, ${ORG}, ${10}, ${'Bakery Bay 1'}, ${'Bakery'}, ${'2026-07-09T07:00:00.000Z'}::timestamptz, NOW()),
+      (${22}, ${ORG}, ${20}, ${'Dairy Bay 2'}, ${'Dairy'}, ${'2026-07-09T09:30:00.000Z'}::timestamptz, NOW()),
+      (${21}, ${ORG}, ${20}, ${'Dairy Bay 1'}, ${'Dairy'}, ${'2026-07-09T06:00:00.000Z'}::timestamptz, NOW())
   `;
   await sql`
     INSERT INTO check_cycles (id, organization_id, name, status, started_at, created_at, updated_at)
@@ -282,57 +159,10 @@ async function seedWorkersStoreWalkFloorProgress(sql: NeonQueryFunction<false, f
   `;
 }
 
-function seedSqliteStoreWalkFloorProgress(sqlite: import('better-sqlite3').Database) {
-  sqlite
-    .prepare(
-      'INSERT INTO users (id, organization_id, email, username, role) VALUES (?, ?, ?, ?, ?)',
-    )
-    .run(7, ORG, 'checker@example.test', 'checker-one', 'Checker One');
-  sqlite
-    .prepare(
-      'INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)',
-    )
-    .run(10, ORG, 'Bakery', 'Bakery');
-  sqlite
-    .prepare(
-      'INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)',
-    )
-    .run(20, ORG, 'Dairy', 'Dairy');
-
-  const insertBay = sqlite.prepare(
-    'INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department, last_checked) VALUES (?, ?, ?, ?, ?, ?)',
-  );
-  insertBay.run(12, ORG, 10, 'Bakery Bay 2', 'Bakery', null);
-  insertBay.run(11, ORG, 10, 'Bakery Bay 1', 'Bakery', '2026-07-09T07:00:00.000Z');
-  insertBay.run(22, ORG, 20, 'Dairy Bay 2', 'Dairy', '2026-07-09T09:30:00.000Z');
-  insertBay.run(21, ORG, 20, 'Dairy Bay 1', 'Dairy', '2026-07-09T06:00:00.000Z');
-
-  sqlite
-    .prepare(
-      'INSERT INTO check_cycles (id, organization_id, name, status, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    )
-    .run(
-      31,
-      ORG,
-      'Morning walk',
-      'active',
-      '2026-07-09T08:00:00.000Z',
-      '2026-07-09T08:00:00.000Z',
-      '2026-07-09T08:00:00.000Z',
-    );
-  sqlite
-    .prepare(
-      'INSERT INTO bay_checks (id, organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    )
-    .run(41, ORG, 31, 22, 7, '2026-07-09T10:00:00.000Z', 2);
-}
-
 // Audit-report seed: two cycles (one completed, one active) and two checkers.
 // Ava checks six distinct bays at a single instant with zero findings — that
 // clamps elapsedHours to one minute (360 bays/hour) and trips both flags. Ben
 // checks two bays 30 minutes apart with findings — a steady, unflagged pace.
-// userName sources differ per backend (SQLite COALESCE(pin, role); Workers
-// COALESCE(username, email)), so pin and username are seeded to the same value.
 const AUDIT_BAY_IDS = [101, 102, 103, 104, 105, 106, 107, 108] as const;
 const AVA_CHECKED_BAY_IDS = [101, 102, 103, 104, 105, 106] as const;
 
@@ -342,27 +172,27 @@ async function seedWorkersStoreWalkAudit(sql: NeonQueryFunction<false, false>) {
   await sql`DELETE FROM store_areas`;
   await sql`DELETE FROM users`;
   await sql`
-    INSERT INTO organizations (id, name, slug)
-    VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'})
+    INSERT INTO organizations (id, name, slug, updated_at)
+    VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'}, NOW())
     ON CONFLICT (id) DO NOTHING
   `;
   await sql`
-    INSERT INTO users (id, organization_id, username, role)
+    INSERT INTO users (id, organization_id, username, role, updated_at)
     VALUES
-      (${51}, ${ORG}, ${'Ava Checker'}, ${'team_member'}),
-      (${52}, ${ORG}, ${'Ben Checker'}, ${'team_member'})
+      (${51}, ${ORG}, ${'Ava Checker'}, ${'team_member'}, NOW()),
+      (${52}, ${ORG}, ${'Ben Checker'}, ${'team_member'}, NOW())
   `;
   await sql`
-    INSERT INTO store_areas (id, organization_id, name, sub_department)
+    INSERT INTO store_areas (id, organization_id, name, sub_department, updated_at)
     VALUES
-      (${100}, ${ORG}, ${'Chilled'}, ${'Chilled'}),
-      (${200}, ${ORG}, ${'Ambient'}, ${'Ambient'})
+      (${100}, ${ORG}, ${'Chilled'}, ${'Chilled'}, NOW()),
+      (${200}, ${ORG}, ${'Ambient'}, ${'Ambient'}, NOW())
   `;
   for (const bayId of AUDIT_BAY_IDS) {
     const parentId = bayId < 105 ? 100 : 200;
     await sql`
-      INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department)
-      VALUES (${bayId}, ${ORG}, ${parentId}, ${`Bay ${bayId}`}, ${'Chilled'})
+      INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department, updated_at)
+      VALUES (${bayId}, ${ORG}, ${parentId}, ${`Bay ${bayId}`}, ${'Chilled'}, NOW())
     `;
   }
   await sql`
@@ -387,56 +217,13 @@ async function seedWorkersStoreWalkAudit(sql: NeonQueryFunction<false, false>) {
   `;
 }
 
-function seedSqliteStoreWalkAudit(sqlite: import('better-sqlite3').Database) {
-  const insertUser = sqlite.prepare(
-    'INSERT INTO users (id, organization_id, username, pin, role) VALUES (?, ?, ?, ?, ?)',
-  );
-  insertUser.run(51, ORG, 'ava', 'Ava Checker', 'team_member');
-  insertUser.run(52, ORG, 'ben', 'Ben Checker', 'team_member');
-
-  const insertDept = sqlite.prepare(
-    'INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)',
-  );
-  insertDept.run(100, ORG, 'Chilled', 'Chilled');
-  insertDept.run(200, ORG, 'Ambient', 'Ambient');
-
-  const insertBay = sqlite.prepare(
-    'INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department) VALUES (?, ?, ?, ?, ?)',
-  );
-  for (const bayId of AUDIT_BAY_IDS) {
-    insertBay.run(bayId, ORG, bayId < 105 ? 100 : 200, `Bay ${bayId}`, 'Chilled');
-  }
-
-  const insertCycle = sqlite.prepare(
-    'INSERT INTO check_cycles (id, organization_id, name, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?)',
-  );
-  insertCycle.run(
-    900,
-    ORG,
-    'Morning walk',
-    'completed',
-    '2026-07-09T08:00:00.000Z',
-    '2026-07-09T08:45:00.000Z',
-  );
-  insertCycle.run(901, ORG, 'Evening walk', 'active', '2026-07-09T09:00:00.000Z', null);
-
-  const insertCheck = sqlite.prepare(
-    'INSERT INTO bay_checks (organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count) VALUES (?, ?, ?, ?, ?, ?)',
-  );
-  for (const bayId of AVA_CHECKED_BAY_IDS) {
-    insertCheck.run(ORG, 900, bayId, 51, '2026-07-09T08:10:00.000Z', 0);
-  }
-  insertCheck.run(ORG, 901, 101, 52, '2026-07-09T09:05:00.000Z', 3);
-  insertCheck.run(ORG, 901, 102, 52, '2026-07-09T09:35:00.000Z', 2);
-}
-
-describe('dual-backend report conformance', () => {
+describe('Worker report conformance (Postgres vs shared expectations)', () => {
   let harness: PgliteHarness;
   let sql: NeonQueryFunction<false, false>;
-  let sqlite: import('better-sqlite3').Database;
   let workersLocationId: number;
-  let sqliteLocationId: number;
-  let sqliteProductId = 0;
+  // Supplier ids are SERIAL-assigned; record them at seed time so the explicit
+  // expectation below can name the credit supplier without hard-coding ids.
+  const supplierIdsBySku = new Map<string, number>();
 
   beforeAll(async () => {
     harness = await createPgliteHarness();
@@ -445,15 +232,15 @@ describe('dual-backend report conformance', () => {
   }, 30000);
 
   afterAll(async () => {
-    sqlite?.close();
     await harness.close();
   });
 
   beforeEach(async () => {
+    supplierIdsBySku.clear();
     await sql`
-      INSERT INTO organizations (id, name, slug)
-      VALUES (${ORG}, ${'Organization A'}, ${'organization-a'}),
-             (${OTHER_ORG}, ${'Organization B'}, ${'organization-b'})
+      INSERT INTO organizations (id, name, slug, updated_at)
+      VALUES (${ORG}, ${'Organization A'}, ${'organization-a'}, NOW()),
+             (${OTHER_ORG}, ${'Organization B'}, ${'organization-b'}, NOW())
       ON CONFLICT (id) DO NOTHING`;
     await sql`DELETE FROM expired_item_transactions`;
     await sql`DELETE FROM inventory_items`;
@@ -462,17 +249,10 @@ describe('dual-backend report conformance', () => {
     await sql`DELETE FROM suppliers`;
     await sql`DELETE FROM store_areas`;
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Aisle 1'}, ${'Dairy'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Aisle 1'}, ${'Dairy'}, NOW())
       RETURNING id`;
     workersLocationId = Number(areaRows[0].id);
-
-    sqlite?.close();
-    sqlite = createSqliteDb();
-    const sqliteArea = sqlite
-      .prepare('INSERT INTO store_areas (organization_id, name, sub_department) VALUES (?, ?, ?)')
-      .run(ORG, 'Aisle 1', 'Dairy');
-    sqliteLocationId = Number(sqliteArea.lastInsertRowid);
   });
 
   async function seedItem(seed: SeededItem): Promise<void> {
@@ -482,8 +262,6 @@ describe('dual-backend report conformance', () => {
     const supplierName = `Supplier ${seed.sku}`;
     let workersSupplierId: number | null = null;
     let workersBrandId: number | null = null;
-    let sqliteSupplierId: number | null = null;
-    let sqliteBrandId: number | null = null;
 
     if (seed.creditContext) {
       const supplierRows = await sql`
@@ -491,12 +269,7 @@ describe('dual-backend report conformance', () => {
         VALUES (${org}, ${supplierName}, ${'Return monthly'}, ${'FULL_CREDIT'})
         RETURNING id`;
       workersSupplierId = Number(supplierRows[0].id);
-      const sqliteSupplier = sqlite
-        .prepare(
-          'INSERT INTO suppliers (organization_id, name, credit_policy_note, credit_type) VALUES (?, ?, ?, ?)',
-        )
-        .run(org, supplierName, 'Return monthly', 'FULL_CREDIT');
-      sqliteSupplierId = Number(sqliteSupplier.lastInsertRowid);
+      supplierIdsBySku.set(seed.sku, workersSupplierId);
     }
 
     if (seed.creditContext === 'REFERENCE_FULL') {
@@ -505,72 +278,41 @@ describe('dual-backend report conformance', () => {
         VALUES (${org}, ${'Brand ' + seed.sku}, ${workersSupplierId}, ${'REFERENCE'})
         RETURNING id`;
       workersBrandId = Number(brandRows[0].id);
-      const sqliteBrand = sqlite
-        .prepare(
-          'INSERT INTO brands (organization_id, name, supplier_id, source) VALUES (?, ?, ?, ?)',
-        )
-        .run(org, `Brand ${seed.sku}`, sqliteSupplierId, 'REFERENCE');
-      sqliteBrandId = Number(sqliteBrand.lastInsertRowid);
     }
 
     const productRows = await sql`
       INSERT INTO products (
-        organization_id, barcode, sku, name, cost_price, retail_price, supplier_id, brand_id
+        organization_id, barcode, sku, name, cost_price, retail_price, supplier_id, brand_id, updated_at
       )
       VALUES (
         ${org}, ${seed.sku}, ${seed.sku}, ${'Item ' + seed.sku}, 10, 18.5,
-        ${seed.creditContext === 'DIRECT_FULL' ? workersSupplierId : null}, ${workersBrandId}
+        ${seed.creditContext === 'DIRECT_FULL' ? workersSupplierId : null}, ${workersBrandId}, NOW()
       )
       RETURNING id`;
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
       VALUES (
         ${org},
         ${Number(productRows[0].id)},
         ${workersLocationId},
         ${expiryDate}::date,
-        ${status}
+        ${status},
+        NOW()
       )`;
-
-    const product = sqlite
-      .prepare(
-        `INSERT INTO products (
-          organization_id, barcode, sku, name, cost_price, retail_price, supplier_id, brand_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        org,
-        seed.sku,
-        seed.sku,
-        `Item ${seed.sku}`,
-        10,
-        18.5,
-        seed.creditContext === 'DIRECT_FULL' ? sqliteSupplierId : null,
-        sqliteBrandId,
-      );
-    sqliteProductId = Number(product.lastInsertRowid);
-    sqlite
-      .prepare(
-        'INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status) VALUES (?, ?, ?, ?, ?)',
-      )
-      .run(org, sqliteProductId, sqliteLocationId, expiryDate, status);
-  }
-
-  function seedSoldThrough(markdownLevel: number | null, org = ORG): void {
-    sqlite
-      .prepare(
-        "INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level) VALUES (?, 1, 'sold_through', ?)",
-      )
-      .run(org, markdownLevel);
   }
 
   async function seedWorkersSoldThrough(markdownLevel: number | null, org = ORG): Promise<void> {
+    // expired_item_transactions.inventory_item_id is a real FK — point the
+    // sold-through rows at a seeded item.
+    const items =
+      await sql`SELECT id FROM inventory_items WHERE organization_id = ${org} ORDER BY id LIMIT 1`;
+    const inventoryItemId = Number(items[0].id);
     await sql`
-      INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level)
-      VALUES (${org}, 1, ${'sold_through'}, ${markdownLevel})`;
+      INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level, updated_at)
+      VALUES (${org}, ${inventoryItemId}, ${'sold_through'}, ${markdownLevel}, NOW())`;
   }
 
-  it('documents the shared domain constants used by both backends', () => {
+  it('documents the shared domain constants used by the report SQL', () => {
     expect(DISPOSITIONED_STATUSES).toEqual(['Processed', 'Sold Through']);
     expect(MARKDOWN_WINDOWS).toMatchObject({
       markdown1: { level: 1, minDays: 61, maxDays: 90 },
@@ -580,13 +322,13 @@ describe('dual-backend report conformance', () => {
     });
   });
 
-  it('returns identical detailed worklist rows, summary counts, and sell-through order', async () => {
+  it('returns the expected detailed worklist rows, summary counts, and sell-through order', async () => {
     const seeds: SeededItem[] = [
       { offsetDays: -1, sku: 'EXPIRED-PAST' },
       { offsetDays: 10, sku: 'URGENT', status: 'Expired' },
       { offsetDays: 20, sku: 'M3' },
-      // Two items sharing an expiry_date: exercises the ii.id tiebreaker so the
-      // engines cannot order ties differently (the NULLS/ordering drift class).
+      // Two items sharing an expiry_date: exercises the ii.id tiebreaker so
+      // tied rows order deterministically.
       { offsetDays: 15, sku: 'TIE-B' },
       { offsetDays: 15, sku: 'TIE-A' },
       { offsetDays: 45, sku: 'M2' },
@@ -600,59 +342,239 @@ describe('dual-backend report conformance', () => {
     ];
     for (const seed of seeds) await seedItem(seed);
     for (const level of [1, 2, 3, 3, null]) {
-      seedSoldThrough(level);
       await seedWorkersSoldThrough(level);
     }
-    seedSoldThrough(3, OTHER_ORG);
     await seedWorkersSoldThrough(3, OTHER_ORG);
 
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
-    const sqliteRepo = new ReportRepository(sqlite, ORG);
+
+    const expectedWorklist = [
+      {
+        expiryDate: expiryDateForOffset(10),
+        status: 'Expired',
+        sku: 'URGENT',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+      {
+        expiryDate: expiryDateForOffset(15),
+        status: 'Active',
+        sku: 'TIE-B',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+      {
+        expiryDate: expiryDateForOffset(15),
+        status: 'Active',
+        sku: 'TIE-A',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+      {
+        expiryDate: expiryDateForOffset(20),
+        status: 'Active',
+        sku: 'M3',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+      {
+        expiryDate: expiryDateForOffset(45),
+        status: 'Active',
+        sku: 'M2',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+      {
+        expiryDate: expiryDateForOffset(75),
+        status: 'Active',
+        sku: 'M1',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'FULL_CREDIT',
+        creditScopeReason: 'FULL_CREDIT',
+        creditSupplierId: supplierIdsBySku.get('M1') ?? null,
+        creditSupplierName: 'Supplier M1',
+      },
+      {
+        expiryDate: expiryDateForOffset(76),
+        status: 'Active',
+        sku: 'REFERENCE',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'PENDING_CONFIRMATION',
+        creditSupplierId: supplierIdsBySku.get('REFERENCE') ?? null,
+        creditSupplierName: 'Supplier REFERENCE',
+      },
+    ];
 
     await expect(
       workersDb.getDetailedExpiryReport(ORG).then(normalizeDetailedRows),
-    ).resolves.toEqual(normalizeDetailedRows(sqliteRepo.getDetailedExpiryReport()));
+    ).resolves.toEqual(expectedWorklist);
     // Unlike the 90-day worklist, active entries include far-future items
-    // (offsets 100 and 140 above) — both backends must return the same set.
+    // (offsets 100 and 140 above).
     await expect(
       workersDb.getActiveExpiryEntries(ORG).then(normalizeDetailedRows),
-    ).resolves.toEqual(normalizeDetailedRows(sqliteRepo.getActiveExpiryEntries()));
-    await expect(workersDb.getOverallExpiryReport(ORG).then(normalizeSummary)).resolves.toEqual(
-      normalizeSummary(sqliteRepo.getOverallExpiryReport()),
-    );
+    ).resolves.toEqual([
+      ...expectedWorklist,
+      {
+        expiryDate: expiryDateForOffset(100),
+        status: 'Active',
+        sku: 'NEXT',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+      {
+        expiryDate: expiryDateForOffset(140),
+        status: 'Active',
+        sku: 'FUTURE',
+        retailPrice: 18.5,
+        subDepartment: 'Dairy',
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
+        creditSupplierName: null,
+      },
+    ]);
+    await expect(workersDb.getOverallExpiryReport(ORG).then(normalizeSummary)).resolves.toEqual({
+      total_expiring: 12,
+      expired_count: 1,
+      markdown1_count: 2,
+      markdown2_count: 1,
+      markdown3_count: 6,
+      total_markdown: 9,
+      expiry_risk_count: 6,
+      next_month_markdown_count: 1,
+      active_expiry_stock_count: 11,
+    });
     await expect(
       workersDb.getSellThroughByMarkdownLevel(ORG).then(normalizeSellThrough),
-    ).resolves.toEqual(normalizeSellThrough(sqliteRepo.getSellThroughByMarkdownLevel()));
+    ).resolves.toEqual([
+      { markdownLevel: 1, soldCount: 1 },
+      { markdownLevel: 2, soldCount: 1 },
+      { markdownLevel: 3, soldCount: 2 },
+      { markdownLevel: null, soldCount: 1 },
+    ]);
   });
 
-  it('returns identical store-walk floor-progress coverage and row order', async () => {
+  it('returns the expected store-walk floor-progress coverage and row order', async () => {
     await seedWorkersStoreWalkFloorProgress(sql);
-    seedSqliteStoreWalkFloorProgress(sqlite);
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
-    const { StoreAreaRepository } =
-      await import('../../backend/src/repositories/store-area.repository');
-    const sqliteRepo = new StoreAreaRepository(createSqlitePrismaAdapter(sqlite) as never);
 
-    await expect(workersDb.getFloorProgress(ORG).then(normalizeFloorProgress)).resolves.toEqual(
-      normalizeFloorProgress(await sqliteRepo.getFloorProgress(ORG)),
-    );
+    await expect(workersDb.getFloorProgress(ORG).then(normalizeFloorProgress)).resolves.toEqual({
+      activeCycle: {
+        id: 31,
+        name: 'Morning walk',
+        status: 'active',
+        startedAt: '2026-07-09T08:00:00.000Z',
+      },
+      summary: {
+        totalBays: 4,
+        checkedBays: 1,
+        notCheckedBays: 1,
+        overdueBays: 2,
+        coveragePercent: 25,
+        uncheckedBays: 3,
+      },
+      departments: [
+        {
+          department: { id: 10, name: 'Bakery' },
+          summary: {
+            totalBays: 2,
+            checkedBays: 0,
+            notCheckedBays: 1,
+            overdueBays: 1,
+            coveragePercent: 0,
+            departmentId: 10,
+            departmentName: 'Bakery',
+            uncheckedBays: 2,
+          },
+          bays: [
+            {
+              id: 11,
+              name: 'Bakery Bay 1',
+              parentId: 10,
+              state: 'overdue',
+              checkedAt: '2026-07-09T07:00:00.000Z',
+              checkedBy: null,
+            },
+            {
+              id: 12,
+              name: 'Bakery Bay 2',
+              parentId: 10,
+              state: 'not_checked',
+              checkedAt: null,
+              checkedBy: null,
+            },
+          ],
+        },
+        {
+          department: { id: 20, name: 'Dairy' },
+          summary: {
+            totalBays: 2,
+            checkedBays: 1,
+            notCheckedBays: 0,
+            overdueBays: 1,
+            coveragePercent: 50,
+            departmentId: 20,
+            departmentName: 'Dairy',
+            uncheckedBays: 1,
+          },
+          bays: [
+            {
+              id: 21,
+              name: 'Dairy Bay 1',
+              parentId: 20,
+              state: 'overdue',
+              checkedAt: '2026-07-09T06:00:00.000Z',
+              checkedBy: null,
+            },
+            {
+              id: 22,
+              name: 'Dairy Bay 2',
+              parentId: 20,
+              state: 'checked',
+              checkedAt: '2026-07-09T10:00:00.000Z',
+              checkedBy: { id: 7, name: 'Checker One' },
+            },
+          ],
+        },
+      ],
+    });
   });
 
-  it('returns identical store-walk audit cycles, users, and flags', async () => {
+  it('returns the expected store-walk audit cycles, users, and flags', async () => {
     await seedWorkersStoreWalkAudit(sql);
-    seedSqliteStoreWalkAudit(sqlite);
 
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
-    const sqliteRepo = new ReportRepository(sqlite, ORG);
-
     const workersReport = await workersDb.getStoreWalkAuditReport(ORG);
-    const sqliteReport = sqliteRepo.getStoreWalkAuditReport();
-
-    expect(workersReport).toEqual(sqliteReport);
 
     // Cycles order by started_at DESC: the active "Evening walk" precedes the
-    // completed "Morning walk". Assert the derived numbers and the unified flag
-    // wording (the Workers copy previously dropped "consecutive") on both engines.
+    // completed "Morning walk".
     expect(workersReport).toEqual([
       {
         cycleId: 901,

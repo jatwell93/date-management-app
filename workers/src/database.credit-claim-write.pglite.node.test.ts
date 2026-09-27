@@ -69,9 +69,13 @@ describe('Workers credit-claim writes (real SQL)', () => {
     db = makeDb();
 
     await sql`
-      INSERT INTO organizations (id, name, slug)
-      VALUES (${ORG}, 'Org A', 'org-a'), (${OTHER_ORG}, 'Org B', 'org-b')
+      INSERT INTO organizations (id, name, slug, updated_at)
+      VALUES (${ORG}, 'Org A', 'org-a', NOW()), (${OTHER_ORG}, 'Org B', 'org-b', NOW())
       ON CONFLICT (id) DO NOTHING`;
+    // credit_claims.created_by_user_id is a real FK — buildOneLine passes 42.
+    await sql`
+      INSERT INTO users (id, organization_id, role, updated_at)
+      VALUES (42, ${ORG}, 'admin', NOW())`;
   });
 
   afterAll(async () => {
@@ -93,6 +97,7 @@ describe('Workers credit-claim writes (real SQL)', () => {
     await sql`DELETE FROM inventory_items`;
     await sql`DELETE FROM products`;
     await sql`DELETE FROM suppliers`;
+    await sql`DELETE FROM store_areas`;
 
     const supplier = await sql`
       INSERT INTO suppliers (organization_id, name, contact_email, policy_write_off_qty,
@@ -109,39 +114,49 @@ describe('Workers credit-claim writes (real SQL)', () => {
     foreignSupplierId = Number(foreignSupplier[0].id);
 
     const product = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price, supplier_id)
-      VALUES (${ORG}, 'BAR-A', 'SKU-A', 'Widget', 10, ${supplierId})
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, supplier_id, updated_at)
+      VALUES (${ORG}, 'BAR-A', 'SKU-A', 'Widget', 10, ${supplierId}, NOW())
       RETURNING id`;
     productId = Number(product[0].id);
 
     const foreignProduct = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price, supplier_id)
-      VALUES (${OTHER_ORG}, 'BAR-B', 'SKU-B', 'Foreign Widget', 10, ${foreignSupplierId})
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, supplier_id, updated_at)
+      VALUES (${OTHER_ORG}, 'BAR-B', 'SKU-B', 'Foreign Widget', 10, ${foreignSupplierId}, NOW())
       RETURNING id`;
     const foreignProductId = Number(foreignProduct[0].id);
+
+    // inventory_items.location_id is a real FK — give each org a store area.
+    const area = await sql`
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES (${ORG}, 'Aisle', NOW())
+      RETURNING id`;
+    const foreignArea = await sql`
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES (${OTHER_ORG}, 'Aisle', NOW())
+      RETURNING id`;
 
     writeOffIds = [];
     for (let i = 0; i < 2; i += 1) {
       const item = await sql`
-        INSERT INTO inventory_items (organization_id, product_id, expiry_date)
-        VALUES (${ORG}, ${productId}, NOW())
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, updated_at)
+        VALUES (${ORG}, ${productId}, ${Number(area[0].id)}, NOW(), NOW())
         RETURNING id`;
       const transaction = await sql`
         INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action,
-                                               units_discarded)
-        VALUES (${ORG}, ${Number(item[0].id)}, 'expired', 6)
+                                               units_discarded, updated_at)
+        VALUES (${ORG}, ${Number(item[0].id)}, 'expired', 6, NOW())
         RETURNING id`;
       writeOffIds.push(Number(transaction[0].id));
     }
 
     const foreignItem = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, expiry_date)
-      VALUES (${OTHER_ORG}, ${foreignProductId}, NOW())
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, updated_at)
+      VALUES (${OTHER_ORG}, ${foreignProductId}, ${Number(foreignArea[0].id)}, NOW(), NOW())
       RETURNING id`;
     const foreignTransaction = await sql`
       INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action,
-                                             units_discarded)
-      VALUES (${OTHER_ORG}, ${Number(foreignItem[0].id)}, 'expired', 6)
+                                             units_discarded, updated_at)
+      VALUES (${OTHER_ORG}, ${Number(foreignItem[0].id)}, 'expired', 6, NOW())
       RETURNING id`;
     foreignWriteOffId = Number(foreignTransaction[0].id);
   });

@@ -32,10 +32,7 @@ export function resolveSupplier(
 }
 
 export type SupplierContextState =
-  | 'NEEDS_BRAND'
-  | 'PENDING_CONFIRMATION'
-  | 'CLAIMABLE'
-  | 'NO_POLICY';
+  'NEEDS_BRAND' | 'PENDING_CONFIRMATION' | 'CLAIMABLE' | 'NO_POLICY';
 
 export interface SupplierContextCandidate {
   id: number;

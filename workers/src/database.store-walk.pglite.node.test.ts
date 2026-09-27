@@ -46,25 +46,25 @@ describe('Workers store walk tracking (real SQL)', () => {
     await sql`DELETE FROM organizations`;
 
     await sql`
-      INSERT INTO organizations (id, name, slug)
-      VALUES (${ORG}, ${'Store Walk Org'}, ${'store-walk-org'}),
-             (${OTHER_ORG}, ${'Other Org'}, ${'other-org'})
+      INSERT INTO organizations (id, name, slug, updated_at)
+      VALUES (${ORG}, ${'Store Walk Org'}, ${'store-walk-org'}, NOW()),
+             (${OTHER_ORG}, ${'Other Org'}, ${'other-org'}, NOW())
     `;
     await sql`
-      INSERT INTO users (id, organization_id, email, username, role)
-      VALUES (${USER_ID}, ${ORG}, ${'checker@example.test'}, ${'Checker One'}, ${'team_member'})
+      INSERT INTO users (id, organization_id, email, username, role, updated_at)
+      VALUES (${USER_ID}, ${ORG}, ${'checker@example.test'}, ${'Checker One'}, ${'team_member'}, NOW())
     `;
     const deptRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Dairy'}, ${'Dairy'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Dairy'}, ${'Dairy'}, NOW())
       RETURNING id
     `;
     departmentId = Number(deptRows[0].id);
     const bayRows = await sql`
-      INSERT INTO store_areas (organization_id, parent_id, name, sub_department, last_checked)
+      INSERT INTO store_areas (organization_id, parent_id, name, sub_department, last_checked, updated_at)
       VALUES
-        (${ORG}, ${departmentId}, ${'Dairy Bay 1'}, ${'Dairy'}, ${null}),
-        (${ORG}, ${departmentId}, ${'Dairy Bay 2'}, ${'Dairy'}, ${'2026-01-01T00:00:00.000Z'}::timestamptz)
+        (${ORG}, ${departmentId}, ${'Dairy Bay 1'}, ${'Dairy'}, ${null}, NOW()),
+        (${ORG}, ${departmentId}, ${'Dairy Bay 2'}, ${'Dairy'}, ${'2026-01-01T00:00:00.000Z'}::timestamptz, NOW())
       RETURNING id, name
     `;
     bayAId = Number(bayRows.find((row) => row.name === 'Dairy Bay 1')?.id);

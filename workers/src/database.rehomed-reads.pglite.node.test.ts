@@ -20,7 +20,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -43,6 +48,8 @@ describe('Workers rehomed read queries (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   }, 30000); // pglite WASM cold-start can exceed the default 10s hook timeout
 
   afterAll(async () => {
@@ -55,6 +62,7 @@ describe('Workers rehomed read queries (real SQL)', () => {
     await sql`DELETE FROM products`;
     await sql`DELETE FROM store_areas`;
     await sql`DELETE FROM users`;
+    defaultAreaByOrg.clear();
   });
 
   const seedArea = async (opts: {
@@ -63,16 +71,16 @@ describe('Workers rehomed read queries (real SQL)', () => {
     subDepartment?: string;
   }): Promise<number> => {
     const rows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${opts.organizationId ?? ORG}, ${opts.name}, ${opts.subDepartment ?? 'Ambient'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${opts.organizationId ?? ORG}, ${opts.name}, ${opts.subDepartment ?? 'Ambient'}, NOW())
       RETURNING id`;
     return Number(rows[0].id);
   };
 
   const seedUser = async (role: string, organizationId = ORG): Promise<number> => {
     const rows = await sql`
-      INSERT INTO users (organization_id, role, email)
-      VALUES (${organizationId}, ${role}, ${`${role}-${organizationId}@example.test`})
+      INSERT INTO users (organization_id, role, email, updated_at)
+      VALUES (${organizationId}, ${role}, ${`${role}-${organizationId}@example.test`}, NOW())
       RETURNING id`;
     return Number(rows[0].id);
   };
@@ -91,10 +99,21 @@ describe('Workers rehomed read queries (real SQL)', () => {
 
   const seedProduct = async (sku: string, organizationId = ORG): Promise<number> => {
     const rows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${organizationId}, ${`bc-${organizationId}-${sku}`}, ${sku}, ${sku}, 1)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${organizationId}, ${`bc-${organizationId}-${sku}`}, ${sku}, ${sku}, 1, NOW())
       RETURNING id`;
     return Number(rows[0].id);
+  };
+
+  // inventory_items.location_id is NOT NULL — tests that don't care which area
+  // get a shared default per org.
+  const defaultAreaByOrg = new Map<string, number>();
+  const defaultAreaId = async (organizationId: string): Promise<number> => {
+    const existing = defaultAreaByOrg.get(organizationId);
+    if (existing !== undefined) return existing;
+    const id = await seedArea({ organizationId, name: `Default ${organizationId}` });
+    defaultAreaByOrg.set(organizationId, id);
+    return id;
   };
 
   /** `daysOut` may be negative, for already-expired stock. */
@@ -105,10 +124,12 @@ describe('Workers rehomed read queries (real SQL)', () => {
     status: string;
     daysOut: number;
   }) => {
+    const organizationId = opts.organizationId ?? ORG;
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${opts.organizationId ?? ORG}, ${opts.productId}, ${opts.locationId ?? null},
-              CURRENT_DATE + (${opts.daysOut} * INTERVAL '1 day'), ${opts.status})`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${organizationId}, ${opts.productId},
+              ${opts.locationId ?? (await defaultAreaId(organizationId))},
+              CURRENT_DATE + (${opts.daysOut} * INTERVAL '1 day'), ${opts.status}, NOW())`;
   };
 
   describe('findStoreAreaById', () => {

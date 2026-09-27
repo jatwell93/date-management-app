@@ -206,10 +206,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          # Both lockfiles, because this job installs both packages — see below.
-          cache-dependency-path: |
-            workers/package-lock.json
-            backend/package-lock.json
+          cache-dependency-path: workers/package-lock.json
 
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
@@ -217,20 +214,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The three `*.conformance.node.test.ts` suites import backend source
-      # directly, to assert the Worker's Postgres queries agree with the
-      # backend's SQLite implementation. That pulls backend's runtime
-      # dependencies (`reflect-metadata`, `better-sqlite3`) into the module
-      # graph, so installing only the Worker's leaves them unresolvable and
-      # three suites die on MODULE_NOT_FOUND.
-      #
-      # This coupling is temporary by design: those suites exist to compare the
-      # two implementations, and they go when the Express backend is deleted in
-      # `retire-express-unify-on-postgres` Phase 4. Until then the cross-package
-      # install is the honest cost of running them.
-      - name: Install backend dependencies (conformance suites import backend source)
-        working-directory: ./backend
-        run: npm ci
+      # The `*.conformance.node.test.ts` suites no longer import backend source:
+      # as of task 3.5 (`retire-express-unify-on-postgres`) they assert the
+      # Worker's Postgres queries against `shared/domain` TypeScript plus
+      # explicit literals instead of a SQLite oracle, and the pglite harness's
+      # root migration modules (`src/database/migrations/*`) import only Node
+      # built-ins. This job therefore installs only the Worker's dependencies.
 
       # These suites run real SQL against pglite and are slower than the
       # workerd pool (~100s locally), so they get a generous ceiling but still

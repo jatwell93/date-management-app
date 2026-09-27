@@ -32,6 +32,11 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await sql`INSERT INTO organizations (id, name, slug, updated_at)
+              VALUES (${ORG}, 'Org A', 'org-a', NOW())`;
+    // expired_item_transactions.user_id is a real FK — USER_ID writes ledger rows.
+    await sql`INSERT INTO users (id, organization_id, username, role, updated_at)
+              VALUES (${USER_ID}, ${ORG}, 'actor', 'admin', NOW())`;
   });
 
   afterAll(async () => {
@@ -55,13 +60,17 @@ describe('Workers disposition markdown capture (real SQL)', () => {
   // Seeds a product + inventory item N days from expiry and returns the item id.
   const seedItem = async (offsetDays: number, sku: string): Promise<number> => {
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${sku}, ${sku}, ${'Item ' + sku}, 10)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${sku}, ${sku}, ${'Item ' + sku}, 10, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES (${ORG}, ${'Loc ' + sku}, NOW())
+      RETURNING id`;
     const itemRows = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, expiry_date)
-      VALUES (${ORG}, ${productId}, (CURRENT_DATE + ${offsetDays} * INTERVAL '1 day')::date)
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, updated_at)
+      VALUES (${ORG}, ${productId}, ${Number(areaRows[0].id)}, (CURRENT_DATE + ${offsetDays} * INTERVAL '1 day')::date, NOW())
       RETURNING id`;
     return Number(itemRows[0].id);
   };
@@ -99,13 +108,17 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     // SQLite backend, which records 0. Guards against `value || null` coercion.
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'ZERO'}, ${'ZERO'}, ${'Zero Cost'}, 0)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'ZERO'}, ${'ZERO'}, ${'Zero Cost'}, 0, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES (${ORG}, ${'Zero Aisle'}, NOW())
+      RETURNING id`;
     const itemRows = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'})
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${Number(areaRows[0].id)}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}, NOW())
       RETURNING id`;
     const itemId = Number(itemRows[0].id);
 
@@ -121,20 +134,20 @@ describe('Workers disposition markdown capture (real SQL)', () => {
   it('processes a multi-unit expired write-off as one ledger row and removes processed rows', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'MULTI'}, ${'MULTI'}, ${'Multi Item'}, 7)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'MULTI'}, ${'MULTI'}, ${'Multi Item'}, 7, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Fridge'}, ${'Cold Chain'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Fridge'}, ${'Cold Chain'}, NOW())
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
     const ids: number[] = [];
     for (const offset of [-7, -5, -3, -1]) {
       const itemRows = await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + ${offset} * INTERVAL '1 day')::date, ${'Expired'})
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + ${offset} * INTERVAL '1 day')::date, ${'Expired'}, NOW())
         RETURNING id`;
       ids.push(Number(itemRows[0].id));
     }
@@ -196,18 +209,18 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     // The ledger must record all 15 units and clear the worklist entry.
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'ONE'}, ${'ONE'}, ${'Single Marker'}, 3)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'ONE'}, ${'ONE'}, ${'Single Marker'}, 3, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'}, NOW())
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
     const itemRows = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'})
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}, NOW())
       RETURNING id`;
     const itemId = Number(itemRows[0].id);
 
@@ -230,35 +243,18 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     ]);
   });
 
-  it('writes off an item whose product has a NULL cost_price (issue #268 400)', async () => {
-    // Repro for the dev-deploy 400 "no expired units are available to process":
-    // the worklist COALESCEs cost_price to 0 for display but groups on the raw
-    // (NULL) value, while the write-off matcher compared `p.cost_price = 0`, which
-    // never matches a NULL row. The matcher must use NULL-safe comparison so an
-    // item shown in the worklist can always be written off.
-    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
-    const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'NULLC'}, ${'NULLC'}, ${'No Cost Item'}, NULL)
-      RETURNING id`;
-    const productId = Number(productRows[0].id);
-    const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'})
-      RETURNING id`;
-    const locationId = Number(areaRows[0].id);
-    await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'})`;
-
-    const worklist = await db.getExpiredItems(ORG);
-    expect(worklist).toHaveLength(1);
-    expect(worklist[0]).toMatchObject({ sku: 'NULLC', quantityAvailable: 1, costPrice: 0 });
-
-    // Must not throw; loss for a NULL/zero cost is 0.
-    const txn = await db.processExpiredItem(worklist[0].id, USER_ID, ORG, 'expired', 4);
-    expect(txn).toMatchObject({ action: 'expired', unitsDiscarded: 4, financialLoss: 0 });
-    expect(await db.getExpiredItems(ORG)).toHaveLength(0);
+  it('rejects a NULL cost_price — the real schema forbids it (issue #268)', async () => {
+    // The old harness allowed NULL here, which was drift: the authoritative
+    // baseline declares `cost_price DOUBLE PRECISION NOT NULL`
+    // (database/migrations/0000_baseline.up.sql:125), so the NULL row the #268
+    // repro relied on cannot exist in production. What remains worth pinning is
+    // that the schema itself enforces this, keeping the production COALESCE
+    // guard in the worklist query defensive rather than load-bearing.
+    await expect(
+      sql`
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${ORG}, ${'NULLC'}, ${'NULLC'}, ${'No Cost Item'}, NULL, NOW())`,
+    ).rejects.toMatchObject({ code: '23502' });
   });
 
   it('writes off a future-dated Markdown item shown in the worklist (issue #268)', async () => {
@@ -268,19 +264,19 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     // Markdown item threw "Cannot discard 1 units; only 0 expired units are available".
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'MKDN'}, ${'MKDN'}, ${'Markdown Item'}, 5)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'MKDN'}, ${'MKDN'}, ${'Markdown Item'}, 5, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'}, NOW())
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
     // 20 days to expiry => Markdown 3 window, not yet expired.
     const itemRows = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '20 days')::date, ${'Markdown 3'})
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '20 days')::date, ${'Markdown 3'}, NOW())
       RETURNING id`;
     const itemId = Number(itemRows[0].id);
 
@@ -303,22 +299,22 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     // Markdown unit at the same location must be one row the user can fully write off.
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'MIX'}, ${'MIX'}, ${'Mixed Item'}, 4)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'MIX'}, ${'MIX'}, ${'Mixed Item'}, 4, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Bay'}, ${'Grocery'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Bay'}, ${'Grocery'}, NOW())
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
     // One already expired, one future-dated Markdown 3 — same product/location/cost.
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Expired'})`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Expired'}, NOW())`;
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '20 days')::date, ${'Markdown 3'})`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '20 days')::date, ${'Markdown 3'}, NOW())`;
 
     const worklist = await db.getExpiredItems(ORG);
     expect(worklist).toHaveLength(1);
@@ -339,25 +335,25 @@ describe('Workers disposition markdown capture (real SQL)', () => {
   it('reports realized expired losses from the transaction ledger (expired-losses report)', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'LOSS'}, ${'LOSS'}, ${'Loss Item'}, 9)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'LOSS'}, ${'LOSS'}, ${'Loss Item'}, 9, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Aisle'}, ${'General'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Aisle'}, ${'General'}, NOW())
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
     // Item is already dispositioned (Sold Through status) — proving the ledger
     // reports realized write-offs, independent of current inventory status.
     const itemRows = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Sold Through'})
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Sold Through'}, NOW())
       RETURNING id`;
     await sql`
       INSERT INTO expired_item_transactions
-        (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss)
-      VALUES (${ORG}, ${Number(itemRows[0].id)}, ${USER_ID}, ${'expired'}, 1, 9)`;
+        (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, updated_at)
+      VALUES (${ORG}, ${Number(itemRows[0].id)}, ${USER_ID}, ${'expired'}, 1, 9, NOW())`;
 
     expect(await db.getExpiredLossBySku(ORG)).toEqual([
       expect.objectContaining({ sku: 'LOSS', productName: 'Loss Item', totalLoss: 9, count: 1 }),
@@ -375,25 +371,25 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     // nothing on Neon and left the graphs empty. See #268.
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${'CUR'}, ${'CUR'}, ${'Current Item'}, 6)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${'CUR'}, ${'CUR'}, ${'Current Item'}, 6, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name, sub_department)
-      VALUES (${ORG}, ${'Aisle'}, ${'Bakery'})
+      INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+      VALUES (${ORG}, ${'Aisle'}, ${'Bakery'}, NOW())
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
     // Counted: two past-expiry 'Expired' + one past-expiry 'Normal' (the scan-path
     // case that was previously invisible). Ignored: an already-processed unit and a
     // future-dated 'Normal' unit that has not expired yet.
     await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'}),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Processed'}),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '5 days')::date, ${'Normal'})`;
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}, NOW()),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}, NOW()),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'}, NOW()),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Processed'}, NOW()),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '5 days')::date, ${'Normal'}, NOW())`;
 
     expect(await db.getLossBySkuReport(ORG)).toEqual([
       expect.objectContaining({ sku: 'CUR', productName: 'Current Item', totalLoss: 18, count: 3 }),
@@ -412,18 +408,18 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     // cheapest (cost 1) must be dropped once we cap at five.
     for (let i = 1; i <= 6; i++) {
       const productRows = await sql`
-        INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-        VALUES (${ORG}, ${`B${i}`}, ${`SKU_${i}`}, ${`Product ${i}`}, ${i})
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${ORG}, ${`B${i}`}, ${`SKU_${i}`}, ${`Product ${i}`}, ${i}, NOW())
         RETURNING id`;
       const productId = Number(productRows[0].id);
       const areaRows = await sql`
-        INSERT INTO store_areas (organization_id, name, sub_department)
-        VALUES (${ORG}, ${`Aisle ${i}`}, ${`Dept_${i}`})
+        INSERT INTO store_areas (organization_id, name, sub_department, updated_at)
+        VALUES (${ORG}, ${`Aisle ${i}`}, ${`Dept_${i}`}, NOW())
         RETURNING id`;
       const locationId = Number(areaRows[0].id);
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'})`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'}, NOW())`;
     }
 
     const skuReport = await db.getLossBySkuReport(ORG);

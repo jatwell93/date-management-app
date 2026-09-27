@@ -40,6 +40,7 @@ import {
 } from './adopt';
 import { assertTargetKind } from './target';
 import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
+import { createPgliteMigrationClient, type PgliteInstance } from './pglite-client';
 
 test('adoptExitCode returns 0 only for STATUS: READY (canAdopt true), regardless of mode', () => {
   // Regression for the real Neon migration-role-check finding: the
@@ -136,34 +137,9 @@ const FINGERPRINT_PATH = path.resolve('database/migrations/catalog-fingerprint.j
 const FINGERPRINT_0009_PATH = path.resolve('database/migrations/catalog-fingerprint.0009.json');
 
 // ---------------------------------------------------------------------------
-// pglite adapter (same pattern as baseline.fingerprint.test.ts)
+// pglite adapter — shared with baseline.fingerprint.test.ts and the Worker
+// harness via src/database/migrations/pglite-client.ts
 // ---------------------------------------------------------------------------
-
-interface PgliteInstance {
-  query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>;
-  exec: (sql: string) => Promise<unknown>;
-  close: () => Promise<void>;
-}
-
-function createPgliteMigrationClient(pg: PgliteInstance): MigrationClient {
-  return {
-    async query(text: string, values?: readonly unknown[]) {
-      if (values !== undefined && values.length > 0) {
-        const result = await pg.query(text, values as unknown[]);
-        return { rows: result.rows as unknown[] };
-      }
-      const trimmed = text.trimStart();
-      if (trimmed.toUpperCase().startsWith('SELECT')) {
-        const result = await pg.query(text);
-        return { rows: result.rows as unknown[] };
-      }
-      // Non-SELECT statements (SET, BEGIN, COMMIT, ROLLBACK, CREATE TABLE, etc.)
-      // go through pg.exec which handles multi-statement DDL and session commands.
-      await pg.exec(text);
-      return { rows: [] };
-    },
-  };
-}
 
 async function createPglite(): Promise<{ pg: PgliteInstance; client: MigrationClient }> {
   const mod = (await import('@electric-sql/pglite')) as {

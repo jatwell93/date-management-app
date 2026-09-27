@@ -10,7 +10,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -35,6 +40,8 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   });
 
   afterAll(async () => {
@@ -42,18 +49,19 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
   });
 
   beforeEach(async () => {
+    await sql`DELETE FROM expired_item_transactions`;
     await sql`DELETE FROM inventory_items`;
     await sql`DELETE FROM products`;
     await sql`DELETE FROM store_areas`;
     await sql`DELETE FROM uploads`;
-    await sql`DELETE FROM expired_item_transactions`;
+    await sql`DELETE FROM users`;
     // Two org-a products + one org-b product; one store area per org.
-    await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price)
-              VALUES (1, ${ORG}, 'B1', 'S1', 'Prod 1', 10),
-                     (2, ${ORG}, 'B2', 'S2', 'Prod 2', 20),
-                     (3, ${OTHER_ORG}, 'B3', 'S3', 'Prod 3', 30)`;
-    await sql`INSERT INTO store_areas (id, organization_id, name)
-              VALUES (1, ${ORG}, 'Aisle 1'), (2, ${OTHER_ORG}, 'Aisle B')`;
+    await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price, updated_at)
+              VALUES (1, ${ORG}, 'B1', 'S1', 'Prod 1', 10, NOW()),
+                     (2, ${ORG}, 'B2', 'S2', 'Prod 2', 20, NOW()),
+                     (3, ${OTHER_ORG}, 'B3', 'S3', 'Prod 3', 30, NOW())`;
+    await sql`INSERT INTO store_areas (id, organization_id, name, updated_at)
+              VALUES (1, ${ORG}, 'Aisle 1', NOW()), (2, ${OTHER_ORG}, 'Aisle B', NOW())`;
   });
 
   const seedItem = (opts: {
@@ -65,14 +73,15 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
     createdOffsetDays?: number;
   }) =>
     sql`INSERT INTO inventory_items
-          (organization_id, product_id, location_id, expiry_date, status, created_at)
+          (organization_id, product_id, location_id, expiry_date, status, created_at, updated_at)
         VALUES (
           ${opts.org ?? ORG},
           ${opts.productId ?? 1},
           ${opts.locationId ?? 1},
           (CURRENT_DATE + ${opts.offsetDays} * INTERVAL '1 day')::date,
           ${opts.status ?? 'Active'},
-          (NOW() + ${opts.createdOffsetDays ?? 0} * INTERVAL '1 day')
+          (NOW() + ${opts.createdOffsetDays ?? 0} * INTERVAL '1 day'),
+          NOW()
         )`;
 
   describe('getDashboardStats', () => {
@@ -145,12 +154,28 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
   });
 
   describe('getStockLossLast30Days', () => {
+    // expired_item_transactions.inventory_item_id is a real FK — the ledger
+    // rows below attach to one shared seeded item per org.
+    let txnItemId = 0;
+    let txnForeignItemId = 0;
+    beforeEach(async () => {
+      const own = await sql`INSERT INTO inventory_items
+          (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${ORG}, 1, 1, (CURRENT_DATE - INTERVAL '1 day')::date, 'Expired', NOW())
+        RETURNING id`;
+      txnItemId = Number(own[0].id);
+      const foreign = await sql`INSERT INTO inventory_items
+          (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${OTHER_ORG}, 3, 2, (CURRENT_DATE - INTERVAL '1 day')::date, 'Expired', NOW())
+        RETURNING id`;
+      txnForeignItemId = Number(foreign[0].id);
+    });
     const seedTxn = (opts: { org?: string; action: string; loss: number; txnOffsetDays: number }) =>
       sql`INSERT INTO expired_item_transactions
-            (organization_id, inventory_item_id, action, financial_loss, transaction_date)
+            (organization_id, inventory_item_id, action, financial_loss, transaction_date, updated_at)
           VALUES (
-            ${opts.org ?? ORG}, 1, ${opts.action}, ${opts.loss},
-            (NOW() + ${opts.txnOffsetDays} * INTERVAL '1 day')
+            ${opts.org ?? ORG}, ${opts.org === OTHER_ORG ? txnForeignItemId : txnItemId}, ${opts.action}, ${opts.loss},
+            (NOW() + ${opts.txnOffsetDays} * INTERVAL '1 day'), NOW()
           )`;
 
     it('sums expired write-off losses within the last 30 days for the org', async () => {
@@ -172,6 +197,13 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
   });
 
   describe('getLastCatalogueUpload', () => {
+    // uploads.user_id/file_key/file_size_bytes are NOT NULL with a real FK.
+    let uploaderId = 0;
+    beforeEach(async () => {
+      const users = await sql`INSERT INTO users (organization_id, username, role, updated_at)
+          VALUES (${ORG}, 'uploader', 'admin', NOW()) RETURNING id`;
+      uploaderId = Number(users[0].id);
+    });
     const seedUpload = (opts: {
       org?: string;
       fileName: string;
@@ -180,12 +212,13 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
       createdOffsetDays?: number;
     }) =>
       sql`INSERT INTO uploads
-            (organization_id, file_name, status, completed_at, created_at)
+            (organization_id, user_id, file_key, file_name, file_size_bytes, status, completed_at, created_at, updated_at)
           VALUES (
-            ${opts.org ?? ORG}, ${opts.fileName}, ${opts.status},
+            ${opts.org ?? ORG}, ${uploaderId}, ${'key-' + opts.fileName}, ${opts.fileName}, 128, ${opts.status},
             CASE WHEN ${opts.completedOffsetDays ?? null}::int IS NULL THEN NULL
                  ELSE NOW() + (${opts.completedOffsetDays ?? null}::int) * INTERVAL '1 day' END,
-            NOW() + (${opts.createdOffsetDays ?? 0}) * INTERVAL '1 day'
+            NOW() + (${opts.createdOffsetDays ?? 0}) * INTERVAL '1 day',
+            NOW()
           )`;
 
     it('returns the most recently completed upload', async () => {

@@ -12,7 +12,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -34,6 +39,11 @@ describe('Workers markdown worklist (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    // expired_item_transactions.user_id is a real FK — processExpiredItem
+    // writes ledger rows for USER_ID.
+    await sql`INSERT INTO users (id, organization_id, username, role, updated_at)
+              VALUES (${USER_ID}, ${ORG}, 'actor', 'admin', NOW())`;
   }, 30000); // pglite WASM cold-start can exceed the default 10s hook timeout
 
   afterAll(async () => {
@@ -46,20 +56,20 @@ describe('Workers markdown worklist (real SQL)', () => {
     await sql`DELETE FROM products`;
     await sql`DELETE FROM store_areas`;
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name) VALUES (${ORG}, ${'Aisle 1'}) RETURNING id`;
+      INSERT INTO store_areas (organization_id, name, updated_at) VALUES (${ORG}, ${'Aisle 1'}, NOW()) RETURNING id`;
     locationId = Number(areaRows[0].id);
   });
 
   // Seeds a product + inventory item N days from expiry with the given status.
   const seedItem = async (offsetDays: number, sku: string, status = 'Active'): Promise<number> => {
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${ORG}, ${sku}, ${sku}, ${'Item ' + sku}, 10)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES (${ORG}, ${sku}, ${sku}, ${'Item ' + sku}, 10, NOW())
       RETURNING id`;
     const productId = Number(productRows[0].id);
     const itemRows = await sql`
-      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + ${offsetDays} * INTERVAL '1 day')::date, ${status})
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + ${offsetDays} * INTERVAL '1 day')::date, ${status}, NOW())
       RETURNING id`;
     return Number(itemRows[0].id);
   };

@@ -4,12 +4,7 @@
  */
 
 export type TierLevel =
-  | 'free'
-  | 'starter'
-  | 'professional'
-  | 'enterprise'
-  | 'premium'
-  | 'concierge';
+  'free' | 'starter' | 'professional' | 'enterprise' | 'premium' | 'concierge';
 
 export enum SubscriptionStatus {
   ACTIVE = 'active',

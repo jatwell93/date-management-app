@@ -1,14 +1,7 @@
-import { createRequire } from 'node:module';
-import { fileURLToPath, URL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import { brandPolicyStatus, hasPolicy } from '../../shared/domain/supplier-policy';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
-
-const backendRequire = createRequire(
-  fileURLToPath(new URL('../../backend/package.json', import.meta.url)),
-);
-const SQLiteDatabase = backendRequire('better-sqlite3') as typeof import('better-sqlite3');
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -16,171 +9,31 @@ vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => sqlHolder.current),
 }));
 
-import { createWorkersDatabase, type PolicyReviewItem, type SupplierWriteData } from './database';
-import type { BrandReviewOptions, BrandReviewPage } from '../../shared/domain/catalogue-review';
+import { createWorkersDatabase, type SupplierWriteData } from './database';
+import type { BrandReviewOptions } from '../../shared/domain/catalogue-review';
 
 const ORG = 'policy-org';
 const OTHER_ORG = 'policy-other';
 
-function createSqlitePolicyDb(): import('better-sqlite3').Database {
-  const db = new SQLiteDatabase(':memory:');
-  db.exec(`
-    CREATE TABLE suppliers (
-      id INTEGER PRIMARY KEY,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      credit_type TEXT NOT NULL DEFAULT 'NONE',
-      contact_email TEXT,
-      contact_phone TEXT,
-      credit_policy_note TEXT NOT NULL DEFAULT '',
-      policy_write_off_qty INTEGER,
-      policy_credit_qty INTEGER,
-      follow_up_days INTEGER NOT NULL DEFAULT 7,
-      representative_name TEXT,
-      representative_email TEXT,
-      policy_updated_at TEXT
-    );
-    CREATE TABLE brands (
-      id INTEGER PRIMARY KEY,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      manufacturer_name TEXT,
-      suggested_supplier_name TEXT,
-      supplier_id INTEGER,
-      source TEXT NOT NULL DEFAULT 'REFERENCE'
-    );
-    CREATE TABLE products (
-      id INTEGER PRIMARY KEY,
-      organization_id TEXT NOT NULL,
-      barcode TEXT NOT NULL,
-      sku TEXT NOT NULL,
-      name TEXT NOT NULL,
-      cost_price REAL NOT NULL DEFAULT 0,
-      brand_id INTEGER
-    );
-  `);
-  return db;
-}
-
-function sqliteCatalogueReview(
-  db: import('better-sqlite3').Database,
-  organizationId: string,
-  options: BrandReviewOptions,
-): BrandReviewPage {
-  const page = options.page ?? 1;
-  const pageSize = options.pageSize ?? 50;
-  const operator =
-    options.titleMatch === 'startsWith' ? `${options.title ?? ''}%` : `%${options.title ?? ''}%`;
-  const where = options.title
-    ? 'WHERE organization_id = ? AND LOWER(name) LIKE LOWER(?)'
-    : 'WHERE organization_id = ?';
-  const values = options.title ? [organizationId, operator] : [organizationId];
-  const totalItems = Number(
-    (
-      db.prepare(`SELECT COUNT(*) AS count FROM products ${where}`).get(...values) as {
-        count: number;
-      }
-    ).count,
-  );
-  const direction = options.sort === 'titleDesc' ? 'DESC' : 'ASC';
-  const rows = db
-    .prepare(
-      `SELECT id, sku, barcode, name FROM products ${where}
-       ORDER BY name COLLATE NOCASE ${direction}, id ASC LIMIT ? OFFSET ?`,
-    )
-    .all(...values, pageSize, (page - 1) * pageSize) as Array<Record<string, unknown>>;
-  return {
-    items: rows.map((row) => ({
-      productId: Number(row.id),
-      sku: String(row.sku),
-      barcode: String(row.barcode),
-      productName: String(row.name),
-      brand: null,
-    })),
-    page,
-    pageSize,
-    totalItems,
-    totalPages: Math.ceil(totalItems / pageSize),
-    nextCursor: null,
-  };
-}
-
-function sqlitePolicyReview(
-  db: import('better-sqlite3').Database,
-  organizationId: string,
-): PolicyReviewItem[] {
-  const rows = db
-    .prepare(
-      `SELECT b.id AS brandId, b.name AS brandName,
-              s.id AS supplierId, s.name AS supplierName,
-              s.credit_type AS creditType,
-              s.contact_email AS contactEmail, s.contact_phone AS contactPhone,
-              s.credit_policy_note AS creditPolicyNote,
-              s.policy_write_off_qty AS policyWriteOffQty,
-              s.policy_credit_qty AS policyCreditQty,
-              s.follow_up_days AS followUpDays,
-              s.representative_name AS representativeName,
-              s.representative_email AS representativeEmail,
-              s.policy_updated_at AS policyUpdatedAt
-       FROM brands b
-       LEFT JOIN suppliers s ON s.id = b.supplier_id AND s.organization_id = b.organization_id
-       WHERE b.organization_id = ?
-       ORDER BY CASE WHEN s.policy_updated_at IS NULL THEN 0 ELSE 1 END,
-                s.policy_updated_at ASC, b.name ASC, b.id ASC`,
-    )
-    .all(organizationId) as Array<Record<string, unknown>>;
-
-  return rows.map((row) => {
-    const supplier =
-      row.supplierId == null
-        ? null
-        : {
-            id: Number(row.supplierId),
-            name: String(row.supplierName),
-            creditType: (row.creditType === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE') as
-              'FULL_CREDIT' | 'NONE',
-            contactEmail: (row.contactEmail as string | null) ?? null,
-            contactPhone: (row.contactPhone as string | null) ?? null,
-            creditPolicyNote: String(row.creditPolicyNote ?? ''),
-            policyWriteOffQty: row.policyWriteOffQty == null ? null : Number(row.policyWriteOffQty),
-            policyCreditQty: row.policyCreditQty == null ? null : Number(row.policyCreditQty),
-            followUpDays: Number(row.followUpDays ?? 7),
-            representativeName: (row.representativeName as string | null) ?? null,
-            representativeEmail: (row.representativeEmail as string | null) ?? null,
-            policyUpdatedAt: (row.policyUpdatedAt as string | null) ?? null,
-          };
-    return {
-      brandId: Number(row.brandId),
-      brandName: String(row.brandName),
-      supplier,
-      status: brandPolicyStatus(row, supplier),
-      policyUpdatedAt: supplier?.policyUpdatedAt ?? null,
-      representativeName: supplier?.representativeName ?? null,
-    };
-  });
-}
-
-describe('Worker supplier policy database and dual-backend conformance', () => {
+describe('Worker supplier policy database (Postgres vs shared TS)', () => {
   let harness: PgliteHarness;
   let sql: NeonQueryFunction<false, false>;
-  let sqlite: import('better-sqlite3').Database;
   let userId: number;
 
   beforeAll(async () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
-    await sql`INSERT INTO organizations (id, name, slug)
-              VALUES (${ORG}, ${'Policy Org'}, ${'policy-org'}),
-                     (${OTHER_ORG}, ${'Other Org'}, ${'policy-other'})`;
-    const users = await sql`INSERT INTO users (organization_id, email, username, role)
-                            VALUES (${ORG}, ${'admin@example.com'}, ${'admin'}, ${'admin'})
+    await sql`INSERT INTO organizations (id, name, slug, updated_at)
+              VALUES (${ORG}, ${'Policy Org'}, ${'policy-org'}, NOW()),
+                     (${OTHER_ORG}, ${'Other Org'}, ${'policy-other'}, NOW())`;
+    const users = await sql`INSERT INTO users (organization_id, email, username, role, updated_at)
+                            VALUES (${ORG}, ${'admin@example.com'}, ${'admin'}, ${'admin'}, NOW())
                             RETURNING id`;
     userId = Number(users[0].id);
   }, 30_000);
 
   afterAll(async () => {
-    sqlite?.close();
     await harness.close();
   });
 
@@ -188,8 +41,6 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     for (const table of ['catalogue_corrections', 'brands', 'suppliers', 'products']) {
       await sql([`DELETE FROM ${table}`] as unknown as TemplateStringsArray);
     }
-    sqlite?.close();
-    sqlite = createSqlitePolicyDb();
   });
 
   it('persists, lists, updates, and explicitly clears every supplier policy field', async () => {
@@ -233,7 +84,7 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     expect(cleared?.policyUpdatedAt).not.toBeNull();
   });
 
-  it('matches SQLite/shared policy status, null-first order, and organization isolation', async () => {
+  it('matches shared policy status, null-first order, and organization isolation', async () => {
     const supplierRows = [
       [1, ORG, 'No Policy', '   ', null],
       [2, ORG, 'Earlier', 'Return monthly', '2026-07-01T00:00:00.000Z'],
@@ -244,13 +95,6 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
       await sql`INSERT INTO suppliers
                   (id, organization_id, name, credit_policy_note, policy_updated_at)
                 VALUES (${id}, ${organizationId}, ${name}, ${note}, ${timestamp})`;
-      sqlite
-        .prepare(
-          `INSERT INTO suppliers
-             (id, organization_id, name, credit_policy_note, policy_updated_at)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(id, organizationId, name, note, timestamp);
     }
     const brandRows = [
       [10, ORG, 'Zulu Missing', 1],
@@ -262,16 +106,85 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     for (const [id, organizationId, name, supplierId] of brandRows) {
       await sql`INSERT INTO brands (id, organization_id, name, supplier_id)
                 VALUES (${id}, ${organizationId}, ${name}, ${supplierId})`;
-      sqlite
-        .prepare('INSERT INTO brands (id, organization_id, name, supplier_id) VALUES (?, ?, ?, ?)')
-        .run(id, organizationId, name, supplierId);
     }
 
     const db = createWorkersDatabase({ DATABASE_URL: 'postgres://test' } as never);
     const workerRows = await db.listPolicyReview(ORG, {});
-    const sqliteRows = sqlitePolicyReview(sqlite, ORG);
 
-    expect(workerRows).toEqual(sqliteRows);
+    // Explicit expectation captured from the original dual-backend suite.
+    expect(workerRows).toEqual([
+      {
+        brandId: 11,
+        brandName: 'Alpha Unassigned',
+        supplier: null,
+        status: 'MISSING',
+        policyUpdatedAt: null,
+        representativeName: null,
+      },
+      {
+        brandId: 10,
+        brandName: 'Zulu Missing',
+        supplier: {
+          id: 1,
+          name: 'No Policy',
+          creditType: 'NONE',
+          contactEmail: null,
+          contactPhone: null,
+          creditPolicyNote: '   ',
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          followUpDays: 7,
+          representativeName: null,
+          representativeEmail: null,
+          policyUpdatedAt: null,
+        },
+        status: 'MISSING',
+        policyUpdatedAt: null,
+        representativeName: null,
+      },
+      {
+        brandId: 12,
+        brandName: 'Beta Earlier',
+        supplier: {
+          id: 2,
+          name: 'Earlier',
+          creditType: 'NONE',
+          contactEmail: null,
+          contactPhone: null,
+          creditPolicyNote: 'Return monthly',
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          followUpDays: 7,
+          representativeName: null,
+          representativeEmail: null,
+          policyUpdatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        status: 'ATTACHED',
+        policyUpdatedAt: '2026-07-01T00:00:00.000Z',
+        representativeName: null,
+      },
+      {
+        brandId: 13,
+        brandName: 'Alpha Later',
+        supplier: {
+          id: 3,
+          name: 'Later',
+          creditType: 'NONE',
+          contactEmail: null,
+          contactPhone: null,
+          creditPolicyNote: 'Photograph damage',
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          followUpDays: 7,
+          representativeName: null,
+          representativeEmail: null,
+          policyUpdatedAt: '2026-07-02T00:00:00.000Z',
+        },
+        status: 'ATTACHED',
+        policyUpdatedAt: '2026-07-02T00:00:00.000Z',
+        representativeName: null,
+      },
+    ]);
     expect(workerRows.map((row) => [row.brandName, row.status])).toEqual([
       ['Alpha Unassigned', 'MISSING'],
       ['Zulu Missing', 'MISSING'],
@@ -291,7 +204,7 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     ).resolves.toHaveLength(1);
   });
 
-  it('matches SQLite numbered title filtering, totals, page boundaries, and stable ordering', async () => {
+  it('matches numbered title filtering, totals, page boundaries, and stable ordering', async () => {
     const rows = [
       [101, ORG, 'BAR-101', 'SKU-101', 'vitamin C'],
       [102, ORG, 'BAR-102', 'SKU-102', 'Vitamin A'],
@@ -300,13 +213,8 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
       [105, OTHER_ORG, 'BAR-105', 'SKU-105', 'Vitamin Foreign'],
     ] as const;
     for (const [id, organizationId, barcode, sku, name] of rows) {
-      await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price)
-                VALUES (${id}, ${organizationId}, ${barcode}, ${sku}, ${name}, ${1})`;
-      sqlite
-        .prepare(
-          'INSERT INTO products (id, organization_id, barcode, sku, name, cost_price) VALUES (?, ?, ?, ?, ?, ?)',
-        )
-        .run(id, organizationId, barcode, sku, name, 1);
+      await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price, updated_at)
+                VALUES (${id}, ${organizationId}, ${barcode}, ${sku}, ${name}, ${1}, NOW())`;
     }
 
     const options: BrandReviewOptions = {
@@ -318,12 +226,46 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     };
     const db = createWorkersDatabase({ DATABASE_URL: 'postgres://test' } as never);
 
-    await expect(db.reviewBrands(ORG, options)).resolves.toEqual(
-      sqliteCatalogueReview(sqlite, ORG, options),
-    );
-    await expect(db.reviewBrands(ORG, { ...options, page: 2 })).resolves.toEqual(
-      sqliteCatalogueReview(sqlite, ORG, { ...options, page: 2 }),
-    );
+    // Explicit expectations captured from the original dual-backend suite.
+    await expect(db.reviewBrands(ORG, options)).resolves.toEqual({
+      items: [
+        {
+          productId: 102,
+          sku: 'SKU-102',
+          barcode: 'BAR-102',
+          productName: 'Vitamin A',
+          brand: null,
+        },
+        {
+          productId: 103,
+          sku: 'SKU-103',
+          barcode: 'BAR-103',
+          productName: 'Vitamin A',
+          brand: null,
+        },
+      ],
+      page: 1,
+      pageSize: 2,
+      totalItems: 3,
+      totalPages: 2,
+      nextCursor: null,
+    });
+    await expect(db.reviewBrands(ORG, { ...options, page: 2 })).resolves.toEqual({
+      items: [
+        {
+          productId: 101,
+          sku: 'SKU-101',
+          barcode: 'BAR-101',
+          productName: 'vitamin C',
+          brand: null,
+        },
+      ],
+      page: 2,
+      pageSize: 2,
+      totalItems: 3,
+      totalPages: 2,
+      nextCursor: null,
+    });
   });
 
   it('bulk-attaches atomically, reports no-ops, and rejects policy-less suppliers', async () => {
@@ -364,10 +306,10 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     const targetId = Number(brands[0].id);
     const differentId = Number(brands[1].id);
     const products = await sql`INSERT INTO products
-      (organization_id, barcode, sku, name, brand_id)
-      VALUES (${ORG}, ${'NEW'}, ${'NEW'}, ${'New'}, ${null}),
-             (${ORG}, ${'LINKED'}, ${'LINKED'}, ${'Linked'}, ${targetId}),
-             (${ORG}, ${'CONFLICT'}, ${'CONFLICT'}, ${'Conflict'}, ${differentId})
+      (organization_id, barcode, sku, name, brand_id, cost_price, updated_at)
+      VALUES (${ORG}, ${'NEW'}, ${'NEW'}, ${'New'}, ${null}, ${0}, NOW()),
+             (${ORG}, ${'LINKED'}, ${'LINKED'}, ${'Linked'}, ${targetId}, ${0}, NOW()),
+             (${ORG}, ${'CONFLICT'}, ${'CONFLICT'}, ${'Conflict'}, ${differentId}, ${0}, NOW())
       RETURNING id`;
     const newId = Number(products[0].id);
     const linkedId = Number(products[1].id);

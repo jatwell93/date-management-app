@@ -13,21 +13,23 @@
  * single statement whose three-way outcome is decided by a CTE. A stubbed
  * driver would assert the shape of a string.
  *
- * **One harness caveat that shapes the implementation.** Production declares
- * `inventory_items_product_id_fkey` as `ON DELETE RESTRICT`; the pglite harness
- * (`__tests__/pglite-db.ts`) declares `inventory_items.product_id` as a
- * nullable integer with no foreign key at all. So a "refuses to delete a
- * product with inventory" test written against a *raised constraint* would pass
- * here no matter what the code did -- green because the harness cannot turn
- * red. `deleteProduct` therefore counts the blocker explicitly, and these tests
- * assert that count. The drift is recorded in the harness.
+ * `deleteProduct` counts the blocker explicitly rather than relying on the
+ * raised `inventory_items_product_id_fkey` (ON DELETE RESTRICT), and these
+ * tests assert that count. The schema now comes from `database/migrations/`,
+ * so the RESTRICT is really present -- the explicit count is what keeps the
+ * outcome a refusal rather than a thrown constraint error.
  *
  * Runs under `vitest.node.config.mts` (`*.node.test.ts`, `npm run test:db`).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
-import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__tests__/pglite-db';
+import {
+  createPgliteHarness,
+  createTaggedSql,
+  seedOrganization,
+  type PgliteHarness,
+} from './__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -51,6 +53,8 @@ describe('Workers excess-product export and product delete (real SQL)', () => {
     harness = await createPgliteHarness();
     sql = createTaggedSql(harness.pg);
     sqlHolder.current = sql;
+    await seedOrganization(harness.pg, ORG, 'Org A');
+    await seedOrganization(harness.pg, OTHER_ORG, 'Org B');
   }, 30000); // pglite WASM cold-start can exceed the default 10s hook timeout
 
   afterAll(async () => {
@@ -63,7 +67,7 @@ describe('Workers excess-product export and product delete (real SQL)', () => {
     await sql`DELETE FROM products`;
     await sql`DELETE FROM store_areas`;
     const areaRows = await sql`
-      INSERT INTO store_areas (organization_id, name) VALUES (${ORG}, ${'Aisle 1'}) RETURNING id`;
+      INSERT INTO store_areas (organization_id, name, updated_at) VALUES (${ORG}, ${'Aisle 1'}, NOW()) RETURNING id`;
     locationId = Number(areaRows[0].id);
   });
 
@@ -78,9 +82,9 @@ describe('Workers excess-product export and product delete (real SQL)', () => {
     const org = opts.organizationId ?? ORG;
     const sku = opts.sku ?? opts.name;
     const rows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price, created_at)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, created_at, updated_at)
       VALUES (${org}, ${`BAR-${org}-${sku}`}, ${`SKU-${org}-${sku}`}, ${opts.name},
-              ${opts.costPrice ?? 1}, ${opts.createdAt})
+              ${opts.costPrice ?? 1}, ${opts.createdAt}, NOW())
       RETURNING id`;
     return Number(rows[0].id);
   };
@@ -88,8 +92,8 @@ describe('Workers excess-product export and product delete (real SQL)', () => {
   const seedInventory = async (productId: number, count: number, organizationId = ORG) => {
     for (let i = 0; i < count; i += 1) {
       await sql`
-        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
-        VALUES (${organizationId}, ${productId}, ${locationId}, ${'2027-01-01'}, ${'Active'})`;
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+        VALUES (${organizationId}, ${productId}, ${locationId}, ${'2027-01-01'}, ${'Active'}, NOW())`;
     }
   };
 

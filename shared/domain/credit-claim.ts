@@ -56,8 +56,7 @@ export const OPEN_CLAIM_STATUSES = [
  */
 type AssertTrue<T extends true> = T;
 type OpenOrSettledStatus =
-  | (typeof OPEN_CLAIM_STATUSES)[number]
-  | (typeof SETTLED_CLAIM_STATUSES)[number];
+  (typeof OPEN_CLAIM_STATUSES)[number] | (typeof SETTLED_CLAIM_STATUSES)[number];
 type _EveryStatusIsOpenOrSettled = AssertTrue<
   CreditClaimStatus extends OpenOrSettledStatus ? true : false
 >;

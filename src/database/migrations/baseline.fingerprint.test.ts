@@ -40,6 +40,7 @@ import {
   type NormalizedCatalog,
   setDifference,
 } from './catalog-introspection';
+import { createPgliteMigrationClient, type PgliteInstance } from './pglite-client';
 import { applyPendingMigrations, loadMigrationHistory, type MigrationClient } from './runner';
 
 const TEST_DEPLOYMENT_SHA = 'a'.repeat(40);
@@ -51,30 +52,6 @@ const BASELINE_SOURCE_COMMIT = 'ae26d623~1';
 // ---------------------------------------------------------------------------
 // pglite adapter
 // ---------------------------------------------------------------------------
-
-interface PgliteInstance {
-  query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>;
-  exec: (sql: string) => Promise<unknown>;
-  close: () => Promise<void>;
-}
-
-function createPgliteMigrationClient(pg: PgliteInstance): MigrationClient {
-  return {
-    async query(text: string, values?: readonly unknown[]) {
-      if (values !== undefined && values.length > 0) {
-        const result = await pg.query(text, values as unknown[]);
-        return { rows: result.rows as unknown[] };
-      }
-      const trimmed = text.trimStart();
-      if (trimmed.toUpperCase().startsWith('SELECT')) {
-        const result = await pg.query(text);
-        return { rows: result.rows as unknown[] };
-      }
-      await pg.exec(text);
-      return { rows: [] };
-    },
-  };
-}
 
 async function createPglite(): Promise<{ pg: PgliteInstance; client: MigrationClient }> {
   const mod = (await import('@electric-sql/pglite')) as {
