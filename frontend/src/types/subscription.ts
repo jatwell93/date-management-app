@@ -1,5 +1,6 @@
-export type TierLevel =
-  'free' | 'starter' | 'professional' | 'enterprise' | 'premium' | 'concierge';
+import type { TierLevel } from '@shared/subscription-types';
+
+export type { TierLevel };
 
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
