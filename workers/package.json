@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:local": "node ../scripts/workers-dev-local.js",
     "build": "node build.js",
     "build:types": "tsc --noEmit -p tsconfig.deploy.json",
     "lint": "tsc --noEmit -p tsconfig.deploy.json",

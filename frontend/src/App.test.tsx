@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
+import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import { useAuthContext } from './components/ClerkAuthProvider';
 import type { RoleValue } from './constants/roles';
 
@@ -471,7 +471,9 @@ describe('App Expect QA diagnostics', () => {
     expect(screen.getByTestId('expect-qa-organization-id')).toHaveTextContent('org_expect');
     expect(screen.getByTestId('expect-qa-bootstrap-status')).toHaveTextContent('ready');
     expect(screen.getByTestId('expect-qa-token')).toHaveTextContent('present');
-    expect(screen.getByTestId('expect-qa-api-base-url')).toHaveTextContent('http://localhost:3001');
+    // Assert the configured base URL, not a literal port: a developer's local
+    // frontend/.env legitimately overrides the default.
+    expect(screen.getByTestId('expect-qa-api-base-url')).toHaveTextContent(API_BASE_URL);
   });
 
   it('collapses QA diagnostics behind a toggle on narrow screens', () => {

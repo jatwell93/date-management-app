@@ -21,7 +21,17 @@ local Express app uses `backend/prisma/database.sqlite`. The custom migration ru
 `backend/database.sqlite`; running `npm run migrate --prefix backend` does not synchronize the
 database used by local Express QA.
 
-Run the backend on `localhost:3001`:
+Run the Worker as the local dev API on `localhost:8787` (see `workers/README.md`
+— it needs `workers/.dev.vars` with `NEON_CONNECTION_STRING`, `JWT_SECRET`, and
+`CLERK_SECRET_KEY` pointing at your own Neon branch):
+
+```powershell
+npm run dev:local --prefix workers
+```
+
+The Prisma/SQLite preamble and Express start-up below only apply if you are
+deliberately running the old Express backend on port 3001 instead of the
+Worker.
 
 ```powershell
 $env:DATABASE_URL='file:./database.sqlite'
@@ -32,7 +42,7 @@ Run the frontend on `localhost:3002` with the Expect diagnostics panel enabled:
 
 ```powershell
 $env:REACT_APP_EXPECT_QA_STATUS='true'
-$env:REACT_APP_API_URL='http://localhost:3001'
+$env:REACT_APP_API_URL='http://localhost:8787'
 $env:BROWSER='none'
 doppler run --project date-management --config dev --preserve-env=REACT_APP_API_URL,REACT_APP_EXPECT_QA_STATUS,BROWSER -- npm start --prefix frontend
 ```
@@ -40,7 +50,7 @@ doppler run --project date-management --config dev --preserve-env=REACT_APP_API_
 Doppler normally replaces variables that already exist in the shell. Keep `--preserve-env` in the
 frontend command so the QA API URL and diagnostics flag cannot be overwritten by remote development
 configuration. Before testing a feature, confirm the diagnostics panel reports
-`api-base-url: http://localhost:3001`; if it reports a remote URL, restart the frontend with the
+`api-base-url: http://localhost:8787`; if it reports a remote URL, restart the frontend with the
 command above.
 
 If you are not using Doppler for a session, set the same variables in the appropriate `.env` files instead. Do not commit local secret files.
@@ -163,10 +173,13 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 For local webhook delivery:
 
 ```powershell
-stripe listen --forward-to localhost:3001/api/webhooks/stripe
+stripe listen --forward-to 127.0.0.1:8787/api/webhooks/stripe
 ```
 
-Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET`.
+Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET` (not the Dashboard endpoint's secret, which fails
+signature verification with 400). Use `127.0.0.1`, not `localhost`: `wrangler dev` listens on IPv4 only and
+the Stripe CLI may resolve `localhost` to `[::1]`. Don't add `--all-thin` — it forwards only thin (v2)
+events, not the snapshot events (`checkout.session.completed`, `customer.subscription.*`) the Worker handles.
 
 ## Backend Auth Bypass
 

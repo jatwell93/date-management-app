@@ -81,7 +81,11 @@ npm test
 ### Starting Development
 
 ```bash
-# Start backend development server (from backend/)
+# Start the Worker as the local dev API (the frontend targets it on :8787):
+npm run dev:local --prefix workers   # serves http://localhost:8787
+
+# Start backend development server (from backend/) — Express, still present
+# until Phase 4 of retire-express-unify-on-postgres:
 npm run dev
 
 # Server runs on http://localhost:3001

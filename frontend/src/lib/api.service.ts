@@ -1,7 +1,24 @@
-const RAW_API_BASE_URL =
-  process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+export const DEFAULT_API_BASE_URL = 'http://localhost:8787';
 
-export const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
+/**
+ * Resolve the API base URL: REACT_APP_API_URL wins over
+ * REACT_APP_API_BASE_URL, both fall through to the wrangler-dev default, and
+ * trailing slashes are stripped so URL building never doubles them.
+ */
+export function resolveApiBaseUrl(env: {
+  REACT_APP_API_URL?: string;
+  REACT_APP_API_BASE_URL?: string;
+}): string {
+  const raw = env.REACT_APP_API_URL || env.REACT_APP_API_BASE_URL || DEFAULT_API_BASE_URL;
+  return raw.replace(/\/+$/, '');
+}
+
+// Keep explicit `process.env.X` member expressions here — vite.config.ts
+// `define` replaces them statically with the loaded REACT_APP_* values.
+export const API_BASE_URL = resolveApiBaseUrl({
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL,
+});
 export const API_AUTH_UNAUTHORIZED_EVENT = 'app:auth-unauthorized';
 
 export interface ApiFieldError {
@@ -66,7 +83,7 @@ class ApiService {
   private baseUrl: string;
 
   constructor() {
-    // Use environment variable or default to localhost:3001
+    // Use environment variable or default to localhost:8787 (wrangler dev)
     this.baseUrl = API_BASE_URL;
   }
 

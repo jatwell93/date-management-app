@@ -3162,11 +3162,23 @@ equivalent, a relocated home, or an explicit retirement decision.
       rejects the insert (23502); the production `COALESCE` guard is kept. Verified: test:db 318 passed /
       1 skipped (317s, up from ~122s — one migration replay per fork), workerd 597 passed, root
       `test:migrations` 95/95, typecheck/format/lint clean.
-- [ ] 3.6 Run the Worker locally (`wrangler dev`) as the dev API; verify the frontend works against it in
+- [x] 3.6 Run the Worker locally (`wrangler dev`) as the dev API; verify the frontend works against it in
       local dev. Add the `wrangler dev` local config (`.dev.vars` / `wrangler.toml` dev section) pointing at
       a developer-owned Neon branch (vs production Hyperdrive), and document which behaviours need the Neon
       branch because pglite cannot model them.
-- [ ] 3.7 Repoint the frontend dev API base URL from Express (port 3001) to the `wrangler dev` origin
+      <br>**Done.** Landed: `workers/.dev.vars.example`, gitignore rules for
+      `workers/.dev.vars*`, `scripts/workers-dev-local.js` launcher + unit tests (`npm run dev:local`),
+      "Local development (wrangler dev)" section in `workers/README.md` covering Miniflare-simulated
+      bindings and the pglite-vs-Neon gap list. Verified 2026-09-29 against developer Neon branch
+      `br-winter-haze-a7ydntft`: `/health?deep=true` database pass, and the frontend on 3002 worked end
+      to end against 8787 (see 3.7). Local gotchas now documented in `.dev.vars.example` /
+      `docs/local-expect-qa.md`: Clerk secret and publishable key must be from the same instance (else
+      every call 401s); `stripe listen` must forward to `127.0.0.1:8787` (wrangler dev is IPv4-only) with
+      the CLI's own `whsec_`.
+      <br>**Follow-up:** `[env.development]` Hyperdrive binding reuses the production id
+      (`wrangler.toml:71` vs `:99`) — `npm run deploy:dev` would reach production's Hyperdrive; fix by
+      creating a dev Hyperdrive config (follow-up, not this task).
+- [x] 3.7 Repoint the frontend dev API base URL from Express (port 3001) to the `wrangler dev` origin
       (port 8787): update the default in `frontend/src/lib/api.service.ts`, `frontend/.env.example`, and any
       `REACT_APP_API_URL` references in `vite.config.ts` / docs. Inventory every frontend network call and
       route it through the shared URL builder unless intentionally same-origin; browser-test frontend
@@ -3174,6 +3186,31 @@ equivalent, a relocated home, or an explicit retirement decision.
       and CORS.
       **2.5 §G did that inventory**: 14 call sites, 13 already routed through `buildApiUrl`. The one
       exception is `components/StorageQuotaWarning.tsx:61`, covered above at 3.1 (Finding 21).
+      <br>**Progress (not yet verified end-to-end).** Landed: default base URL in
+      `frontend/src/lib/api.service.ts` is now `http://localhost:8787` (plus the constructor comment),
+      `frontend/.env.example`, and the `3001` assertions in `api.service.test.ts`, `App.test.tsx`, and
+      `offline-sync.test.ts`. `utils/uploadUtils.ts` `uploadWithRetry` and `lib/offline-sync.ts`
+      `processQueueOperations` already receive `buildApiUrl` results — left as-is. `SentryTest.tsx`
+      (REACT_APP_WORKERS_URL, dev-only) and `serviceWorkerRegistration.ts` (same-origin) intentionally
+      untouched. Docs updated: `workers/README.md`, `docs/local-expect-qa.md`,
+      `docs/LOCAL_WEBHOOK_SETUP.md`, `docs/developer-guide.md`; Express-descriptive `3001` references
+      elsewhere left by design.
+      <br>**Browser test 3002→8787 (2026-09-29, developer Neon branch):** PASS — Clerk sign-up + org
+      bootstrap (201), dashboard, store areas, SKU/barcode lookup, inventory create, reports; CSV upload
+      initiate→direct→status with the local queue consuming it; subscription/current, trial-status,
+      organization/usage; checkout via `/upgrade` (200 → Stripe test payment), webhooks
+      `checkout.session.completed` / `customer.subscription.created|updated` all 200 and the org flipped
+      to active; cancel from `/subscription` (200, `customer.subscription.updated` 200); clean 404 on an
+      unknown SKU; every preflight 204, no CORS errors. `GET /api/storage-quota/:userId` answers correctly
+      when called directly (403 for another user's id); billing portal from `/subscription` Manage billing
+      (`create-portal-session` → Stripe portal) PASS.
+      <br>**Follow-ups found, not actioned here (pre-existing, not caused by the repoint):**
+      (a) `StorageQuotaWarning` made no request during the browser test. Hypothesis (claim check
+      pending): `App.tsx:575` gates it on `userId`, which `ClerkAuthProvider.tsx` reads from a numeric
+      `userId` token claim that a default Clerk session token lacks, so it never mounts; the Worker derives the user from the token, so the fix is
+      frontend-only. (b) Cancel is only reachable at the bottom of `/subscription` (shown only when
+      `status === 'active'`); the Billing "Upgrade" and "View plans" entries both lead to plan selection,
+      so there is no discoverable cancel path.
       **Offline-queue mitigation before the production base URL moves (2.5 Finding 25 —
       DOWNGRADED 2026-08-28 from required to precautionary).** `offline-sync.ts` `addOperation:149`
       has no production caller (all 25 call sites are tests), so the queue is always empty and the
