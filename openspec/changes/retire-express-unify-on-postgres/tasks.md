@@ -3178,7 +3178,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       <br>**Follow-up:** `[env.development]` Hyperdrive binding reuses the production id
       (`wrangler.toml:71` vs `:99`) — `npm run deploy:dev` would reach production's Hyperdrive; fix by
       creating a dev Hyperdrive config (follow-up, not this task).
-- [ ] 3.7 Repoint the frontend dev API base URL from Express (port 3001) to the `wrangler dev` origin
+- [x] 3.7 Repoint the frontend dev API base URL from Express (port 3001) to the `wrangler dev` origin
       (port 8787): update the default in `frontend/src/lib/api.service.ts`, `frontend/.env.example`, and any
       `REACT_APP_API_URL` references in `vite.config.ts` / docs. Inventory every frontend network call and
       route it through the shared URL builder unless intentionally same-origin; browser-test frontend
@@ -3202,7 +3202,8 @@ equivalent, a relocated home, or an explicit retirement decision.
       `checkout.session.completed` / `customer.subscription.created|updated` all 200 and the org flipped
       to active; cancel from `/subscription` (200, `customer.subscription.updated` 200); clean 404 on an
       unknown SKU; every preflight 204, no CORS errors. `GET /api/storage-quota/:userId` answers correctly
-      when called directly (403 for another user's id). Pending: billing portal (`create-portal-session`).
+      when called directly (403 for another user's id); billing portal from `/subscription` Manage billing
+      (`create-portal-session` → Stripe portal) PASS.
       <br>**Follow-ups found, not actioned here (pre-existing, not caused by the repoint):**
       (a) `StorageQuotaWarning` made no request during the browser test. Hypothesis (claim check
       pending): `App.tsx:575` gates it on `userId`, which `ClerkAuthProvider.tsx` reads from a numeric
