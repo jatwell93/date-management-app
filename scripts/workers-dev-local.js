@@ -31,6 +31,21 @@ const HYPERDRIVE_LOCAL_ENV = 'CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPE
 const PLACEHOLDER_MARKER = '<';
 
 /**
+ * Parse a dotenv value (the already-trimmed text after `=`).
+ * A value quoted on both ends — optionally followed by an inline `#` comment —
+ * returns its quoted contents verbatim; the lazy group keeps `#` inside the
+ * quotes ("a # b") and stops before a quoted comment ("a" # "b"). Unquoted
+ * values strip an inline comment only when it follows whitespace — a `#`
+ * directly after the value (no space) is part of the value.
+ */
+function parseDevVarValue(raw) {
+  const quoted = raw.match(/^(["'])(.*?)\1(?:\s+#.*)?$/);
+  if (quoted) return quoted[2];
+  const hashIdx = raw.search(/\s#/);
+  return hashIdx === -1 ? raw : raw.slice(0, hashIdx).trimEnd();
+}
+
+/**
  * Parse dotenv-style content into a {key: value} map.
  * Supports `KEY=VALUE`, optional surrounding single/double quotes, `export`
  * prefixes, inline `#` comments outside quotes, and blank lines.
@@ -44,20 +59,7 @@ function parseDevVars(content) {
     const eq = stripped.indexOf('=');
     if (eq <= 0) continue;
     const key = stripped.slice(0, eq).trim();
-    let value = stripped.slice(eq + 1).trim();
-    if (
-      value.length >= 2 &&
-      ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'")))
-    ) {
-      value = value.slice(1, -1);
-    } else {
-      // Strip an inline comment only when it follows whitespace — a `#`
-      // directly after the value (no space) is part of the value.
-      const hashIdx = value.search(/\s#/);
-      if (hashIdx !== -1) value = value.slice(0, hashIdx).trimEnd();
-    }
-    vars[key] = value;
+    vars[key] = parseDevVarValue(stripped.slice(eq + 1).trim());
   }
   return vars;
 }
@@ -164,17 +166,31 @@ function main() {
     console.error(`[dev:local] failed to start wrangler: ${err.message}`);
     process.exit(1);
   });
-  child.on('exit', (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
+  child.on('exit', (code, signal) => forwardChildExit(code, signal));
+}
+
+/**
+ * Propagate a child exit to this process: forward the signal to ourselves so
+ * the parent sees the same termination, else exit with the child's code.
+ * Windows Node only supports SIGINT/SIGTERM/SIGKILL on kill(), so an
+ * unsupported signal falls back to exit(1) instead of throwing.
+ */
+function forwardChildExit(code, signal, proc = process) {
+  if (signal) {
+    try {
+      proc.kill(proc.pid, signal);
+    } catch {
+      proc.exit(1);
     }
-    process.exit(code ?? 1);
-  });
+    return;
+  }
+  proc.exit(code ?? 1);
 }
 
 module.exports = {
   parseDevVars,
+  parseDevVarValue,
+  forwardChildExit,
   validateDevVars,
   redactConnectionString,
   buildChildEnv,

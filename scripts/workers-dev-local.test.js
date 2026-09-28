@@ -5,6 +5,8 @@ const test = require('node:test');
 
 const {
   parseDevVars,
+  parseDevVarValue,
+  forwardChildExit,
   validateDevVars,
   redactConnectionString,
   buildChildEnv,
@@ -35,6 +37,26 @@ test('parseDevVars keeps = inside values and # without preceding space', () => {
   const vars = parseDevVars(`${REQUIRED_KEY}=${uri}\nHASH=a#b\n`);
   assert.equal(vars[REQUIRED_KEY], uri);
   assert.equal(vars.HASH, 'a#b');
+});
+
+test('parseDevVarValue strips an inline comment after a quoted value', () => {
+  assert.equal(parseDevVarValue('"postgres://u:p@h/db" # note'), 'postgres://u:p@h/db');
+  assert.equal(parseDevVarValue("'v' # note"), 'v');
+});
+
+test('parseDevVarValue keeps # inside quotes and stops before a quoted comment', () => {
+  assert.equal(parseDevVarValue('"a # b"'), 'a # b');
+  assert.equal(parseDevVarValue('"a" # "b"'), 'a');
+});
+
+test('parseDevVarValue falls back to unquoted parsing for unterminated quotes', () => {
+  assert.equal(parseDevVarValue('"unterminated # c'), '"unterminated');
+});
+
+test('parseDevVars handles quoted values with trailing comments', () => {
+  const vars = parseDevVars('K="postgres://u:p@h/db" # note\nJ=\'v\' # note\n');
+  assert.equal(vars.K, 'postgres://u:p@h/db');
+  assert.equal(vars.J, 'v');
 });
 
 test('validateDevVars accepts a real connection string', () => {
@@ -133,4 +155,48 @@ test('hyperdrivePresetWarning stays quiet when unset or equal', () => {
     ),
     null,
   );
+});
+
+/** Fake process that records kill/exit calls. */
+function fakeProc(killImpl) {
+  return {
+    pid: 4242,
+    calls: [],
+    kill(pid, signal) {
+      this.calls.push(['kill', pid, signal]);
+      if (killImpl) killImpl(pid, signal);
+    },
+    exit(code) {
+      this.calls.push(['exit', code]);
+    },
+  };
+}
+
+test('forwardChildExit exits with the child code', () => {
+  const proc = fakeProc();
+  forwardChildExit(0, null, proc);
+  assert.deepEqual(proc.calls, [['exit', 0]]);
+});
+
+test('forwardChildExit exits 1 when code is null and no signal', () => {
+  const proc = fakeProc();
+  forwardChildExit(null, null, proc);
+  assert.deepEqual(proc.calls, [['exit', 1]]);
+});
+
+test('forwardChildExit forwards the signal and does not exit', () => {
+  const proc = fakeProc();
+  forwardChildExit(null, 'SIGTERM', proc);
+  assert.deepEqual(proc.calls, [['kill', 4242, 'SIGTERM']]);
+});
+
+test('forwardChildExit falls back to exit(1) when kill throws (unsupported signal)', () => {
+  const proc = fakeProc(() => {
+    throw new Error('not supported on Windows');
+  });
+  forwardChildExit(null, 'SIGUSR1', proc);
+  assert.deepEqual(proc.calls, [
+    ['kill', 4242, 'SIGUSR1'],
+    ['exit', 1],
+  ]);
 });
