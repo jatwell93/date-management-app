@@ -48,6 +48,54 @@ npm run dev
 
 This starts a local development server at `http://localhost:8787`.
 
+### Local development (wrangler dev)
+
+`npm run dev:local` is the supported way to run the Worker as the local dev
+API. It reads `workers/.dev.vars`, requires `NEON_CONNECTION_STRING`, and maps
+it onto `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` so
+`wrangler dev` connects directly to your own Neon branch and never touches the
+Hyperdrive id declared in `wrangler.toml`.
+
+```bash
+cd workers
+cp .dev.vars.example .dev.vars   # fill in NEON_CONNECTION_STRING, JWT_SECRET, CLERK_SECRET_KEY
+npm install
+npm run dev:local                # serves http://localhost:8787
+```
+
+The frontend dev server (Vite, port 3002) targets `http://localhost:8787` by
+default — but any `REACT_APP_API_URL` or `REACT_APP_API_BASE_URL` set in
+Doppler `dev` or a local `frontend/.env` overrides that. Point it at
+`http://localhost:8787` or remove it, and confirm via the Expect QA panel's
+`api-base-url` field (see `docs/local-expect-qa.md`). Extra args are forwarded
+to wrangler: `npm run dev:local -- --log-level debug`.
+
+**What is simulated locally:** the R2 `CSV_UPLOADS` bucket, the KV
+`RATE_LIMITER` namespace, and the Queue binding run in Miniflare's local
+emulation, and `STORAGE_PROVIDER=local` writes uploads to the local filesystem.
+Clerk session verification still calls the real Clerk API, so
+`CLERK_SECRET_KEY` must belong to the same Clerk instance as the frontend's
+`REACT_APP_CLERK_PUBLISHABLE_KEY`.
+
+**What needs the real Neon branch — pglite cannot model it.** `npm run
+test:db` runs SQL correctness against the authoritative migrations in pglite,
+but a WASM Postgres cannot stand in for the live driver and server:
+
+- the `@neondatabase/serverless` transport and its pooling behaviour;
+- real multi-connection concurrency, row locking, and advisory locks (the
+  migration runner relies on `pg_advisory_lock`);
+- runtime role grants (`app_runtime` vs the owner role used by migrations);
+- extensions, collation, and query-planner differences from pglite;
+- statement timeouts and real network latency/failure modes.
+
+Run `npm run dev:local` against your Neon branch to exercise any of those.
+
+**Known follow-up:** `[env.development]`'s Hyperdrive binding reuses the
+production Hyperdrive id. `npm run dev:local` bypasses it via the local
+connection-string env var, but `npm run deploy:dev` would still reach
+production's Hyperdrive — create a separate dev Hyperdrive config before
+anyone deploys the development environment.
+
 ### Test Commands
 
 ```bash

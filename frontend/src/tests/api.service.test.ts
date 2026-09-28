@@ -1,5 +1,12 @@
 import { fetchMock } from '../test-utils/fetchMock';
-import { ApiError, apiService, API_AUTH_UNAUTHORIZED_EVENT } from '../lib/api.service';
+import {
+  ApiError,
+  apiService,
+  API_AUTH_UNAUTHORIZED_EVENT,
+  API_BASE_URL,
+  DEFAULT_API_BASE_URL,
+  resolveApiBaseUrl,
+} from '../lib/api.service';
 
 describe('apiService 401 handling', () => {
   let consoleErrorSpy: jest.SpyInstance;
@@ -87,12 +94,50 @@ describe('apiService structured errors and partial writes', () => {
     await apiService.patch('/supplier-credits/suppliers/7', { name: 'Acme' }, 'test-bearer');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3001/api/supplier-credits/suppliers/7',
+      // API_BASE_URL is env-configured (a local frontend/.env may override the
+      // :8787 default); assert the resolved base plus the built path.
+      `${API_BASE_URL}/api/supplier-credits/suppliers/7`,
       expect.objectContaining({
         method: 'PATCH',
         headers: expect.objectContaining({ Authorization: 'Bearer test-bearer' }),
         body: JSON.stringify({ name: 'Acme' }),
       }),
+    );
+  });
+});
+
+describe('resolveApiBaseUrl', () => {
+  it('defaults to the wrangler dev origin when neither env var is set', () => {
+    expect(resolveApiBaseUrl({})).toBe(DEFAULT_API_BASE_URL);
+    expect(DEFAULT_API_BASE_URL).toBe('http://localhost:8787');
+  });
+
+  it('prefers REACT_APP_API_URL over REACT_APP_API_BASE_URL', () => {
+    expect(
+      resolveApiBaseUrl({
+        REACT_APP_API_URL: 'http://a.example',
+        REACT_APP_API_BASE_URL: 'http://b.example',
+      }),
+    ).toBe('http://a.example');
+  });
+
+  it('uses REACT_APP_API_BASE_URL when REACT_APP_API_URL is absent', () => {
+    expect(resolveApiBaseUrl({ REACT_APP_API_BASE_URL: 'http://b.example' })).toBe(
+      'http://b.example',
+    );
+  });
+
+  it('treats an empty string as unset and falls through', () => {
+    expect(
+      resolveApiBaseUrl({ REACT_APP_API_URL: '', REACT_APP_API_BASE_URL: 'http://b.example' }),
+    ).toBe('http://b.example');
+    expect(resolveApiBaseUrl({ REACT_APP_API_URL: '' })).toBe(DEFAULT_API_BASE_URL);
+  });
+
+  it('strips trailing slashes', () => {
+    expect(resolveApiBaseUrl({ REACT_APP_API_URL: 'http://a.example/' })).toBe('http://a.example');
+    expect(resolveApiBaseUrl({ REACT_APP_API_URL: 'http://a.example/api//' })).toBe(
+      'http://a.example/api',
     );
   });
 });

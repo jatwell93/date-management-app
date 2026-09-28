@@ -32,7 +32,7 @@ describe('OfflineSyncService', () => {
     vi.clearAllMocks();
 
     // Set API base URL for tests
-    process.env.REACT_APP_API_BASE_URL = 'http://localhost:3001';
+    process.env.REACT_APP_API_BASE_URL = 'http://localhost:8787';
 
     // Reset fetch mock to default
     global.fetch = vi.fn().mockResolvedValue({

@@ -1,0 +1,45 @@
+# Local dev secrets for `npm run dev:local` (wrangler dev). Copy to .dev.vars and fill in.
+# .dev.vars is gitignored — never commit real values.
+
+# REQUIRED. Pooled connection URI for YOUR OWN Neon development branch.
+# NEVER point this at production. Get it from the Neon console → your branch →
+# Connection string (use the -pooler host).
+NEON_CONNECTION_STRING=postgres://<user>:<password>@<your-branch-host>-pooler.<region>.aws.neon.tech/<db>?sslmode=require
+
+# REQUIRED. Any random local value — only used to sign/verify local JWTs.
+JWT_SECRET=<any-random-local-string>
+
+# Secret key for the SAME Clerk instance as the frontend's
+# REACT_APP_CLERK_PUBLISHABLE_KEY (pk_test_... → sk_test_...).
+CLERK_SECRET_KEY=<sk_test_...>
+
+# The frontend dev origin.
+FRONTEND_URL=http://localhost:3002
+
+# --- Optional feature config ---
+
+# Clerk webhook signature secret (only needed for local webhook testing).
+# CLERK_WEBHOOK_SECRET=<whsec_...>
+
+# Stripe TEST MODE keys only (sk_test_...). Never sk_live_.
+# Checkout answers 500 "Billing is not configured" until the price ids are set.
+# Each must equal the frontend's matching REACT_APP_STRIPE_PRICE_* value, or
+# checkout answers 400 "priceId is not configured for checkout".
+# STRIPE_SECRET_KEY=<sk_test_...>
+# STRIPE_STARTER_MONTHLY_PRICE_ID=<price_...>
+# STRIPE_STARTER_ANNUAL_PRICE_ID=<price_...>
+# STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID=<price_...>
+# STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID=<price_...>
+# The whsec_... printed by
+#   stripe listen --forward-to 127.0.0.1:8787/api/webhooks/stripe
+# NOT the dashboard endpoint's secret (that one fails verification with 400).
+# Use 127.0.0.1, not localhost: wrangler dev listens on IPv4 only and the CLI
+# may resolve localhost to [::1] (connection refused).
+# STRIPE_WEBHOOK_SECRET=<whsec_...>
+
+# Resend (email). Leave unset to run without email.
+# RESEND_API_KEY=<re_...>
+# RESEND_FROM_EMAIL=<noreply@your-domain.example>
+
+# Comma-separated Clerk user ids granted platform-admin locally.
+# PLATFORM_ADMIN_USER_IDS=<user_...,user_...>

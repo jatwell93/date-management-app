@@ -4,7 +4,7 @@ This guide walks you through setting up Stripe webhook testing locally using ngr
 
 ## Why Webhooks Need Tunneling
 
-Stripe webhooks are POST requests sent from Stripe's servers to your application. Stripe cannot reach `localhost` directly, so we need a tunneling service to forward requests to your local backend.
+Stripe webhooks are POST requests sent from Stripe's servers to your application. Stripe cannot reach `localhost` directly, so we need a tunneling service to forward requests to your local dev API (the Worker on port 8787).
 
 ## Option 1: ngrok (Recommended)
 
@@ -24,12 +24,15 @@ choco install ngrok
 
 **Or download directly from:** https://ngrok.com/download
 
-### 1.2 Start Your Backend
+### 1.2 Start the Local Dev API
+
+The frontend now talks to the Cloudflare Worker locally (port 8787), and the
+Worker owns the Stripe webhook route. Run it against your own Neon branch:
 
 ```bash
-cd backend
-npm run dev
-# Server should be running on http://localhost:3001
+cd workers
+npm run dev:local
+# Server should be running on http://localhost:8787
 ```
 
 ### 1.3 Start ngrok Tunnel
@@ -37,13 +40,13 @@ npm run dev
 In a new terminal:
 
 ```bash
-ngrok http 3001
+ngrok http 8787
 ```
 
 You'll see output like:
 
 ```
-Forwarding    https://abc123.ngrok.io -> http://localhost:3001
+Forwarding    https://abc123.ngrok.io -> http://localhost:8787
 ```
 
 Copy the HTTPS URL (`https://abc123.ngrok.io`)
@@ -65,25 +68,23 @@ Copy the HTTPS URL (`https://abc123.ngrok.io`)
 
 ### 1.5 Update Environment Variables
 
-Create `.env.development` in the `backend/` directory:
+Add the Stripe keys to `workers/.dev.vars` (gitignored — see
+`workers/.dev.vars.example`):
 
 ```bash
-# Copy from .env.example
-cp .env.example backend/.env.development
-
-# Edit the file and add:
+# In workers/.dev.vars:
 STRIPE_SECRET_KEY=sk_test_xxxxx  # From https://dashboard.stripe.com/apikeys
 STRIPE_WEBHOOK_SECRET=whsec_xxxxx  # From webhook endpoint (above)
 ```
 
-### 1.6 Restart Backend
+### 1.6 Restart the Worker
 
 ```bash
-cd backend
-npm run dev
+cd workers
+npm run dev:local
 ```
 
-The backend will load your new `.env.development` and have access to the Stripe keys.
+The Worker loads `.dev.vars` on start, so it picks up the Stripe keys.
 
 ### 1.7 Test the Webhook
 
@@ -92,7 +93,7 @@ In the Stripe Dashboard, find your webhook endpoint and click **Send test event*
 - Select event type: `customer.subscription.created`
 - Click **Send event**
 
-You should see the webhook logged in your backend console:
+You should see the webhook logged in the Worker console:
 
 ```
 Processing webhook event: customer.subscription.created
@@ -103,7 +104,7 @@ Processing webhook event: customer.subscription.created
 Every time you restart your backend or need a fresh ngrok session:
 
 ```bash
-ngrok http 3001  # Get new forwarding URL
+ngrok http 8787  # Get new forwarding URL
 # Update ngrok URL in Stripe Dashboard Webhooks settings
 ```
 
@@ -119,11 +120,11 @@ ngrok http 3001  # Get new forwarding URL
 npm install -g localtunnel
 ```
 
-### 2.2 Start Backend
+### 2.2 Start the Worker
 
 ```bash
-cd backend
-npm run dev
+cd workers
+npm run dev:local
 ```
 
 ### 2.3 Start Tunnel
@@ -131,7 +132,7 @@ npm run dev
 In a new terminal:
 
 ```bash
-lt --port 3001 --subdomain pharmacy-app
+lt --port 8787 --subdomain pharmacy-app
 ```
 
 You'll get: `https://pharmacy-app.loca.lt`
@@ -167,7 +168,7 @@ The webhook handler follows these principles:
 | `invoice.payment_failed`               | Done   | Set `past_due`, audit, and queue dunning flow  |
 | `customer.subscription.trial_will_end` | Done   | Queue trial reminder flow                      |
 
-See [`backend/src/services/webhook.service.ts`](../backend/src/services/webhook.service.ts) for implementation details.
+See [`workers/src/stripe/webhook-handler.ts`](../workers/src/stripe/webhook-handler.ts) for implementation details.
 
 ---
 
@@ -175,9 +176,9 @@ See [`backend/src/services/webhook.service.ts`](../backend/src/services/webhook.
 
 ### Webhook not being received?
 
-1. **Check ngrok is running:** `ngrok http 3001`
+1. **Check ngrok is running:** `ngrok http 8787`
 2. **Verify Stripe Dashboard:** Webhooks → Your endpoint → View recent attempts
-3. **Check backend logs:** Look for `Processing webhook event: ...`
+3. **Check Worker logs:** Look for `Processing webhook event: ...`
 4. **Signature verification failed?**
    - Ensure `STRIPE_WEBHOOK_SECRET` matches Stripe Dashboard
    - Verify it starts with `whsec_` (not the public key)
@@ -186,12 +187,12 @@ See [`backend/src/services/webhook.service.ts`](../backend/src/services/webhook.
 
 - 400: Invalid signature or missing header
 - 401: Missing or wrong webhook secret
-- Check `backend/src/routes/webhook.routes.ts` for error handling
+- Check `workers/src/stripe/webhook-handler.ts` for error handling
 
 ### Getting 5xx errors?
 
 - 500: Error processing webhook (handler threw exception)
-- Check backend logs, Sentry, and webhook metrics for the event ID and handler failure.
+- Check Worker logs, Sentry, and webhook metrics for the event ID and handler failure.
 
 ### ngrok URL keeps changing?
 
