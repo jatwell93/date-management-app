@@ -25,6 +25,7 @@
     "processed_webhook_events",
     "products",
     "refresh_tokens",
+    "scheduled_job_runs",
     "schema_migrations",
     "store_areas",
     "subscription_tiers",
@@ -1668,6 +1669,69 @@
       "default": null
     },
     {
+      "table": "scheduled_job_runs",
+      "name": "job_name",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "lease_token",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "lease_expires_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "last_started_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "last_finished_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "last_succeeded_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "last_status",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "last_error",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "updated_at",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
       "table": "schema_migrations",
       "name": "id",
       "type": "text",
@@ -3300,6 +3364,14 @@
       "definition": "CREATE INDEX refresh_tokens_user_id_idx ON public.refresh_tokens USING btree (user_id)",
       "unique": false,
       "primary": false,
+      "predicate": null
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "scheduled_job_runs_pkey",
+      "definition": "CREATE UNIQUE INDEX scheduled_job_runs_pkey ON public.scheduled_job_runs USING btree (job_name)",
+      "unique": true,
+      "primary": true,
       "predicate": null
     },
     {
@@ -5161,6 +5233,24 @@
       "name": "refresh_tokens_user_id_not_null",
       "type": "n",
       "definition": "NOT NULL user_id"
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "scheduled_job_runs_job_name_not_null",
+      "type": "n",
+      "definition": "NOT NULL job_name"
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "scheduled_job_runs_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (job_name)"
+    },
+    {
+      "table": "scheduled_job_runs",
+      "name": "scheduled_job_runs_updated_at_not_null",
+      "type": "n",
+      "definition": "NOT NULL updated_at"
     },
     {
       "table": "schema_migrations",

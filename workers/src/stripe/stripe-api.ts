@@ -263,3 +263,34 @@ export function cancelStripeSubscriptionAtPeriodEnd(
     },
   );
 }
+
+interface StripeListResponse<T> {
+  data: T[];
+  has_more: boolean;
+}
+
+/**
+ * Page through every subscription in the Stripe account (`GET /v1/subscriptions
+ * ?status=all`), used by the daily `stripe-reconciliation` scheduled job.
+ * `starting_after` continues the previous page, per Stripe's cursor pagination.
+ * A request failure propagates — the caller decides whether the run fails.
+ */
+export async function listStripeSubscriptions<T>(
+  env: Env,
+  options: { startingAfter?: string } = {},
+): Promise<T[]> {
+  const all: T[] = [];
+  let startingAfter = options.startingAfter;
+  for (;;) {
+    const query = `status=all&limit=100${startingAfter ? `&starting_after=${encodeURIComponent(startingAfter)}` : ''}`;
+    const page = await stripeRequest<StripeListResponse<T>>(env, `/subscriptions?${query}`, {
+      method: 'GET',
+    });
+    all.push(...page.data);
+    const last = page.data[page.data.length - 1] as { id?: string } | undefined;
+    if (!page.has_more || !last?.id) {
+      return all;
+    }
+    startingAfter = last.id;
+  }
+}

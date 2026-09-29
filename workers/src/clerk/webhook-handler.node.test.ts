@@ -612,4 +612,80 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
         VALUES (${organizationId}, ${'professional'}, ${'trialing'}, NOW())`,
     ).rejects.toThrow(/unique|duplicate key/i);
   });
+
+  describe('webhook metrics', () => {
+    beforeEach(async () => {
+      await sql`DELETE FROM webhook_metrics`;
+    });
+
+    it('records a success after an event is processed', async () => {
+      const response = await deliver(
+        'msg_metrics_ok',
+        userCreatedEvent({ clerkUserId: 'user_m', email: 'm@acme.test', clerkOrgId: 'org_m' }),
+      );
+      expect(response.status).toBe(200);
+
+      const rows = await sql`SELECT event_type, total_count, failure_count FROM webhook_metrics`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        event_type: 'user.created',
+        total_count: 1,
+        failure_count: 0,
+      });
+    });
+
+    it('records a failure on the 500 processing-error path', async () => {
+      await harness.pg.exec('ALTER TABLE users RENAME TO users_metrics_quarantined');
+      let response: Response;
+      try {
+        response = await deliver(
+          'msg_metrics_fail',
+          userCreatedEvent({ clerkUserId: 'user_f', email: 'f@acme.test', clerkOrgId: 'org_f' }),
+        );
+      } finally {
+        await harness.pg.exec('ALTER TABLE users_metrics_quarantined RENAME TO users');
+      }
+      expect(response.status).toBe(500);
+
+      const rows = await sql`SELECT total_count, failure_count FROM webhook_metrics`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ total_count: 1, failure_count: 1 });
+    });
+
+    it('records nothing for signature failures or replayed claims', async () => {
+      // Forged signature — 400 before the claim.
+      const rawBody = JSON.stringify(
+        userCreatedEvent({ clerkUserId: 'u', email: 'x@x', clerkOrgId: 'o' }),
+      );
+      const forged = await handleClerkWebhook(
+        new Request('https://api.test/api/webhooks/clerk', {
+          method: 'POST',
+          headers: {
+            'svix-id': 'msg_metrics_forged',
+            'svix-timestamp': String(Math.floor(Date.now() / 1000)),
+            'svix-signature': 'v1,Zm9yZ2Vk',
+            'Content-Type': 'application/json',
+          },
+          body: rawBody,
+        }),
+        ENV,
+        'https://app.test',
+      );
+      expect(forged.status).toBe(400);
+
+      // A real delivery, then its replay — a completed claim is not a new
+      // outcome and must not double-count.
+      const event = userCreatedEvent({
+        clerkUserId: 'user_r',
+        email: 'r@acme.test',
+        clerkOrgId: 'org_r',
+      });
+      expect((await deliver('msg_metrics_replay', event)).status).toBe(200);
+      expect((await deliver('msg_metrics_replay', event)).status).toBe(200);
+
+      const rows = await sql`SELECT total_count, failure_count FROM webhook_metrics`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ total_count: 1, failure_count: 0 });
+    });
+  });
 });

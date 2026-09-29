@@ -88,6 +88,16 @@ id = "a0b277b9636144cba1bacdcb247a2d40"
 binding = "ANALYTICS"
 dataset = "analytics_events"
 
+# Cron Triggers (Production)
+# One hourly tick at minute 0 UTC; dispatch to individual jobs happens in code
+# (workers/src/scheduled/) against the scheduled_job_runs lease table, so missed
+# ticks still catch up. Deliberately absent from [env.development]: the dev
+# deployment's Hyperdrive binding reuses the production id (see
+# [[env.development.hyperdrive]] above), so dev jobs would run against the
+# production database — recorded as a follow-up.
+[env.production.triggers]
+crons = ["0 * * * *"]
+
 # R2 Bucket Bindings (Development/Preview)
 [[env.development.r2_buckets]]
 binding = "CSV_UPLOADS"

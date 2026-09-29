@@ -61,6 +61,7 @@ import {
   SUBSCRIPTION_EVENT_TYPES,
   type StripeSubscriptionObject,
 } from './subscription-events';
+import { recordWebhookOutcome } from '../webhook-metrics';
 import { verifyStripeSignature } from './webhook-signature';
 
 /**
@@ -269,8 +270,9 @@ export async function handleStripeWebhook(
 
   const { event, eventId, eventType } = accepted;
 
+  let db: ReturnType<typeof createWorkersDatabase> | undefined;
   try {
-    const db = createWorkersDatabase(env);
+    db = createWorkersDatabase(env);
 
     // Claim the event *before* doing the work. Stripe delivers at least once and
     // retries on timeout or 5xx, so concurrent redelivery of one event id is the
@@ -291,6 +293,11 @@ export async function handleStripeWebhook(
 
     await applyClaimedEventOrReleaseClaim(db.sql, eventId, eventType, event);
 
+    // Metrics count processing outcomes only — not signature failures,
+    // missing-secret 503s, or completed/in-flight skips above (those returns
+    // happen before this line). A recording failure never propagates.
+    await recordWebhookOutcome(db.sql, eventType, true);
+
     return jsonResponse({ received: true }, 200, env, requestOrigin);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -299,6 +306,10 @@ export async function handleStripeWebhook(
       eventType,
       message,
     });
+    // If we never got a connection (db undefined), there is nothing to write.
+    if (db) {
+      await recordWebhookOutcome(db.sql, eventType, false);
+    }
     // 500 so Stripe retries. The claim has already been released above, so the
     // retry re-drives the event rather than finding it in flight.
     return errorResponse('Error processing webhook event', 500, env, requestOrigin);

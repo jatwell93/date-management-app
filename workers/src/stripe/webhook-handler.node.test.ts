@@ -722,4 +722,77 @@ describe('POST /api/webhooks/stripe', () => {
       expect(rows[0].completed_at).not.toBeNull();
     });
   });
+
+  describe('webhook metrics', () => {
+    beforeEach(async () => {
+      await sql`DELETE FROM webhook_metrics`;
+    });
+
+    it('records a success after an event is processed', async () => {
+      const request = await stripeRequest(
+        subscriptionEvent({ id: 'evt_metrics_ok', type: 'customer.subscription.created' }),
+      );
+      const response = await handleStripeWebhook(request, ENV);
+      expect(response.status).toBe(200);
+
+      const rows = await sql`
+        SELECT event_type, total_count, failure_count FROM webhook_metrics`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        event_type: 'customer.subscription.created',
+        total_count: 1,
+        failure_count: 0,
+      });
+    });
+
+    it('records a failure on the 500 processing-error path', async () => {
+      // Force processing to throw after the claim: hide the table
+      // attribution queries read, restore it immediately afterwards.
+      await harness.pg.exec(
+        'ALTER TABLE subscription_tiers RENAME TO subscription_tiers_quarantined',
+      );
+      let response: Response;
+      try {
+        response = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({ id: 'evt_metrics_fail', type: 'customer.subscription.created' }),
+          ),
+          ENV,
+        );
+      } finally {
+        await harness.pg.exec(
+          'ALTER TABLE subscription_tiers_quarantined RENAME TO subscription_tiers',
+        );
+      }
+      expect(response.status).toBe(500);
+
+      const rows = await sql`SELECT total_count, failure_count FROM webhook_metrics`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ total_count: 1, failure_count: 1 });
+    });
+
+    it('records nothing for signature failures or replayed claims', async () => {
+      // Forged signature — 400 before the claim.
+      const forged = await stripeRequest(
+        subscriptionEvent({ id: 'evt_metrics_forged', type: 'customer.subscription.created' }),
+        { signature: 'deadbeef'.repeat(8) },
+      );
+      expect((await handleStripeWebhook(forged, ENV)).status).toBe(400);
+
+      // A real delivery, then its replay — the replay is a completed claim,
+      // not a new outcome, so it must not double-count.
+      const request = await stripeRequest(
+        subscriptionEvent({ id: 'evt_metrics_replay', type: 'customer.subscription.created' }),
+      );
+      expect((await handleStripeWebhook(request, ENV)).status).toBe(200);
+      const replay = await stripeRequest(
+        subscriptionEvent({ id: 'evt_metrics_replay', type: 'customer.subscription.created' }),
+      );
+      expect((await handleStripeWebhook(replay, ENV)).status).toBe(200);
+
+      const rows = await sql`SELECT total_count, failure_count FROM webhook_metrics`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ total_count: 1, failure_count: 0 });
+    });
+  });
 });

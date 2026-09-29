@@ -12,6 +12,7 @@
 import { CatalogueImportMessage, Env } from './types/env';
 import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
+import { runScheduledTick } from './scheduled/dispatcher';
 import * as Sentry from '@sentry/cloudflare';
 import {
   resolveInventoryFields,
@@ -655,6 +656,13 @@ const sentryWrappedHandlers = Sentry.withSentry(
     },
     async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
       await handleCatalogueImportQueue(batch, env);
+    },
+    // One hourly cron tick (`0 * * * *`, production only — see wrangler.toml).
+    // Dispatch to individual jobs happens in `scheduled/dispatcher.ts` against
+    // `scheduled_job_runs` run state; `controller.scheduledTime` — not Date.now()
+    // — is the tick's asOf so catch-up after a delayed delivery still works.
+    async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+      await runScheduledTick(env, new Date(controller.scheduledTime));
     },
   },
 );

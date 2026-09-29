@@ -9,6 +9,7 @@ import {
   type ClerkWebhookEventPayload,
 } from './clerk-persistence';
 import { verifyClerkSvixSignature, type ClerkWebhookHeaders } from './webhook-signature';
+import { recordWebhookOutcome } from '../webhook-metrics';
 
 export async function handleClerkWebhook(
   request: Request,
@@ -52,8 +53,9 @@ export async function handleClerkWebhook(
 
   const eventType = typeof event.type === 'string' ? event.type : 'unknown';
 
+  let db: ReturnType<typeof createWorkersDatabase> | undefined;
   try {
-    const db = createWorkersDatabase(env);
+    db = createWorkersDatabase(env);
 
     // Claim the event *before* doing the work. Svix delivers at least once and
     // retries on timeout or 5xx, so concurrent redelivery of one event id is the
@@ -109,6 +111,10 @@ export async function handleClerkWebhook(
 
     await completeClerkWebhookEvent(db.sql, headers.id);
 
+    // Metrics count processing outcomes only — not signature failures or the
+    // completed/in-flight skips above. A recording failure never propagates.
+    await recordWebhookOutcome(db.sql, eventType, true);
+
     return jsonResponse({ received: true }, 200, env, requestOrigin);
   } catch (error) {
     console.error('[CLERK_WEBHOOK] Error processing webhook event', {
@@ -116,6 +122,9 @@ export async function handleClerkWebhook(
       eventType,
       error: error instanceof Error ? error.message : 'unknown',
     });
+    if (db) {
+      await recordWebhookOutcome(db.sql, eventType, false);
+    }
     return errorResponse('Error processing Clerk webhook event', 500, env, requestOrigin);
   }
 }
