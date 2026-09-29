@@ -3149,6 +3149,29 @@ equivalent, a relocated home, or an explicit retirement decision.
       run; deploy; confirm each job's first on-schedule run in `scheduled_job_runs` / Worker logs.
       **Follow-up recorded:** CSV import bands (`upload/expiry-import.ts:27-37`, 7/14/30) disagree with
       `MARKDOWN_WINDOWS` (30/60/90) — pre-existing in Express too; the nightly job corrects imported rows.
+      <br>**3.3a review rework + local scheduled verification (2026-09-29).** Bot findings settled: **(A)**
+      accepted — the purge job no longer swallows R2 delete errors (the R2 binding's `delete()` does not
+      throw for a missing key, so a throw is real: row left for the next tick, per-photo Sentry capture with
+      `storageKey`); **(B)** accepted — the replay-growth query now range-scans `processed_at` (covered by new
+      migration `0017_processed_webhook_events_processed_at_idx`, needed because completed rows are never
+      deleted), the failure-rate alert is volume-gated (>=20 deliveries), and the replay ratio now requires a
+      >=10 previous-hour baseline else falls back to the >100 volume rule; **(C)** accepted — the lease is
+      wall-clock (`NOW()`), so a delayed/replayed tick's stale `asOf` can't produce a born-expired lease and
+      PC/DB clock skew no longer shows finished-before-started (`last_succeeded_at` stays `asOf`; `isJobDue`
+      unchanged); **(D)** accepted — `ScheduledJobRun` mirrored into `backend/prisma/schema.prisma`; **(E)**
+      declined — `recordWebhookOutcome` stays awaited rather than `ctx.waitUntil` (one small awaited query per
+      delivery; keeps the handler signature simple); parallel photo purge declined (500 sequential round trips
+      fit well inside the 600 s lease and the Paid 15-minute cron limit).
+      <br>**Local verification.** With `wrangler dev --test-scheduled`, `curl http://127.0.0.1:8787/cdn-cgi/local/scheduled?cron=0+*+*+*+*`
+      returned "ok". A read-only query of `scheduled_job_runs` on dev branch `br-winter-haze-a7ydntft` showed
+      the first tick (22:18:52Z) ran all four jobs to `succeeded` with no `last_error`, and the second tick
+      (22:18:58Z) ran only `webhook-monitoring` — the daily jobs did not re-run, confirming once-per-day and
+      catch-up behaviour; all leases were released. **Follow-up:** the local wrangler dev terminal showed no
+      console output from the scheduled handler even though the jobs ran, and `/__scheduled` returned the
+      Worker's own 404 JSON although wrangler 4.129.1 help still names that route — cause not investigated.
+      <br>**Pending (human):** apply **0016 and 0017** to the dev branch and production per the deploy runbook
+      **before** deploying the Worker; deploy; confirm each job's first on-schedule run in `scheduled_job_runs`
+      / Worker logs.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
       **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in

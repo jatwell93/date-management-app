@@ -1,9 +1,10 @@
 /**
- * Unit coverage for the `credit-claim-photo-purge` job's failure posture: R2
- * errors are swallowed (the object may already be gone — the row is still
- * deleted), row-delete errors are per-photo captured and the loop continues,
- * and `failed > 0` marks the run failed. The underlying SELECT/DELETE
- * statements are real-SQL covered in `scheduled.pglite.node.test.ts`.
+ * Unit coverage for the `credit-claim-photo-purge` job's failure posture: an
+ * R2 delete that throws leaves the row in place (a Workers R2 `delete()` does
+ * not throw for a missing key, so a rejection is a real failure), row-delete
+ * errors are per-photo captured and the loop continues, and `failed > 0` marks
+ * the run failed. The underlying SELECT/DELETE statements are real-SQL covered
+ * in `scheduled.pglite.node.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../types/env';
@@ -82,8 +83,8 @@ describe('credit-claim-photo-purge job', () => {
     expect(result.failed).not.toBe(true);
   });
 
-  it('still deletes the row when the R2 delete fails (object may be gone)', async () => {
-    const { bucket } = fakeBucket(['gone.jpg']);
+  it('a resolved R2 delete (e.g. object already gone) still deletes the row', async () => {
+    const { bucket } = fakeBucket();
     const { sql, deletedIds } = fakeSql([
       { id: 1, organizationId: 'org_1', storageKey: 'gone.jpg' },
     ]);
@@ -94,6 +95,26 @@ describe('credit-claim-photo-purge job', () => {
     expect(result.summary.purged).toBe(1);
     expect(result.failed).not.toBe(true);
     expect(sentryCalls.exceptions).toHaveLength(0);
+  });
+
+  it('leaves the row when the R2 delete throws, captures it, and fails the run', async () => {
+    const { bucket } = fakeBucket(['bad.jpg']);
+    const { sql, deletedIds } = fakeSql([
+      { id: 1, organizationId: 'org_1', storageKey: 'bad.jpg' },
+      { id: 2, organizationId: 'org_2', storageKey: 'good.jpg' },
+    ]);
+
+    const result = await creditClaimPhotoPurgeJob.run({ env: env(bucket), sql, asOf: AS_OF });
+
+    // The failed photo's row stays (retried next tick); the sibling still purges.
+    expect(deletedIds).toEqual([2]);
+    expect(result.summary).toEqual({ purged: 1, failed: 1, hitBatchLimit: false });
+    expect(result.failed).toBe(true);
+    expect(sentryCalls.exceptions).toHaveLength(1);
+    const ctx = (sentryCalls.exceptions[0] as [unknown, { extra: Record<string, unknown> }])[1];
+    expect(ctx.extra.storageKey).toBe('bad.jpg');
+    expect(ctx.extra.photoId).toBe(1);
+    expect(ctx.extra.organizationId).toBe('org_1');
   });
 
   it('captures a row-delete failure per photo, continues, and marks the run failed', async () => {

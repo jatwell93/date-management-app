@@ -96,15 +96,33 @@ describe('scheduled jobs (pglite)', () => {
       expect(rows[0].last_status).toBe('running');
     });
 
-    it('a new tick takes over once the lease has expired', async () => {
+    it('a new tick takes over once the lease has expired (wall-clock)', async () => {
       await acquireJobLease(sql, LEASE_JOB, 'tok-a', AS_OF_ISO);
-      const later = new Date(AS_OF.getTime() + 301 * 1000).toISOString();
-      expect(await acquireJobLease(sql, LEASE_JOB, 'tok-b', later)).toBe(true);
+      // Expire the lease in the DB's clock rather than waiting for real time:
+      // the takeover condition is `lease_expires_at <= NOW()`. Retried with the
+      // SAME asOf — expiry is wall-clock, not the tick's scheduled time.
+      await sql`
+        UPDATE scheduled_job_runs SET lease_expires_at = NOW() - INTERVAL '1 second'
+        WHERE job_name = 'lease-probe'`;
+      expect(await acquireJobLease(sql, LEASE_JOB, 'tok-b', AS_OF_ISO)).toBe(true);
       const rows =
         (await sql`SELECT lease_token FROM scheduled_job_runs WHERE job_name = 'lease-probe'`) as Array<{
           lease_token: string;
         }>;
       expect(rows[0].lease_token).toBe('tok-b');
+    });
+
+    it('a live lease blocks even a tick whose asOf is far in the future', async () => {
+      await acquireJobLease(sql, LEASE_JOB, 'tok-a', AS_OF_ISO);
+      // lease_expires_at is NOW()+300s — live. A delayed/replayed tick carrying
+      // a much-later scheduled time must not steal the in-flight job.
+      const farFuture = new Date('2030-01-01T00:00:00.000Z').toISOString();
+      expect(await acquireJobLease(sql, LEASE_JOB, 'tok-b', farFuture)).toBe(false);
+      const rows =
+        (await sql`SELECT lease_token FROM scheduled_job_runs WHERE job_name = 'lease-probe'`) as Array<{
+          lease_token: string;
+        }>;
+      expect(rows[0].lease_token).toBe('tok-a');
     });
 
     it('release with a stale token is a no-op; the right token records success', async () => {
@@ -357,15 +375,35 @@ describe('scheduled jobs (pglite)', () => {
       expect(sentryCalls.messages).toHaveLength(0);
     });
 
-    it('alerts on failure rate above 5%', async () => {
+    it('a high failure rate below the minimum volume does not alert', async () => {
+      // 10% failure rate, but only 10 deliveries — below the volume floor.
+      // 1 failure also stays under the daily_error_count rule, so nothing alerts.
       await sql`
         INSERT INTO webhook_metrics (event_type, date, total_count, failure_count)
         VALUES ('t', date_trunc('day', ${AS_OF_ISO}::timestamp), 10, 1)`;
       const result = await webhookMonitoringJob.run({ env: ENV, sql, asOf: AS_OF });
       expect(result.summary.failureRatePercent).toBe(10);
+      expect(result.summary.alerted).toEqual([]);
+      expect(sentryCalls.messages).toHaveLength(0);
+    });
+
+    it('alerts on failure rate above 5% once the volume floor is met', async () => {
+      await sql`
+        INSERT INTO webhook_metrics (event_type, date, total_count, failure_count)
+        VALUES ('t', date_trunc('day', ${AS_OF_ISO}::timestamp), 20, 2)`;
+      const result = await webhookMonitoringJob.run({ env: ENV, sql, asOf: AS_OF });
+      expect(result.summary.failureRatePercent).toBe(10);
       expect(result.summary.alerted).toContain('failure_rate');
       const call = sentryCalls.messages[0] as [string, { fingerprint: string[] }];
       expect(call[1].fingerprint).toEqual(['webhook_monitoring', 'failure_rate']);
+    });
+
+    it('does not fire the rate alert just under the volume floor', async () => {
+      await sql`
+        INSERT INTO webhook_metrics (event_type, date, total_count, failure_count)
+        VALUES ('t', date_trunc('day', ${AS_OF_ISO}::timestamp), 19, 1)`;
+      const result = await webhookMonitoringJob.run({ env: ENV, sql, asOf: AS_OF });
+      expect(result.summary.alerted).toEqual([]);
     });
 
     it('alerts on daily error count even when the rate is fine', async () => {
@@ -414,5 +452,32 @@ describe('scheduled jobs (pglite)', () => {
       expect(spike.summary.replayGrowth).toBe(10);
       expect(spike.summary.alerted).toContain('replay_attack_suspected');
     });
+
+    for (const [previous, current, expectAlert] of [
+      [1, 6, false], // tiny baseline — the ratio is noise, volume rule applies
+      [9, 60, false], // still below the baseline; 60 <= 100, no alert
+      [10, 50, false], // at baseline: 5.0x is not > 5
+      [10, 51, true], // at baseline: 5.1x alerts
+      [0, 101, true], // zero baseline: volume rule, >100 alerts
+    ] as const) {
+      it(`replay baseline ${previous} / current ${current} ${expectAlert ? 'alerts' : 'stays quiet'}`, async () => {
+        for (let i = 0; i < previous; i += 1) {
+          await sql`
+            INSERT INTO processed_webhook_events (id, event_type, processed_at)
+            VALUES (${'prev' + i}, 't', ${AS_OF_ISO}::timestamp - make_interval(mins => 90))`;
+        }
+        for (let i = 0; i < current; i += 1) {
+          await sql`
+            INSERT INTO processed_webhook_events (id, event_type, processed_at)
+            VALUES (${'cur' + i}, 't', ${AS_OF_ISO}::timestamp - make_interval(mins => 30))`;
+        }
+        const result = await webhookMonitoringJob.run({ env: ENV, sql, asOf: AS_OF });
+        if (expectAlert) {
+          expect(result.summary.alerted).toContain('replay_attack_suspected');
+        } else {
+          expect(result.summary.alerted).not.toContain('replay_attack_suspected');
+        }
+      });
+    }
   });
 });

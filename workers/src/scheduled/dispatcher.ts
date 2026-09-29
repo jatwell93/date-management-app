@@ -63,31 +63,39 @@ interface JobRunStateRow {
 /**
  * Claim a job's row for this tick. Single statement: the INSERT seeds the row
  * on first ever run; the UPDATE path only fires while the previous lease is
- * absent or expired (`lease_expires_at <= asOf`), so a still-running tick keeps
+ * absent or expired (`lease_expires_at <= NOW()`), so a still-running tick keeps
  * its lease. Returns true when this tick holds the job.
+ *
+ * The lease is deliberately wall-clock (NOW()), not `asOf`: `asOf` is the
+ * tick's *scheduled* instant, which lags real time whenever a delivery is
+ * delayed or replayed — a lease anchored to it could be born already expired.
+ * Clock skew between the isolate and the database is also why `last_started_at`
+ * is NOW() rather than asOf (it records when the DB observed the claim; nothing
+ * reads it for due-ness — that is `last_succeeded_at`'s job, and that column
+ * deliberately stores `asOf`).
  */
 export async function acquireJobLease(
   sql: SqlClient,
   job: ScheduledJob,
   token: string,
-  asOfIso: string,
+  _asOfIso: string,
 ): Promise<boolean> {
   const rows = (await sql`
     INSERT INTO scheduled_job_runs
       (job_name, lease_token, lease_expires_at, last_started_at, last_status, updated_at)
     VALUES (
       ${job.name}, ${token},
-      ${asOfIso}::timestamp + make_interval(secs => ${job.leaseSeconds}),
-      ${asOfIso}::timestamp, 'running', NOW()
+      NOW() + make_interval(secs => ${job.leaseSeconds}),
+      NOW(), 'running', NOW()
     )
     ON CONFLICT (job_name) DO UPDATE SET
       lease_token = EXCLUDED.lease_token,
       lease_expires_at = EXCLUDED.lease_expires_at,
-      last_started_at = EXCLUDED.last_started_at,
+      last_started_at = NOW(),
       last_status = 'running',
       updated_at = NOW()
     WHERE scheduled_job_runs.lease_expires_at IS NULL
-       OR scheduled_job_runs.lease_expires_at <= ${asOfIso}::timestamp
+       OR scheduled_job_runs.lease_expires_at <= NOW()
     RETURNING job_name
   `) as unknown[];
   return rows.length > 0;

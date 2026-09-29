@@ -162,6 +162,7 @@ model ProcessedWebhookEvent {
   completedAt DateTime? @default(now()) @map("completed_at")
 
   @@index([eventType, processedAt])
+  @@index([processedAt])
   @@map("processed_webhook_events")
 }
 

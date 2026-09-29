@@ -391,6 +391,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0017",
+      "forward": "0017_processed_webhook_events_processed_at_idx.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0017_processed_webhook_events_processed_at_idx.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }

@@ -5,10 +5,10 @@
  * Batch-limited at 500 per run: a large backlog drains over successive daily
  * ticks rather than one long run against the lease window.
  *
- * Failure posture is Express's: an R2 delete error is swallowed (the object may
- * already be gone — the row must still be removed), while a *row* delete error
- * is per-photo captured and the loop continues; `failed > 0` marks the run
- * failed so the missed rows are retried on the next tick.
+ * The R2 binding's `delete()` does not throw for a missing key, so a throw is a
+ * real failure: the row is left in place (the next tick retries it), the error
+ * is captured per photo with the photo and object identifiers, and the loop
+ * continues. `failed > 0` marks the run failed so the slot stays owed.
  */
 import * as Sentry from '@sentry/cloudflare';
 import { deletePhotoRowById, listPhotosDueForPurgeAcrossOrgs } from '../../credit-claim-database';
@@ -27,20 +27,22 @@ export const creditClaimPhotoPurgeJob: ScheduledJob = {
     let failed = 0;
 
     for (const photo of photos) {
-      // The object may already be gone (manual delete, lifecycle rule). The row
-      // is the source of truth for "still retained", so an R2 miss must not stop
-      // the row being removed — Express treats this identically.
-      await photoBucket(env)
-        .delete(photo.storageKey)
-        .catch(() => undefined);
       try {
+        // Object first, row second: a row deleted before its object would leave
+        // untracked R2 garbage, while a failed R2 delete leaving the row is
+        // self-healing — the next tick retries it.
+        await photoBucket(env).delete(photo.storageKey);
         await deletePhotoRowById(sql, photo.id);
         purged += 1;
       } catch (error) {
         failed += 1;
         Sentry.captureException(error, {
           tags: { job: 'credit-claim-photo-purge', event: 'photo-delete' },
-          extra: { organizationId: photo.organizationId, photoId: photo.id },
+          extra: {
+            organizationId: photo.organizationId,
+            photoId: photo.id,
+            storageKey: photo.storageKey,
+          },
         });
       }
     }

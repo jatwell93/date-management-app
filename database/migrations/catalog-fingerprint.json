@@ -3255,6 +3255,14 @@
       "predicate": null
     },
     {
+      "table": "processed_webhook_events",
+      "name": "processed_webhook_events_processed_at_idx",
+      "definition": "CREATE INDEX processed_webhook_events_processed_at_idx ON public.processed_webhook_events USING btree (processed_at)",
+      "unique": false,
+      "primary": false,
+      "predicate": null
+    },
+    {
       "table": "products",
       "name": "idx_products_brand_id",
       "definition": "CREATE INDEX idx_products_brand_id ON public.products USING btree (brand_id)",
