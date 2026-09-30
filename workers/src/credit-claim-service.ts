@@ -155,7 +155,7 @@ export async function sendClaimEmail(env: Env, message: ClaimEmailMessage): Prom
   return true;
 }
 
-function photoBucket(env: Env): R2Bucket {
+export function photoBucket(env: Env): R2Bucket {
   return env.CSV_UPLOADS;
 }
 

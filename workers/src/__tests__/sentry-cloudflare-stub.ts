@@ -12,4 +12,8 @@ export function captureException(_error: unknown, _context?: unknown): void {
   // no-op in tests
 }
 
-export default { withSentry, captureException };
+export function captureMessage(_message: unknown, _context?: unknown): void {
+  // no-op in tests
+}
+
+export default { withSentry, captureException, captureMessage };

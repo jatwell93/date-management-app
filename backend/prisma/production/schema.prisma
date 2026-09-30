@@ -162,6 +162,7 @@ model ProcessedWebhookEvent {
   completedAt DateTime? @default(now()) @map("completed_at")
 
   @@index([eventType, processedAt])
+  @@index([processedAt])
   @@map("processed_webhook_events")
 }
 
@@ -730,4 +731,18 @@ model WebhookMetrics {
   @@index([eventType])
   @@index([date])
   @@map("webhook_metrics")
+}
+
+model ScheduledJobRun {
+  jobName         String    @id @map("job_name")
+  leaseToken      String?   @map("lease_token")
+  leaseExpiresAt  DateTime? @map("lease_expires_at")
+  lastStartedAt   DateTime? @map("last_started_at")
+  lastFinishedAt  DateTime? @map("last_finished_at")
+  lastSucceededAt DateTime? @map("last_succeeded_at")
+  lastStatus      String?   @map("last_status")
+  lastError       String?   @map("last_error")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  @@map("scheduled_job_runs")
 }

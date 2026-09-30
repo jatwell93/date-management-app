@@ -3113,6 +3113,65 @@ equivalent, a relocated home, or an explicit retirement decision.
       `appliedAt` column that exists in neither backend, so `acquire` always fails and the caller
       reports it as "already running, skipping" (Finding 14). Neon has no `$transaction`, so the
       replacement is a conditional single-statement insert or an advisory lock.
+      <br>**3.3a progress (Cron Trigger half; code landed, deploy + on-schedule verification pending).**
+      Decisions (user, 2026-09-29): rows **4, 8, 9 retired as superseded** — the Worker derives trial
+      expiry and the 7-day dunning lapse from dates on every request (`workers/src/subscription-status.ts`
+      `deriveSubscriptionAccess`, #489; pinned by `subscription-status.test.ts:66`, `:113-120`,
+      `:146-148`), and writing a downgrade would break the cancellation paid-through window
+      (`stripe/stripe-persistence.ts:421-436`). Row 3.3b's downgrade-warning email (row 5) must therefore
+      key off `trial_end_date`, not a downgrade write. **One hourly Cron Trigger** (`0 * * * *`,
+      `[env.production.triggers]` only — absent from development because its Hyperdrive id is
+      production's; asserted by `scripts/verify-scheduled-triggers.test.js`) dispatches from the schedule
+      table in `workers/src/scheduled/schedule.ts` (UTC): `markdown-recalculation` daily 00,
+      `stripe-reconciliation` daily 01, `credit-claim-photo-purge` daily 03, `webhook-monitoring` hourly —
+      Finding 13's 02:00 collision is gone and Finding 15 is resolved by construction (UTC, `asOf` =
+      `controller.scheduledTime`). **Overlap prevention / catch-up:** migration
+      `0016_scheduled_job_runs` — a single-statement conditional upsert lease (Neon HTTP has no session, so
+      no advisory locks; `JobLockRepository` not ported, Finding 14) plus `last_succeeded_at`, so a missed
+      or failed daily slot re-runs on the next tick. Per-job isolation with Sentry capture; structured
+      `scheduled_job` log lines; production kill switch `SCHEDULED_JOBS_DISABLED="true"` (set as a Worker
+      secret; the handover note said none existed). Jobs: markdown recalculation is one set-based UPDATE
+      over the shared 30/60/90 `MARKDOWN_WINDOWS`, touching only the five markdown-lifecycle statuses
+      (Express overwrote dispositioned rows too — not carried); photo purge deletes R2 then row, per-photo
+      isolation, 500/run; Stripe reconciliation (daily, per user) re-applies each linked subscription
+      through the webhook's own `processSubscriptionEvent`, `allSettled` not `Promise.all` (row 12),
+      missing-in-Stripe warns without deleting (row 13); webhook monitoring ports rows 19-21 with
+      fingerprint-grouped Sentry alerts, and the Stripe + Clerk webhook handlers now write
+      `webhook_metrics` (processing outcomes only — Express counted duplicate skips as failures, not
+      carried), without which rows 19-20 would always read 0. Also fixed: the workerd vitest suite loaded a
+      developer's `workers/.dev.vars` (4 `health.test.ts` failures on any machine following 3.6);
+      `vitest.config.mts` now points the pool at a generated config copy with no neighbouring secrets.
+      Verified: test:migrations 100/100, test:db 341 passed / 1 skipped (+ lease-truncation test), workerd
+      620 passed / 6 skipped with a real `.dev.vars` present, test:tooling 43 pass / 2 pre-existing skips,
+      typecheck/build/format/lint clean. `test:migrations:e2e` needs `MIGRATION_E2E_DATABASE_URL` (not run).
+      **Pending (human):** apply 0016 to the dev branch and production per the deploy runbook **before**
+      deploying the Worker (the tick's first query reads `scheduled_job_runs`); local `--test-scheduled`
+      run; deploy; confirm each job's first on-schedule run in `scheduled_job_runs` / Worker logs.
+      **Follow-up recorded:** CSV import bands (`upload/expiry-import.ts:27-37`, 7/14/30) disagree with
+      `MARKDOWN_WINDOWS` (30/60/90) — pre-existing in Express too; the nightly job corrects imported rows.
+      <br>**3.3a review rework + local scheduled verification (2026-09-29).** Bot findings settled: **(A)**
+      accepted — the purge job no longer swallows R2 delete errors (the R2 binding's `delete()` does not
+      throw for a missing key, so a throw is real: row left for the next tick, per-photo Sentry capture with
+      `storageKey`); **(B)** accepted — the replay-growth query now range-scans `processed_at` (covered by new
+      migration `0017_processed_webhook_events_processed_at_idx`, needed because completed rows are never
+      deleted), the failure-rate alert is volume-gated (>=20 deliveries), and the replay ratio now requires a
+      >=10 previous-hour baseline else falls back to the >100 volume rule; **(C)** accepted — the lease is
+      wall-clock (`NOW()`), so a delayed/replayed tick's stale `asOf` can't produce a born-expired lease and
+      PC/DB clock skew no longer shows finished-before-started (`last_succeeded_at` stays `asOf`; `isJobDue`
+      unchanged); **(D)** accepted — `ScheduledJobRun` mirrored into `backend/prisma/schema.prisma`; **(E)**
+      declined — `recordWebhookOutcome` stays awaited rather than `ctx.waitUntil` (one small awaited query per
+      delivery; keeps the handler signature simple); parallel photo purge declined (500 sequential round trips
+      fit well inside the 600 s lease and the Paid 15-minute cron limit).
+      <br>**Local verification.** With `wrangler dev --test-scheduled`, `curl http://127.0.0.1:8787/cdn-cgi/local/scheduled?cron=0+*+*+*+*`
+      returned "ok". A read-only query of `scheduled_job_runs` on dev branch `br-winter-haze-a7ydntft` showed
+      the first tick (22:18:52Z) ran all four jobs to `succeeded` with no `last_error`, and the second tick
+      (22:18:58Z) ran only `webhook-monitoring` — the daily jobs did not re-run, confirming once-per-day and
+      catch-up behaviour; all leases were released. **Follow-up:** the local wrangler dev terminal showed no
+      console output from the scheduled handler even though the jobs ran, and `/__scheduled` returned the
+      Worker's own 404 JSON although wrangler 4.129.1 help still names that route — cause not investigated.
+      <br>**Pending (human):** apply **0016 and 0017** to the dev branch and production per the deploy runbook
+      **before** deploying the Worker; deploy; confirm each job's first on-schedule run in `scheduled_job_runs`
+      / Worker logs.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
       **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in

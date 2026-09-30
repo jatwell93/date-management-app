@@ -25,6 +25,12 @@ export interface Env {
   CATALOGUE_QUEUE_ENABLED?: string;
   USAGE_LIMITS_ENFORCE?: string; // "true" to refuse over-cap writes; default off (measure only)
   SUBSCRIPTION_GATE_ENFORCE?: string; // "true" to refuse creation for a lapsed subscription; default off (measure only)
+  // Kill switch for the hourly Cron Trigger: "true" makes the tick a no-op.
+  // Set it as a Worker secret (Cloudflare dashboard / `wrangler secret put`) —
+  // it takes effect on the next tick without shipping new code; unset to
+  // re-enable. Deliberately absent from wrangler.toml vars so the default
+  // (enabled) is not encoded twice.
+  SCHEDULED_JOBS_DISABLED?: string;
   ENTERPRISE_MAX_SKUS?: string;
   ENTERPRISE_MAX_ACTIVE_EXPIRIES?: string;
   ENTERPRISE_MAX_FILE_SIZE?: string;

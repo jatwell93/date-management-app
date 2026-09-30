@@ -109,6 +109,10 @@ workers/.dev.vars
 workers/.dev.vars.*
 !workers/.dev.vars.example
 
+# Generated copy of wrangler.toml written by vitest.config.mts so the workerd
+# test pool's config lives in a directory with no neighbouring .dev.vars
+workers/.vitest-tmp/
+
 # Playwright
 e2e/.auth/
 test-results/

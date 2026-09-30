@@ -731,3 +731,51 @@ export function createCreditClaimDatabase(
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Scheduled-job queries — deliberately NOT on the per-organization factory
+// above. Every method there takes `organizationId`; these are the exceptions,
+// used only by the `credit-claim-photo-purge` scheduled job, and named so the
+// cross-org scope is visible at the call site.
+// ---------------------------------------------------------------------------
+
+export interface PhotoDueForPurge {
+  id: number;
+  organizationId: string;
+  storageKey: string;
+}
+
+/**
+ * Photos whose retention deadline has passed (`delete_after <= asOf`),
+ * across ALL organizations, oldest deadline first. `delete_after IS NULL`
+ * means "not yet settled" — such photos are never returned.
+ */
+export async function listPhotosDueForPurgeAcrossOrgs(
+  sql: NeonQueryFunction<false, false>,
+  asOf: Date,
+  limit = 500,
+): Promise<PhotoDueForPurge[]> {
+  const rows = (await sql`
+    SELECT id,
+           organization_id AS "organizationId",
+           storage_key AS "storageKey"
+    FROM credit_claim_photos
+    WHERE delete_after IS NOT NULL
+      AND delete_after <= ${asOf.toISOString()}::timestamp
+    ORDER BY delete_after ASC, id ASC
+    LIMIT ${limit}
+  `) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: Number(row.id),
+    organizationId: String(row.organizationId),
+    storageKey: String(row.storageKey),
+  }));
+}
+
+/** Delete one photo row by id — the row-side half of the purge, after R2. */
+export async function deletePhotoRowById(
+  sql: NeonQueryFunction<false, false>,
+  id: number,
+): Promise<void> {
+  await sql`DELETE FROM credit_claim_photos WHERE id = ${id}`;
+}
