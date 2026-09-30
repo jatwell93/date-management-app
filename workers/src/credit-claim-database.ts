@@ -735,8 +735,8 @@ export function createCreditClaimDatabase(
 // ---------------------------------------------------------------------------
 // Scheduled-job queries — deliberately NOT on the per-organization factory
 // above. Every method there takes `organizationId`; these are the exceptions,
-// used only by the `credit-claim-photo-purge` scheduled job, and named so the
-// cross-org scope is visible at the call site.
+// used only by the scheduled jobs, and named so the cross-org scope is visible
+// at the call site.
 // ---------------------------------------------------------------------------
 
 export interface PhotoDueForPurge {
@@ -778,4 +778,37 @@ export async function deletePhotoRowById(
   id: number,
 ): Promise<void> {
   await sql`DELETE FROM credit_claim_photos WHERE id = ${id}`;
+}
+
+export interface ClaimDueForFollowUp {
+  id: number;
+  organizationId: string;
+}
+
+/**
+ * Open claims whose next follow-up is due (`next_follow_up_at <= asOf`),
+ * across ALL organizations, most overdue first. The status predicate uses the
+ * shared chaseable list so the scan can never pick up a settled claim, and the
+ * `IS NOT NULL` guard makes the intent explicit rather than relying on NULL
+ * comparisons sorting it out — a claim with no schedule has nothing due.
+ */
+export async function listClaimsDueForFollowUpAcrossOrgs(
+  sql: NeonQueryFunction<false, false>,
+  asOf: Date,
+  limit = 500,
+): Promise<ClaimDueForFollowUp[]> {
+  const rows = (await sql`
+    SELECT id,
+           organization_id AS "organizationId"
+    FROM credit_claims
+    WHERE status = ANY(${[...CHASEABLE_CLAIM_STATUSES]})
+      AND next_follow_up_at IS NOT NULL
+      AND next_follow_up_at <= ${asOf.toISOString()}::timestamp
+    ORDER BY next_follow_up_at ASC, id ASC
+    LIMIT ${limit}
+  `) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: Number(row.id),
+    organizationId: String(row.organizationId),
+  }));
 }

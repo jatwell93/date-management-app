@@ -16,6 +16,8 @@ import { markdownRecalculationJob } from './jobs/markdown-recalculation';
 import { stripeReconciliationJob } from './jobs/stripe-reconciliation';
 import { creditClaimPhotoPurgeJob } from './jobs/credit-claim-photo-purge';
 import { webhookMonitoringJob } from './jobs/webhook-monitoring';
+import { trialEmailsJob } from './jobs/trial-emails';
+import { creditClaimFollowUpsJob } from './jobs/credit-claim-follow-ups';
 
 export type SqlClient = Database['sql'];
 
@@ -52,8 +54,8 @@ export interface ScheduledJob {
 }
 
 /**
- * Daily `hourUtc` values are spread so the four jobs never share an hour's
- * work. Everything runs inside the single hourly tick; the hour is when a job
+ * Daily `hourUtc` values are spread so the jobs never share an hour's work.
+ * Everything runs inside the single hourly tick; the hour is when a job
  * becomes *due*, not when it is scheduled — a delayed tick still catches up.
  */
 export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
@@ -61,6 +63,8 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
   stripeReconciliationJob,
   creditClaimPhotoPurgeJob,
   webhookMonitoringJob,
+  trialEmailsJob,
+  creditClaimFollowUpsJob,
 ];
 
 /**

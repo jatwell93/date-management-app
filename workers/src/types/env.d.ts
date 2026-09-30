@@ -4,6 +4,7 @@
  * This file defines the TypeScript types for environment variables,
  * secrets, and resource bindings available in the Workers runtime.
  */
+import type { NotificationEmailMessage } from '../notifications/messages';
 
 export interface Env {
   // ============================================================================
@@ -118,6 +119,12 @@ export interface Env {
 
   // Queue for durable catalogue import processing
   CATALOGUE_IMPORT_QUEUE?: Queue<CatalogueImportMessage>;
+
+  // Queue for per-recipient notification emails: trial lifecycle reminders and
+  // credit-claim follow-ups (task 3.3b). Producers are the `trial-emails` and
+  // `credit-claim-follow-ups` scheduled jobs; `queue()` in index-minimal.ts
+  // routes the `notification-emails-*` queue names to the consumer.
+  NOTIFICATION_EMAIL_QUEUE?: Queue<NotificationEmailMessage>;
 
   // ============================================================================
   // Hyperdrive Bindings

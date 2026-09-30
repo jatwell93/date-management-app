@@ -65,6 +65,23 @@ dead_letter_queue = "catalogue-imports-prod-dlq"
 max_concurrency = 1
 retry_delay = 30
 
+# Per-recipient notification emails: trial lifecycle reminders and credit-claim
+# follow-ups (task 3.3b). The queues must be created in Cloudflare BEFORE
+# deploying (dashboard or `wrangler queues create`): notification-emails-prod
+# and notification-emails-prod-dlq.
+[[env.production.queues.producers]]
+binding = "NOTIFICATION_EMAIL_QUEUE"
+queue = "notification-emails-prod"
+
+[[env.production.queues.consumers]]
+queue = "notification-emails-prod"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "notification-emails-prod-dlq"
+max_concurrency = 1
+retry_delay = 60
+
 # Hyperdrive Configuration (Production)
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
@@ -142,6 +159,22 @@ max_retries = 5
 dead_letter_queue = "catalogue-imports-dev-dlq"
 max_concurrency = 1
 retry_delay = 30
+
+# Per-recipient notification emails (task 3.3b) — see the production block
+# above. Create notification-emails-dev and notification-emails-dev-dlq in
+# Cloudflare before deploying.
+[[env.development.queues.producers]]
+binding = "NOTIFICATION_EMAIL_QUEUE"
+queue = "notification-emails-dev"
+
+[[env.development.queues.consumers]]
+queue = "notification-emails-dev"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "notification-emails-dev-dlq"
+max_concurrency = 1
+retry_delay = 60
 
 # KV namespace binding for distributed rate limiting in development/preview
 # Create via: npx wrangler kv namespace create RATE_LIMITER --env development
