@@ -3194,7 +3194,11 @@ equivalent, a relocated home, or an explicit retirement decision.
       carry the tick's `asOf` so `daysRemaining` — and thus the payload under one key — is identical across
       retries (Resend 409s a reused key with a different payload); window bounds derive from
       `TRIAL_REMINDER_THRESHOLDS` / `TRIAL_ENDED_LOOKBACK_DAYS` via one shared candidate query. test:db 376 /
-      1 skipped, workerd 109. Queues created (user, 2026-10-01). **Pending (human):** deploy; confirm the first `trial-emails` / `credit-claim-follow-ups` rows in
+      1 skipped, workerd 109. Bot finding accepted: a failed reservation release after a failed send left a
+      marker that made the retry ack as "already-sent" (email lost). `reserveTrialEmailEvent` now returns
+      `reserved | recent | taken`; a marker younger than `TRIAL_RESERVATION_RESEND_WINDOW_MINUTES` (60) is
+      re-sent under the same Resend key without being deleted by that delivery. test:db 380 / 1 skipped.
+      Queues created (user, 2026-10-01). **Pending (human):** deploy; confirm the first `trial-emails` / `credit-claim-follow-ups` rows in
       `scheduled_job_runs` and a delivered email.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.

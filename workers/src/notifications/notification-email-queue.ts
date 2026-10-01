@@ -12,7 +12,9 @@
  *    attempt loses the insert and acks without sending. The reservation id is
  *    also the Resend `Idempotency-Key`, so a retry after a provider error that
  *    Resend actually accepted cannot produce a second email inside its 24h
- *    window.
+ *    window. A reservation younger than the resend window — stranded by a
+ *    crashed send or a failed release — is re-sent under that same key rather
+ *    than skipped, so a leftover marker can never suppress the email entirely.
  *  - **Follow-ups** re-check due-ness inside `sendFollowUp` (`requireDueAt`),
  *    whose counter CAS already serializes concurrent senders.
  *
@@ -173,27 +175,47 @@ async function handleTrialEmailMessage(
       : 0;
   const event = trialEventFor(body, daysRemaining);
 
-  const reserved = await reserveTrialEmailEvent(db.sql, {
+  const reservation = await reserveTrialEmailEvent(db.sql, {
     id: event.id,
     organizationId: body.organizationId,
     eventType: event.eventType,
     metadata: event.metadata,
   });
-  if (!reserved) {
+  if (reservation === 'taken') {
     logSkip(body.kind, body.organizationId, 'already-sent');
     message.ack();
     return;
+  }
+  // 'recent' means a marker already exists but is too young to trust as
+  // "already sent" — it was stranded by a crashed send or a failed release.
+  // Re-send under the same Idempotency-Key (Resend replays rather than
+  // double-sends), but the row is not ours: this delivery must never delete a
+  // marker whose original send may have actually landed.
+  const ownsReservation = reservation === 'reserved';
+  if (!ownsReservation) {
+    console.log(
+      JSON.stringify({
+        event: 'notification_email_resend_under_key',
+        kind: body.kind,
+        organizationId: body.organizationId,
+        reservationId: event.id,
+      }),
+    );
   }
 
   // From here on the reservation exists. A send that never happened — the
   // provider refusing as unconfigured, or throwing — must release it, or this
   // notification is permanently suppressed as "already sent" without an email.
   const releaseReservation = async (): Promise<void> => {
+    if (!ownsReservation) {
+      return;
+    }
     try {
       await deleteTrialEmailEvent(db.sql, event.id);
     } catch (deleteError) {
-      // The retry/redelivery will then read "already-sent" and skip a send that
-      // never went out — silent suppression, so it must be loud.
+      // Not silent suppression: a redelivery inside the resend window heals a
+      // stranded marker by re-sending under the same key. Still loud — a heap
+      // of these would mean the heal path is doing real work every day.
       Sentry.captureException(deleteError, {
         tags: { feature: 'notification-email', action: 'release-reservation' },
         extra: {

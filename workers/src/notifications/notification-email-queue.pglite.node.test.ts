@@ -162,6 +162,12 @@ describe('handleNotificationEmailQueue (pglite)', () => {
       const first = message(reminderBody());
       await handleNotificationEmailQueue(batchOf(first), RESEND_ENV, db);
 
+      // Backdate the marker past the resend window: a reservation younger than
+      // TRIAL_RESERVATION_RESEND_WINDOW_MINUTES is deliberately re-sent under
+      // the same key (it may have been stranded by a failed release), so the
+      // "already sent" skip this test exists to pin only applies to old rows.
+      await sql`UPDATE trial_events SET occurred_at = NOW() - INTERVAL '2 hours'`;
+
       const second = message(reminderBody());
       await handleNotificationEmailQueue(batchOf(second), RESEND_ENV, db);
 
@@ -169,6 +175,89 @@ describe('handleNotificationEmailQueue (pglite)', () => {
       expect(second.ack).toHaveBeenCalledTimes(1);
       expect(second.retry).not.toHaveBeenCalled();
       expect(await trialEventIds()).toEqual([trialReminderSentEventId(ORG, TRIAL_END_ISO, 5)]);
+    });
+
+    it('re-sends under the same key when a young reservation was left behind by a failed release', async () => {
+      await seedTrial(ORG);
+      // Simulates a crash or failed delete after the send attempt: the marker
+      // row exists with a current occurred_at, but the email may never have
+      // landed. A redelivery inside the resend window must re-issue the send —
+      // Resend replays under the reused Idempotency-Key if the original did
+      // land — rather than suppressing the email as 'already-sent'.
+      const eventId = trialReminderSentEventId(ORG, TRIAL_END_ISO, 5);
+      await sql`
+        INSERT INTO trial_events (id, organization_id, event_type)
+        VALUES (${eventId}, ${ORG}, 'trial_reminder_sent')`;
+      fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+      const msg = message(reminderBody());
+
+      await handleNotificationEmailQueue(batchOf(msg), RESEND_ENV, db);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const headers = (sentEmailInit().headers ?? {}) as Record<string, string>;
+      expect(headers['Idempotency-Key']).toBe(eventId);
+      expect(msg.ack).toHaveBeenCalledTimes(1);
+      expect(msg.retry).not.toHaveBeenCalled();
+      // The delivery does not own the row — it stays put either way.
+      expect(await trialEventIds()).toEqual([eventId]);
+    });
+
+    it('acks an old reservation as already-sent without emailing', async () => {
+      await seedTrial(ORG);
+      const eventId = trialReminderSentEventId(ORG, TRIAL_END_ISO, 5);
+      await sql`
+        INSERT INTO trial_events (id, organization_id, event_type, occurred_at)
+        VALUES (${eventId}, ${ORG}, 'trial_reminder_sent', NOW() - INTERVAL '2 hours')`;
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const msg = message(reminderBody());
+
+      await handleNotificationEmailQueue(batchOf(msg), RESEND_ENV, db);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(msg.ack).toHaveBeenCalledTimes(1);
+      expect(msg.retry).not.toHaveBeenCalled();
+      expect(
+        logSpy.mock.calls.some((args) => String(args[0]).includes('"reason":"already-sent"')),
+      ).toBe(true);
+      logSpy.mockRestore();
+    });
+
+    it('retries a resend under the same key when the provider throws, keeping the row', async () => {
+      await seedTrial(ORG);
+      const eventId = trialReminderSentEventId(ORG, TRIAL_END_ISO, 5);
+      await sql`
+        INSERT INTO trial_events (id, organization_id, event_type)
+        VALUES (${eventId}, ${ORG}, 'trial_reminder_sent')`;
+      fetchMock.mockResolvedValue(new Response('provider exploded', { status: 500 }));
+      const msg = message(reminderBody());
+
+      await handleNotificationEmailQueue(batchOf(msg), RESEND_ENV, db);
+
+      // The row is not ours to delete: the original send may have landed, so
+      // the marker stays and the message retries for another attempt.
+      expect(await trialEventIds()).toEqual([eventId]);
+      expect(msg.retry).toHaveBeenCalledTimes(1);
+      expect(msg.ack).not.toHaveBeenCalled();
+      expect(sentryCalls.exceptions.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('acks a resend under the same key when Resend is unconfigured, keeping the row', async () => {
+      await seedTrial(ORG);
+      const eventId = trialReminderSentEventId(ORG, TRIAL_END_ISO, 5);
+      await sql`
+        INSERT INTO trial_events (id, organization_id, event_type)
+        VALUES (${eventId}, ${ORG}, 'trial_reminder_sent')`;
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const msg = message(reminderBody());
+      const env = { NODE_ENV: 'test' } as unknown as Env;
+
+      await handleNotificationEmailQueue(batchOf(msg), env, db);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(await trialEventIds()).toEqual([eventId]);
+      expect(msg.ack).toHaveBeenCalledTimes(1);
+      expect(msg.retry).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
 
     it('releases the reservation and retries when the provider errors', async () => {

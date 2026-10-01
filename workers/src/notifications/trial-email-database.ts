@@ -25,6 +25,17 @@ export type TrialReminderThreshold = (typeof TRIAL_REMINDER_THRESHOLDS)[number];
 /** Days a just-ended trial remains eligible for the "your trial has ended" email. */
 export const TRIAL_ENDED_LOOKBACK_DAYS = 3;
 
+/**
+ * Minutes for which a `trial_events` reservation is *not* trusted as
+ * "already sent". A reservation younger than this is re-sent under the same
+ * Resend Idempotency-Key — within Resend's 24h key retention a reused key
+ * replays the original response without sending a duplicate — so a
+ * reservation stranded by a crashed send or a failed release cannot suppress
+ * the email. The window must cover the queue's retry span (max_retries 5 ×
+ * retry_delay 60 s in wrangler.toml) and stay far below 24h.
+ */
+export const TRIAL_RESERVATION_RESEND_WINDOW_MINUTES = 60;
+
 export interface TrialEmailCandidate {
   organizationId: string;
   organizationName: string;
@@ -207,30 +218,53 @@ export async function findTrialEmailContext(
   };
 }
 
+/** How a reservation attempt resolved — see `reserveTrialEmailEvent`. */
+export type TrialEmailReservation = 'reserved' | 'recent' | 'taken';
+
 /**
  * Reserve a send by inserting the marker row *before* the email goes out —
- * `ON CONFLICT DO NOTHING` makes exactly one concurrent consumer win. Returns
- * false when the id already existed (the email already went out, or is going
- * out right now on another attempt).
+ * `ON CONFLICT DO NOTHING` makes exactly one concurrent consumer win.
  *
- * Reserve-first rather than send-then-record: a crash after a successful send
- * but before the record leaves the reservation in place, so a redelivery skips
- * rather than double-sends. The false/throw paths in the consumer delete the
- * reservation again precisely because it was written ahead of the send.
+ *  - `'reserved'`: this delivery wrote the marker and owns it — if the send
+ *    never happens the caller must release (delete) the row.
+ *  - `'taken'`: a marker older than `TRIAL_RESERVATION_RESEND_WINDOW_MINUTES`
+ *    already exists — the email already went out (or the send was given up on
+ *    long ago); the caller must skip.
+ *  - `'recent'`: a marker exists but is younger than the resend window —
+ *    stranded by a crashed send or a failed release. The caller re-sends under
+ *    the same id (which is also the Resend Idempotency-Key, so a send that
+ *    already landed replays rather than double-sends) but does NOT own the
+ *    row and must never delete it.
+ *
+ * One statement: the outer SELECT cannot see the CTE's own insert, so `recent`
+ * only reflects a pre-existing row. `occurred_at` is `TIMESTAMP(3) DEFAULT
+ * CURRENT_TIMESTAMP` in the session timezone, hence `LOCALTIMESTAMP`.
  */
 export async function reserveTrialEmailEvent(
   sql: Sql,
   event: { id: string; organizationId: string; eventType: string; metadata: unknown },
-): Promise<boolean> {
+): Promise<TrialEmailReservation> {
   const rows = (await sql`
-    INSERT INTO trial_events (id, organization_id, event_type, metadata)
-    VALUES (${event.id}, ${event.organizationId}, ${event.eventType}, ${JSON.stringify(
-      event.metadata,
-    )})
-    ON CONFLICT (id) DO NOTHING
-    RETURNING id
-  `) as Array<{ id: string }>;
-  return rows.length === 1;
+    WITH ins AS (
+      INSERT INTO trial_events (id, organization_id, event_type, metadata)
+      VALUES (${event.id}, ${event.organizationId}, ${event.eventType}, ${JSON.stringify(
+        event.metadata,
+      )})
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    )
+    SELECT EXISTS (SELECT 1 FROM ins) AS reserved,
+           EXISTS (
+             SELECT 1 FROM trial_events
+             WHERE id = ${event.id}
+               AND occurred_at > LOCALTIMESTAMP - make_interval(mins => ${TRIAL_RESERVATION_RESEND_WINDOW_MINUTES}::int)
+           ) AS recent
+  `) as Array<{ reserved: boolean; recent: boolean }>;
+  const row = rows[0];
+  if (row?.reserved) {
+    return 'reserved';
+  }
+  return row?.recent ? 'recent' : 'taken';
 }
 
 /** Release a reservation after a send that never happened (unconfigured provider or provider error). */
