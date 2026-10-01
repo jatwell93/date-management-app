@@ -16,6 +16,7 @@ import { markdownRecalculationJob } from './jobs/markdown-recalculation';
 import { stripeReconciliationJob } from './jobs/stripe-reconciliation';
 import { creditClaimPhotoPurgeJob } from './jobs/credit-claim-photo-purge';
 import { webhookMonitoringJob } from './jobs/webhook-monitoring';
+import { saasMetricsSnapshotJob } from './jobs/saas-metrics-snapshot';
 import { trialEmailsJob } from './jobs/trial-emails';
 import { creditClaimFollowUpsJob } from './jobs/credit-claim-follow-ups';
 
@@ -63,6 +64,7 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
   stripeReconciliationJob,
   creditClaimPhotoPurgeJob,
   webhookMonitoringJob,
+  saasMetricsSnapshotJob,
   trialEmailsJob,
   creditClaimFollowUpsJob,
 ];

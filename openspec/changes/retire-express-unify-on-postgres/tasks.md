@@ -3200,6 +3200,35 @@ equivalent, a relocated home, or an explicit retirement decision.
       re-sent under the same Resend key without being deleted by that delivery. test:db 380 / 1 skipped.
       Queues created (user, 2026-10-01). **Pending (human):** deploy; confirm the first `trial-emails` / `credit-claim-follow-ups` rows in
       `scheduled_job_runs` and a delivered email.
+      <br>**3.3 wrap-up — remaining matrix rows decided (user, 2026-10-02).** **Retired with the backend:**
+      row 3 (SQLite file-copy backup; nothing to copy post-cutover — the Postgres backup is 3.4's), row 18
+      (`JobLockRepository`; broken per Finding 14, superseded by the `scheduled_job_runs` lease), row 22
+      (daily business-report email; zero importers, gated on an unset env var — a new feature if ever
+      wanted), rows 23-25 (in-process `setInterval` timers; no meaning in a Worker — Workers Analytics,
+      Sentry and Neon's own metrics cover the surface). Row 26 (`POST /reports/update-statuses`) has no
+      frontend or Worker caller and the nightly `markdown-recalculation` job covers it, so it retires
+      with the backend; recorded for 2.1's route matrix. **Rebuilt:** rows 16-17 as the daily
+      `saas-metrics-snapshot` job (02 UTC, the hour freed by retiring dunning) — see 3.3c.
+      <br>**3.3c (rows 16-17; code landed, deploy pending).** `workers/src/scheduled/jobs/saas-metrics-snapshot.ts`
+      upserts one `metrics_snapshots` row per UTC day (keyed on `date` = the day described; no migration).
+      Formulas corrected, not ported (user, 2026-10-02): the trial cohort is dated by `trial_started_at +
+      PROFESSIONAL_TRIAL_DAYS` (the Stripe upsert overwrites `trial_end_date` on conversion, so Express's
+      cohort would always read 0% converted), converted = ever linked to a Stripe subscription; MRR = monthly
+      price (annual / 12) summed over non-lapsed `active`/`past_due` Stripe-linked rows via
+      `deriveSubscriptionAccess`; ARPU = MRR / paying orgs, stored in cents; churn = cancellations whose
+      `current_period_end` falls in the 30-day window over the paying count of the snapshot 30 days earlier
+      (`tier_distribution` now holds paying customers per tier; null rate until a baseline exists).
+      Webhook and payment-failure metrics dropped (rows 19-21 live in `webhook-monitoring`; payment failure
+      was never implemented). Alerts: Sentry warnings fingerprinted `['saas_metrics', type]` for conversion
+      < 10% and churn > 5%, gated on a sample of at least 10. Review round (2026-10-02), both accepted:
+      the paying prefilter now admits `canceled` rows still inside their paid window (a scheduled
+      cancellation would otherwise drop out of MRR for the rest of a paid term while the request path
+      still serves them), statuses the derivation doesn't recognize are excluded but counted in
+      `unrecognizedCustomers` rather than silently dropped, and the lapse check is evaluated at
+      `periodEnd` instead of `asOf` so the paying count is a pure function of the snapshot date under
+      delayed/catch-up ticks. Verified: test:db 396 / 1 skipped (16 in the new file), dispatcher 14/14,
+      typecheck, lint, format:check, `git diff --check` clean. **Pending (human):** deploy;
+      confirm the first `saas-metrics-snapshot` row in `scheduled_job_runs` and `metrics_snapshots`.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
       **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in
