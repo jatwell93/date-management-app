@@ -3220,8 +3220,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       (`tier_distribution` now holds paying customers per tier; null rate until a baseline exists).
       Webhook and payment-failure metrics dropped (rows 19-21 live in `webhook-monitoring`; payment failure
       was never implemented). Alerts: Sentry warnings fingerprinted `['saas_metrics', type]` for conversion
-      < 10% and churn > 5%, gated on a sample of at least 10. Verified: test:db 390 / 1 skipped (10 new),
-      dispatcher 14/14, typecheck, lint, format:check, `git diff --check` clean. **Pending (human):** deploy;
+      < 10% and churn > 5%, gated on a sample of at least 10. Review round (2026-10-02), both accepted:
+      the paying prefilter now admits `canceled` rows still inside their paid window (a scheduled
+      cancellation would otherwise drop out of MRR for the rest of a paid term while the request path
+      still serves them), statuses the derivation doesn't recognize are excluded but counted in
+      `unrecognizedCustomers` rather than silently dropped, and the lapse check is evaluated at
+      `periodEnd` instead of `asOf` so the paying count is a pure function of the snapshot date under
+      delayed/catch-up ticks. Verified: test:db 396 / 1 skipped (16 in the new file), dispatcher 14/14,
+      typecheck, lint, format:check, `git diff --check` clean. **Pending (human):** deploy;
       confirm the first `saas-metrics-snapshot` row in `scheduled_job_runs` and `metrics_snapshots`.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.

@@ -250,6 +250,144 @@ describe('saas-metrics-snapshot job (pglite)', () => {
     });
   });
 
+  it('counts a canceled row still inside its paid window as paying', async () => {
+    // cancel_at_period_end + current_period_end after periodEnd — the customer
+    // keeps what they already paid for, same as the request path.
+    await seedTier('org_cancel_window', {
+      status: 'canceled',
+      tierLevel: 'professional',
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: '2026-10-15T00:00:00Z',
+    });
+
+    const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
+
+    expect(result.summary).toMatchObject({
+      payingCustomers: 1,
+      mrrCents: TIER_PRICES.professional,
+      churned: 0,
+      unrecognizedCustomers: 0,
+    });
+    const row = await snapshotRow();
+    expect(row?.total_revenue_cents).toBe(TIER_PRICES.professional);
+    expect(JSON.parse(row!.tier_distribution!)).toEqual({ professional: 1 });
+  });
+
+  it('does not count an immediate cancellation (cancel_at_period_end=false) as paying', async () => {
+    // Lapses at once on the request path, so it is not paying here either;
+    // current_period_end sits outside [windowStart, periodEnd) so the churn
+    // count stays out of this test.
+    await seedTier('org_cancel_now', {
+      status: 'canceled',
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: '2026-10-15T00:00:00Z',
+    });
+
+    const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
+
+    expect(result.summary).toMatchObject({
+      payingCustomers: 0,
+      mrrCents: 0,
+      churned: 0,
+      unrecognizedCustomers: 0,
+    });
+    const row = await snapshotRow();
+    expect(JSON.parse(row!.tier_distribution!)).toEqual({});
+  });
+
+  it('does not count a canceled row whose paid window ended before periodEnd', async () => {
+    // Paid window already over at periodEnd — and before the churn window
+    // too, so the test stays single-purpose.
+    await seedTier('org_cancel_lapsed', {
+      status: 'canceled',
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: '2026-08-20T00:00:00Z',
+    });
+
+    const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
+
+    expect(result.summary).toMatchObject({
+      payingCustomers: 0,
+      churned: 0,
+      unrecognizedCustomers: 0,
+    });
+  });
+
+  it('evaluates the lapse at periodEnd, so the paying count is identical whatever the tick hour', async () => {
+    // Grace ends 2026-10-02T12:00Z — after periodEnd (midnight) but before the
+    // 23:00 tick. Evaluating at asOf would make the two ticks disagree.
+    await seedTier('org_pd_boundary', {
+      status: 'past_due',
+      tierLevel: 'starter',
+      pastDueSince: new Date(
+        Date.parse('2026-10-02T12:00:00.000Z') - DUNNING_GRACE_DAYS * MS_PER_DAY,
+      ).toISOString(),
+    });
+
+    const early = await saasMetricsSnapshotJob.run({
+      env: ENV,
+      sql,
+      asOf: new Date('2026-10-02T02:00:00.000Z'),
+    });
+    const late = await saasMetricsSnapshotJob.run({
+      env: ENV,
+      sql,
+      asOf: new Date('2026-10-02T23:00:00.000Z'),
+    });
+
+    // The row was paying for most of snapshot day 2026-10-01, so both ticks
+    // count it — the count is a pure function of the snapshot date.
+    expect(early.summary.payingCustomers).toBe(1);
+    expect(late.summary.payingCustomers).toBe(early.summary.payingCustomers);
+  });
+
+  it('counts an unrecognized Stripe status separately instead of failing it open into paying', async () => {
+    // 'unpaid' is a real Stripe status the derivation does not recognize. The
+    // request path fails it open; a revenue metric must not — so it is
+    // excluded from paying and surfaced in unrecognizedCustomers.
+    await seedTier('org_unpaid', { status: 'unpaid', tierLevel: 'starter' });
+
+    const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
+
+    expect(result.summary).toMatchObject({
+      payingCustomers: 0,
+      mrrCents: 0,
+      unrecognizedCustomers: 1,
+      alerted: [],
+    });
+    const row = await snapshotRow();
+    expect(row).not.toBeNull();
+    expect(row?.total_revenue_cents).toBe(0);
+    expect(JSON.parse(row!.tier_distribution!)).toEqual({});
+    // No Sentry alert — but the exclusion is not silent: one warning line.
+    expect(sentryCalls.messages).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(warnSpy.mock.calls[0][0] as string)).toMatchObject({
+      event: 'saas_metrics_unrecognized_statuses',
+      unrecognizedCustomers: 1,
+    });
+  });
+
+  it('does not count a legitimately excluded canceled row as unrecognized', async () => {
+    // Canceled outside the paid window is excluded by the candidates
+    // prefilter as a *recognized* non-paying state — it is not an
+    // unrecognized status.
+    await seedTier('org_cancel_old', {
+      status: 'canceled',
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: '2026-08-20T00:00:00Z',
+    });
+
+    const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
+
+    expect(result.summary).toMatchObject({
+      payingCustomers: 0,
+      unrecognizedCustomers: 0,
+      churned: 0,
+    });
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
   it('dates churn by current_period_end inside the window, with a null rate without a baseline', async () => {
     await seedTier('org_churned', { status: 'canceled', currentPeriodEnd: '2026-09-15T00:00:00Z' });
     await seedTier('org_early', { status: 'canceled', currentPeriodEnd: '2026-08-20T00:00:00Z' });

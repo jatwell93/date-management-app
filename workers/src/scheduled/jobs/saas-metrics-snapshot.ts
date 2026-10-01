@@ -6,8 +6,9 @@
  *  - **MRR**: Express mixed per-seat ARPU with per-subscription counts. Here it
  *    is the monthly-equivalent price summed over every live paying
  *    `subscription_tiers` row (a past-due row still counts inside the shared
- *    dunning grace, via `deriveSubscriptionAccess`). `tier_distribution` is
- *    redefined as *paying customers per tier* — nothing reads the column today.
+ *    dunning grace, and a canceled row inside its paid window, via
+ *    `deriveSubscriptionAccess`). `tier_distribution` is redefined as *paying
+ *    customers per tier* — nothing reads the column today.
  *  - **Churn baseline**: Express took "customers at start" as the sum of two
  *    30-day flow counts from an old snapshot, which is not a customer count —
  *    the baseline here is the snapshot written SAAS_METRICS_WINDOW_DAYS before
@@ -137,9 +138,15 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
     const { ended, converted } = cohortRows[0] ?? { ended: 0, converted: 0 };
     const trialConversionRate = ended > 0 ? (converted / ended) * 100 : null;
 
-    // Paying rows: status-filtered in SQL, then the shared lapse derivation
-    // drops past-due rows past the dunning grace — the same rule the request
-    // path uses, so "paying" means "not lapsed" exactly once in the codebase.
+    // Paying = the same lapse rule the request path uses
+    // (`deriveSubscriptionAccess`), deliberately narrowed in SQL. A canceled
+    // row still counts while inside its paid window; an immediate
+    // cancellation (cancel_at_period_end = false) lapses at once, matching
+    // the request path. Statuses the derivation does not recognize are
+    // excluded here rather than failed open into a revenue number — they
+    // cannot be evaluated for "still paying" when their semantics are
+    // unknown — and are counted separately below so the exclusion is not
+    // silent.
     const candidates = (await sql`
       SELECT tier_level AS "tierLevel", status,
              billing_cycle AS "billingCycle",
@@ -149,7 +156,14 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
              past_due_since::text AS "pastDueSince"
       FROM subscription_tiers
       WHERE stripe_subscription_id IS NOT NULL
-        AND status IN ('active', 'past_due')
+        AND (
+          status IN ('active', 'past_due')
+          OR (
+            status IN ('canceled', 'cancelled')
+            AND cancel_at_period_end
+            AND current_period_end > ${periodEndIso}::timestamp
+          )
+        )
     `) as PayingCandidateRow[];
 
     let payingCustomers = 0;
@@ -157,6 +171,9 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
     let mrrCents = 0;
     const tierDistribution: Record<string, number> = {};
     for (const row of candidates) {
+      // The lapse is evaluated at periodEnd, not asOf: the paying count is a
+      // pure function of the snapshot date, so the tick's own hour — or a
+      // delayed catch-up replay — can never change it.
       const access = deriveSubscriptionAccess(
         {
           status: row.status,
@@ -166,7 +183,7 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
           cancel_at_period_end: row.cancelAtPeriodEnd,
           past_due_since: toDateOrNull(row.pastDueSince),
         },
-        asOf,
+        periodEnd,
       );
       if (access.lapsed) {
         continue;
@@ -184,6 +201,20 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
           : TIER_PRICES[tier as keyof typeof TIER_PRICES];
     }
     const arpuCents = payingCustomers > 0 ? mrrCents / payingCustomers : null;
+
+    // The deliberate exclusion from the candidates query, made visible:
+    // Stripe statuses the derivation does not recognize (e.g. 'unpaid', or a
+    // status a future writer introduces) cannot be judged "still paying", so
+    // they are kept out of the revenue number and counted here instead of
+    // dropped silently. Recognized non-paying states — trialing, and canceled
+    // rows outside their paid window — are excluded above, not counted here.
+    const unrecognizedRows = (await sql`
+      SELECT COUNT(*)::int AS unrecognized
+      FROM subscription_tiers
+      WHERE stripe_subscription_id IS NOT NULL
+        AND status NOT IN ('active', 'past_due', 'trialing', 'canceled', 'cancelled', 'incomplete_expired')
+    `) as Array<{ unrecognized: number }>;
+    const unrecognizedCustomers = unrecognizedRows[0]?.unrecognized ?? 0;
 
     // Churned in the window, dated by current_period_end — the day the lapse
     // took effect — because updated_at is touched by every reconciliation run
@@ -263,6 +294,19 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
       });
     }
 
+    // Not one of the job's two alerts — no Sentry — but a nonzero
+    // unrecognized-status count must not be silent either: it rides the
+    // summary and gets its own warning line for the log stream.
+    if (unrecognizedCustomers > 0) {
+      console.warn(
+        JSON.stringify({
+          event: 'saas_metrics_unrecognized_statuses',
+          snapshotDate: snapshotDateIso,
+          unrecognizedCustomers,
+        }),
+      );
+    }
+
     return {
       summary: {
         snapshotDate: snapshotDateIso,
@@ -272,6 +316,7 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
         payingCustomers,
         mrrCents,
         unpricedCustomers,
+        unrecognizedCustomers,
         churned,
         customersAtStart,
         churnRate,
