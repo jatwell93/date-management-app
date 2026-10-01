@@ -241,17 +241,28 @@ async function handleTrialEmailMessage(
       { idempotencyKey: event.id },
     );
     if (!accepted) {
-      // Unconfigured provider: not retryable in this deployment, so release
-      // the reservation (a configured deploy could still send later) and ack.
+      // Unconfigured provider. An owned reservation: release it (a configured
+      // deploy could still send later) and ack — not retryable here. A 'recent'
+      // marker is not ours: we cannot tell whether the original send landed,
+      // so the row must stay — but acking would let it age into 'taken' and
+      // lose the email silently, so retry instead: it sends if Resend is
+      // configured again within the retry span, else it lands in the DLQ as a
+      // visible record (replaying it after the resend window also needs the
+      // `trial_events` row deleted, or it reads as 'taken').
       await releaseReservation();
       console.warn(
         JSON.stringify({
           event: 'notification_email_unconfigured',
           kind: body.kind,
           organizationId: body.organizationId,
+          ...(ownsReservation ? {} : { reservation: 'recent' }),
         }),
       );
-      message.ack();
+      if (ownsReservation) {
+        message.ack();
+      } else {
+        message.retry();
+      }
       return;
     }
     message.ack();

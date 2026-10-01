@@ -241,7 +241,7 @@ describe('handleNotificationEmailQueue (pglite)', () => {
       expect(sentryCalls.exceptions.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('acks a resend under the same key when Resend is unconfigured, keeping the row', async () => {
+    it('retries a resend under the same key when Resend is unconfigured, keeping the row', async () => {
       await seedTrial(ORG);
       const eventId = trialReminderSentEventId(ORG, TRIAL_END_ISO, 5);
       await sql`
@@ -253,10 +253,16 @@ describe('handleNotificationEmailQueue (pglite)', () => {
 
       await handleNotificationEmailQueue(batchOf(msg), env, db);
 
+      // The marker is not ours and we cannot tell whether the original send
+      // landed, so the row stays — and the message retries rather than acking,
+      // which would let the marker age into 'taken' and drop the email.
       expect(fetchMock).not.toHaveBeenCalled();
       expect(await trialEventIds()).toEqual([eventId]);
-      expect(msg.ack).toHaveBeenCalledTimes(1);
-      expect(msg.retry).not.toHaveBeenCalled();
+      expect(msg.retry).toHaveBeenCalledTimes(1);
+      expect(msg.ack).not.toHaveBeenCalled();
+      expect(
+        warn.mock.calls.some((args) => String(args[0]).includes('"reservation":"recent"')),
+      ).toBe(true);
       warn.mockRestore();
     });
 
