@@ -151,8 +151,9 @@ export async function sendClaimEmail(
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
   };
-  // Resend dedupes on this key for 24h: a redelivered queue message retries the
-  // same send without emailing the recipient twice (task 3.3b).
+  // Resend dedupes on this key for 24h: a redelivered queue message or a
+  // retried send retries the same request without emailing the recipient
+  // twice — used by the trial notifications and the follow-up nudge (3.3b).
   if (options.idempotencyKey) {
     headers['Idempotency-Key'] = options.idempotencyKey;
   }
@@ -259,11 +260,17 @@ async function deliverClaimEmail(
   organizationId: string,
   claim: CreditClaim,
   to: string,
-  options: { followUp?: boolean } = {},
+  options: { followUp?: boolean; idempotencyKey?: string } = {},
 ): Promise<boolean> {
-  const email = renderClaimEmail(claim, options);
+  const email = renderClaimEmail(claim, { followUp: options.followUp });
   const attachments = await loadAttachments(db, env, organizationId, claim.id);
-  return sendClaimEmail(env, { to, ...email, attachments });
+  return sendClaimEmail(
+    env,
+    { to, ...email, attachments },
+    {
+      idempotencyKey: options.idempotencyKey,
+    },
+  );
 }
 
 /**
@@ -513,8 +520,13 @@ export async function sendFollowUp(
       .catch(() => undefined);
 
   try {
+    // The key is stable per attempt because nextCount derives from the observed
+    // counter: if Resend accepts but the response is lost, the catch restores
+    // the schedule and the queue retries — `requireDueAt` passes again, so
+    // without this key the supplier would get the nudge twice.
     const accepted = await deliverClaimEmail(db, env, organizationId, claim, to, {
       followUp: true,
+      idempotencyKey: `claim-follow-up:${organizationId}:${id}:${nextCount}`,
     });
     if (!accepted) {
       await restore();

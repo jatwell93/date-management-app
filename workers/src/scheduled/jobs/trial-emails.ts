@@ -25,12 +25,62 @@ import {
   reminderThresholdFor,
   trialEndedEmailSentEventId,
   trialReminderSentEventId,
+  type TrialEmailCandidate,
 } from '../../notifications/trial-email-database';
 import type { JobContext, ScheduledJob } from '../schedule';
 
 const BATCH_LIMIT = 500;
 /** `sendBatch` accepts at most 100 messages per call — chunk the enqueue. */
 const SEND_BATCH_CHUNK = 100;
+
+interface PendingNotification {
+  message: NotificationEmailMessage;
+  dedupeId: string;
+}
+
+/**
+ * One (message, dedupeId) pair per reminder candidate. The reminder threshold
+ * is resolved here — smallest covering threshold — and travels inside the
+ * message so the consumer never recomputes which window it belongs to. `asOf`
+ * travels too: the consumer renders `daysRemaining` from it, so a retried send
+ * carries a byte-identical payload under the same Resend Idempotency-Key
+ * (Resend answers 409 when a key is reused with different content).
+ */
+function reminderMessages(candidates: TrialEmailCandidate[], asOf: Date): PendingNotification[] {
+  const pending: PendingNotification[] = [];
+  for (const candidate of candidates) {
+    const trialEndIso = candidate.trialEndDate.toISOString();
+    const threshold = reminderThresholdFor(candidate.trialEndDate, asOf);
+    if (threshold === null) {
+      continue;
+    }
+    pending.push({
+      message: {
+        kind: 'trial-reminder',
+        organizationId: candidate.organizationId,
+        trialEndDate: trialEndIso,
+        threshold,
+        asOf: asOf.toISOString(),
+      },
+      dedupeId: trialReminderSentEventId(candidate.organizationId, trialEndIso, threshold),
+    });
+  }
+  return pending;
+}
+
+function endedMessages(candidates: TrialEmailCandidate[]): PendingNotification[] {
+  return candidates.map((candidate) => {
+    const trialEndIso = candidate.trialEndDate.toISOString();
+    return {
+      message: {
+        kind: 'trial-ended' as const,
+        organizationId: candidate.organizationId,
+        trialEndDate: trialEndIso,
+      },
+      dedupeId: trialEndedEmailSentEventId(candidate.organizationId, trialEndIso),
+    };
+  });
+}
 
 export const trialEmailsJob: ScheduledJob = {
   name: 'trial-emails',
@@ -53,40 +103,10 @@ export const trialEmailsJob: ScheduledJob = {
 
     const reminderCandidates = await listTrialReminderCandidates(sql, asOf, BATCH_LIMIT);
     const endedCandidates = await listTrialEndedCandidates(sql, asOf, BATCH_LIMIT);
-
-    // One (message, dedupeId) pair per candidate. The reminder threshold is
-    // resolved here — smallest covering threshold — and travels inside the
-    // message so the consumer never recomputes which window it belongs to.
-    const pending: Array<{ message: NotificationEmailMessage; dedupeId: string }> = [];
-
-    for (const candidate of reminderCandidates) {
-      const trialEndIso = candidate.trialEndDate.toISOString();
-      const threshold = reminderThresholdFor(candidate.trialEndDate, asOf);
-      if (threshold === null) {
-        continue;
-      }
-      pending.push({
-        message: {
-          kind: 'trial-reminder',
-          organizationId: candidate.organizationId,
-          trialEndDate: trialEndIso,
-          threshold,
-        },
-        dedupeId: trialReminderSentEventId(candidate.organizationId, trialEndIso, threshold),
-      });
-    }
-
-    for (const candidate of endedCandidates) {
-      const trialEndIso = candidate.trialEndDate.toISOString();
-      pending.push({
-        message: {
-          kind: 'trial-ended',
-          organizationId: candidate.organizationId,
-          trialEndDate: trialEndIso,
-        },
-        dedupeId: trialEndedEmailSentEventId(candidate.organizationId, trialEndIso),
-      });
-    }
+    const pending = [
+      ...reminderMessages(reminderCandidates, asOf),
+      ...endedMessages(endedCandidates),
+    ];
 
     // Drop candidates whose marker row already exists — sent (or reserved
     // mid-send) on an earlier run. A queued-but-unconsumed duplicate is caught
@@ -98,20 +118,17 @@ export const trialEmailsJob: ScheduledJob = {
     const fresh = pending.filter((p) => !existing.has(p.dedupeId));
     const alreadySent = pending.length - fresh.length;
 
-    let remindersEnqueued = 0;
-    let endedEnqueued = 0;
     const bodies = fresh.map((p) => p.message);
     for (let i = 0; i < bodies.length; i += SEND_BATCH_CHUNK) {
       await queue.sendBatch(bodies.slice(i, i + SEND_BATCH_CHUNK).map((body) => ({ body })));
     }
-    for (const message of bodies) {
-      if (message.kind === 'trial-reminder') {
-        remindersEnqueued += 1;
-      } else if (message.kind === 'trial-ended') {
-        endedEnqueued += 1;
-      }
-    }
 
-    return { summary: { remindersEnqueued, endedEnqueued, alreadySent } };
+    return {
+      summary: {
+        remindersEnqueued: bodies.filter((m) => m.kind === 'trial-reminder').length,
+        endedEnqueued: bodies.filter((m) => m.kind === 'trial-ended').length,
+        alreadySent,
+      },
+    };
   },
 };

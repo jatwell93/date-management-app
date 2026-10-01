@@ -3189,8 +3189,12 @@ equivalent, a relocated home, or an explicit retirement decision.
       duplicated message cannot nudge twice. No migration. Both jobs skip (not fail) when Resend is
       unconfigured and fail when the queue binding is missing. Verified: test:db 374 passed / 1 skipped,
       workerd 105 (new/changed files) + 88 (health + dispatcher), workers typecheck, lint, format:check,
-      `git diff --check` clean. **Pending (human):** create the four queues in Cloudflare **before** the
-      Worker deploy; deploy; confirm the first `trial-emails` / `credit-claim-follow-ups` rows in
+      `git diff --check` clean. Review round (2026-10-01): follow-up sends now carry a stable Resend key
+      `claim-follow-up:<org>:<claim>:<nextCount>` (closes the lost-response double nudge); reminder messages
+      carry the tick's `asOf` so `daysRemaining` — and thus the payload under one key — is identical across
+      retries (Resend 409s a reused key with a different payload); window bounds derive from
+      `TRIAL_REMINDER_THRESHOLDS` / `TRIAL_ENDED_LOOKBACK_DAYS` via one shared candidate query. test:db 376 /
+      1 skipped, workerd 109. Queues created (user, 2026-10-01). **Pending (human):** deploy; confirm the first `trial-emails` / `credit-claim-follow-ups` rows in
       `scheduled_job_runs` and a delivered email.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.

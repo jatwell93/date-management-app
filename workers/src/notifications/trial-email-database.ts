@@ -68,17 +68,16 @@ export function trialEndedEmailSentEventId(organizationId: string, trialEndIso: 
 }
 
 /**
- * Trials ending inside the widest reminder window (`trial_end_date` in
- * `(asOf, asOf + 10 days]`), soonest first, across all organizations.
- * Organizations with a blank `contact_email` cannot be emailed and are filtered
- * in SQL rather than selected and dropped.
+ * Trials whose end falls inside `(window.after, window.atOrBefore]`, soonest
+ * first, across all organizations. Organizations with a blank `contact_email`
+ * cannot be emailed and are filtered in SQL rather than selected and dropped.
+ * One SELECT for both windows so the join and the address filter cannot drift.
  */
-export async function listTrialReminderCandidates(
+async function listTrialCandidatesEndingIn(
   sql: Sql,
-  asOf: Date,
-  limit = 500,
+  window: { after: Date; atOrBefore: Date },
+  limit: number,
 ): Promise<TrialEmailCandidate[]> {
-  const asOfIso = asOf.toISOString();
   const rows = (await sql`
     SELECT st.organization_id AS "organizationId",
            o.name AS "organizationName",
@@ -87,8 +86,8 @@ export async function listTrialReminderCandidates(
     FROM subscription_tiers st
     JOIN organizations o ON o.id = st.organization_id
     WHERE st.status = 'trialing'
-      AND st.trial_end_date > ${asOfIso}::timestamp
-      AND st.trial_end_date <= ${asOfIso}::timestamp + make_interval(days => 10)
+      AND st.trial_end_date > ${window.after.toISOString()}::timestamp
+      AND st.trial_end_date <= ${window.atOrBefore.toISOString()}::timestamp
       AND trim(coalesce(o.contact_email, '')) <> ''
     ORDER BY st.trial_end_date ASC
     LIMIT ${limit}
@@ -97,8 +96,27 @@ export async function listTrialReminderCandidates(
 }
 
 /**
- * Trials whose end passed inside the lookback window
- * (`trial_end_date` in `(asOf - 3 days, asOf]`). The bound is what makes the
+ * Trials ending inside the widest reminder window — `trial_end_date` in
+ * `(asOf, asOf + TRIAL_REMINDER_THRESHOLDS max days]`.
+ */
+export async function listTrialReminderCandidates(
+  sql: Sql,
+  asOf: Date,
+  limit = 500,
+): Promise<TrialEmailCandidate[]> {
+  return listTrialCandidatesEndingIn(
+    sql,
+    {
+      after: asOf,
+      atOrBefore: new Date(asOf.getTime() + Math.max(...TRIAL_REMINDER_THRESHOLDS) * MS_PER_DAY),
+    },
+    limit,
+  );
+}
+
+/**
+ * Trials whose end passed inside the lookback window — `trial_end_date` in
+ * `(asOf - TRIAL_ENDED_LOOKBACK_DAYS days, asOf]`. The bound is what makes the
  * query safe against rows that are 'trialing' forever — see the file comment.
  */
 export async function listTrialEndedCandidates(
@@ -106,22 +124,14 @@ export async function listTrialEndedCandidates(
   asOf: Date,
   limit = 500,
 ): Promise<TrialEmailCandidate[]> {
-  const asOfIso = asOf.toISOString();
-  const rows = (await sql`
-    SELECT st.organization_id AS "organizationId",
-           o.name AS "organizationName",
-           o.contact_email AS "contactEmail",
-           st.trial_end_date::text AS "trialEndDate"
-    FROM subscription_tiers st
-    JOIN organizations o ON o.id = st.organization_id
-    WHERE st.status = 'trialing'
-      AND st.trial_end_date <= ${asOfIso}::timestamp
-      AND st.trial_end_date > ${asOfIso}::timestamp - make_interval(days => 3)
-      AND trim(coalesce(o.contact_email, '')) <> ''
-    ORDER BY st.trial_end_date ASC
-    LIMIT ${limit}
-  `) as TrialCandidateRow[];
-  return rows.map(toCandidate);
+  return listTrialCandidatesEndingIn(
+    sql,
+    {
+      after: new Date(asOf.getTime() - TRIAL_ENDED_LOOKBACK_DAYS * MS_PER_DAY),
+      atOrBefore: asOf,
+    },
+    limit,
+  );
 }
 
 /**

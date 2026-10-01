@@ -8,22 +8,74 @@
  * `trialEndDate` is an ISO-8601 string: the value the producing job read from
  * `subscription_tiers.trial_end_date`, so the consumer can detect a stale
  * message (the stored end moved on) instead of emailing about a trial that no
- * longer ends when the message claims.
+ * longer ends when the message claims. `asOf` is the producing tick's instant
+ * for the same reason in the other direction: the consumer renders
+ * `daysRemaining` from it, so a retried send is byte-identical under the same
+ * Resend Idempotency-Key.
  */
 import type { Env } from '../types/env';
+import { TRIAL_REMINDER_THRESHOLDS, type TrialReminderThreshold } from './trial-email-database';
 
 export type NotificationEmailMessage =
   | {
       kind: 'trial-reminder';
       organizationId: string;
       trialEndDate: string;
-      threshold: 10 | 5 | 2;
+      threshold: TrialReminderThreshold;
+      asOf: string;
     }
   | { kind: 'trial-ended'; organizationId: string; trialEndDate: string }
   | { kind: 'credit-claim-follow-up'; organizationId: string; claimId: number };
 
 function isIsoDateString(value: unknown): value is string {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isTrialReminderThreshold(value: unknown): value is TrialReminderThreshold {
+  return (TRIAL_REMINDER_THRESHOLDS as readonly number[]).includes(value as number);
+}
+
+function parseTrialReminder(
+  record: Record<string, unknown>,
+  organizationId: string,
+): NotificationEmailMessage | null {
+  if (!isIsoDateString(record.trialEndDate) || !isIsoDateString(record.asOf)) {
+    return null;
+  }
+  if (!isTrialReminderThreshold(record.threshold)) {
+    return null;
+  }
+  return {
+    kind: 'trial-reminder',
+    organizationId,
+    trialEndDate: record.trialEndDate,
+    threshold: record.threshold,
+    asOf: record.asOf,
+  };
+}
+
+function parseTrialEnded(
+  record: Record<string, unknown>,
+  organizationId: string,
+): NotificationEmailMessage | null {
+  if (!isIsoDateString(record.trialEndDate)) {
+    return null;
+  }
+  return { kind: 'trial-ended', organizationId, trialEndDate: record.trialEndDate };
+}
+
+function parseCreditClaimFollowUp(
+  record: Record<string, unknown>,
+  organizationId: string,
+): NotificationEmailMessage | null {
+  if (!isPositiveInteger(record.claimId)) {
+    return null;
+  }
+  return { kind: 'credit-claim-follow-up', organizationId, claimId: record.claimId };
 }
 
 /**
@@ -42,34 +94,12 @@ export function parseNotificationEmailMessage(body: unknown): NotificationEmailM
   }
 
   switch (record.kind) {
-    case 'trial-reminder': {
-      const threshold = record.threshold;
-      if (!isIsoDateString(record.trialEndDate)) {
-        return null;
-      }
-      if (threshold !== 10 && threshold !== 5 && threshold !== 2) {
-        return null;
-      }
-      return {
-        kind: 'trial-reminder',
-        organizationId,
-        trialEndDate: record.trialEndDate,
-        threshold,
-      };
-    }
-    case 'trial-ended': {
-      if (!isIsoDateString(record.trialEndDate)) {
-        return null;
-      }
-      return { kind: 'trial-ended', organizationId, trialEndDate: record.trialEndDate };
-    }
-    case 'credit-claim-follow-up': {
-      const claimId = record.claimId;
-      if (typeof claimId !== 'number' || !Number.isInteger(claimId) || claimId <= 0) {
-        return null;
-      }
-      return { kind: 'credit-claim-follow-up', organizationId, claimId };
-    }
+    case 'trial-reminder':
+      return parseTrialReminder(record, organizationId);
+    case 'trial-ended':
+      return parseTrialEnded(record, organizationId);
+    case 'credit-claim-follow-up':
+      return parseCreditClaimFollowUp(record, organizationId);
     default:
       return null;
   }

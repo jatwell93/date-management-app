@@ -901,6 +901,25 @@ describe('credit-claim write routes', () => {
       expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeUndefined();
       fetchSpy.mockRestore();
     });
+
+    it('the initial claim send carries no Idempotency-Key header', async () => {
+      // The first send already cannot double-email — the DRAFT→SENDING CAS
+      // admits exactly one sender, and a lost post-send finalize retries the
+      // write, never the fetch. Only the follow-up needs a key.
+      const fetchSpy = acceptEmails();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        finalizeSentClaim: vi.fn(),
+      });
+
+      await sendClaim(db, configuredEnv(), ORG, 1);
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeUndefined();
+      fetchSpy.mockRestore();
+    });
   });
 
   describe('sendFollowUp preconditions', () => {
@@ -947,6 +966,31 @@ describe('credit-claim write routes', () => {
         followUpCount: 2,
         nextFollowUpAt: new Date('2026-10-13T10:00:00.000Z'),
       });
+      fetchSpy.mockRestore();
+    });
+
+    it('sends a stable per-attempt Idempotency-Key so a retried delivery cannot double-email', async () => {
+      // If Resend accepts but the response is lost, the schedule is restored
+      // and the queue retries — `requireDueAt` passes again, so the key derived
+      // from the reserved slot is what stops the supplier seeing the nudge
+      // twice.
+      const fetchSpy = acceptEmails();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi
+          .fn()
+          .mockResolvedValue(draftClaim({ status: 'SENT', sentAt: '2026-09-22 10:00:00' })),
+        reserveFollowUp: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await sendFollowUp(db, configuredEnv(), ORG, 1);
+
+      // Claim id 1, observed followUpCount 0 → the reserved slot is 1.
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe(
+        `claim-follow-up:${ORG}:1:1`,
+      );
       fetchSpy.mockRestore();
     });
 

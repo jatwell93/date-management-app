@@ -16,6 +16,8 @@ import {
   type PgliteHarness,
 } from '../../__tests__/pglite-db';
 import {
+  TRIAL_ENDED_LOOKBACK_DAYS,
+  TRIAL_REMINDER_THRESHOLDS,
   trialReminderSentEventId,
   type TrialReminderThreshold,
 } from '../../notifications/trial-email-database';
@@ -118,20 +120,27 @@ describe('trial-emails job (pglite)', () => {
     const reminderByOrg = new Map(
       reminders.map((r) => [
         r.organizationId,
-        { trialEndDate: r.trialEndDate, threshold: (r as { threshold: number }).threshold },
+        {
+          trialEndDate: r.trialEndDate,
+          threshold: (r as { threshold: number }).threshold,
+          asOf: (r as { asOf: string }).asOf,
+        },
       ]),
     );
     expect(reminderByOrg.get('org_10d')).toEqual({
       trialEndDate: isoDaysFromAsOf(9.5),
       threshold: 10,
+      asOf: AS_OF_ISO,
     });
     expect(reminderByOrg.get('org_5d')).toEqual({
       trialEndDate: isoDaysFromAsOf(4),
       threshold: 5,
+      asOf: AS_OF_ISO,
     });
     expect(reminderByOrg.get('org_2d')).toEqual({
       trialEndDate: isoDaysFromAsOf(1.5),
       threshold: 2,
+      asOf: AS_OF_ISO,
     });
     expect(ended).toEqual([
       {
@@ -150,6 +159,34 @@ describe('trial-emails job (pglite)', () => {
     ]) {
       expect(bodies.some((b) => b.organizationId === orgId)).toBe(false);
     }
+  });
+
+  it('honours the exact window bounds for reminders and ended trials', async () => {
+    // Reminder window is (asOf, asOf + max threshold]: an end exactly at the
+    // far edge is inside; an end exactly at asOf is not a reminder — it falls
+    // into the ended window's upper bound instead.
+    await seedOrg('org_edge_10d', { trialEndDays: Math.max(...TRIAL_REMINDER_THRESHOLDS) });
+    await seedOrg('org_edge_past', { trialEndDays: 10.0001 });
+    // Ended window is (asOf - lookback, asOf]: exactly at the lookback edge is
+    // outside; just inside it, and exactly asOf, are inside.
+    await seedOrg('org_edge_ended_in', { trialEndDays: -TRIAL_ENDED_LOOKBACK_DAYS + 0.001 });
+    await seedOrg('org_edge_ended_out', { trialEndDays: -TRIAL_ENDED_LOOKBACK_DAYS });
+    await seedOrg('org_edge_now', { trialEndDays: 0 });
+
+    const result = await trialEmailsJob.run({ env: envWith({ sendBatch }), sql, asOf: AS_OF });
+
+    expect(result.summary).toEqual({
+      remindersEnqueued: 1,
+      endedEnqueued: 2,
+      alreadySent: 0,
+    });
+    const bodies = enqueuedBodies();
+    const byOrg = new Map(bodies.map((b) => [b.organizationId, b.kind]));
+    expect(byOrg.get('org_edge_10d')).toBe('trial-reminder');
+    expect(byOrg.get('org_edge_ended_in')).toBe('trial-ended');
+    expect(byOrg.get('org_edge_now')).toBe('trial-ended');
+    expect(byOrg.has('org_edge_past')).toBe(false);
+    expect(byOrg.has('org_edge_ended_out')).toBe(false);
   });
 
   it('drops candidates whose dedupe id already exists in trial_events', async () => {

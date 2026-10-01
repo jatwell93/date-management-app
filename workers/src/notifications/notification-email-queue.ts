@@ -32,11 +32,17 @@ import {
   reserveTrialEmailEvent,
   trialEndedEmailSentEventId,
   trialReminderSentEventId,
+  type TrialEmailContext,
 } from './trial-email-database';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type QueueMessage = MessageBatch<unknown>['messages'][number];
+
+type TrialEmailMessage = Extract<
+  NotificationEmailMessage,
+  { kind: 'trial-reminder' | 'trial-ended' }
+>;
 
 function logSkip(
   kind: NotificationEmailMessage['kind'],
@@ -55,66 +61,128 @@ function logSkip(
   );
 }
 
+type TrialMessageValidation =
+  | { skip: string }
+  | { skip: null; organizationName: string; storedEnd: Date; contactEmail: string };
+
+/**
+ * Re-validate a trial message against live state: between enqueue and consume
+ * the trial may have converted, been re-dated, or lost its contact address. A
+ * stale message acks — retrying it would never change the answer. `now` (not
+ * `body.asOf`) decides the ended/not-ended checks: those are about the world,
+ * not about payload determinism.
+ */
+function validateTrialMessage(
+  context: TrialEmailContext | null,
+  body: TrialEmailMessage,
+  now: Date,
+): TrialMessageValidation {
+  const messageEnd = new Date(body.trialEndDate);
+  if (!context) {
+    return { skip: 'organization-or-subscription-missing' };
+  }
+  if (context.status !== 'trialing') {
+    return { skip: 'status-not-trialing' };
+  }
+  const storedEnd = context.trialEndDate;
+  if (storedEnd === null || storedEnd.getTime() !== messageEnd.getTime()) {
+    return { skip: 'trial-end-date-changed' };
+  }
+  const contactEmail = context.contactEmail?.trim() ?? '';
+  if (contactEmail === '') {
+    return { skip: 'no-contact-email' };
+  }
+  if (body.kind === 'trial-reminder' && now.getTime() >= storedEnd.getTime()) {
+    return { skip: 'trial-already-ended' };
+  }
+  if (body.kind === 'trial-ended' && now.getTime() < storedEnd.getTime()) {
+    return { skip: 'trial-not-yet-ended' };
+  }
+  return { skip: null, organizationName: context.organizationName, storedEnd, contactEmail };
+}
+
+/**
+ * The reservation row for this message: the `trial_events.id` PK doubles as
+ * the Resend Idempotency-Key, and the metadata records what the send asserted.
+ */
+function trialEventFor(
+  body: TrialEmailMessage,
+  daysRemaining: number,
+): { id: string; eventType: string; metadata: Record<string, unknown> } {
+  if (body.kind === 'trial-reminder') {
+    return {
+      id: trialReminderSentEventId(body.organizationId, body.trialEndDate, body.threshold),
+      eventType: 'trial_reminder_sent',
+      metadata: {
+        threshold: body.threshold,
+        daysRemaining,
+        trialEndDate: body.trialEndDate,
+      },
+    };
+  }
+  return {
+    id: trialEndedEmailSentEventId(body.organizationId, body.trialEndDate),
+    eventType: 'trial_ended_email_sent',
+    metadata: { trialEndDate: body.trialEndDate },
+  };
+}
+
+function renderTrialEmail(
+  body: TrialEmailMessage,
+  context: { organizationName: string; trialEndDate: Date },
+  daysRemaining: number,
+  frontendUrl: string | undefined,
+): { subject: string; html: string; text: string } {
+  if (body.kind === 'trial-reminder') {
+    return renderTrialReminderEmail({
+      organizationName: context.organizationName,
+      trialEndDate: context.trialEndDate,
+      daysRemaining,
+      frontendUrl,
+    });
+  }
+  return renderTrialEndedEmail({
+    organizationName: context.organizationName,
+    trialEndDate: context.trialEndDate,
+    frontendUrl,
+  });
+}
+
 async function handleTrialEmailMessage(
   message: QueueMessage,
-  body: Extract<NotificationEmailMessage, { kind: 'trial-reminder' | 'trial-ended' }>,
+  body: TrialEmailMessage,
   env: Env,
   db: Database,
 ): Promise<void> {
   const context = await findTrialEmailContext(db.sql, body.organizationId);
-  const messageEnd = new Date(body.trialEndDate);
-  const now = new Date();
-
-  // Re-validate against live state: between enqueue and consume the trial may
-  // have converted, been re-dated, or lost its contact address. A stale
-  // message acks — retrying it would never change the answer.
-  const skip = (reason: string): void => {
-    logSkip(body.kind, body.organizationId, reason);
+  const validation = validateTrialMessage(context, body, new Date());
+  if (validation.skip !== null) {
+    logSkip(body.kind, body.organizationId, validation.skip);
     message.ack();
-  };
+    return;
+  }
+  const { organizationName, storedEnd, contactEmail } = validation;
 
-  if (!context) {
-    return skip('organization-or-subscription-missing');
-  }
-  if (context.status !== 'trialing') {
-    return skip('status-not-trialing');
-  }
-  const storedEnd = context.trialEndDate;
-  if (storedEnd === null || storedEnd.getTime() !== messageEnd.getTime()) {
-    return skip('trial-end-date-changed');
-  }
-  const contactEmail = context.contactEmail?.trim() ?? '';
-  if (contactEmail === '') {
-    return skip('no-contact-email');
-  }
-  if (body.kind === 'trial-reminder' && now.getTime() >= storedEnd.getTime()) {
-    return skip('trial-already-ended');
-  }
-  if (body.kind === 'trial-ended' && now.getTime() < storedEnd.getTime()) {
-    return skip('trial-not-yet-ended');
-  }
-
-  const daysRemaining = Math.max(1, Math.ceil((storedEnd.getTime() - now.getTime()) / MS_PER_DAY));
-  const id =
+  // daysRemaining comes from the producing tick's asOf, not the consume
+  // instant: Resend rejects a reused Idempotency-Key carrying a different
+  // payload (409 invalid_idempotent_request), so a retry must render identical
+  // text rather than drifting with the wall clock.
+  const daysRemaining =
     body.kind === 'trial-reminder'
-      ? trialReminderSentEventId(body.organizationId, body.trialEndDate, body.threshold)
-      : trialEndedEmailSentEventId(body.organizationId, body.trialEndDate);
+      ? Math.max(1, Math.ceil((storedEnd.getTime() - Date.parse(body.asOf)) / MS_PER_DAY))
+      : 0;
+  const event = trialEventFor(body, daysRemaining);
 
   const reserved = await reserveTrialEmailEvent(db.sql, {
-    id,
+    id: event.id,
     organizationId: body.organizationId,
-    eventType: body.kind === 'trial-reminder' ? 'trial_reminder_sent' : 'trial_ended_email_sent',
-    metadata:
-      body.kind === 'trial-reminder'
-        ? {
-            threshold: body.threshold,
-            daysRemaining,
-            trialEndDate: body.trialEndDate,
-          }
-        : { trialEndDate: body.trialEndDate },
+    eventType: event.eventType,
+    metadata: event.metadata,
   });
   if (!reserved) {
-    return skip('already-sent');
+    logSkip(body.kind, body.organizationId, 'already-sent');
+    message.ack();
+    return;
   }
 
   // From here on the reservation exists. A send that never happened — the
@@ -122,36 +190,33 @@ async function handleTrialEmailMessage(
   // notification is permanently suppressed as "already sent" without an email.
   const releaseReservation = async (): Promise<void> => {
     try {
-      await deleteTrialEmailEvent(db.sql, id);
+      await deleteTrialEmailEvent(db.sql, event.id);
     } catch (deleteError) {
       // The retry/redelivery will then read "already-sent" and skip a send that
       // never went out — silent suppression, so it must be loud.
       Sentry.captureException(deleteError, {
         tags: { feature: 'notification-email', action: 'release-reservation' },
-        extra: { kind: body.kind, organizationId: body.organizationId, reservationId: id },
+        extra: {
+          kind: body.kind,
+          organizationId: body.organizationId,
+          reservationId: event.id,
+        },
       });
     }
   };
 
-  const rendered =
-    body.kind === 'trial-reminder'
-      ? renderTrialReminderEmail({
-          organizationName: context.organizationName,
-          trialEndDate: storedEnd,
-          daysRemaining,
-          frontendUrl: env.FRONTEND_URL,
-        })
-      : renderTrialEndedEmail({
-          organizationName: context.organizationName,
-          trialEndDate: storedEnd,
-          frontendUrl: env.FRONTEND_URL,
-        });
+  const rendered = renderTrialEmail(
+    body,
+    { organizationName, trialEndDate: storedEnd },
+    daysRemaining,
+    env.FRONTEND_URL,
+  );
 
   try {
     const accepted = await sendClaimEmail(
       env,
       { to: contactEmail, ...rendered },
-      { idempotencyKey: id },
+      { idempotencyKey: event.id },
     );
     if (!accepted) {
       // Unconfigured provider: not retryable in this deployment, so release

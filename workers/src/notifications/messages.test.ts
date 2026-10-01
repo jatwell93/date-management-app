@@ -19,12 +19,14 @@ describe('parseNotificationEmailMessage', () => {
         organizationId: 'org_1',
         trialEndDate: '2030-06-15T12:00:00.000Z',
         threshold: 5,
+        asOf: '2030-06-10T00:00:00.000Z',
       }),
     ).toEqual({
       kind: 'trial-reminder',
       organizationId: 'org_1',
       trialEndDate: '2030-06-15T12:00:00.000Z',
       threshold: 5,
+      asOf: '2030-06-10T00:00:00.000Z',
     });
     expect(
       parseNotificationEmailMessage({
@@ -66,11 +68,36 @@ describe('parseNotificationEmailMessage', () => {
         organizationId: 'o',
         trialEndDate: '2030-01-01T00:00:00Z',
         threshold: 7,
+        asOf: '2030-01-01T00:00:00Z',
       },
     ],
     [
       'a missing threshold',
-      { kind: 'trial-reminder', organizationId: 'o', trialEndDate: '2030-01-01T00:00:00Z' },
+      {
+        kind: 'trial-reminder',
+        organizationId: 'o',
+        trialEndDate: '2030-01-01T00:00:00Z',
+        asOf: '2030-01-01T00:00:00Z',
+      },
+    ],
+    [
+      'a missing asOf',
+      {
+        kind: 'trial-reminder',
+        organizationId: 'o',
+        trialEndDate: '2030-01-01T00:00:00Z',
+        threshold: 5,
+      },
+    ],
+    [
+      'a malformed asOf',
+      {
+        kind: 'trial-reminder',
+        organizationId: 'o',
+        trialEndDate: '2030-01-01T00:00:00Z',
+        threshold: 5,
+        asOf: 'not-a-date',
+      },
     ],
     ['a string claimId', { kind: 'credit-claim-follow-up', organizationId: 'o', claimId: '42' }],
     ['a non-positive claimId', { kind: 'credit-claim-follow-up', organizationId: 'o', claimId: 0 }],

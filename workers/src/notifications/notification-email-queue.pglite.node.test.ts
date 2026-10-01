@@ -134,6 +134,7 @@ describe('handleNotificationEmailQueue (pglite)', () => {
       organizationId: ORG,
       trialEndDate: TRIAL_END_ISO,
       threshold: 5,
+      asOf: '2026-10-01T00:00:00.000Z',
     });
 
     it('reserves the trial_events row, emails once with the id as Idempotency-Key, and acks', async () => {
@@ -232,6 +233,49 @@ describe('handleNotificationEmailQueue (pglite)', () => {
       logSpy.mockRestore();
     });
 
+    it('renders a byte-identical payload on retry so the Idempotency-Key stays valid', async () => {
+      // Resend answers 409 invalid_idempotent_request when a key is reused with
+      // a different payload. The producing tick's `asOf` is 3h old by the time
+      // this message is consumed — if daysRemaining were computed from the
+      // consume-time clock, the retried send would carry different text under
+      // the same key and loop all the way to the DLQ.
+      const end = new Date(Date.now() + 22 * 60 * 60 * 1000);
+      await seedTrial(ORG, { trialEnd: end.toISOString() });
+      const body = {
+        kind: 'trial-reminder',
+        organizationId: ORG,
+        trialEndDate: end.toISOString(),
+        threshold: 2,
+        asOf: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      };
+
+      // First attempt: the provider throws — reservation released, retry.
+      fetchMock.mockResolvedValue(new Response('provider exploded', { status: 500 }));
+      const first = message(body);
+      await handleNotificationEmailQueue(batchOf(first), RESEND_ENV, db);
+      expect(first.retry).toHaveBeenCalledTimes(1);
+      expect(await trialEventIds()).toEqual([]);
+      const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+
+      // Second consume of the SAME message body hours later in wall-clock
+      // terms (asOf is 3h stale): identical request, identical key.
+      fetchMock.mockClear();
+      fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+      const second = message(body);
+      await handleNotificationEmailQueue(batchOf(second), RESEND_ENV, db);
+
+      const secondInit = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(secondInit.body).toEqual(firstInit.body);
+      expect((secondInit.headers as Record<string, string>)['Idempotency-Key']).toBe(
+        (firstInit.headers as Record<string, string>)['Idempotency-Key'],
+      );
+      // And the subject pins the mechanism: ceil((end − asOf)) = 2 days,
+      // while ceil((end − now)) = 1 day — so this only holds when the message's
+      // own asOf, not the consume-time clock, drives the rendering.
+      expect(JSON.parse(String(secondInit.body)).subject).toBe('Your free trial ends in 2 days');
+      expect(second.ack).toHaveBeenCalledTimes(1);
+    });
+
     it('skips a reminder consumed after the trial already ended', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       // The stored end equals the message's (in the past), so the only skip
@@ -242,6 +286,7 @@ describe('handleNotificationEmailQueue (pglite)', () => {
         organizationId: ORG,
         trialEndDate: '2020-01-01T00:00:00.000Z',
         threshold: 2,
+        asOf: '2020-01-01T00:00:00.000Z',
       });
 
       await handleNotificationEmailQueue(batchOf(msg), RESEND_ENV, db);
@@ -384,6 +429,7 @@ describe('handleNotificationEmailQueue (pglite)', () => {
         organizationId: ORG,
         trialEndDate: TRIAL_END_ISO,
         threshold: 5,
+        asOf: '2026-10-01T00:00:00.000Z',
       });
 
       await handleNotificationEmailQueue(batchOf(bad, good), RESEND_ENV, db);
