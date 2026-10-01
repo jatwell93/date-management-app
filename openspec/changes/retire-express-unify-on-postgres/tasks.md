@@ -3172,6 +3172,34 @@ equivalent, a relocated home, or an explicit retirement decision.
       <br>**Pending (human):** apply **0016 and 0017** to the dev branch and production per the deploy runbook
       **before** deploying the Worker; deploy; confirm each job's first on-schedule run in `scheduled_job_runs`
       / Worker logs.
+      <br>**3.3b progress (queue half, rows 5/6/7/14; code landed, infra + deploy pending).** Decisions (user,
+      2026-09-30): **Resend** with copy in code (`workers/src/notifications/trial-emails.ts`) rather than the
+      SendGrid dynamic templates — the Express downgrade template also rendered `excessItems = 0 - 500`; a
+      **dedicated queue** `notification-emails-{prod,dev}` + `-dlq` (batch 10, retries 5, retry_delay 60,
+      concurrency 1) rather than sharing the catalogue queue; `queue()` routes by `batch.queue` name. Two new
+      daily jobs in the schedule table: `trial-emails` 22 UTC (rows 5/6) and `credit-claim-follow-ups` 23 UTC
+      (row 14) — AU business hours. Row 5 is now a "your trial has ended" notice keyed off `trial_end_date`
+      (lookback-bounded to 3 days, because nothing writes a downgrade and expired trials stay `trialing`);
+      reminders pick the smallest covering 10/5/2-day threshold so a missed day still sends exactly one.
+      **Row 7 dedupe: reserve first** — the `trial_events.id` TEXT PK is a deterministic
+      `<event>:<org>:<trialEndIso>[:<threshold>]` id inserted `ON CONFLICT DO NOTHING` before the send,
+      released on provider false/throw, and reused as the Resend `Idempotency-Key` (24h). Row 14: cross-org
+      due query `listClaimsDueForFollowUpAcrossOrgs` (indexed `next_follow_up_at`, 500/run); the consumer calls
+      `sendFollowUp(..., { requireDueAt })`, which refuses a not-due claim before the counter CAS so a
+      duplicated message cannot nudge twice. No migration. Both jobs skip (not fail) when Resend is
+      unconfigured and fail when the queue binding is missing. Verified: test:db 374 passed / 1 skipped,
+      workerd 105 (new/changed files) + 88 (health + dispatcher), workers typecheck, lint, format:check,
+      `git diff --check` clean. Review round (2026-10-01): follow-up sends now carry a stable Resend key
+      `claim-follow-up:<org>:<claim>:<nextCount>` (closes the lost-response double nudge); reminder messages
+      carry the tick's `asOf` so `daysRemaining` — and thus the payload under one key — is identical across
+      retries (Resend 409s a reused key with a different payload); window bounds derive from
+      `TRIAL_REMINDER_THRESHOLDS` / `TRIAL_ENDED_LOOKBACK_DAYS` via one shared candidate query. test:db 376 /
+      1 skipped, workerd 109. Bot finding accepted: a failed reservation release after a failed send left a
+      marker that made the retry ack as "already-sent" (email lost). `reserveTrialEmailEvent` now returns
+      `reserved | recent | taken`; a marker younger than `TRIAL_RESERVATION_RESEND_WINDOW_MINUTES` (60) is
+      re-sent under the same Resend key without being deleted by that delivery. test:db 380 / 1 skipped.
+      Queues created (user, 2026-10-01). **Pending (human):** deploy; confirm the first `trial-emails` / `credit-claim-follow-ups` rows in
+      `scheduled_job_runs` and a delivered email.
 - [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
       **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in

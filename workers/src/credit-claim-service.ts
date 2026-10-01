@@ -16,6 +16,7 @@ import type { R2Bucket } from '@cloudflare/workers-types';
 import * as Sentry from '@sentry/cloudflare';
 import {
   isChaseableClaimStatus,
+  isFollowUpDue,
   isSettledClaimStatus,
   nextFollowUp,
 } from '../../shared/domain/credit-claim';
@@ -112,7 +113,11 @@ export interface ClaimEmailMessage {
  * when unconfigured, so an org without the secret gets the backend's
  * "provider is not configured" validation error instead of a 500.
  */
-export async function sendClaimEmail(env: Env, message: ClaimEmailMessage): Promise<boolean> {
+export async function sendClaimEmail(
+  env: Env,
+  message: ClaimEmailMessage,
+  options: { idempotencyKey?: string } = {},
+): Promise<boolean> {
   const apiKey = env.RESEND_API_KEY;
   const from = env.RESEND_FROM_EMAIL;
   // Both secrets are required, and a missing sender counts as unconfigured rather
@@ -142,9 +147,20 @@ export async function sendClaimEmail(env: Env, message: ClaimEmailMessage): Prom
     }));
   }
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  // Resend dedupes on this key for 24h: a redelivered queue message or a
+  // retried send retries the same request without emailing the recipient
+  // twice — used by the trial notifications and the follow-up nudge (3.3b).
+  if (options.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -244,11 +260,17 @@ async function deliverClaimEmail(
   organizationId: string,
   claim: CreditClaim,
   to: string,
-  options: { followUp?: boolean } = {},
+  options: { followUp?: boolean; idempotencyKey?: string } = {},
 ): Promise<boolean> {
-  const email = renderClaimEmail(claim, options);
+  const email = renderClaimEmail(claim, { followUp: options.followUp });
   const attachments = await loadAttachments(db, env, organizationId, claim.id);
-  return sendClaimEmail(env, { to, ...email, attachments });
+  return sendClaimEmail(
+    env,
+    { to, ...email, attachments },
+    {
+      idempotencyKey: options.idempotencyKey,
+    },
+  );
 }
 
 /**
@@ -440,17 +462,39 @@ export async function sendClaim(
   return { ok: true, value: updated };
 }
 
-/** Send a follow-up nudge and advance the schedule. */
+/**
+ * Send a follow-up nudge and advance the schedule.
+ *
+ * `options.requireDueAt` is the queue consumer's re-check: a duplicated or
+ * redelivered notification message would otherwise reserve and send a second
+ * nudge, so when it is set the loaded claim must still be due at that instant
+ * before the counter CAS runs. Check-then-reserve is safe because the CAS
+ * itself is keyed on the same loaded `followUpCount`. The manual-nudge route
+ * leaves it unset — the user asked for the nudge just now.
+ */
 export async function sendFollowUp(
   db: Database,
   env: Env,
   organizationId: string,
   id: number,
+  options: { requireDueAt?: Date } = {},
 ): Promise<ClaimWriteResult<CreditClaim>> {
   const claim = await db.findCreditClaim(organizationId, id);
   if (!claim) return fail('NOT_FOUND', `Claim ${id} not found`);
   if (!isChaseableClaimStatus(claim.status) || !claim.sentAt) {
     return fail('VALIDATION', `Claim ${id} is not awaiting a supplier response.`);
+  }
+  if (
+    options.requireDueAt !== undefined &&
+    !isFollowUpDue(
+      {
+        status: claim.status,
+        nextFollowUpAt: claim.nextFollowUpAt ? parseDbTimestamp(claim.nextFollowUpAt) : null,
+      },
+      options.requireDueAt,
+    )
+  ) {
+    return fail('CONFLICT', `Claim ${id} is not due for a follow-up.`);
   }
   const to = claimRecipient(claim);
   if (!to) return fail('VALIDATION', 'The supplier has no contact email.');
@@ -476,8 +520,13 @@ export async function sendFollowUp(
       .catch(() => undefined);
 
   try {
+    // The key is stable per attempt because nextCount derives from the observed
+    // counter: if Resend accepts but the response is lost, the catch restores
+    // the schedule and the queue retries — `requireDueAt` passes again, so
+    // without this key the supplier would get the nudge twice.
     const accepted = await deliverClaimEmail(db, env, organizationId, claim, to, {
       followUp: true,
+      idempotencyKey: `claim-follow-up:${organizationId}:${id}:${nextCount}`,
     });
     if (!accepted) {
       await restore();

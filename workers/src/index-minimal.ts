@@ -114,6 +114,7 @@ import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
 import { isUniqueViolation } from './db-errors';
 import { recordOutcome, sendClaim, sendFollowUp, uploadClaimPhoto } from './credit-claim-service';
+import { handleNotificationEmailQueue } from './notifications/notification-email-queue';
 
 /** Outcomes the outcome route accepts, matching the backend's `claimOutcomeSchema`. */
 const CLAIM_OUTCOMES: readonly ClaimOutcome[] = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED'];
@@ -655,6 +656,12 @@ const sentryWrappedHandlers = Sentry.withSentry(
       }
     },
     async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+      // The queue name — not the message shape — picks the handler: both
+      // bindings deliver to this one consumer entrypoint.
+      if (batch.queue.startsWith('notification-emails')) {
+        await handleNotificationEmailQueue(batch, env);
+        return;
+      }
       await handleCatalogueImportQueue(batch, env);
     },
     // One hourly cron tick (`0 * * * *`, production only — see wrangler.toml).

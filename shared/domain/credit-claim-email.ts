@@ -10,7 +10,7 @@
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return (
     value
       .replace(/&/g, '&amp;')

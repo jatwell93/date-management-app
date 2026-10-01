@@ -26,7 +26,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
 import * as minimalEntrypoint from './index-minimal';
 import { authenticateClerkRequest } from './clerk/bootstrap-handler';
-import { recordOutcome, sendClaim, sendFollowUp } from './credit-claim-service';
+import { recordOutcome, sendClaim, sendClaimEmail, sendFollowUp } from './credit-claim-service';
 import type { CreditClaim, Database } from './database';
 import type { Env } from './types/env';
 
@@ -869,6 +869,59 @@ describe('credit-claim write routes', () => {
     });
   });
 
+  describe('sendClaimEmail transport', () => {
+    const message = {
+      to: 'supplier@x.test',
+      subject: 'subject',
+      html: '<p>hi</p>',
+      text: 'hi',
+    };
+
+    it('sends the Idempotency-Key header when one is provided', async () => {
+      const fetchSpy = acceptEmails();
+
+      const accepted = await sendClaimEmail(configuredEnv(), message, {
+        idempotencyKey: 'trial_reminder_sent:org_1:iso:5',
+      });
+
+      expect(accepted).toBe(true);
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe(
+        'trial_reminder_sent:org_1:iso:5',
+      );
+      fetchSpy.mockRestore();
+    });
+
+    it('omits the Idempotency-Key header when no key is provided', async () => {
+      const fetchSpy = acceptEmails();
+
+      await sendClaimEmail(configuredEnv(), message);
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeUndefined();
+      fetchSpy.mockRestore();
+    });
+
+    it('the initial claim send carries no Idempotency-Key header', async () => {
+      // The first send already cannot double-email — the DRAFT→SENDING CAS
+      // admits exactly one sender, and a lost post-send finalize retries the
+      // write, never the fetch. Only the follow-up needs a key.
+      const fetchSpy = acceptEmails();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        finalizeSentClaim: vi.fn(),
+      });
+
+      await sendClaim(db, configuredEnv(), ORG, 1);
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeUndefined();
+      fetchSpy.mockRestore();
+    });
+  });
+
   describe('sendFollowUp preconditions', () => {
     const bucket = createBucket();
 
@@ -913,6 +966,31 @@ describe('credit-claim write routes', () => {
         followUpCount: 2,
         nextFollowUpAt: new Date('2026-10-13T10:00:00.000Z'),
       });
+      fetchSpy.mockRestore();
+    });
+
+    it('sends a stable per-attempt Idempotency-Key so a retried delivery cannot double-email', async () => {
+      // If Resend accepts but the response is lost, the schedule is restored
+      // and the queue retries — `requireDueAt` passes again, so the key derived
+      // from the reserved slot is what stops the supplier seeing the nudge
+      // twice.
+      const fetchSpy = acceptEmails();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi
+          .fn()
+          .mockResolvedValue(draftClaim({ status: 'SENT', sentAt: '2026-09-22 10:00:00' })),
+        reserveFollowUp: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await sendFollowUp(db, configuredEnv(), ORG, 1);
+
+      // Claim id 1, observed followUpCount 0 → the reserved slot is 1.
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe(
+        `claim-follow-up:${ORG}:1:1`,
+      );
       fetchSpy.mockRestore();
     });
 
@@ -982,6 +1060,82 @@ describe('credit-claim write routes', () => {
       // The returned claim carries the advance that was actually committed.
       expect(result.ok === true && result.value.followUpCount).toBe(1);
       errorSpy.mockRestore();
+      fetchSpy.mockRestore();
+    });
+
+    it('refuses a not-due claim as CONFLICT when requireDueAt is set, without reserving', async () => {
+      // The queue consumer passes requireDueAt so a duplicated or delayed
+      // message cannot nudge the supplier twice. Check-before-reserve is safe
+      // because the CAS is keyed on the same loaded followUpCount.
+      const reserveFollowUp = vi.fn();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(
+          draftClaim({
+            status: 'SENT',
+            sentAt: '2026-09-22 10:00:00',
+            nextFollowUpAt: '2026-10-29 10:00:00',
+          }),
+        ),
+        reserveFollowUp,
+      });
+
+      const result = await sendFollowUp(db, configuredEnv(), ORG, 1, {
+        requireDueAt: new Date('2026-10-01T00:00:00.000Z'),
+      });
+
+      expect(result).toMatchObject({ ok: false, code: 'CONFLICT' });
+      expect(result.ok === false && result.message).toContain('not due');
+      expect(reserveFollowUp).not.toHaveBeenCalled();
+    });
+
+    it('proceeds with requireDueAt when the claim is due', async () => {
+      const fetchSpy = acceptEmails();
+      const reserveFollowUp = vi.fn().mockResolvedValue(true);
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(
+          draftClaim({
+            status: 'SENT',
+            sentAt: '2026-09-22 10:00:00',
+            nextFollowUpAt: '2026-09-29 10:00:00',
+          }),
+        ),
+        reserveFollowUp,
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const result = await sendFollowUp(db, configuredEnv(), ORG, 1, {
+        requireDueAt: new Date('2026-10-01T00:00:00.000Z'),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(reserveFollowUp).toHaveBeenCalledTimes(1);
+      fetchSpy.mockRestore();
+    });
+
+    it('does not apply the due check when requireDueAt is omitted (manual nudge)', async () => {
+      // The route leaves the option unset: a not-yet-due claim still nudges
+      // when the user asks for it. reserveFollowUp being reached is what
+      // proves the gate stayed open.
+      const fetchSpy = acceptEmails();
+      const reserveFollowUp = vi.fn().mockResolvedValue(true);
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(
+          draftClaim({
+            status: 'SENT',
+            sentAt: '2026-09-22 10:00:00',
+            nextFollowUpAt: '2027-01-01 10:00:00',
+          }),
+        ),
+        reserveFollowUp,
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        addCreditClaimEvent: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const result = await sendFollowUp(db, configuredEnv(), ORG, 1);
+
+      expect(result.ok).toBe(true);
+      expect(reserveFollowUp).toHaveBeenCalledTimes(1);
       fetchSpy.mockRestore();
     });
 
