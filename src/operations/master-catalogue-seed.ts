@@ -14,8 +14,12 @@
  * active catalogue is refused unless explicitly confirmed; and `dryRun`
  * reports the prospective diff without touching the database.
  *
- * Two things are deliberately different from the Express seeder:
+ * Three things are deliberately different from the Express seeder:
  *
+ *   - A run that would blank stored values on more than the threshold share of
+ *     the entries it matches is refused unless explicitly confirmed. Optional
+ *     columns are matched by exact header, so a renamed `RRP $` reads as empty
+ *     on every row and would otherwise null every stored price with no error.
  *   - Text fields are formula-escaped on the way in. The catalogue feeds brand
  *     and product text into every tenant, and the repository rule is that the
  *     control sits at ingestion (`shared/domain/csv-injection.ts`). The Express
@@ -35,6 +39,19 @@ export const DEFAULT_RETIREMENT_THRESHOLD = 0.1;
 
 const REQUIRED_HEADERS = ['Description', 'Barcode', 'Brand'] as const;
 const UPSERT_BATCH_SIZE = 1000;
+
+/** Entry fields a workbook may leave empty. Every one of them is nullable in the table. */
+const OPTIONAL_FIELDS = [
+  'apiSku',
+  'sigmaSku',
+  'ch2Sku',
+  'manufacturerName',
+  'category',
+  'subCategory',
+  'rrp',
+  'metroPrice',
+] as const;
+export type OptionalField = (typeof OPTIONAL_FIELDS)[number];
 
 export interface MasterCatalogueSeedEntry {
   barcode: string;
@@ -71,6 +88,10 @@ export interface MasterCatalogueSeedResult {
   errorCount: number;
   errors: MasterCatalogueRowError[];
   retiredBarcodes: string[];
+  /** Existing entries that would lose a stored value in at least one optional field. */
+  blankedEntries: number;
+  /** Per optional field, how many existing entries would go from a value to none. */
+  blankedFields: Partial<Record<OptionalField, number>>;
   dryRun: boolean;
   /** `catalogue_seed_runs.version` written by a live run; null for a dry run. */
   seedRunVersion: number | null;
@@ -81,7 +102,11 @@ export interface MasterCatalogueSeedOptions {
   sourceFileName: string;
   dryRun?: boolean;
   confirmRetirements?: boolean;
-  /** Share of the active catalogue a run may retire unconfirmed, 0 to 1. */
+  confirmBlankedFields?: boolean;
+  /**
+   * Share, 0 to 1, a run may change unconfirmed: of the active catalogue for
+   * retirements, and of the entries the workbook matches for blanked fields.
+   */
   retirementThreshold?: number;
   now?: Date;
 }
@@ -107,11 +132,36 @@ export class RetirementThresholdExceeded extends Error {
   }
 }
 
+/**
+ * Thrown when a run would blank stored values across more of the catalogue
+ * than the threshold allows. A renamed or misspelled optional column makes
+ * every row read as empty for that field, with no row-level error to show for
+ * it; this is what stops that from nulling a column for the whole catalogue.
+ */
+export class BlankingThresholdExceeded extends Error {
+  constructor(
+    public readonly blankedEntries: number,
+    public readonly matchedEntries: number,
+    public readonly proportion: number,
+    public readonly threshold: number,
+    public readonly blankedFields: Partial<Record<OptionalField, number>>,
+  ) {
+    super(
+      `Blanking stored values on ${blankedEntries} of ${matchedEntries} existing catalogue entries (${proportion}) exceeds threshold ${threshold}; fields: ${JSON.stringify(blankedFields)}`,
+    );
+    this.name = 'BlankingThresholdExceeded';
+  }
+}
+
+function isProportion(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 /** Parses `MASTER_CATALOGUE_RETIREMENT_THRESHOLD`; unset or blank means the default. */
 export function resolveRetirementThreshold(configured: string | undefined): number {
   if (configured == null || configured.trim() === '') return DEFAULT_RETIREMENT_THRESHOLD;
   const threshold = Number(configured);
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+  if (!isProportion(threshold)) {
     throw new Error(
       'MASTER_CATALOGUE_RETIREMENT_THRESHOLD must be a number between 0 and 1 inclusive',
     );
@@ -164,10 +214,6 @@ export function normalizeMasterCatalogueRows(rows: unknown[][]): MasterCatalogue
       ],
     };
   }
-  const at = (row: unknown[], name: string): unknown => {
-    const index = headers.get(name.toUpperCase());
-    return index == null ? undefined : row[index];
-  };
 
   const entries: MasterCatalogueSeedEntry[] = [];
   const errors: MasterCatalogueRowError[] = [];
@@ -176,45 +222,63 @@ export function normalizeMasterCatalogueRows(rows: unknown[][]): MasterCatalogue
 
   dataRows.forEach((row, index) => {
     const rowNumber = index + 2;
-    if (row.every((value) => textValue(value) == null)) {
+    if (isBlankRow(row)) {
       skipped += 1;
       return;
     }
-
-    const description = safeTextValue(at(row, 'Description'));
-    const barcode = safeTextValue(at(row, 'Barcode'));
-    const brandName = safeTextValue(at(row, 'Brand'));
-    if (!description || !barcode || !brandName) {
-      errors.push({ row: rowNumber, message: 'Description, barcode, and brand are required' });
+    const outcome = readRow(headers, row, barcodeRows);
+    if (typeof outcome === 'string') {
+      errors.push({ row: rowNumber, message: outcome });
       return;
     }
-
-    const firstRow = barcodeRows.get(barcode);
-    if (firstRow != null) {
-      errors.push({
-        row: rowNumber,
-        message: `Duplicate barcode ${barcode}; first seen on row ${firstRow}`,
-      });
-      return;
-    }
-    barcodeRows.set(barcode, rowNumber);
-
-    entries.push({
-      barcode,
-      description,
-      apiSku: skuValue(at(row, 'API PDE')),
-      sigmaSku: skuValue(at(row, 'Sigma PDE')),
-      ch2Sku: skuValue(at(row, 'CH2 PDE')),
-      brandName,
-      manufacturerName: safeTextValue(at(row, 'Manufacturer')),
-      category: safeTextValue(at(row, 'Category')),
-      subCategory: safeTextValue(at(row, 'Sub-Category')),
-      rrp: priceValue(at(row, 'RRP $')),
-      metroPrice: priceValue(at(row, 'Metro $')),
-    });
+    barcodeRows.set(outcome.barcode, rowNumber);
+    entries.push(outcome);
   });
 
   return { entries, skipped, errors };
+}
+
+/** The entry a data row describes, or the reason it is rejected. */
+function readRow(
+  headers: Map<string, number>,
+  row: unknown[],
+  barcodeRows: Map<string, number>,
+): MasterCatalogueSeedEntry | string {
+  const entry = entryFromRow((name) => cellAt(headers, row, name));
+  if (entry === null) return 'Description, barcode, and brand are required';
+  const firstRow = barcodeRows.get(entry.barcode);
+  if (firstRow != null) return `Duplicate barcode ${entry.barcode}; first seen on row ${firstRow}`;
+  return entry;
+}
+
+function isBlankRow(row: unknown[]): boolean {
+  return row.every((value) => textValue(value) == null);
+}
+
+function cellAt(headers: Map<string, number>, row: unknown[], name: string): unknown {
+  const index = headers.get(name.toUpperCase());
+  return index == null ? undefined : row[index];
+}
+
+/** The entry a row describes, or null when a required field is empty. */
+function entryFromRow(at: (name: string) => unknown): MasterCatalogueSeedEntry | null {
+  const description = safeTextValue(at('Description'));
+  const barcode = safeTextValue(at('Barcode'));
+  const brandName = safeTextValue(at('Brand'));
+  if (!description || !barcode || !brandName) return null;
+  return {
+    barcode,
+    description,
+    apiSku: skuValue(at('API PDE')),
+    sigmaSku: skuValue(at('Sigma PDE')),
+    ch2Sku: skuValue(at('CH2 PDE')),
+    brandName,
+    manufacturerName: safeTextValue(at('Manufacturer')),
+    category: safeTextValue(at('Category')),
+    subCategory: safeTextValue(at('Sub-Category')),
+    rrp: priceValue(at('RRP $')),
+    metroPrice: priceValue(at('Metro $')),
+  };
 }
 
 interface ExistingEntry extends MasterCatalogueSeedEntry {
@@ -265,16 +329,17 @@ async function loadExistingEntries(client: MigrationClient): Promise<ExistingEnt
 function entryMatches(existing: MasterCatalogueSeedEntry, expected: MasterCatalogueSeedEntry) {
   return (
     existing.description === expected.description &&
-    existing.apiSku === expected.apiSku &&
-    existing.sigmaSku === expected.sigmaSku &&
-    existing.ch2Sku === expected.ch2Sku &&
     existing.brandName === expected.brandName &&
-    existing.manufacturerName === expected.manufacturerName &&
-    existing.category === expected.category &&
-    existing.subCategory === expected.subCategory &&
-    existing.rrp === expected.rrp &&
-    existing.metroPrice === expected.metroPrice
+    OPTIONAL_FIELDS.every((field) => existing[field] === expected[field])
   );
+}
+
+/** Optional fields where `existing` holds a value and the workbook entry holds none. */
+function blankedFieldsOf(
+  existing: MasterCatalogueSeedEntry,
+  entry: MasterCatalogueSeedEntry,
+): OptionalField[] {
+  return OPTIONAL_FIELDS.filter((field) => existing[field] != null && entry[field] == null);
 }
 
 interface SeedPlan {
@@ -282,6 +347,16 @@ interface SeedPlan {
   /** Entries to insert, update, or reinstate — everything except unchanged rows. */
   toUpsert: MasterCatalogueSeedEntry[];
   activeBefore: number;
+  /** Workbook entries whose barcode is already in the catalogue, retired or not. */
+  matchedEntries: number;
+}
+
+type SeedAction = 'inserted' | 'reinstated' | 'unchanged' | 'updated';
+
+function classify(current: ExistingEntry | undefined, entry: MasterCatalogueSeedEntry): SeedAction {
+  if (!current) return 'inserted';
+  if (current.retired) return 'reinstated';
+  return entryMatches(current, entry) ? 'unchanged' : 'updated';
 }
 
 function planSeed(parsed: MasterCatalogueParseResult, existing: ExistingEntry[]): SeedPlan {
@@ -302,23 +377,72 @@ function planSeed(parsed: MasterCatalogueParseResult, existing: ExistingEntry[])
     errorCount: parsed.errors.length,
     errors: [...parsed.errors],
     retiredBarcodes,
+    blankedEntries: 0,
+    blankedFields: {},
     dryRun: true,
     seedRunVersion: null,
   };
 
   const toUpsert: MasterCatalogueSeedEntry[] = [];
+  let matchedEntries = 0;
   for (const entry of parsed.entries) {
     const current = existingByBarcode.get(entry.barcode);
-    if (!current) result.inserted += 1;
-    else if (current.retired) result.reinstated += 1;
-    else if (entryMatches(current, entry)) {
-      result.unchanged += 1;
-      continue;
-    } else result.updated += 1;
-    toUpsert.push(entry);
+    const action = classify(current, entry);
+    result[action] += 1;
+    if (action !== 'unchanged') toUpsert.push(entry);
+    if (!current) continue;
+
+    matchedEntries += 1;
+    const blanked = blankedFieldsOf(current, entry);
+    if (blanked.length > 0) result.blankedEntries += 1;
+    for (const field of blanked) {
+      result.blankedFields[field] = (result.blankedFields[field] ?? 0) + 1;
+    }
   }
 
-  return { result, toUpsert, activeBefore: existing.filter((entry) => !entry.retired).length };
+  return {
+    result,
+    toUpsert,
+    activeBefore: existing.filter((entry) => !entry.retired).length,
+    matchedEntries,
+  };
+}
+
+/** True when `count` is more than `threshold` of a non-empty `total`. */
+function exceedsShare(count: number, total: number, threshold: number): boolean {
+  return total > 0 && count / total > threshold;
+}
+
+/** Refuses a plan that retires or blanks more than the threshold without confirmation. */
+function assertWithinThresholds(
+  plan: SeedPlan,
+  options: MasterCatalogueSeedOptions,
+  threshold: number,
+): void {
+  const { result, activeBefore, matchedEntries } = plan;
+  if (
+    options.confirmRetirements !== true &&
+    exceedsShare(result.retired, activeBefore, threshold)
+  ) {
+    throw new RetirementThresholdExceeded(
+      result.retired,
+      activeBefore,
+      result.retired / activeBefore,
+      threshold,
+    );
+  }
+  if (
+    options.confirmBlankedFields !== true &&
+    exceedsShare(result.blankedEntries, matchedEntries, threshold)
+  ) {
+    throw new BlankingThresholdExceeded(
+      result.blankedEntries,
+      matchedEntries,
+      result.blankedEntries / matchedEntries,
+      threshold,
+      result.blankedFields,
+    );
+  }
 }
 
 const UPSERT_SQL = `
@@ -356,12 +480,9 @@ async function applySeed(
   // readers alone, so the snapshot the counts are computed from is the one the
   // writes land on.
   await client.query('LOCK TABLE master_catalogue_entries IN SHARE ROW EXCLUSIVE MODE');
-  const { result, toUpsert, activeBefore } = planSeed(parsed, await loadExistingEntries(client));
-
-  const proportion = activeBefore === 0 ? 0 : result.retired / activeBefore;
-  if (activeBefore > 0 && proportion > threshold && options.confirmRetirements !== true) {
-    throw new RetirementThresholdExceeded(result.retired, activeBefore, proportion, threshold);
-  }
+  const plan = planSeed(parsed, await loadExistingEntries(client));
+  assertWithinThresholds(plan, options, threshold);
+  const { result, toUpsert } = plan;
 
   for (let offset = 0; offset < toUpsert.length; offset += UPSERT_BATCH_SIZE) {
     const batch = toUpsert.slice(offset, offset + UPSERT_BATCH_SIZE);
@@ -424,11 +545,16 @@ export async function seedMasterCatalogue(
     throw new CatalogueSeedValidationError(result);
   }
 
+  return inTransaction(client, () => applySeed(client, parsed, options, threshold));
+}
+
+/** Runs `work` between BEGIN and COMMIT, rolling back and rethrowing if it fails. */
+async function inTransaction<T>(client: MigrationClient, work: () => Promise<T>): Promise<T> {
   await client.query('BEGIN');
-  let result: MasterCatalogueSeedResult;
   try {
-    result = await applySeed(client, parsed, options, threshold);
+    const value = await work();
     await client.query('COMMIT');
+    return value;
   } catch (error) {
     try {
       await client.query('ROLLBACK');
@@ -440,5 +566,4 @@ export async function seedMasterCatalogue(
     }
     throw error;
   }
-  return result;
 }

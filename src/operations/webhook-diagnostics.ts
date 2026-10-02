@@ -322,7 +322,9 @@ export function compareWithStripe(
 ): string[] {
   const problems: string[] = [];
   const stored = billing.subscription?.stripeCustomerId ?? null;
-  if (stored !== null && stripe.customerId !== null && stored !== stripe.customerId) {
+  // Only two known ids can disagree; a missing one on either side is not a mismatch.
+  const bothKnown = stored !== null && stripe.customerId !== null;
+  if (bothKnown && stored !== stripe.customerId) {
     problems.push(
       `Stored stripe_customer_id ${stored} does not match the subscription's customer ${stripe.customerId}`,
     );
@@ -362,77 +364,83 @@ function describeRecord(record: WebhookEventRecord): string {
   return `${record.provider} ${record.eventType} — STRANDED, claimed ${record.processedAt} (${age}) and never completed; the next redelivery takes it over`;
 }
 
-/** Renders the report for a terminal. Lines starting `[!]` need attention. */
-export function formatWebhookDiagnostics(report: WebhookDiagnosticReport): string {
-  const lines: string[] = [];
-  const { health } = report;
-  lines.push(`Webhook diagnostics as of ${health.asOf} (window: ${health.windowHours}h)`);
+/** The `[!] ` prefix for a line that needs a person, or nothing. */
+function attention(needed: boolean): string {
+  return needed ? '[!] ' : '';
+}
 
-  for (const provider of health.providers) {
-    lines.push('', `${provider.provider} — ${provider.total} event(s) in window`);
-    if (provider.total === 0) {
-      lines.push(
-        `  [!] No events in window. Last event ever: ${provider.lastProcessedAt ?? 'none'}`,
-      );
-    }
-    for (const row of provider.byType) lines.push(`  ${row.eventType}: ${row.count}`);
-    for (const record of provider.uncompleted) {
-      const marker = record.state === 'stranded' ? '[!] ' : '';
-      lines.push(`  ${marker}${record.id}: ${describeRecord(record)}`);
-    }
+function providerLines(provider: ProviderHealth): string[] {
+  const lines = ['', `${provider.provider} — ${provider.total} event(s) in window`];
+  if (provider.total === 0) {
+    lines.push(`  [!] No events in window. Last event ever: ${provider.lastProcessedAt ?? 'none'}`);
   }
-
-  lines.push('', 'Handler outcomes (webhook_metrics)');
-  if (health.metrics.length === 0) lines.push('  No outcomes recorded for these days.');
-  for (const metric of health.metrics) {
-    const marker = metric.failures > 0 ? '[!] ' : '';
+  for (const row of provider.byType) lines.push(`  ${row.eventType}: ${row.count}`);
+  for (const record of provider.uncompleted) {
     lines.push(
-      `  ${marker}${metric.day} ${metric.eventType}: ${metric.total} total, ${metric.failures} failed`,
+      `  ${attention(record.state === 'stranded')}${record.id}: ${describeRecord(record)}`,
     );
   }
+  return lines;
+}
 
-  if (report.event) {
-    lines.push('', `Event ${report.event.id}`);
-    if (report.event.records.length === 0) {
-      lines.push(
-        '  [!] Not in either ledger. It was never received, or its handler failed and released the claim.',
-        '      Check the provider dashboard for delivery attempts, then the handler outcomes above.',
-        `      To redeliver a Stripe event: stripe events resend ${report.event.id}`,
-      );
-    }
-    for (const record of report.event.records) {
-      const marker = record.state === 'stranded' ? '[!] ' : '';
-      lines.push(`  ${marker}${describeRecord(record)}`);
-    }
+function metricLines(metrics: DailyMetric[]): string[] {
+  const lines = ['', 'Handler outcomes (webhook_metrics)'];
+  if (metrics.length === 0) lines.push('  No outcomes recorded for these days.');
+  for (const metric of metrics) {
+    lines.push(
+      `  ${attention(metric.failures > 0)}${metric.day} ${metric.eventType}: ${metric.total} total, ${metric.failures} failed`,
+    );
   }
+  return lines;
+}
 
-  if (report.organization) {
-    const { billing } = report.organization;
-    lines.push('', `Organization ${report.organization.id}`);
-    if (billing === null) {
-      lines.push('  [!] Organization not found.');
-    } else if (billing.subscription === null) {
-      lines.push(`  ${billing.organizationName}`, '  [!] No subscription_tiers row.');
-    } else {
-      const s = billing.subscription;
-      lines.push(
-        `  ${billing.organizationName}`,
-        `  Stored: ${s.tierLevel} / ${s.status} / ${s.billingCycle}, updated ${s.updatedAt}`,
-        `  Stripe subscription: ${s.stripeSubscriptionId ?? 'none'}; customer: ${s.stripeCustomerId ?? 'none'}`,
-        `  Current period end: ${s.currentPeriodEnd ?? 'none'}; cancel at period end: ${s.cancelAtPeriodEnd}`,
-      );
-    }
-    if (report.organization.stripe) {
-      const stripe = report.organization.stripe;
-      lines.push(`  Stripe says: ${stripe.status}, customer ${stripe.customerId ?? 'none'}`);
-    }
-    if (report.organization.stripeError) {
-      lines.push(`  [!] Stripe lookup failed: ${report.organization.stripeError}`);
-    }
-    for (const problem of report.organization.stripeProblems ?? []) {
-      lines.push(`  [!] ${problem}`);
-    }
+function eventLines(event: NonNullable<WebhookDiagnosticReport['event']>): string[] {
+  const lines = ['', `Event ${event.id}`];
+  if (event.records.length === 0) {
+    lines.push(
+      '  [!] Not in either ledger. It was never received, or its handler failed and released the claim.',
+      '      Check the provider dashboard for delivery attempts, then the handler outcomes above.',
+      `      To redeliver a Stripe event: stripe events resend ${event.id}`,
+    );
   }
+  for (const record of event.records) {
+    lines.push(`  ${attention(record.state === 'stranded')}${describeRecord(record)}`);
+  }
+  return lines;
+}
 
-  return lines.join('\n');
+function billingLines(billing: OrganizationBilling | null): string[] {
+  if (billing === null) return ['  [!] Organization not found.'];
+  const s = billing.subscription;
+  if (s === null) return [`  ${billing.organizationName}`, '  [!] No subscription_tiers row.'];
+  return [
+    `  ${billing.organizationName}`,
+    `  Stored: ${s.tierLevel} / ${s.status} / ${s.billingCycle}, updated ${s.updatedAt}`,
+    `  Stripe subscription: ${s.stripeSubscriptionId ?? 'none'}; customer: ${s.stripeCustomerId ?? 'none'}`,
+    `  Current period end: ${s.currentPeriodEnd ?? 'none'}; cancel at period end: ${s.cancelAtPeriodEnd}`,
+  ];
+}
+
+function organizationLines(
+  organization: NonNullable<WebhookDiagnosticReport['organization']>,
+): string[] {
+  const lines = ['', `Organization ${organization.id}`, ...billingLines(organization.billing)];
+  const { stripe, stripeError, stripeProblems = [] } = organization;
+  if (stripe)
+    lines.push(`  Stripe says: ${stripe.status}, customer ${stripe.customerId ?? 'none'}`);
+  if (stripeError) lines.push(`  [!] Stripe lookup failed: ${stripeError}`);
+  for (const problem of stripeProblems) lines.push(`  [!] ${problem}`);
+  return lines;
+}
+
+/** Renders the report for a terminal. Lines starting `[!]` need attention. */
+export function formatWebhookDiagnostics(report: WebhookDiagnosticReport): string {
+  const { health } = report;
+  return [
+    `Webhook diagnostics as of ${health.asOf} (window: ${health.windowHours}h)`,
+    ...health.providers.flatMap(providerLines),
+    ...metricLines(health.metrics),
+    ...(report.event ? eventLines(report.event) : []),
+    ...(report.organization ? organizationLines(report.organization) : []),
+  ].join('\n');
 }

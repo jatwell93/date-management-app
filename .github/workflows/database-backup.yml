@@ -84,7 +84,7 @@ jobs:
         run: node --test scripts/backup-retention.test.js
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4
+        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
 
       - name: Dump production (pg_dump, read-only)
         env:

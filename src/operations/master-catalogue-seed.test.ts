@@ -20,6 +20,7 @@ import {
   type PgliteInstance,
 } from '../database/migrations/pglite-client';
 import {
+  BlankingThresholdExceeded,
   CatalogueSeedValidationError,
   normalizeMasterCatalogueRows,
   resolveRetirementThreshold,
@@ -452,4 +453,90 @@ test('seeds a workbook larger than one upsert batch', async () => {
 
   assert.equal(result.inserted, 2500);
   assert.deepEqual(await counts(), { entries: 2500, active: 2500, runs: 1 });
+});
+
+// ===========================================================================
+// Blanked fields
+// ===========================================================================
+
+/** Ten products with prices, under a header whose price column is spelled `priceHeader`. */
+function pricedWorkbook(priceHeader: string, price: (n: number) => unknown = () => 9.99) {
+  return normalizeMasterCatalogueRows([
+    ['Description', 'API PDE', 'Barcode', 'Brand', priceHeader],
+    ...Array.from({ length: 10 }, (_, i) => [
+      `Product ${i + 1}`,
+      `api-${i + 1}`,
+      `93000000000${String(i + 1).padStart(2, '0')}`,
+      'Brand',
+      price(i + 1),
+    ]),
+  ]);
+}
+
+test('refuses a renamed price column that would null every stored price', async () => {
+  await seedMasterCatalogue(client, pricedWorkbook('RRP $'), OPTIONS);
+  const misspelled = pricedWorkbook('RRP');
+
+  const dryRun = await seedMasterCatalogue(client, misspelled, { ...OPTIONS, dryRun: true });
+  assert.equal(dryRun.blankedEntries, 10);
+  assert.deepEqual(dryRun.blankedFields, { rrp: 10 });
+  assert.equal(dryRun.updated, 10);
+
+  await assert.rejects(
+    () => seedMasterCatalogue(client, misspelled, OPTIONS),
+    (error: unknown) => {
+      assert.ok(error instanceof BlankingThresholdExceeded);
+      assert.deepEqual(
+        [error.blankedEntries, error.matchedEntries, error.proportion, error.threshold],
+        [10, 10, 1, 0.1],
+      );
+      assert.deepEqual(error.blankedFields, { rrp: 10 });
+      return true;
+    },
+  );
+  assert.deepEqual(await rows(`SELECT DISTINCT rrp FROM master_catalogue_entries`), [
+    { rrp: 9.99 },
+  ]);
+  assert.deepEqual(await counts(), { entries: 10, active: 10, runs: 1 });
+
+  // Confirmed, the operator gets exactly what they agreed to.
+  const confirmed = await seedMasterCatalogue(client, misspelled, {
+    ...OPTIONS,
+    confirmBlankedFields: true,
+  });
+  assert.equal(confirmed.blankedEntries, 10);
+  assert.deepEqual(await rows(`SELECT DISTINCT rrp FROM master_catalogue_entries`), [
+    { rrp: null },
+  ]);
+});
+
+test('lets a few blanked values through under the threshold and reports them', async () => {
+  await seedMasterCatalogue(client, pricedWorkbook('RRP $'), OPTIONS);
+
+  // One price withdrawn ("POA") out of ten is 0.1: at the threshold, not over it.
+  const result = await seedMasterCatalogue(
+    client,
+    pricedWorkbook('RRP $', (n) => (n === 3 ? 'POA' : 9.99)),
+    OPTIONS,
+  );
+
+  assert.equal(result.blankedEntries, 1);
+  assert.deepEqual(result.blankedFields, { rrp: 1 });
+  assert.deepEqual(await rows(`SELECT barcode FROM master_catalogue_entries WHERE rrp IS NULL`), [
+    { barcode: '9300000000003' },
+  ]);
+});
+
+test('counts only stored values lost, not new entries or values that were already empty', async () => {
+  await seedMasterCatalogue(client, workbook(product(1)), OPTIONS);
+
+  // Product 1 never had a Sigma or CH2 sku, and product 2 is new: nothing is blanked.
+  const result = await seedMasterCatalogue(client, workbook(product(1), product(2, { rrp: '' })), {
+    ...OPTIONS,
+    retirementThreshold: 0,
+  });
+
+  assert.equal(result.inserted, 1);
+  assert.equal(result.blankedEntries, 0);
+  assert.deepEqual(result.blankedFields, {});
 });

@@ -3392,6 +3392,34 @@ equivalent, a relocated home, or an explicit retirement decision.
       yet. The first manual run is the test. Likeliest first-run failure: `pg_restore
       --exit-on-error` into vanilla PostgreSQL if the Neon database carries an extension the image
       lacks.
+      <br>**3.4 review rework (2026-10-03).** Three bot findings acted on. **(A) Blanked fields — a
+      real defect, fixed more broadly than proposed.** Optional columns are matched by exact
+      header, so a renamed `RRP $` read as empty on every row and a live run would null every
+      stored price with no error; the retirement gate did not cover it. The proposed remedy —
+      require the two price headers — would leave the same hole on the other six optional
+      columns, and cannot be applied to all of them because the supplier sample itself has no
+      `CH2 PDE`. Instead the seeder counts, per optional field, existing entries that would go
+      from a value to none, reports them in every result (`blankedEntries`, `blankedFields`, so a
+      dry run shows them), and refuses a live run that blanks more than the threshold share of the
+      entries it matches unless `--confirm-blanked-fields` is passed. Header drift and format
+      drift (prices turning into text) are caught alike; a handful of withdrawn prices passes. Three
+      tests; five mutations each fail one. **(B) Restore target — real, fixed more strongly than
+      proposed.** `verify` refused only a byte-identical copy of `DATABASE_URL_UNPOOLED`, and that
+      variable is unset in the CI step and may be in a run by hand. The proposed same-host
+      comparison has the same dependency, so `verify` now allows only a loopback host, parsed with
+      `new URL` (exercised against nine URL shapes, including `localhost@evil.example.com` and
+      `localhost.evil.example.com`). The finding overstated the impact — without `--clean`,
+      `pg_restore --exit-on-error` stops at the first existing object rather than dropping the
+      schema — but statements before that point would still have run against the wrong database.
+      **(C) Action pinning — applied to the whole class.** `dopplerhq/cli-action@v4` is pinned to
+      `4819d808…` (v4.0.1) in all seven uses across four workflows, not only the new one; Dependabot's
+      `github-actions` ecosystem keeps SHA pins current. **Complexity report — partly acted on.**
+      Split where the split names something: the 19-branch report formatter into one renderer per
+      section (output pinned byte-for-byte by an existing test), the row reader and threshold
+      checks out of the seeder, a shared `withConnection` (4 tests) replacing the connect/close
+      block both CLIs had copied, and the per-table rule out of the tenant-scope check. Left alone:
+      two-operand range checks, a test body, and functions sitting exactly at the threshold.
+      `test:operations` is now 40 tests.
       <br>**To close 3.4:** (1) create the backup bucket and secrets, run the workflow by hand,
       and record the green run here; (2) run the read-only production query for the two gated
       rows — non-canonical `users.role` values and `uploads.status = 'complete'` — then delete

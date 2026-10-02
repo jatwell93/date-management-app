@@ -111,11 +111,12 @@ function keysFromListing(text) {
   }
   const contents = listing.Contents ?? [];
   if (!Array.isArray(contents)) throw new Error('Bucket listing has a non-array Contents');
-  return contents.map((object) => {
-    if (typeof object?.Key !== 'string')
-      throw new Error('Bucket listing has an object with no Key');
-    return object.Key;
-  });
+  return contents.map(keyOf);
+}
+
+function keyOf(object) {
+  if (typeof object?.Key !== 'string') throw new Error('Bucket listing has an object with no Key');
+  return object.Key;
 }
 
 async function readAll(stream) {

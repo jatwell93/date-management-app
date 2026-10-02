@@ -87,37 +87,27 @@ async function findTenantScopeViolations(pg: PGlite): Promise<string[]> {
     ORDER BY c.relname
   `);
 
-  const violations: string[] = [];
-  const seen = new Set<string>();
-  for (const row of result.rows) {
-    seen.add(row.table_name);
-    const unscoped = row.table_name in UNSCOPED_TABLES;
-    if (!row.has_column) {
-      if (!unscoped) {
-        violations.push(
-          `${row.table_name}: no organization_id column and not listed in UNSCOPED_TABLES`,
-        );
-      }
-      continue;
-    }
-    if (unscoped) {
-      violations.push(`${row.table_name}: listed in UNSCOPED_TABLES but has organization_id`);
-    }
-    if (!row.not_null) {
-      violations.push(`${row.table_name}: organization_id is nullable`);
-    }
-    if (!row.has_validated_fk) {
-      violations.push(
-        `${row.table_name}: organization_id has no validated foreign key to organizations(id)`,
-      );
-    }
+  const seen = new Set(result.rows.map((row) => row.table_name));
+  const staleEntries = Object.keys(UNSCOPED_TABLES)
+    .filter((table) => !seen.has(table))
+    .map((table) => `${table}: listed in UNSCOPED_TABLES but does not exist`);
+  return [...result.rows.flatMap(tableViolations), ...staleEntries];
+}
+
+function tableViolations(row: TableScopeRow): string[] {
+  const table = row.table_name;
+  const unscoped = table in UNSCOPED_TABLES;
+  if (!row.has_column) {
+    return unscoped
+      ? []
+      : [`${table}: no organization_id column and not listed in UNSCOPED_TABLES`];
   }
-  for (const table of Object.keys(UNSCOPED_TABLES)) {
-    if (!seen.has(table)) {
-      violations.push(`${table}: listed in UNSCOPED_TABLES but does not exist`);
-    }
-  }
-  return violations;
+  return [
+    unscoped && `${table}: listed in UNSCOPED_TABLES but has organization_id`,
+    !row.not_null && `${table}: organization_id is nullable`,
+    !row.has_validated_fk &&
+      `${table}: organization_id has no validated foreign key to organizations(id)`,
+  ].filter((violation): violation is string => typeof violation === 'string');
 }
 
 describe('tenant-ID integrity invariant', () => {

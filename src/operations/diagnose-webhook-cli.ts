@@ -29,7 +29,6 @@ import { Client } from 'pg';
 
 import {
   formatMigrationError,
-  MigrationExecutionError,
   validateMigrationTarget,
   type MigrationClient,
 } from '../database/migrations/runner';
@@ -44,6 +43,7 @@ import {
   type FetchLike,
   type WebhookDiagnosticReport,
 } from './webhook-diagnostics';
+import { withConnection } from './with-connection';
 
 export interface DiagnoseWebhookArgs {
   eventId?: string;
@@ -109,25 +109,38 @@ export async function buildWebhookDiagnosticReport(
   }
 
   if (args.organizationId !== undefined) {
-    const billing = await getOrganizationBilling(client, args.organizationId);
-    report.organization = { id: args.organizationId, billing };
-    const subscriptionId = billing?.subscription?.stripeSubscriptionId;
-    if (billing && subscriptionId && dependencies.stripeSecretKey) {
-      try {
-        const stripe = await fetchStripeSubscription(
-          dependencies.stripeSecretKey,
-          subscriptionId,
-          dependencies.fetchImpl,
-        );
-        report.organization.stripe = stripe;
-        report.organization.stripeProblems = compareWithStripe(billing, stripe);
-      } catch (error) {
-        report.organization.stripeError = error instanceof Error ? error.message : String(error);
-      }
-    }
+    report.organization = await diagnoseOrganization(client, args.organizationId, dependencies);
   }
 
   return report;
+}
+
+type OrganizationDiagnosis = NonNullable<WebhookDiagnosticReport['organization']>;
+
+/** The organization's stored billing and, when it can be looked up, Stripe's view of it. */
+async function diagnoseOrganization(
+  client: MigrationClient,
+  organizationId: string,
+  dependencies: DiagnoseWebhookDependencies,
+): Promise<OrganizationDiagnosis> {
+  const billing = await getOrganizationBilling(client, organizationId);
+  const diagnosis: OrganizationDiagnosis = { id: organizationId, billing };
+  const subscriptionId = billing?.subscription?.stripeSubscriptionId;
+  const { stripeSecretKey } = dependencies;
+  // Nothing to compare without a key to ask Stripe and a subscription to ask about.
+  if (!billing || !subscriptionId || !stripeSecretKey) return diagnosis;
+
+  try {
+    diagnosis.stripe = await fetchStripeSubscription(
+      stripeSecretKey,
+      subscriptionId,
+      dependencies.fetchImpl,
+    );
+    diagnosis.stripeProblems = compareWithStripe(billing, diagnosis.stripe);
+  } catch (error) {
+    diagnosis.stripeError = error instanceof Error ? error.message : String(error);
+  }
+  return diagnosis;
 }
 
 async function run(): Promise<void> {
@@ -152,35 +165,15 @@ async function run(): Promise<void> {
     keepAlive: true,
   });
 
-  await client.connect();
-  let report: WebhookDiagnosticReport | undefined;
-  let diagnosticError: unknown;
-  try {
+  const report = await withConnection(client, 'Diagnostics', async () => {
     await client.query('SET default_transaction_read_only = on');
     await verifyMigrationRole(client, process.env.MIGRATION_ROLE);
-    report = await buildWebhookDiagnosticReport(client, args, {
+    return buildWebhookDiagnosticReport(client, args, {
       asOf: new Date(),
       stripeSecretKey: process.env.STRIPE_SECRET_KEY,
       fetchImpl: (url, init) => fetch(url, init),
     });
-  } catch (error) {
-    diagnosticError = error;
-  }
-
-  try {
-    await client.end();
-  } catch (closeError) {
-    if (diagnosticError !== undefined) {
-      throw new MigrationExecutionError('Diagnostics failed and connection close also failed', [
-        diagnosticError,
-        closeError,
-      ]);
-    }
-    throw closeError;
-  }
-
-  if (diagnosticError !== undefined) throw diagnosticError;
-  if (report === undefined) throw new Error('Diagnostics finished without a report');
+  });
   process.stdout.write(
     `${args.json ? JSON.stringify(report, null, 2) : formatWebhookDiagnostics(report)}\n`,
   );

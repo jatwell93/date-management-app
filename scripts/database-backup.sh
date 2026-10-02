@@ -38,7 +38,7 @@
 #   POSTGRES_IMAGE               — image providing pg_dump/pg_restore/psql (all but prune/upload)
 #   BACKUP_DUMP_FILE             — dump path, default ./backup.dump
 #   DATABASE_URL_UNPOOLED        — dump: direct (non-pooled) source connection string
-#   RESTORE_CHECK_URL            — verify: scratch database to restore into (never the source)
+#   RESTORE_CHECK_URL            — verify: scratch database to restore into; must be on localhost
 #   BACKUP_R2_ACCOUNT_ID         — upload, prune: Cloudflare account id
 #   BACKUP_R2_ACCESS_KEY_ID      — upload, prune: R2 API token id scoped to the backup bucket
 #   BACKUP_R2_SECRET_ACCESS_KEY  — upload, prune: R2 API token secret
@@ -116,9 +116,26 @@ upload() {
 verify() {
   require POSTGRES_IMAGE RESTORE_CHECK_URL
   [ -s "$DUMP_FILE" ] || fail "No dump at $DUMP_FILE to verify"
-  if [ -n "${DATABASE_URL_UNPOOLED:-}" ] && [ "$RESTORE_CHECK_URL" = "$DATABASE_URL_UNPOOLED" ]; then
-    fail "RESTORE_CHECK_URL is the source database; refusing to restore over it"
-  fi
+
+  # The scratch database is always local. Allowlisting loopback is stronger
+  # than comparing against the source URL: it holds when DATABASE_URL_UNPOOLED
+  # is unset (as it is in this step in CI, and may be in a run by hand), and it
+  # cannot be defeated by a differently spelled connection string for the same
+  # server. Restoring into a real database is a deliberate `pg_restore`, per
+  # docs/database-backup-runbook.md — not something this subcommand does.
+  local restore_host
+  restore_host="$(RESTORE_CHECK_URL="$RESTORE_CHECK_URL" node -e '
+    try {
+      process.stdout.write(new URL(process.env.RESTORE_CHECK_URL).hostname.toLowerCase());
+    } catch {
+      process.stdout.write("");
+    }
+  ')"
+  case "$restore_host" in
+    localhost | 127.0.0.1 | "[::1]") ;;
+    "") fail "RESTORE_CHECK_URL is not a parseable connection URL" ;;
+    *) fail "RESTORE_CHECK_URL must point at a local scratch database (localhost); refusing to restore into ${restore_host}" ;;
+  esac
 
   PGURL="$RESTORE_CHECK_URL" docker run --rm --network host -e PGURL \
     -v "$(pwd)/${DUMP_FILE}:/backup.dump:ro" "$POSTGRES_IMAGE" \

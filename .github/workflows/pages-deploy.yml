@@ -43,7 +43,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4
+        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
 
       # Keep npm major in sync with the lockfile generator (see backend-test.yml).
       - name: Pin npm to match lockfile generator
@@ -151,7 +151,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4
+        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
 
       # Keep npm major in sync with the lockfile generator (see backend-test.yml).
       - name: Pin npm to match lockfile generator

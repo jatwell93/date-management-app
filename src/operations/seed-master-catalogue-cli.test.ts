@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  BlankingThresholdExceeded,
   CatalogueSeedValidationError,
   RetirementThresholdExceeded,
   type MasterCatalogueSeedResult,
@@ -17,10 +18,21 @@ test('parses a workbook path and supported flags', () => {
     workbookPath: 'catalogue.xlsx',
     dryRun: false,
     confirmRetirements: false,
+    confirmBlankedFields: false,
   });
   assert.deepEqual(
     parseSeedMasterCatalogueArgs(['--confirm-retirements', 'catalogue.xlsx', '--dry-run']),
-    { workbookPath: 'catalogue.xlsx', dryRun: true, confirmRetirements: true },
+    {
+      workbookPath: 'catalogue.xlsx',
+      dryRun: true,
+      confirmRetirements: true,
+      confirmBlankedFields: false,
+    },
+  );
+  assert.equal(
+    parseSeedMasterCatalogueArgs(['catalogue.xlsx', '--confirm-blanked-fields'])
+      .confirmBlankedFields,
+    true,
   );
 });
 
@@ -38,7 +50,7 @@ test('rejects missing paths, unknown flags, and multiple workbook paths', () => 
 });
 
 test('rejects a live production seed from the sample workbook, wherever it was copied', () => {
-  const live = { dryRun: false, confirmRetirements: true };
+  const live = { dryRun: false, confirmRetirements: true, confirmBlankedFields: true };
   for (const workbookPath of [
     'supplier-doc-examples/sample_100_ipa_price_brands.xlsx',
     '/tmp/SAMPLE_100_IPA_PRICE_BRANDS.XLSX',
@@ -72,6 +84,8 @@ test('preserves validation details and the prospective diff in CLI JSON', () => 
     errorCount: 1,
     errors: [{ row: 7, message: 'Duplicate barcode 123; first seen on row 2' }],
     retiredBarcodes: ['111', '222'],
+    blankedEntries: 1,
+    blankedFields: { rrp: 1 },
     dryRun: true,
     seedRunVersion: null,
   };
@@ -90,6 +104,21 @@ test('preserves validation details and the prospective diff in CLI JSON', () => 
       activeBefore: 100,
       proportion: 0.4,
       threshold: 0.1,
+    },
+  );
+  assert.deepEqual(
+    serializeSeedMasterCatalogueError(
+      new BlankingThresholdExceeded(30, 100, 0.3, 0.1, { rrp: 30, metroPrice: 30 }),
+    ),
+    {
+      name: 'BlankingThresholdExceeded',
+      message:
+        'Blanking stored values on 30 of 100 existing catalogue entries (0.3) exceeds threshold 0.1; fields: {"rrp":30,"metroPrice":30}',
+      blankedEntries: 30,
+      matchedEntries: 100,
+      proportion: 0.3,
+      threshold: 0.1,
+      blankedFields: { rrp: 30, metroPrice: 30 },
     },
   );
   assert.deepEqual(serializeSeedMasterCatalogueError(new Error('connect ECONNREFUSED')), {
