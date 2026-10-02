@@ -455,6 +455,24 @@ test('seeds a workbook larger than one upsert batch', async () => {
   assert.deepEqual(await counts(), { entries: 2500, active: 2500, runs: 1 });
 });
 
+test('refuses to plan against a stored barcode that was never formula-escaped', async () => {
+  // A row as a seeder without the escape would have stored it.
+  await pg.query(
+    `INSERT INTO master_catalogue_entries (barcode, description, brand_name)
+     VALUES ('-9300000000001', 'Legacy', 'Brand')`,
+  );
+  const parsed = workbook(['Legacy', 'api-1', '-9300000000001', 'Brand', 1]);
+  assert.equal(parsed.entries[0].barcode, "'-9300000000001");
+
+  for (const dryRun of [true, false]) {
+    await assert.rejects(
+      () => seedMasterCatalogue(client, parsed, { ...OPTIONS, dryRun }),
+      /1 stored barcode\(s\) are not formula-escaped and would not match the workbook: -9300000000001/,
+    );
+  }
+  assert.deepEqual(await counts(), { entries: 1, active: 1, runs: 0 });
+});
+
 // ===========================================================================
 // Blanked fields
 // ===========================================================================

@@ -3420,6 +3420,16 @@ equivalent, a relocated home, or an explicit retirement decision.
       block both CLIs had copied, and the per-table rule out of the tenant-scope check. Left alone:
       two-operand range checks, a test body, and functions sitting exactly at the threshold.
       `test:operations` is now 40 tests.
+      <br>**PR #557 CI + Seer (2026-10-03).** Backend Tests failed on one unrelated test:
+      `contract/inventory.test.ts` hard-coded expiry `2026-12-31`, which entered the markdown window
+      this month and read `Markdown 1`; it now uses today + 2 years. Seer, two findings, both
+      acted on: the backup `verify` mount prefixed `$(pwd)` to `BACKUP_DUMP_FILE`, breaking an
+      absolute path (now resolved to an absolute path; checked against a stub `docker`); and a
+      stored barcode that was never formula-escaped (`-123`) would not match the workbook's `'-123`,
+      so a seed would duplicate the entry and retire the original. The seeder now refuses to plan
+      — dry run included — while any stored barcode is not in escaped form, naming them. Not
+      silently rewritten: normalising a live identifier is an operator decision. Unlikely in
+      practice (real barcodes are digits), but cheap to rule out.
       <br>**To close 3.4:** (1) create the backup bucket and secrets, run the workflow by hand,
       and record the green run here; (2) run the read-only production query for the two gated
       rows — non-canonical `users.role` values and `uploads.status = 'complete'` — then delete

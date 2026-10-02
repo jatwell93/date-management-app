@@ -359,7 +359,29 @@ function classify(current: ExistingEntry | undefined, entry: MasterCatalogueSeed
   return entryMatches(current, entry) ? 'unchanged' : 'updated';
 }
 
+/**
+ * Refuses to plan against stored barcodes that are not in the form this
+ * seeder writes. Workbook barcodes are formula-escaped on the way in, so a
+ * legacy row stored raw as `-123` would not match the workbook's `'-123`: the
+ * run would insert a second entry for the same product and retire the
+ * original. Normalising such a row is a decision about live data, so it is
+ * reported rather than guessed at.
+ */
+function assertCanonicalBarcodes(existing: ExistingEntry[]): void {
+  const raw = existing
+    .map((entry) => entry.barcode)
+    .filter((barcode) => escapeSpreadsheetFormula(barcode) !== barcode);
+  if (raw.length > 0) {
+    throw new Error(
+      `${raw.length} stored barcode(s) are not formula-escaped and would not match the workbook: ` +
+        `${raw.slice(0, 10).join(', ')}${raw.length > 10 ? ', …' : ''}. ` +
+        `Prefix each with an apostrophe in master_catalogue_entries before seeding.`,
+    );
+  }
+}
+
 function planSeed(parsed: MasterCatalogueParseResult, existing: ExistingEntry[]): SeedPlan {
+  assertCanonicalBarcodes(existing);
   const workbookBarcodes = new Set(parsed.entries.map((entry) => entry.barcode));
   const existingByBarcode = new Map(existing.map((entry) => [entry.barcode, entry]));
   const retiredBarcodes = existing

@@ -137,8 +137,13 @@ verify() {
     *) fail "RESTORE_CHECK_URL must point at a local scratch database (localhost); refusing to restore into ${restore_host}" ;;
   esac
 
+  # Docker needs an absolute host path for the mount; BACKUP_DUMP_FILE may be
+  # either relative or absolute.
+  local dump_path
+  dump_path="$(cd "$(dirname "$DUMP_FILE")" && pwd)/$(basename "$DUMP_FILE")"
+
   PGURL="$RESTORE_CHECK_URL" docker run --rm --network host -e PGURL \
-    -v "$(pwd)/${DUMP_FILE}:/backup.dump:ro" "$POSTGRES_IMAGE" \
+    -v "${dump_path}:/backup.dump:ro" "$POSTGRES_IMAGE" \
     sh -c 'exec pg_restore --dbname="$PGURL" --no-owner --no-privileges --exit-on-error /backup.dump'
 
   local restored_ids counts
