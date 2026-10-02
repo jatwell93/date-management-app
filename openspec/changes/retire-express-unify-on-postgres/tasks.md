@@ -3253,6 +3253,149 @@ equivalent, a relocated home, or an explicit retirement decision.
       days / 10 files of retention — so with (b)'s 6-hour PITR reach and single snapshot,
       Neon-native alone is a reduction. The two current implementations also disagree on the backup
       destination path; settle that once.
+      <br>**3.4 decisions (user, 2026-10-02).** (1) The rebuilt operator tools are **root Node
+      CLIs** under `src/operations/`, compiled by the root `tsc` and connecting through `pg` — the
+      `migrate:*` pattern — not Worker routes: a Worker cannot read a local workbook, and an admin
+      route would need a platform-admin concept that does not exist. (2)
+      `export-excess-products.ts` is **retired, not rebuilt**: 3.1 rehomed the customer endpoint
+      `GET /api/products/export-excess`, which is the documented downgrade step; the operator-only
+      extras (`--tier` what-if, any organization without a session) are dropped deliberately.
+      (3) Backup is a **scheduled GitHub Actions `pg_dump` to R2 with 30-day retention** — a
+      restorable dump, which a Worker cannot produce — preserving the current posture rather than
+      accepting Neon's 6-hour reach. (4) The master-catalogue seeder keeps **`.xlsx` input through
+      `exceljs`**, not `xlsx@0.18.5`, whose npm build is unmaintained.
+      <br>**3.4a (tenant-ID invariant rehomed; 21 scripts retired; code landed).**
+      `workers/src/database.tenant-scope-invariant.pglite.node.test.ts` replaces `audit-org-ids.ts`.
+      It does not port the script's row counts — over an empty pglite database those pass whatever
+      the schema says. It asserts the constraints that make the rows impossible: every table in
+      `public` either carries `organization_id` as NOT NULL with a validated foreign key to
+      `organizations(id)` (23 tables) or is listed in `UNSCOPED_TABLES` with the reason it has no
+      tenant (12 tables). The script enumerated eight tables by hand, so a table added later was
+      never audited; here an unclassified table fails the suite. Five in-suite mutation cases
+      (column made nullable, FK dropped, FK re-added `NOT VALID`, new unscoped table, new table with
+      an unconstrained column) each assert the exact violation reported, and one behavioural case
+      confirms Postgres rejects a NULL tenant (`23502` on `organization_id`) and an unknown tenant
+      (`23503` on the FK) beside a control insert that succeeds.
+      <br>**Finding 18 is two-fifths open, not five-fifths.** The tenant-ID third of the production
+      query is discharged without running it: `migrate:verify` compares production to
+      `catalog-fingerprint.json` under the strict `ADOPTION_COMPARISON` profile with no column
+      exceptions (`verify.ts:133`), on every deploy (`migration-prep.yml:265`), and that fingerprint
+      records `organization_id` NOT NULL plus a validated FK on all 23 tenant tables. A NULL or
+      orphaned tenant id cannot exist in a database that passes verify. So `audit-org-ids.ts`,
+      `backfill-org-ids.ts` (and its hard-coded `DEFAULT_ORG_ID`) and `check-null-org-ids.ts` are
+      retired here. **Still gated on the read-only production query:** `backfill-canonical-roles.js`
+      (no CHECK constraint on `users.role`; 0014 normalised the values but nothing asserts they
+      stayed canonical) and `migrate-upload-status.ts` (`uploads.status` is unconstrained text).
+      <br>**Retired in this slice (21):** the ten superseded by the Phase 1 runner except
+      `seed-tier-feature-flags.js`; `migrate-production-simple.js`, `migrate-production-doppler.js`,
+      `backup.sh`; `neon-to-sqlite.ts`, `test-r2-connection.ts`, `debug-env.js`, `query-orgs.ts`;
+      the three tenant-ID scripts above; `export-excess-products.ts` per decision (2); and
+      `verify-csv-memory.ts`, retired deliberately — it drives the `csv-parse` library directly on
+      Node, so it never exercised application code and proves nothing about the Worker's import
+      path under an isolate. Commands removed from `backend/package.json`: `audit:org-ids`,
+      `export:neon-to-sqlite`, `export:excess-products`, `verify:neon`, `migrate:prod`. The
+      operator-CLI section of `docs/tier-downgrade-guide.md` went with the script it documented.
+      <br>**One correction to the 2.4 inventory.** It lists `seed-tier-feature-flags.js` as
+      retirable now. It is not: `.github/workflows/backend-test.yml:218` runs `npm run
+      seed:tier-flags` and `db:reset` chains it, so it seeds the SQLite database the Express suite
+      runs on. It joins `run-tests.js` as delete-with-the-backend. `migrate.js`, `setup.js` and
+      `seed-users.js` likewise stay until Phase 4 — they are the SQLite dev loop, and removing them
+      one at a time buys nothing.
+      <br>**3.4b (master-catalogue seeder rebuilt; code landed; closes the runner half of #393).**
+      `npm run seed:master-catalogue -- <workbook.xlsx> [--dry-run] [--confirm-retirements]` now
+      runs `src/operations/seed-master-catalogue-cli.ts`. The logic is split three ways so each
+      part is testable alone: `master-catalogue-seed.ts` (row normalisation, the diff, the
+      transaction — takes a `MigrationClient`, so `pg` in the CLI and pglite in tests),
+      `master-catalogue-workbook.ts` (the only `exceljs` importer) and the CLI (arguments, target
+      guards, JSON output). A live run uses the `migrate:seed` contract unchanged: allowlisted
+      direct connection, primary target kind, the dedicated migration role, and
+      `MIGRATION_SEED_CONFIRMATION` in production. `--dry-run` only reads and accepts any declared
+      target kind. The Express runner, its unit test and the backend `seed:master-catalogue`
+      command are deleted; `SeedService.seedMasterCatalogue` itself stays until Phase 4 with the
+      service file it shares with `seedDemoData`, now with no entry point.
+      <br>**Carried over unchanged:** upsert by barcode; retire-never-delete, reinstating the same
+      row id; a workbook with any validation error writes nothing; the retirement threshold
+      (`MASTER_CATALOGUE_RETIREMENT_THRESHOLD`, default 0.1, "exceeds" not "reaches") and
+      `--confirm-retirements`; the production refusal of the 100-row sample workbook; one
+      `catalogue_seed_runs` row per live run, in the same transaction as the catalogue writes.
+      <br>**Deliberately different from the Express seeder:** (1) changed rows go in as one
+      `jsonb_to_recordset` upsert per 1000 rather than one `UPDATE` per row inside a 600-second
+      Prisma transaction; (2) the run takes `LOCK TABLE master_catalogue_entries IN SHARE ROW
+      EXCLUSIVE MODE`, so two seeders cannot interleave and the counts are computed from the
+      snapshot the writes land on, while Worker readers are not blocked; (3) text fields are
+      formula-escaped with `shared/domain/csv-injection.ts` — the catalogue feeds brand and product
+      text to every tenant and the Express seeder stored it raw (the #473 control, applied at the
+      one ingestion point that fix did not reach); (4) a workbook missing a required column fails
+      once on the header instead of once per data row; (5) the two overlapping sample-workbook
+      guards are one, matched on file name so a copy outside the repository is refused too;
+      (6) the result carries `seedRunVersion`.
+      <br>**Tests:** `npm run test:operations` — 21 cases, the seeding ones on pglite with the
+      migrated schema, including the checked-in sample workbook read through `exceljs` (99 entries,
+      and a rerun that must count all 99 unchanged, which fails if a price does not round-trip
+      through `double precision`). Mutation-verified: replacing `ROLLBACK` with a no-op, `>` with
+      `>=` on the threshold, dropping the formula escape, dropping `retired_at = NULL` from the
+      upsert, dropping the barcode filter from the retirement `UPDATE`, and skipping every second
+      batch each fail a named test. `exceljs@4.4.0` is a root devDependency: 99 transitive
+      packages, last released 2023, one moderate advisory (transitive `uuid`, not reachable from a
+      workbook read). The 2.2 manifest section for the deleted CLI test is replaced by a note —
+      its four rows proposed `retire`; all four behaviours are rewritten instead.
+      <br>**Gap handed to 3.9:** `test:operations` runs in no workflow, and neither does
+      `test:migrations` — only `test:migrations:e2e` and `test:neon-scripts` are wired. 3.9's
+      migration-runner job is where both belong.
+      <br>**3.4c (webhook diagnostic rebuilt; code landed).** `npm run diagnose:webhook --
+      [--event-id <id>] [--org <id>] [--hours <n>] [--json]` runs
+      `src/operations/diagnose-webhook-cli.ts` over `webhook-diagnostics.ts`. Rebuilt around what
+      the Worker's tables mean rather than ported: `processed_webhook_events` and
+      `clerk_webhook_events` are claim ledgers since 0012/0015, so an event is reported as
+      completed, in flight, or **stranded** (uncompleted past the provider's stale window) — the
+      Express script predates claims and could only say whether a row existed, and it never looked
+      at Clerk at all. Handler failures come from `webhook_metrics`, because a failed delivery
+      releases its claim and leaves no ledger row. `--org` shows the stored subscription and, with
+      `STRIPE_SECRET_KEY` set, compares it to Stripe on the two facts that decide whether an event
+      can be attributed (customer id, and `metadata.organizationId` on the **customer**, where 3.8
+      found it lives); status is shown but never flagged, since a stored status may lag by design.
+      A failed Stripe call is recorded in the report rather than losing the database half. The
+      session sets `default_transaction_read_only` before its first query; guards are those of
+      `migrate:status`. Dropped: `--recent` and `--verbose` (the health section is always printed)
+      and the static troubleshooting text that pointed at `localhost:3001`;
+      `docs/webhook-troubleshooting.md` is updated to the new flags.
+      <br>**Tests:** 12 cases in `test:operations` on pglite, every row seeded at an explicit UTC
+      wall-clock time against a fixed `asOf` so claim ages and window edges are exact (a claim at
+      exactly 60 s is in flight, at 61 s stranded; 100 s is stranded for Stripe and in flight for
+      Clerk). Seven mutations each fail a named test. The two stale windows are restated in the
+      root module, which cannot import Worker source;
+      `workers/src/webhook-diagnostics-constants.node.test.ts` fails if they drift from
+      `STRIPE_WEBHOOK_STALE_CLAIM_SECONDS` / `CLERK_WEBHOOK_STALE_CLAIM_SECONDS`.
+      <br>**3.4d (backup reimplemented; code landed, NOT yet run).**
+      `.github/workflows/database-backup.yml` runs daily at 16:00 UTC and on demand:
+      `pg_dump` of production inside the pinned `postgres:17.10` image → upload to a private R2
+      bucket → restore into a scratch PostgreSQL service and check the restored migration ledger
+      is a non-empty prefix of `manifest.json` → prune. The steps are subcommands of
+      `scripts/database-backup.sh`; the key format and the deletion rule are
+      `scripts/backup-retention.js`. Retention is 30 days with a floor of the 10 newest backups,
+      so a month of failed runs cannot age out the last good ones; a key the script did not name
+      is never deleted. The dump is uploaded before it is verified and pruning runs only after
+      both, so a run that cannot prove its backup keeps the dump for inspection and deletes
+      nothing. This settles Finding 17's two points: the posture stays at 30 days, and the
+      destination is stated once (`postgres/date-management-<UTC timestamp>.dump`).
+      `backup.sh`, `database.backup.service.ts` and the operator route
+      `database.backup.routes.ts` have no Worker successor — on-demand backup is the workflow's
+      **Run workflow** button — and retire with the backend; 2.3 row 3 (scheduled backup) is
+      discharged by the schedule. Restore procedure: `docs/database-backup-runbook.md`.
+      <br>**What is and is not verified for 3.4d.** `backup-retention.js` has 12 tests (in
+      `test:tooling`, and run by the workflow itself before it trusts the script) and five
+      mutations each fail one. The shell script is syntax-checked and its guard paths exercised
+      (unknown subcommand, pooled connection string, missing secret). **The dump, restore, upload
+      and prune paths have never executed**: there is no Docker or AWS CLI on the development
+      machine, and the R2 bucket and its four Doppler secrets (`BACKUP_R2_ACCOUNT_ID`,
+      `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY`, `BACKUP_R2_BUCKET`) do not exist
+      yet. The first manual run is the test. Likeliest first-run failure: `pg_restore
+      --exit-on-error` into vanilla PostgreSQL if the Neon database carries an extension the image
+      lacks.
+      <br>**To close 3.4:** (1) create the backup bucket and secrets, run the workflow by hand,
+      and record the green run here; (2) run the read-only production query for the two gated
+      rows — non-canonical `users.role` values and `uploads.status = 'complete'` — then delete
+      `backfill-canonical-roles.js` and `migrate-upload-status.ts`.
 - [x] 3.5 Initialize the pglite conformance harness from the **authoritative Phase 1 migrations/baseline**
       instead of its embedded `SCHEMA_SQL`, and drop the SQLite comparison arm — conformance becomes "raw
       SQL vs shared TS on Postgres". The conformance tests already live in `workers/src/__tests__/`

@@ -228,17 +228,6 @@ The export includes:
 Products are selected oldest-first: the oldest products up to your tier limit
 are kept, and everything created after that point is what the export lists.
 
-### Via CLI Script (Admins)
-
-For administrators managing multiple organizations:
-
-```bash
-cd backend
-npm run export:excess-products -- --org <organization-id> --tier starter
-```
-
-This generates a CSV file with all products sorted by creation date (oldest first), making it easy to identify deletion candidates.
-
 ### CSV Export Format
 
 ```csv
