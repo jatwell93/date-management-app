@@ -17,10 +17,9 @@
  * This module is the mechanism, and all three package copies — Express, the
  * Worker and the frontend — now re-export it rather than restating it.
  *
- * One restatement survives on purpose: `backend/scripts/backfill-canonical-roles.js`
- * is CommonJS run by bare `node`, so it cannot import this module, and its
- * retirement is task 3.4's call rather than this change's. Its table is
- * annotated there with what it must mirror and why it cannot simply import.
+ * The last restatement, `backend/scripts/backfill-canonical-roles.js`, was
+ * retired in task 3.4: migration 0014 performs the same normalization inside
+ * the migration ledger.
  *
  * **Least privilege on the way in.** An unrecognized spelling normalizes to
  * `team_member`, never to a privileged role. That is why the alias table is
