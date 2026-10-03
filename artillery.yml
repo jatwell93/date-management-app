@@ -28,13 +28,19 @@ config:
     p95: 200 # p95 latency must be <200ms
     p99: 500 # p99 latency must be <500ms
 
-# Authenticated scenarios send LOAD_TEST_BEARER_TOKEN, a Clerk session JWT.
+# Authenticated scenarios send LOAD_TEST_BEARER_TOKEN, a Clerk session JWT;
+# the run refuses to start without one (requireBearerToken, below).
 # The Worker accepts only Clerk tokens; the old `/api/auth/login` step that
 # minted a local token was removed in #560 (that token was rejected by every
 # data route, so these scenarios only ever measured the 401 path). Clerk
 # session tokens are short-lived, so a run longer than the token's lifetime
-# measures 401s again for its tail — 401 stays an accepted status for that
-# reason, and an unset token measures the rejection path throughout.
+# measures 401s again for its tail. 401 stays an accepted status for that
+# reason, and every one is counted as auth.rejected in the report: a run with
+# a large auth.rejected count measured the rejection path, not the data path.
+before:
+  flow:
+    - function: 'requireBearerToken'
+
 scenarios:
   # Health check endpoint (no auth)
   - name: 'Health Check'
@@ -67,6 +73,7 @@ scenarios:
           url: '/api/users/me'
           headers:
             Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
+          afterResponse: 'countAuthRejections'
           expect:
             - statusCode: [200, 401]
             - contentType: json
@@ -79,6 +86,7 @@ scenarios:
           url: '/api/products?limit=10&offset=0'
           headers:
             Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
+          afterResponse: 'countAuthRejections'
           expect:
             - statusCode: [200, 401]
             - contentType: json
@@ -91,6 +99,7 @@ scenarios:
           url: '/api/dashboard'
           headers:
             Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
+          afterResponse: 'countAuthRejections'
           expect:
             - statusCode: [200, 401]
             - contentType: json

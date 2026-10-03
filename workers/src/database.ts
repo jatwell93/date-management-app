@@ -404,7 +404,6 @@ export interface User {
   id: number;
   email: string;
   name: string | null;
-  passwordHash: string;
   organizationId?: string;
   role: string;
   createdAt: Date;
@@ -1418,7 +1417,6 @@ export function createWorkersDatabase(env: Env): Database {
         SELECT id,
                email,
                username as "name",
-               ''::text as "passwordHash",
                organization_id as "organizationId",
                role,
                created_at as "createdAt",
