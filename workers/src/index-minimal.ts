@@ -158,8 +158,10 @@ function getAllowedRoles(env: Env): Set<string> {
 
 function isValidRole(role: string): boolean {
   // We don't have env here at all call sites; use the superset for validation
-  // and rely on the per-env getAllowedRoles for error messages. The DB column
-  // accepts any string, so the *gate* is the bigger risk than role validation.
+  // and rely on the per-env getAllowedRoles for error messages. Since 0018 the
+  // DB column also refuses anything outside this superset
+  // (`users_role_canonical`), so a value that slipped past this check would
+  // fail the insert rather than be stored.
   return ROLES_DEV.has(role);
 }
 

@@ -140,12 +140,12 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
 
     const ownUser = await sql`
       INSERT INTO users (organization_id, email, username, role, updated_at)
-      VALUES (${ORG}, 'a@example.com', 'user-a', 'member', NOW()) RETURNING id`;
+      VALUES (${ORG}, 'a@example.com', 'user-a', 'team_member', NOW()) RETURNING id`;
     ownUserId = Number(ownUser[0].id);
 
     const foreignUser = await sql`
       INSERT INTO users (organization_id, email, username, role, updated_at)
-      VALUES (${OTHER_ORG}, 'b@example.com', 'user-b', 'member', NOW()) RETURNING id`;
+      VALUES (${OTHER_ORG}, 'b@example.com', 'user-b', 'team_member', NOW()) RETURNING id`;
     foreignUserId = Number(foreignUser[0].id);
   });
 
@@ -318,7 +318,7 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       expect(result).toBeNull();
 
       const rows = await sql`SELECT role FROM users WHERE id = ${foreignUserId}`;
-      expect(rows[0].role).toBe('member');
+      expect(rows[0].role).toBe('team_member');
 
       // The role change and its audit row are one statement, so a refused
       // escalation must leave no trace either. Asserting the absence matters:

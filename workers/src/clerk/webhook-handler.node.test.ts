@@ -454,16 +454,18 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
     await deliver('msg_replay', event);
 
     // Mark the row so a re-run of the side effects is visible: the upsert would
-    // reset role and username from the payload.
-    await sql`UPDATE users SET role = ${'Sentinel'} WHERE clerk_user_id = ${'user_1'}`;
+    // reset username from the payload. (A username, not a role: since 0018 the
+    // role column refuses anything but a canonical value, so it cannot carry a
+    // marker no payload could produce.)
+    await sql`UPDATE users SET username = ${'Sentinel'} WHERE clerk_user_id = ${'user_1'}`;
     const completedAtBefore = (await marker('msg_replay'))?.completed_at;
 
     const response = await deliver('msg_replay', event);
 
     expect(response.status).toBe(200);
-    const rows = await sql`SELECT role FROM users WHERE clerk_user_id = ${'user_1'}`;
+    const rows = await sql`SELECT username FROM users WHERE clerk_user_id = ${'user_1'}`;
     expect(rows).toHaveLength(1);
-    expect(rows[0].role).toBe('Sentinel');
+    expect(rows[0].username).toBe('Sentinel');
     expect(await countSubscriptions()).toBe(1);
     // The replay did not re-stamp the marker either.
     expect((await marker('msg_replay'))?.completed_at).toEqual(completedAtBefore);

@@ -5778,6 +5778,12 @@
     },
     {
       "table": "users",
+      "name": "users_role_canonical",
+      "type": "c",
+      "definition": "CHECK ((role = ANY (ARRAY['admin'::text, 'manager'::text, 'team_member'::text])))"
+    },
+    {
+      "table": "users",
       "name": "users_role_not_null",
       "type": "n",
       "definition": "NOT NULL role"

@@ -22,7 +22,7 @@ applied.
 
 The history is a set of `NNNN_name.up.sql` / `NNNN_name.down.sql` pairs plus
 `database/migrations/manifest.json`, which is the declaration of intent for each migration.
-`0000_baseline` through `0017_processed_webhook_events_processed_at_idx` are installed today.
+`0000_baseline` through `0018_users_role_canonical` are installed today.
 
 A migration must be **replayable over its own result**. The documented forward-fix recovery path
 unstamps every migration above the one being fixed and re-applies them against the existing schema,

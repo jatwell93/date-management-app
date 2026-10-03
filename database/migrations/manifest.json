@@ -414,6 +414,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0018",
+      "forward": "0018_users_role_canonical.up.sql",
+      "transaction": "required",
+      "compatibility": "contract",
+      "dataLoss": "destructive",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0018_users_role_canonical.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "partial"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }
