@@ -58,7 +58,12 @@ export function register(config?: Config) {
 function registerValidSW(swUrl: string, config?: Config) {
   navigator.serviceWorker
     .register(swUrl)
-    .then((registration) => {
+    .then((registration: ServiceWorkerRegistration | undefined) => {
+      // Some environments (e.g. Playwright with serviceWorkers: 'block')
+      // stub register() so it resolves without a registration object.
+      if (!registration) {
+        return;
+      }
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker === null) {
