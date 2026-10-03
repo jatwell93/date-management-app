@@ -3090,7 +3090,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       `productId`, then uncorrelated report JOINs resolving it) has no Express analogue at all, so
       no manifest row predicted it. Work the remaining gates by exercising the Worker against real
       SQL; a row that says "no Worker test exists" is the most likely place to find a defect.
-- [ ] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
+- [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
       **Sequencing correction from 2.3 (Finding 9-R).** Finding 9 recorded that the Worker has "no
@@ -3229,6 +3229,25 @@ equivalent, a relocated home, or an explicit retirement decision.
       delayed/catch-up ticks. Verified: test:db 396 / 1 skipped (16 in the new file), dispatcher 14/14,
       typecheck, lint, format:check, `git diff --check` clean. **Pending (human):** deploy;
       confirm the first `saas-metrics-snapshot` row in `scheduled_job_runs` and `metrics_snapshots`.
+      <br>**Production check (2026-10-03, read-only, Neon SQL editor).** All seven jobs in
+      `scheduled_job_runs` are `succeeded` with `last_error` NULL, each within its cadence:
+      `trial-emails` 2026-10-02 22:00 UTC, `credit-claim-follow-ups` 23:00, `markdown-recalculation`
+      2026-10-03 00:00, `stripe-reconciliation` 01:00, `saas-metrics-snapshot` 02:00,
+      `credit-claim-photo-purge` 03:00, `webhook-monitoring` hourly (09:00). That covers the first
+      successful runs of the three 3.3b/3.3c jobs. `last_succeeded_at` reading a few seconds
+      *before* `last_started_at` is by design, not clock skew: it stores the tick's scheduled
+      instant (`dispatcher.ts:109`), while `last_started_at` is `NOW()` at lease time.
+      `metrics_snapshots` holds one row per day for 2026-09-30, 10-01 and 10-02, each dated the
+      day before it was written, all zero with `churn_rate` NULL — correct for a platform with no
+      paying customers and no prior month to baseline churn against. The 09-30 row was written at
+      23:00 on 10-01 rather than 02:00: the first tick after the 3.3c deploy, catching up the missed
+      day, as the dispatcher's catch-up rule intends.
+      <br>**Email delivery not observed, accepted (user, 2026-10-03).** Resend shows no sends: no
+      trial or credit claim has qualified for an email yet, so `trial-emails` and
+      `credit-claim-follow-ups` succeeded with nothing to enqueue. The queue → Resend path is covered
+      by the 3.3b tests (idempotency keys, reservation states, DLQ) but has not carried a production
+      message. The first real send is worth a glance in Resend.
+      <br>**CLOSED 2026-10-03.**
 - [x] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
       **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in
