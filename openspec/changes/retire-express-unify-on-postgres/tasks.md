@@ -3229,7 +3229,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       delayed/catch-up ticks. Verified: test:db 396 / 1 skipped (16 in the new file), dispatcher 14/14,
       typecheck, lint, format:check, `git diff --check` clean. **Pending (human):** deploy;
       confirm the first `saas-metrics-snapshot` row in `scheduled_job_runs` and `metrics_snapshots`.
-- [ ] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
+- [x] 3.4 Relocate/reimplement the operational scripts kept in 2.4 (including the backup capability);
       execute retirement of the rest.
       **2.4 output — the kept set is three scripts, not a directory.** Of the 30 files in
       `backend/scripts/`, 26 retire. Only `seed-master-catalogue.ts`, `diagnose-webhook.ts`, and
@@ -3430,10 +3430,20 @@ equivalent, a relocated home, or an explicit retirement decision.
       — dry run included — while any stored barcode is not in escaped form, naming them. Not
       silently rewritten: normalising a live identifier is an operator decision. Unlikely in
       practice (real barcodes are digits), but cheap to rule out.
-      <br>**To close 3.4:** (1) create the backup bucket and secrets, run the workflow by hand,
-      and record the green run here; (2) run the read-only production query for the two gated
-      rows — non-canonical `users.role` values and `uploads.status = 'complete'` — then delete
-      `backfill-canonical-roles.js` and `migrate-upload-status.ts`.
+      <br>**CLOSED 2026-10-03.** (1) **Backup proven on production**, run 37084226854 after #557
+      merged: dump 173,266 bytes → `postgres/date-management-20261003T011402Z.dump` (size
+      re-read from R2) → restored into scratch PostgreSQL 17 with ledger `18 migration(s), latest
+      0017` and `organizations=3 users=23 products=49 tier_feature_flags=54` → prune `1 kept, 0 to
+      delete`. The extension risk did not materialise. (2) **Production query** (Neon SQL editor,
+      read-only): `uploads.status = 'complete'` count 0, so `migrate-upload-status.ts` is deleted.
+      `users.role` returned **`user` × 18** — but `backfill-canonical-roles.js` has no mapping for
+      `user` and could not have fixed it, and the value is not legacy: the Worker writes it today
+      (`index-minimal.ts` `handleRegister` passes `role: 'user'`; `database.ts` `createUser`
+      defaults to it). A script cannot discharge a live writer, so the script is deleted and the
+      finding goes to an issue (unauthenticated `POST /api/auth/register` inserts users into the
+      oldest organization with a non-canonical role; no frontend caller). `normalizeRole` maps
+      `user` to `team_member`, so no row is over-privileged. `shared/domain/roles.ts` no longer
+      describes the deleted script as a surviving restatement.
 - [x] 3.5 Initialize the pglite conformance harness from the **authoritative Phase 1 migrations/baseline**
       instead of its embedded `SCHEMA_SQL`, and drop the SQLite comparison arm — conformance becomes "raw
       SQL vs shared TS on Postgres". The conformance tests already live in `workers/src/__tests__/`

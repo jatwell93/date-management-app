@@ -61,6 +61,10 @@ their privileges rather than merely looking untidy.
 
 ---
 
+> **Superseded (2026-10-03).** `backfill-canonical-roles.js` was deleted in task 3.4 of
+> `retire-express-unify-on-postgres`. Migration `0014_normalize_user_roles` performs this
+> normalization; the steps below are kept as a historical record only.
+
 Normalize any legacy role values (`Manager`, `owner`, `Staff`, etc.) in the `User` and `OrganizationInvite` tables to canonical values (`admin`, `manager`, `team_member`). The script is idempotent — safe to run multiple times.
 
 ### Step 1 — Dry Run (no writes)
