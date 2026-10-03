@@ -492,8 +492,8 @@ curl http://localhost:3001/database-metrics | jq .
 # Run tier flag seeding
 npm run seed:tier-flags
 
-# Run schema audit
-npm run audit:org-ids
+# Tenant-ID integrity (schema-enforced; asserted by the Worker conformance suite)
+npm run test:db
 
 # Diagnose webhook issues
 npm run diagnose:webhook

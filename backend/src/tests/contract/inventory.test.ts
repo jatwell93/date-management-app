@@ -72,9 +72,13 @@ afterAll(async () => {
 
 describe('POST /inventory-items', () => {
   it('should respond with a 201 status code and the created item', async () => {
+    // Relative, not a literal: a fixed date drifts into the markdown window as
+    // the calendar catches up (`2026-12-31` read `Markdown 1` from October 2026).
+    const expiry = new Date();
+    expiry.setUTCFullYear(expiry.getUTCFullYear() + 2);
     const newItem = {
       productId,
-      expiryDate: '2026-12-31',
+      expiryDate: expiry.toISOString().slice(0, 10),
       locationId,
     };
 
