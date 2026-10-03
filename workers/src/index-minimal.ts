@@ -302,8 +302,6 @@ const RE_STORAGE_QUOTA_USER = /^\/api\/storage-quota\/[^/]+$/;
 // handler and gets a 400 for a non-numeric id rather than a 404.
 const RE_PRODUCT_ID = /^\/api\/products\/[^/]+$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
-  ['POST', '/api/auth/login', handleLogin],
-  ['POST', '/api/auth/register', handleRegister],
   ['GET', '/api/users/me', handleGetCurrentUser],
   ['GET', '/api/users', handleListUsers],
   ['POST', '/api/users', handleCreateLegacyUser],
@@ -759,129 +757,12 @@ import {
 import { isReferentialError } from './tenant-references';
 import { SignJWT, jwtVerify } from 'jose';
 
-/**
- * Hash password using Web Crypto (edge-compatible)
- * Uses PBKDF2 which is available in Workers
- */
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-
-  const hash = await crypto.subtle.deriveBits(
-    {
-      name: 'PBKDF2',
-      salt: salt,
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    256,
-  );
-
-  // Combine salt and hash for storage
-  const combined = new Uint8Array(salt.length + new Uint8Array(hash).length);
-  combined.set(salt);
-  combined.set(new Uint8Array(hash), salt.length);
-
-  // Return as base64
-  return btoa(String.fromCharCode(...combined));
-}
-
-/**
- * Verify password against stored hash
- */
-async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  try {
-    const encoder = new TextEncoder();
-
-    // Decode stored hash
-    const combined = new Uint8Array(
-      atob(storedHash)
-        .split('')
-        .map((c) => c.charCodeAt(0)),
-    );
-
-    // Extract salt (first 16 bytes)
-    const salt = combined.slice(0, 16);
-    const storedHashBytes = combined.slice(16);
-
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(password),
-      'PBKDF2',
-      false,
-      ['deriveBits'],
-    );
-
-    const hash = await crypto.subtle.deriveBits(
-      {
-        name: 'PBKDF2',
-        salt: salt,
-        iterations: 100000,
-        hash: 'SHA-256',
-      },
-      keyMaterial,
-      256,
-    );
-
-    // Compare hashes
-    const hashBytes = new Uint8Array(hash);
-    if (hashBytes.length !== storedHashBytes.length) return false;
-
-    return hashBytes.every((byte, i) => byte === storedHashBytes[i]);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Verify bcrypt-style hash (for backward compatibility with existing users)
- * Note: Full bcrypt verification isn't available in Workers,
- * so we use a simple prefix check and assume valid for testing
- */
-async function verifyBcryptPassword(password: string, storedHash: string): Promise<boolean> {
-  // Check if it's a bcrypt hash (starts with $2a$, $2b$, etc.)
-  if (storedHash.startsWith('$2')) {
-    // For bcrypt hashes, we can't verify in Workers without native bindings
-    // In production, you'd either:
-    // 1. Migrate all users to PBKDF2 hashes
-    // 2. Use a Worker that calls an external service
-    // 3. Use Cloudflare's Password hashing API when available
-    console.warn('Bcrypt hash detected - cannot verify in Workers. Migration needed.');
-    return false;
-  }
-
-  // Try PBKDF2 verification
-  return verifyPassword(password, storedHash);
-}
-
 function requireJwtSecret(env: Env): Uint8Array {
   const secret = env.JWT_SECRET?.trim();
   if (!secret) {
     throw new Error('JWT_SECRET is required');
   }
   return new TextEncoder().encode(secret);
-}
-
-/**
- * Create JWT token using jose
- */
-async function createToken(userId: number, env: Env): Promise<string> {
-  const secret = requireJwtSecret(env);
-
-  return await new SignJWT({ userId })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('24h')
-    .setIssuedAt()
-    .sign(secret);
 }
 
 /**
@@ -941,119 +822,13 @@ async function verifyUploadToken(
 }
 
 /**
- * Extract and verify JWT token from Authorization header
- */
-async function authenticateRequest(request: Request, env: Env): Promise<{ userId: number } | null> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const secret = requireJwtSecret(env);
-  try {
-    const { payload } = await jwtVerify(token, secret);
-    return { userId: payload.userId as number };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * POST /api/auth/login
- */
-async function handleLogin(request: Request, db: Database, env: Env): Promise<Response> {
-  const body = (await request.json()) as { email: string; password: string };
-
-  if (!body.email || !body.password) {
-    return errorResponse('Email and password are required', 400, env);
-  }
-
-  const user = await db.findUserByEmail(body.email);
-
-  if (!user) {
-    return errorResponse('Invalid credentials', 401, env);
-  }
-
-  const validPassword = await verifyBcryptPassword(body.password, user.passwordHash);
-  if (!validPassword) {
-    return errorResponse('Invalid credentials', 401, env);
-  }
-
-  const token = await createToken(user.id, env);
-
-  return jsonResponse(
-    {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
-    },
-    200,
-    env,
-  );
-}
-
-/**
- * POST /api/auth/register
- */
-async function handleRegister(request: Request, db: Database, env: Env): Promise<Response> {
-  const body = (await request.json()) as { email: string; password: string; name: string };
-
-  if (!body.email || !body.password || !body.name) {
-    return errorResponse('Email, password, and name are required', 400, env);
-  }
-
-  const existingUser = await db.findUserByEmail(body.email);
-
-  if (existingUser) {
-    return errorResponse('Email already registered', 409, env);
-  }
-
-  const passwordHash = await hashPassword(body.password);
-  const emailPrefix =
-    body.email
-      .split('@')[0]
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '')
-      .slice(0, 24) || 'user';
-  const uniqueUsername = `${emailPrefix}-${Date.now().toString(36)}`;
-
-  const user = await db.createUser({
-    email: body.email,
-    passwordHash,
-    name: uniqueUsername,
-    role: 'user',
-  });
-
-  const token = await createToken(user.id, env);
-
-  return jsonResponse(
-    {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
-    },
-    201,
-    env,
-  );
-}
-
-/**
  * Authenticate an API request via Clerk and resolve the internal user record.
  * Returns either an authenticated context or an error Response (already with
  * CORS headers applied via errorResponse).
  *
- * The frontend now signs requests with Clerk RS256 JWTs, so the legacy
- * authenticateRequest (which expects a token signed with our local JWT_SECRET)
- * always returns null for those tokens. Repeated 401s cause the React app to
+ * The frontend signs requests with Clerk RS256 JWTs. The legacy local-JWT
+ * authenticator (tokens signed with JWT_SECRET, issued by the removed
+ * `/api/auth/login` and `/api/auth/register`, #560) returned null for those. Repeated 401s cause the React app to
  * treat the session as expired and sign the user out, bouncing to /login
  * immediately after a successful bootstrap.
  */
@@ -5156,7 +4931,7 @@ export async function handleUploadErrorReport(
   });
 }
 
-export { handleLogin, handleRegister, handleOrganizationBootstrap };
+export { handleOrganizationBootstrap };
 export { getClerkAuthorizedParties };
 
 type MarkdownConfigRow = {

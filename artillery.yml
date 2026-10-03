@@ -18,13 +18,6 @@ config:
     - duration: 60
       arrivalRate: 150
       name: 'Peak load'
-  payload:
-    path: './artillery-users.csv'
-    fields:
-      - 'email'
-      - 'password'
-    skipHeader: true
-    order: sequence
   processor: './artillery-processor.js'
   http:
     timeout: 10
@@ -35,10 +28,17 @@ config:
     p95: 200 # p95 latency must be <200ms
     p99: 500 # p99 latency must be <500ms
 
+# Authenticated scenarios send LOAD_TEST_BEARER_TOKEN, a Clerk session JWT.
+# The Worker accepts only Clerk tokens; the old `/api/auth/login` step that
+# minted a local token was removed in #560 (that token was rejected by every
+# data route, so these scenarios only ever measured the 401 path). Clerk
+# session tokens are short-lived, so a run longer than the token's lifetime
+# measures 401s again for its tail — 401 stays an accepted status for that
+# reason, and an unset token measures the rejection path throughout.
 scenarios:
   # Health check endpoint (no auth)
   - name: 'Health Check'
-    weight: 20
+    weight: 30
     flow:
       - get:
           url: '/health'
@@ -49,7 +49,7 @@ scenarios:
 
   # Health check with compression
   - name: 'Health Check (Gzip)'
-    weight: 10
+    weight: 15
     flow:
       - get:
           url: '/health'
@@ -59,79 +59,38 @@ scenarios:
             - statusCode: 200
             - hasHeader: 'content-encoding'
 
-  # Auth flow - Login
-  - name: 'User Login'
-    weight: 30
-    flow:
-      - post:
-          url: '/api/auth/login'
-          json:
-            email: '{{ email }}'
-            password: '{{ password }}'
-          expect:
-            - statusCode: 200
-            - contentType: json
-            - hasProperty: token
-          capture:
-            - json: '$.token'
-              as: 'authToken'
-
   # Get current user (requires auth)
   - name: 'Get Current User'
-    weight: 20
+    weight: 25
     flow:
-      - post:
-          url: '/api/auth/login'
-          json:
-            email: 'loadtest@example.com'
-            password: '{{ $processEnvironment.TEST_PASSWORD }}'
-          capture:
-            - json: '$.token'
-              as: 'authToken'
       - get:
           url: '/api/users/me'
           headers:
-            Authorization: 'Bearer {{ authToken }}'
+            Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
           expect:
             - statusCode: [200, 401]
             - contentType: json
 
   # Get products (requires auth)
   - name: 'Get Products'
-    weight: 15
+    weight: 20
     flow:
-      - post:
-          url: '/api/auth/login'
-          json:
-            email: 'loadtest@example.com'
-            password: '{{ $processEnvironment.TEST_PASSWORD }}'
-          capture:
-            - json: '$.token'
-              as: 'authToken'
       - get:
           url: '/api/products?limit=10&offset=0'
           headers:
-            Authorization: 'Bearer {{ authToken }}'
+            Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
           expect:
             - statusCode: [200, 401]
             - contentType: json
 
   # Get dashboard (complex query)
   - name: 'Get Dashboard'
-    weight: 5
+    weight: 10
     flow:
-      - post:
-          url: '/api/auth/login'
-          json:
-            email: 'loadtest@example.com'
-            password: '{{ $processEnvironment.TEST_PASSWORD }}'
-          capture:
-            - json: '$.token'
-              as: 'authToken'
       - get:
           url: '/api/dashboard'
           headers:
-            Authorization: 'Bearer {{ authToken }}'
+            Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
           expect:
             - statusCode: [200, 401]
             - contentType: json

@@ -94,9 +94,7 @@ export interface Database {
   sql: NeonQueryFunction<false, false>;
 
   // User queries
-  findUserByEmail(email: string): Promise<User | null>;
   findUserById(id: number): Promise<User | null>;
-  createUser(data: CreateUserData): Promise<User>;
 
   // Product queries.
   //
@@ -411,13 +409,6 @@ export interface User {
   role: string;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface CreateUserData {
-  email: string;
-  name?: string;
-  passwordHash: string;
-  role?: string;
 }
 
 // Field set kept aligned with the Prisma schema in
@@ -1422,23 +1413,6 @@ export function createWorkersDatabase(env: Env): Database {
     ...createCreditClaimDatabase(sql),
 
     // User queries
-    async findUserByEmail(email: string): Promise<User | null> {
-      const rows = await sql`
-        SELECT id,
-               email,
-               username as "name",
-               ''::text as "passwordHash",
-               organization_id as "organizationId",
-               role,
-               created_at as "createdAt",
-               updated_at as "updatedAt"
-        FROM users 
-        WHERE LOWER(email) = LOWER(${email})
-        LIMIT 1
-      `;
-      return (rows[0] as User) || null;
-    },
-
     async findUserById(id: number): Promise<User | null> {
       const rows = await sql`
         SELECT id,
@@ -1454,46 +1428,6 @@ export function createWorkersDatabase(env: Env): Database {
         LIMIT 1
       `;
       return (rows[0] as User) || null;
-    },
-
-    async createUser(data: CreateUserData): Promise<User> {
-      const rows = await sql`
-        WITH sync_sequence AS (
-          SELECT setval(
-            pg_get_serial_sequence('users', 'id'),
-            COALESCE((SELECT MAX(id) FROM users), 0) + 1,
-            false
-          )
-        ),
-        default_org AS (
-          SELECT id
-          FROM organizations
-          ORDER BY created_at ASC
-          LIMIT 1
-        )
-        INSERT INTO users (organization_id, email, username, role, created_at, updated_at)
-        SELECT default_org.id,
-               ${data.email.toLowerCase()},
-               ${data.name || null},
-               ${data.role || 'user'},
-               NOW(),
-               NOW()
-        FROM default_org, sync_sequence
-        RETURNING id,
-                  email,
-                  username as "name",
-                  ''::text as "passwordHash",
-                  organization_id as "organizationId",
-                  role,
-                  created_at as "createdAt",
-                  updated_at as "updatedAt"
-      `;
-
-      if (!rows[0]) {
-        throw new Error('No organization available for user provisioning');
-      }
-
-      return rows[0] as User;
     },
 
     // Product queries

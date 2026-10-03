@@ -236,7 +236,7 @@ curl -I \
 - `artillery.yml` - Full load test configuration with multiple scenarios
 - `artillery-quick.yml` - Quick health check test for CI/CD
 - `artillery-processor.js` - Custom metrics processor
-- `artillery-users.csv` - Test user credentials
+- `LOAD_TEST_BEARER_TOKEN` (environment) - Clerk session JWT for the authenticated scenarios (#560 removed the local login they used)
 - `analyze-load-test.js` - Statistical analysis script
 
 ### Results (100 Samples)
@@ -604,7 +604,7 @@ artillery report results.json --output report.html
 - `artillery.yml` - Full test configuration (warm-up, ramp-up, sustained, peak phases)
 - `artillery-quick.yml` - Fast smoke test
 - `artillery-processor.js` - Custom scenario hooks
-- `artillery-users.csv` - Test user credentials
+- `LOAD_TEST_BEARER_TOKEN` (environment) - Clerk session JWT for the authenticated scenarios (#560 removed the local login they used)
 
 ### Statistical Analysis
 
