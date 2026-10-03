@@ -286,8 +286,8 @@ async function runChecks(query) {
   //    result would assert compatibility the query never tested. Rows above the
   //    int4 range are guaranteed by the canonical reference data: migration 0010
   //    exists precisely because `storage_bytes` carries values up to 100 GB, and
-  //    `backend/scripts/seed-tier-flags.js:26,38` seeds the professional and
-  //    premium tiers with 10 GB / 1000 GB. An empty result therefore means the
+  //    `src/database/migrations/seed.ts:41-45` seeds every tier above free
+  //    with 10 GB or 100 GB. An empty result therefore means the
   //    restore is missing reference data or landed on a pre-0010 schema — both
   //    worth failing on.
   await record('tier_feature_flags_int8', async () => {

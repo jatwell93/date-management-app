@@ -26,7 +26,7 @@ Quick reference for common Stripe webhook problems and how to resolve them.
     **Diagnostic**:
 
 ```bash
-npm run diagnose:webhook -- --recent
+npm run diagnose:webhook
 ```
 
 ### 2) Missing organizationId in customer metadata
@@ -52,7 +52,7 @@ npm run diagnose:webhook -- --org <org_id>
     **Verification**:
 
 ```bash
-npm run diagnose:webhook -- --event-id <evt_id> --verbose
+npm run diagnose:webhook -- --event-id <evt_id>
 ```
 
 ### 4) Customer deleted
@@ -157,13 +157,13 @@ The system handles 8 webhook event types:
 
 ```bash
 # Check recent webhook health
-npm run diagnose:webhook -- --recent
+npm run diagnose:webhook
 
 # Investigate specific event
-npm run diagnose:webhook -- --event-id evt_1234567890 --verbose
+npm run diagnose:webhook -- --event-id evt_1234567890
 
 # Check specific organization
-npm run diagnose:webhook -- --org <org_id> --verbose
+npm run diagnose:webhook -- --org <org_id>
 ```
 
 ### Manual Database Queries

@@ -1,0 +1,123 @@
+name: Database Backup (pg_dump to R2)
+
+# Task 3.4 of `retire-express-unify-on-postgres` (2.4 Finding 17).
+#
+# Replaces the Express backup service, which kept 30 days of SQLite file copies.
+# Neon point-in-time recovery reaches back 6 hours on the current plan, so it
+# cannot stand in for that on its own. This workflow takes a daily `pg_dump` of
+# production, stores it in a private R2 bucket, proves it restores, and prunes
+# backups older than 30 days.
+#
+# This is a GitHub workflow and not a Worker Cron Trigger because a Worker
+# cannot run `pg_dump`: the alternative would be a table-by-table export, which
+# is not something `pg_restore` can turn back into a database.
+#
+# Step order is deliberate:
+#   dump -> upload -> verify -> prune
+# The dump is uploaded BEFORE it is verified, so a dump that fails its restore
+# check is still in the bucket for inspection. Pruning comes last and only runs
+# if everything before it succeeded — a run that could not prove its own backup
+# must not delete the older ones.
+#
+# All logic lives in scripts/database-backup.sh (one subcommand per step) and
+# scripts/backup-retention.js. Restore procedure: docs/database-backup-runbook.md.
+#
+# Secrets (Doppler, production config):
+#   DATABASE_URL_UNPOOLED, BACKUP_R2_ACCOUNT_ID, BACKUP_R2_ACCESS_KEY_ID,
+#   BACKUP_R2_SECRET_ACCESS_KEY, BACKUP_R2_BUCKET
+on:
+  schedule:
+    # 16:00 UTC — 02:00 or 03:00 in Sydney, outside store hours.
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One backup at a time. A manual run during the scheduled one queues behind it
+# rather than cancelling it mid-upload.
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+env:
+  # Same image and digest as migrations-e2e.yml, which pins it to match the
+  # production Neon project's PostgreSQL 17. pg_dump must not be older than the
+  # server it dumps; bump both workflows together.
+  POSTGRES_IMAGE: postgres:17.10-trixie@sha256:cb875afe6d2e8593c28c22d37d0fd7aaf035c43a42e2f7792cd4c09ceb6beac5
+
+jobs:
+  backup:
+    name: Back up production PostgreSQL
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    services:
+      # Scratch database the dump is restored into. Never the source.
+      postgres:
+        image: postgres:17.10-trixie@sha256:cb875afe6d2e8593c28c22d37d0fd7aaf035c43a42e2f7792cd4c09ceb6beac5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restore_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # The retention script decides what gets deleted. Its tests run here, in
+      # the job that is about to trust it, so a broken rule fails before any
+      # object is touched.
+      - name: Test the retention script
+        run: node --test scripts/backup-retention.test.js
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
+
+      - name: Dump production (pg_dump, read-only)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: doppler run -- bash scripts/database-backup.sh dump
+
+      - name: Upload the dump to R2
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: doppler run -- bash scripts/database-backup.sh upload
+
+      # No Doppler here: this step needs no production secret, so it gets none.
+      - name: Verify the dump restores
+        env:
+          RESTORE_CHECK_URL: postgresql://postgres:postgres@localhost:5432/restore_check
+        run: bash scripts/database-backup.sh verify
+
+      - name: Prune backups past retention
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: doppler run -- bash scripts/database-backup.sh prune
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Database backup"
+            echo ""
+            if [ -f backup-key.txt ]; then
+              echo "Uploaded: \`$(cat backup-key.txt)\`"
+            else
+              echo "No backup was uploaded by this run."
+            fi
+            echo ""
+            echo "Restore procedure: \`docs/database-backup-runbook.md\`"
+          } >> "$GITHUB_STEP_SUMMARY"
