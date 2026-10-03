@@ -337,21 +337,34 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
      * but the gate normalizes too, so a database that has not run it yet (or a
      * replica mid-rollout) still admits the person the row plainly describes.
      *
+     * Since migration 0018 a migrated database refuses the spelling outright
+     * (`users_role_canonical`), so this case simulates one that has not run
+     * 0018 yet: the constraint is dropped for the test and restored after it.
+     *
      * Mutation check: restoring the raw `role === 'admin'` comparison turns
      * this into a 403.
      */
     it('admits an admin whose row still holds the pre-migration spelling', async () => {
-      await sql`
-        INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
-        VALUES (${ORG}, 'clerk-legacy-admin', 'legacy', 'legacy@a.test', 'Manager', NOW())`;
-      await sql`
-        INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
-        VALUES (${ORG}, 'professional', 'active', NOW())`;
+      await sql`ALTER TABLE users DROP CONSTRAINT users_role_canonical`;
+      try {
+        await sql`
+          INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
+          VALUES (${ORG}, 'clerk-legacy-admin', 'legacy', 'legacy@a.test', 'Manager', NOW())`;
+        await sql`
+          INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
+          VALUES (${ORG}, 'professional', 'active', NOW())`;
 
-      const response = await postUser('team_member', 'clerk-legacy-admin');
+        const response = await postUser('team_member', 'clerk-legacy-admin');
 
-      expect(response.status).toBe(201);
-      expect(await readAudit()).toHaveLength(1);
+        expect(response.status).toBe(201);
+        expect(await readAudit()).toHaveLength(1);
+      } finally {
+        // The legacy row must go before the constraint can be validated again.
+        await sql`DELETE FROM users WHERE role NOT IN ('admin', 'manager', 'team_member')`;
+        await sql`
+          ALTER TABLE users ADD CONSTRAINT users_role_canonical
+          CHECK (role IN ('admin', 'manager', 'team_member'))`;
+      }
     });
 
     /**

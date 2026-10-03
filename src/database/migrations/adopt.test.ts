@@ -207,7 +207,7 @@ function applyOptions() {
     deploymentSha: TEST_DEPLOYMENT_SHA,
     mode: 'apply' as const,
     fingerprintPath: FINGERPRINT_PATH,
-    adoptionConfirmation: 'ADOPT test-host/test-db AT 0017',
+    adoptionConfirmation: 'ADOPT test-host/test-db AT 0018',
     targetHost: 'test-host',
     targetDatabase: 'test-db',
   };
@@ -227,7 +227,7 @@ test('dry-run adoption on a matching database reports canAdopt', async () => {
 
     assert.equal(report.canAdopt, true);
     assert.equal(report.ledgerAlreadyPopulated, false);
-    assert.equal(report.adoptionPoint, '0017');
+    assert.equal(report.adoptionPoint, '0018');
     assert.deepEqual(
       report.wouldStamp,
       history.map(({ id }) => id),
@@ -384,7 +384,7 @@ test('approved adoption requires explicit confirmation', async () => {
         deploymentSha: TEST_DEPLOYMENT_SHA,
         mode: 'apply',
         fingerprintPath: FINGERPRINT_PATH,
-        adoptionConfirmation: 'ADOPT test-host/test-db AT 0017',
+        adoptionConfirmation: 'ADOPT test-host/test-db AT 0018',
       }),
       /requires targetHost and targetDatabase/,
     );
@@ -404,7 +404,7 @@ test('wrong adoption confirmation is rejected', async () => {
         deploymentSha: TEST_DEPLOYMENT_SHA,
         mode: 'apply',
         fingerprintPath: FINGERPRINT_PATH,
-        adoptionConfirmation: 'ADOPT wrong-host/wrong-db AT 0017',
+        adoptionConfirmation: 'ADOPT wrong-host/wrong-db AT 0018',
         targetHost: 'test-host',
         targetDatabase: 'test-db',
       }),
