@@ -5,9 +5,7 @@ import { neon } from '@neondatabase/serverless';
 import { healthCheck } from './health';
 import {
   default as worker,
-  handleLogin,
   handleOrganizationBootstrap,
-  handleRegister,
   handleUploadComplete,
   handleUploadDirect,
   handleCatalogueImportQueue,
@@ -477,6 +475,38 @@ describe('API config guard', () => {
     const body = (await response.json()) as any;
     expect(body.error || body.message).toBe('Not Found');
     expect(JSON.stringify(body)).not.toContain('Test error from Cloudflare Workers');
+  });
+
+  // #560: the pre-Clerk password routes created users with no authentication,
+  // in whichever organization was oldest, with the non-canonical role 'user'.
+  // A well-formed body is the case that matters: it is what reached the insert.
+  it.each([
+    ['/api/auth/register', { email: 'new@example.com', password: 'pass', name: 'New' }],
+    ['/api/auth/login', { email: 'user@example.com', password: 'pass' }],
+  ])('does not route the removed legacy auth endpoint %s', async (path, payload) => {
+    const testEnv = {
+      ...env,
+      JWT_SECRET: 'test-secret',
+      NEON_CONNECTION_STRING: 'postgresql://user:password@db.example.com/app?sslmode=require',
+    } as Env;
+    const ctx = {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn(),
+    } as unknown as ExecutionContext;
+
+    const response = await worker.fetch(
+      new Request(`https://example.com${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      testEnv,
+      ctx,
+    );
+
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as any;
+    expect(body.error || body.message).toBe('Not Found');
   });
 });
 
@@ -1706,81 +1736,6 @@ describe('Auth input validation', () => {
     expect(response.status).toBe(401);
     const body = (await response.json()) as any;
     expect(body.error || body.message).toBeTruthy();
-  });
-
-  const createDb = (overrides: Partial<Database> = {}) =>
-    ({
-      sql: {} as any,
-      findUserByEmail: vi.fn().mockResolvedValue(null),
-      findUserById: vi.fn(),
-      createUser: vi.fn().mockResolvedValue({
-        id: 1,
-        email: 'user@example.com',
-        name: 'User',
-        passwordHash: 'hash',
-        role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }),
-      findProducts: vi.fn(),
-      findProductById: vi.fn(),
-      countProducts: vi.fn(),
-      findInventoryItems: vi.fn(),
-      countInventoryItems: vi.fn(),
-      findStoreAreas: vi.fn(),
-      getDashboardStats: vi.fn(),
-      ...overrides,
-    }) as unknown as Database;
-
-  it('returns 400 when login body is missing fields', async () => {
-    const request = new Request('https://example.com/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com' }),
-    });
-
-    const response = await handleLogin(request, createDb(), envForAuth);
-    expect(response.status).toBe(400);
-    const body = (await response.json()) as any;
-    expect(body.error).toBe('Email and password are required');
-  });
-
-  it('returns 400 when register body is missing fields', async () => {
-    const request = new Request('https://example.com/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', password: 'pass' }),
-    });
-
-    const response = await handleRegister(request, createDb(), envForAuth);
-    expect(response.status).toBe(400);
-    const body = (await response.json()) as any;
-    expect(body.error).toBe('Email, password, and name are required');
-  });
-
-  it('returns 409 when registering existing email', async () => {
-    const request = new Request('https://example.com/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', password: 'pass', name: 'User' }),
-    });
-
-    const db = createDb({
-      findUserByEmail: vi.fn().mockResolvedValue({
-        id: 1,
-        email: 'user@example.com',
-        name: 'User',
-        passwordHash: 'hash',
-        role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }),
-    });
-
-    const response = await handleRegister(request, db, envForAuth);
-    expect(response.status).toBe(409);
-    const body = (await response.json()) as any;
-    expect(body.error).toBe('Email already registered');
   });
 });
 

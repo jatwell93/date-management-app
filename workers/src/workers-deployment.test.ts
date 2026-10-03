@@ -46,18 +46,22 @@ describe('Workers Preview Deployment', () => {
   });
 
   describe('Authentication Endpoints', () => {
-    it('should return 400 for login without credentials', async () => {
-      try {
-        const response = await fetch(`${PREVIEW_URL}/api/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        expect([400, 401, 500]).toContain(response.status);
-      } catch (error) {
-        console.warn('⚠️  Login endpoint test skipped - Worker may not be deployed');
-      }
-    });
+    // #560: the local password routes are gone; identity is Clerk only.
+    it.each(['/api/auth/login', '/api/auth/register'])(
+      'does not serve the removed legacy route %s',
+      async (path) => {
+        try {
+          const response = await fetch(`${PREVIEW_URL}${path}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'probe@example.com', password: 'x', name: 'x' }),
+          });
+          expect(response.status).toBe(404);
+        } catch (error) {
+          console.warn('⚠️  Legacy auth route check skipped - Worker may not be deployed');
+        }
+      },
+    );
   });
 
   describe('Expired Items Routes', () => {
