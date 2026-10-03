@@ -270,6 +270,81 @@ describe('healthCheck', () => {
   });
 });
 
+describe('liveness and readiness probes', () => {
+  const probeEnv = (overrides: Partial<Env> = {}): Env =>
+    ({
+      NODE_ENV: 'development',
+      STORAGE_PROVIDER: 'r2',
+      NEON_CONNECTION_STRING: 'postgres://example',
+      JWT_SECRET: 'test-secret',
+      CLERK_WEBHOOK_SECRET: 'whsec_test',
+      R2_ACCOUNT_ID: 'test',
+      R2_ACCESS_KEY_ID: 'test',
+      R2_SECRET_ACCESS_KEY: 'test',
+      R2_BUCKET_NAME: 'test',
+      ...overrides,
+    }) as unknown as Env;
+
+  const get = (path: string, e: Env) =>
+    worker.fetch(new Request(`https://example.com${path}`), e, {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext);
+
+  it.each(['/live', '/api/live'])(
+    '%s answers alive without touching the database',
+    async (path) => {
+      vi.mocked(neon).mockClear();
+      const response = await get(path, probeEnv({ NEON_CONNECTION_STRING: undefined }));
+
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as any).status).toBe('alive');
+      expect(neon).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/ready', '/api/ready'])('%s is ready when SELECT 1 returns a row', async (path) => {
+    vi.mocked(neon).mockReturnValueOnce(stubNeonQuery(() => Promise.resolve([{ '?column?': 1 }])));
+    const response = await get(path, probeEnv());
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as any).status).toBe('ready');
+  });
+
+  it('/ready is 503 when the database query fails, without echoing the error', async () => {
+    vi.mocked(neon).mockReturnValueOnce(
+      stubNeonQuery(() => Promise.reject(new Error('password authentication failed'))),
+    );
+    const response = await get('/ready', probeEnv());
+
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as any;
+    expect(body.status).toBe('not ready');
+    expect(JSON.stringify(body)).not.toContain('password');
+  });
+
+  it('/ready is 503 when no database connection string is configured', async () => {
+    const response = await get('/ready', probeEnv({ NEON_CONNECTION_STRING: undefined }));
+
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as any).status).toBe('not ready');
+  });
+
+  it('/ready stays ready when only R2 is down', async () => {
+    vi.mocked(neon).mockReturnValueOnce(stubNeonQuery(() => Promise.resolve([{ '?column?': 1 }])));
+    const response = await get(
+      '/ready',
+      probeEnv({
+        CSV_UPLOADS: {
+          list: vi.fn().mockRejectedValue(new Error('R2 down')),
+        } as unknown as R2Bucket,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+});
+
 describe('API config guard', () => {
   it('returns 500 when database config is missing for /api/products', async () => {
     const response = await SELF.fetch('https://example.com/api/products');

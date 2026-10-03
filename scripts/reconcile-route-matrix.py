@@ -59,6 +59,11 @@ for pathname in re.findall(r"\['(/api/webhooks/[a-z]+|/webhooks/[a-z]+)'", idx):
 live.append(('POST', 'exact', '/api/organization/bootstrap'))
 live.append(('GET', 'exact', '/health'))
 live.append(('GET', 'exact', '/api/health'))
+# Orchestrator probes, dispatched beside /health. Derived from the source so a
+# deleted handler stops counting as live.
+for probe in ('/live', '/api/live', '/ready', '/api/ready'):
+    if "pathname === '%s'" % probe in idx:
+        live.append(('GET', 'exact', probe))
 
 # Upload router: base is /upload or /api/upload.
 for base in ('/upload', '/api/upload'):

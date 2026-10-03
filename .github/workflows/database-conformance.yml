@@ -1,0 +1,340 @@
+name: Database Conformance
+
+# Task 3.9 of `retire-express-unify-on-postgres`: the one required database
+# conformance gate for the unified Postgres stack.
+#
+# Required check: "Database Conformance Gate". Do NOT require the individual
+# jobs. A *skipped* job counts as SUCCESS for a required check, so the gate job
+# runs `if: always()` and inspects the real results (same pattern as
+# workers-test.yml and migrations-e2e.yml).
+#
+# Two jobs run on every pull request / push to main (no `paths:` filter, so the
+# check always reports; `changes` does path detection in-workflow):
+#
+#   worker-conformance  - Worker PGlite real-SQL suites (`npm run test:db`).
+#   migration-runner    - migration-runner unit suites, the operator CLI suites,
+#                         and the runner end-to-end suite against an ephemeral
+#                         PostgreSQL service container. No production secrets.
+#
+# Both FAIL, never skip, when the database is unavailable: the service container
+# has a health check, and the e2e suite fails closed when its env vars are unset.
+#
+# `neon-compatibility` is separate, scheduled, and NOT part of the gate: it needs
+# a Neon API key, which pull requests never receive. It creates an isolated
+# branch, runs the migration runner against it, and deletes the branch in an
+# `if: always()` step.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  schedule:
+    # Daily, off the hour to avoid the top-of-hour GitHub Actions queue.
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('db-conformance-pr-{0}', github.ref) || format('db-conformance-{0}-{1}', github.event_name, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: Detect database-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      database: ${{ steps.filter.outputs.database }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          # Deliberately NOT `set -e`: every failure path must fall back to
+          # RUNNING the tests. See workers-test.yml for the full reasoning.
+          set -u
+
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "::error::GITHUB_OUTPUT is unset; cannot publish detection result."
+            exit 1
+          fi
+
+          run_tests() {
+            echo "$1"
+            echo "database=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          # Scheduled and manual runs have no diff to inspect: always run.
+          if [ "$EVENT" != "pull_request" ] && [ "$EVENT" != "push" ]; then
+            run_tests "Event ${EVENT} has no diff; running database conformance."
+          fi
+
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_AFTER"
+          fi
+
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            run_tests "Base commit unavailable; running database conformance."
+          fi
+
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            run_tests "Base commit ${base} not found; running database conformance."
+          fi
+
+          if ! changed=$(git diff --name-only "$base" "$head" 2>&1); then
+            run_tests "git diff failed (${changed}); running database conformance."
+          fi
+
+          # Workers and shared code, the authoritative migrations and schemas,
+          # the migration runner and operator tools, root package/lock files, and
+          # this workflow itself (a change to a step must be exercised by it).
+          pattern='^(workers|shared)/|^database/|^src/(database|operations)/|^package(-lock)?\.json$|^tsconfig[^/]*\.json$|^\.github/workflows/database-conformance\.yml$'
+          if printf '%s\n' "$changed" | grep -qE "$pattern"; then
+            echo "database=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "database=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  worker-conformance:
+    name: Worker PGlite Conformance
+    needs: changes
+    if: needs.changes.outputs.database == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./workers
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: workers/package-lock.json
+
+      # Dependabot regenerates lockfiles with npm 11; Node 22 ships npm 10.
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      # PGlite runs Postgres in-process (WASM): no service and no credentials.
+      # It applies the real root migrations, so a migration that breaks the
+      # Worker's queries fails here.
+      - name: Run Worker real-SQL (PGlite) tests
+        run: npm run test:db
+        timeout-minutes: 15
+
+  migration-runner:
+    name: Migration Runner (PostgreSQL service)
+    needs: changes
+    if: needs.changes.outputs.database == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Same image as migrations-e2e.yml: pinned by amd64 digest to match
+    # production Neon (PG 17). Bump tag and digest together there and here.
+    services:
+      postgres:
+        image: postgres:17.10-trixie@sha256:cb875afe6d2e8593c28c22d37d0fd7aaf035c43a42e2f7792cd4c09ceb6beac5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: migration_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fail rather than skip when the service is unreachable. The container
+      # health check gates job start; this makes the failure explicit.
+      - name: Verify PostgreSQL service is reachable
+        run: |
+          for i in $(seq 1 30); do
+            if (echo > /dev/tcp/127.0.0.1/5432) 2>/dev/null; then
+              echo "PostgreSQL service is accepting connections."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::PostgreSQL service container is not reachable on 5432."
+          exit 1
+
+      - name: Run migration-runner suites
+        run: npm run test:migrations
+
+      - name: Run operator tool suites
+        run: npm run test:operations
+
+      - name: Run migration runner end-to-end suite
+        env:
+          MIGRATION_E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/migration_e2e
+          MIGRATION_E2E_CONFIRMATION: DROP migration_e2e AT localhost
+        run: npm run test:migrations:e2e
+
+  # THE required status check.
+  gate:
+    name: Database Conformance Gate
+    if: always()
+    needs: [changes, worker-conformance, migration-runner]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate database conformance job results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DATABASE_CHANGED: ${{ needs.changes.outputs.database }}
+          WORKER_RESULT: ${{ needs.worker-conformance.result }}
+          RUNNER_RESULT: ${{ needs.migration-runner.result }}
+        run: |
+          set -u
+          echo "changes=${CHANGES_RESULT} database_changed=${DATABASE_CHANGED:-<unset>}"
+          echo "worker-conformance=${WORKER_RESULT} migration-runner=${RUNNER_RESULT}"
+
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate rather than letting skipped jobs pass as success."
+            exit 1
+          fi
+
+          if [ "${DATABASE_CHANGED:-}" != "true" ]; then
+            echo "No database-relevant changes detected - gate passes with jobs skipped."
+            exit 0
+          fi
+
+          status=0
+          for pair in "Worker PGlite Conformance:${WORKER_RESULT}" "Migration Runner:${RUNNER_RESULT}"; do
+            name=${pair%%:*}
+            result=${pair#*:}
+            if [ "$result" != "success" ]; then
+              echo "::error::${name} did not succeed (result: ${result})."
+              status=1
+            fi
+          done
+          exit $status
+
+  # Scheduled compatibility check against real Neon. Not part of the gate.
+  #
+  # Needs repository secret NEON_API_KEY and repository variables
+  # NEON_PROJECT_ID and NEON_COMPAT_PARENT_BRANCH_ID (a non-production branch to
+  # fork from, so no production data is copied into CI). The job fails when any
+  # is unset: a compatibility job that silently skips proves nothing.
+  neon-compatibility:
+    name: Neon Compatibility (scheduled)
+    needs: changes
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      NEON_PARENT_BRANCH_ID: ${{ vars.NEON_COMPAT_PARENT_BRANCH_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require Neon configuration
+        run: |
+          missing=0
+          for v in NEON_API_KEY NEON_PROJECT_ID NEON_PARENT_BRANCH_ID; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::${v} is not configured; the Neon compatibility job cannot run."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Create isolated Neon branch
+        id: branch
+        run: |
+          set -euo pipefail
+          name="ci-compat-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          body=$(node -e 'process.stdout.write(JSON.stringify({branch:{name:process.argv[1],parent_id:process.argv[2]},endpoints:[{type:"read_write"}]}))' "$name" "$NEON_PARENT_BRANCH_ID")
+          resp=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$body" \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches")
+          branch_id=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).branch.id))')
+          # Record the id BEFORE anything else can fail, so cleanup always has it.
+          echo "branch_id=${branch_id}" >> "$GITHUB_OUTPUT"
+          echo "Created Neon branch ${name} (${branch_id})."
+
+      # The branch is unpooled-reachable at the endpoint host the API returns.
+      - name: Resolve connection details
+        id: conn
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?branch_id=${{ steps.branch.outputs.branch_id }}&database_name=neondb&role_name=neondb_owner")
+          uri=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).uri))')
+          echo "::add-mask::${uri}"
+          host=$(node -e 'process.stdout.write(new URL(process.argv[1]).hostname)' "$uri")
+          echo "::add-mask::${host}"
+          echo "DATABASE_URL_UNPOOLED=${uri}" >> "$GITHUB_ENV"
+          echo "MIGRATION_ALLOWED_HOST=${host}" >> "$GITHUB_ENV"
+
+      - name: Apply and verify migrations on the Neon branch
+        env:
+          MIGRATION_ALLOWED_DATABASE: neondb
+          MIGRATION_ENVIRONMENT: ci
+          MIGRATION_TARGET_KIND: primary
+          MIGRATION_ROLE: neondb_owner
+          MIGRATION_DEPLOYMENT_SHA: ${{ github.sha }}
+        run: |
+          npm run migrate:apply
+          npm run migrate:verify
+
+      # Guaranteed cleanup: runs on success, failure and cancellation. A failed
+      # delete fails the job so a leaked branch is visible.
+      - name: Delete Neon branch
+        if: always() && steps.branch.outputs.branch_id != ''
+        run: |
+          curl -sS --fail-with-body -X DELETE \
+            -H "Authorization: Bearer ${NEON_API_KEY}" \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${{ steps.branch.outputs.branch_id }}"

@@ -283,3 +283,51 @@ export async function handleHealthCheck(request: Request, env: Env): Promise<Res
     );
   }
 }
+
+/**
+ * Liveness probe (`GET /live`, `GET /api/live`).
+ *
+ * Matches Express `getLive`: answers 200 whenever the isolate can serve a
+ * request, and touches nothing else. A liveness probe that checked the database
+ * would restart a healthy process during a database outage.
+ */
+export function handleLiveProbe(request: Request, env: Env): Response {
+  return new Response(JSON.stringify({ status: 'alive', timestamp: new Date().toISOString() }), {
+    status: 200,
+    headers: getCorsHeaders(request, env),
+  });
+}
+
+/**
+ * Readiness probe (`GET /ready`, `GET /api/ready`).
+ *
+ * Ready means required configuration is present AND the database answered
+ * `SELECT 1`. A deployment with no database connection string is not ready,
+ * unlike `/health?deep=true`, which omits the database check in that case.
+ * An R2 failure alone does not make the Worker unready: uploads degrade, reads
+ * still work. The response never echoes the database error text.
+ */
+export async function handleReadyProbe(request: Request, env: Env): Promise<Response> {
+  const timestamp = new Date().toISOString();
+  const notReady = (error: string) =>
+    new Response(JSON.stringify({ status: 'not ready', timestamp, error }), {
+      status: 503,
+      headers: getCorsHeaders(request, env),
+    });
+
+  try {
+    const result = await healthCheck(env, true);
+    if (result.checks.config.status !== 'pass') {
+      return notReady('Required configuration missing');
+    }
+    if (result.checks.database?.status !== 'pass') {
+      return notReady('Database not available');
+    }
+    return new Response(JSON.stringify({ status: 'ready', timestamp }), {
+      status: 200,
+      headers: getCorsHeaders(request, env),
+    });
+  } catch {
+    return notReady('Readiness check failed');
+  }
+}
