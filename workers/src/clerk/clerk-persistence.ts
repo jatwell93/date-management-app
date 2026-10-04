@@ -575,8 +575,16 @@ export async function processClerkWebhookEvent(
           `;
           return;
         }
+
+        // The event names an organization this database has never seen, so it
+        // cannot be about any member here. Falling through to the unscoped
+        // update below would retire the user from whichever organization they
+        // actually belong to.
+        return;
       }
 
+      // No organization in the payload at all: Clerk always sends one, so this is
+      // a malformed or hand-built delivery. Retire the member wherever they are.
       await sql`
         UPDATE users
         SET

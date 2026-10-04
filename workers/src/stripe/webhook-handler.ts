@@ -146,6 +146,12 @@ async function acceptStripeEvent(
     return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
   }
 
+  // A valid signature proves who sent the body, not that it is an event
+  // object: `null` parses and would throw on the property read below.
+  if (event === null || typeof event !== 'object' || Array.isArray(event)) {
+    return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
+  }
+
   const eventId = asString(event.id);
 
   if (!eventId) {

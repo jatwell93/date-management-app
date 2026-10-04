@@ -33,6 +33,7 @@ vi.mock('@neondatabase/serverless', () => ({
 
 import { createWorkersDatabase } from './database';
 import { UNLIMITED_CAP } from './utils/usage-limits';
+import { isUniqueViolation } from './db-errors';
 
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';
@@ -311,6 +312,102 @@ describe('Workers tier usage limits (real SQL)', () => {
   // deletions" row (multi-tenant-usage-limits.test.ts:506) asserted this against
   // a counter column; here there is no counter to drift, so the property to
   // prove is that the COUNT in the INSERT agrees with what the caller can see.
+  // Duplicate identity is closed by the unique indexes, not by a read-then-write
+  // check, so two uploads racing for one barcode cannot both land. pglite
+  // serializes statements and cannot stage the race; what it can prove is that
+  // the index is the arbiter, which is what makes the race safe on Neon.
+  describe('product identity is enforced by the database', () => {
+    it('refuses a second product with the same barcode in one organization', async () => {
+      await makeDb().createProduct(ORG, { barcode: 'BAR-DUP', sku: 'SKU-D1', name: 'First' }, 10);
+
+      const attempt = makeDb().createProduct(
+        ORG,
+        { barcode: 'BAR-DUP', sku: 'SKU-D2', name: 'Second' },
+        10,
+      );
+
+      await expect(attempt).rejects.toSatisfy(isUniqueViolation);
+      expect(await countProducts()).toBe(1);
+      const rows = await sql`SELECT name FROM products WHERE barcode = ${'BAR-DUP'}`;
+      expect(rows.map((row) => row.name)).toEqual(['First']);
+    });
+
+    it('refuses a second product with the same SKU in one organization', async () => {
+      await makeDb().createProduct(ORG, { barcode: 'BAR-S1', sku: 'SKU-DUP', name: 'First' }, 10);
+
+      const attempt = makeDb().createProduct(
+        ORG,
+        { barcode: 'BAR-S2', sku: 'SKU-DUP', name: 'Second' },
+        10,
+      );
+
+      await expect(attempt).rejects.toSatisfy(isUniqueViolation);
+      expect(await countProducts()).toBe(1);
+    });
+
+    it('lets two organizations hold the same barcode', async () => {
+      await makeDb().createProduct(ORG, { barcode: 'BAR-SHARED', name: 'Mine' }, 10);
+
+      const other = await makeDb().createProduct(
+        OTHER_ORG,
+        { barcode: 'BAR-SHARED', name: 'Theirs' },
+        10,
+      );
+
+      expect(other?.name).toBe('Theirs');
+      expect(await countProducts(OTHER_ORG)).toBe(1);
+    });
+  });
+
+  // `createQueuedCatalogueUpload` guards with `WHERE NOT EXISTS`, which two
+  // concurrent requests can both pass. The partial unique index from migration
+  // 0001 is what actually admits one of them; the handler maps its violation to
+  // 409. Asserting the index is asserting the guarantee.
+  describe('one active catalogue import per organization', () => {
+    const insertCatalogueUpload = async (organizationId: string, key: string, status: string) => {
+      await sql`
+        INSERT INTO uploads
+          (organization_id, user_id, file_key, file_name, file_size_bytes, import_type, status, updated_at)
+        VALUES (${organizationId}, ${uploaderId}, ${key}, ${`${key}.csv`}, 10, ${'product-catalog'}, ${status}, NOW())`;
+    };
+
+    beforeEach(async () => {
+      await seedUploader();
+    });
+
+    it.each(['pending', 'queued', 'validating', 'processing'])(
+      'refuses a second import while the first is %s',
+      async (activeStatus) => {
+        await insertCatalogueUpload(ORG, 'first', activeStatus);
+
+        await expect(insertCatalogueUpload(ORG, 'second', 'pending')).rejects.toSatisfy(
+          isUniqueViolation,
+        );
+        const rows = await sql`SELECT file_key FROM uploads WHERE organization_id = ${ORG}`;
+        expect(rows.map((row) => row.file_key)).toEqual(['first']);
+      },
+    );
+
+    it('admits the next import once the first has finished or failed', async () => {
+      await insertCatalogueUpload(ORG, 'done', 'completed');
+      await insertCatalogueUpload(ORG, 'broken', 'failed');
+
+      await insertCatalogueUpload(ORG, 'next', 'pending');
+
+      const rows = await sql`SELECT file_key FROM uploads WHERE organization_id = ${ORG}`;
+      expect(rows).toHaveLength(3);
+    });
+
+    it('does not let one organization block another', async () => {
+      await insertCatalogueUpload(ORG, 'mine', 'processing');
+
+      await insertCatalogueUpload(OTHER_ORG, 'theirs', 'pending');
+
+      const rows = await sql`SELECT file_key FROM uploads WHERE organization_id = ${OTHER_ORG}`;
+      expect(rows).toHaveLength(1);
+    });
+  });
+
   describe('slots are returned when rows are removed or retired', () => {
     it('admits a product once another is deleted', async () => {
       await seedProducts(5);

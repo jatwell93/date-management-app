@@ -3111,6 +3111,24 @@ equivalent, a relocated home, or an explicit retirement decision.
       **Decision (reviewer, 2026-10-05): cap refusals stay HTTP 402.** Express was
       inconsistent (feature-gate middleware 403, invite-path seat limit 402); the Worker's 402
       fits "upgrade required" and no frontend code branches on either status for these routes.
+      **Batch 2 — `webhook-security`, `concurrency`, `scheduled-job-idempotency`.** Worked the
+      73 rows. Most were already covered by the 3.1 and 3.3 tests the manifest predates; 60 are
+      re-pointed to `worker-equivalent-exists` with path:line citations and 13 are proposed
+      `retire`. Working them found and fixed three defects, each pinned by a test that fails
+      without the fix: a signed webhook body of `null` threw a `TypeError` in both the Stripe and
+      Clerk handlers (and a bare array, string or number was claimed and acknowledged as an event
+      by the Clerk handler); and an `organizationMembership.deleted` event naming an organization
+      this database has never seen soft-deleted the user in whichever organization they belong to.
+      New tests also cover `organizationMembership.deleted` end to end (it had none), Clerk signature
+      and header refusals, a Stripe `updated` event arriving before `created`, the free-tier default
+      for a first event with no tier, recovery of a lapsed trial by a subscription event, and the
+      two unique indexes that close duplicate-barcode and concurrent-catalogue-import races.
+      **Two items need the reviewer, flagged in the manifest.** (1) The Worker's tier caps are soft
+      under concurrency, so Express's "three concurrent creates, limit two, exactly two land"
+      guarantee is retired (`multi-tenant-usage-limits` concurrency row and the counter rows);
+      confirm that is acceptable before `USAGE_LIMITS_ENFORCE` is switched on. (2) The Worker does
+      not reject a duplicate inventory item (same product, expiry and location) where Express
+      returned 409; the row is proposed `retire` but is a dropped guard, not a rewrite.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.

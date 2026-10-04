@@ -51,6 +51,14 @@ export async function handleClerkWebhook(
     return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
   }
 
+  // A valid signature proves who sent the body, not that it is an event. `null`
+  // would throw on the property read below and escape this handler; a bare
+  // array, string or number would be claimed and acknowledged as an event of
+  // type 'unknown'.
+  if (event === null || typeof event !== 'object' || Array.isArray(event)) {
+    return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
+  }
+
   const eventType = typeof event.type === 'string' ? event.type : 'unknown';
 
   let db: ReturnType<typeof createWorkersDatabase> | undefined;
