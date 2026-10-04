@@ -991,14 +991,16 @@ async function applyUserRoleChange(
  * still recorded `role_assigned` would read, in the compliance trail, as an
  * admin who was created.
  *
- * **The count includes soft-deleted users**, matching `getUsageCounts` (so the
- * cap and the usage screen agree) and Express's `countByOrganization`
- * (`backend/src/repositories/user.repository.ts:67`, which also omits any
- * `deletedAt` filter). `listUsers` does exclude them, so a soft-deleted user is
- * invisible in the UI while still holding a seat. That is pre-existing parity,
- * not a regression, and it is inert while `USAGE_LIMITS_ENFORCE` is off — but
- * it is a condition to settle before turning the flag on, since "delete a user
- * to free a seat" would not work.
+ * **The count excludes soft-deleted users**, matching `getUsageCounts` (so the
+ * cap and the usage screen agree) and `listUsers`, so "delete a user to free a
+ * seat" works. This deliberately diverges from Express's `countByOrganization`
+ * (`backend/src/repositories/user.repository.ts:67`), which still counts
+ * soft-deleted rows: while both backends run, the same organization can show
+ * different seat usage in each. Counting them was the original behaviour and
+ * left a deleted user invisible in the UI while still holding a seat; that was
+ * the first condition recorded as blocking `USAGE_LIMITS_ENFORCE`, and it is
+ * now settled. Covered by `database.usage-limits.pglite.node.test.ts`
+ * ("admits a user once another is soft-deleted").
  *
  * **This is not the only path that creates a seat, and the other one is
  * deliberately left uncapped.** `upsertClerkUser`
@@ -1039,7 +1041,8 @@ async function insertOrganizationUser(
       INSERT INTO users (organization_id, username, role, created_at, updated_at)
       SELECT ${organizationId}, ${username}, ${role}, NOW(), NOW()
       WHERE (
-        SELECT COUNT(*) FROM users WHERE organization_id = ${organizationId}
+        SELECT COUNT(*) FROM users
+        WHERE organization_id = ${organizationId} AND deleted_at IS NULL
       ) < ${seatCap}
       RETURNING id, email, username, role, clerk_user_id, created_at
     ),
@@ -1732,7 +1735,7 @@ export function createWorkersDatabase(env: Env): Database {
       // so the number shown matches the number enforced against.
       const [skus, users, activeExpiries] = await Promise.all([
         sql`SELECT COUNT(*)::int as count FROM products WHERE organization_id = ${organizationId}`,
-        sql`SELECT COUNT(*)::int as count FROM users WHERE organization_id = ${organizationId}`,
+        sql`SELECT COUNT(*)::int as count FROM users WHERE organization_id = ${organizationId} AND deleted_at IS NULL`,
         sql`
           SELECT COUNT(*)::int as count FROM inventory_items
           WHERE organization_id = ${organizationId}

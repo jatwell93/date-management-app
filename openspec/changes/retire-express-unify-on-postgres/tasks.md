@@ -3090,6 +3090,27 @@ equivalent, a relocated home, or an explicit retirement decision.
       `productId`, then uncorrelated report JOINs resolving it) has no Express analogue at all, so
       no manifest row predicted it. Work the remaining gates by exercising the Worker against real
       SQL; a row that says "no Worker test exists" is the most likely place to find a defect.
+      **Batch 1 — `feature-limits` core (usage caps).** Worked the 33 rows for
+      `multi-tenant-usage-limits` and `feature-gate.middleware`. Result: 14 re-pointed to
+      `worker-equivalent-exists` with path:line citations (the Worker gained SKU, expiry and
+      seat caps in 3.1.a/3.1.j, after these rows were written, so several said "blocked on
+      Phase 3.1" when it had shipped); 19 proposed `retire`. Retirements fall in three classes:
+      the `tier_feature_flags` gate (deliberately not rehomed, `index-minimal.ts:1531`); Express
+      tier constants the Worker table deliberately differs from (pinned against the shared
+      source of truth in `utils/usage-limits.test.ts`); and the 80% warning attached to create
+      responses and the 403 upgrade CTA, which have no consumer in `frontend/src`.
+      **Defect found by working a row (the method note again).** The seat cap and
+      `getUsageCounts` counted `users` without `deleted_at IS NULL`, so a user removed through
+      `DELETE /api/users/:id` vanished from the list but kept its seat. Latent while
+      `USAGE_LIMITS_ENFORCE` is off, a hard lock-out once it is on. Fixed in
+      `workers/src/database.ts` and covered in
+      `database.usage-limits.pglite.node.test.ts` ("slots are returned when rows are removed or
+      retired"); removing the filter fails two tests. The other 75 `feature-limits` rows belong
+      to the storage-quota, upload, subscription/trial and dunning domains and move with those
+      batches.
+      **Decision (reviewer, 2026-10-05): cap refusals stay HTTP 402.** Express was
+      inconsistent (feature-gate middleware 403, invite-path seat limit 402); the Worker's 402
+      fits "upgrade required" and no frontend code branches on either status for these routes.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
