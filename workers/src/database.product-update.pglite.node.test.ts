@@ -150,6 +150,16 @@ describe('Workers product update (real SQL)', () => {
 
   it('advances updated_at and leaves created_at alone', async () => {
     const id = await seedProduct({ barcode: '55555555', sku: 'SKU-5', name: 'Timestamps' });
+    // Backdate both timestamps. The columns are TIMESTAMP(3), so an insert and
+    // an update that land in the same millisecond -- routine on a fast CI
+    // runner -- leave `updated_at > created_at` false even when the statement
+    // is correct. That flaked on CI. A one-minute gap makes the assertion
+    // deterministic, and it still fails if `updated_at = NOW()` is removed
+    // because updated_at would then equal created_at.
+    await sql`UPDATE products
+      SET created_at = created_at - interval '1 minute',
+          updated_at = updated_at - interval '1 minute'
+      WHERE id = ${id}`;
     const before = await readRow(id);
 
     const updated = await makeDb().updateProduct(ORG, id, { name: 'Touched' });

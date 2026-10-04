@@ -3627,12 +3627,25 @@ equivalent, a relocated home, or an explicit retirement decision.
       on `subscriptions.create`. Until then the webhook is correct but under-supplied. The Dashboard
       test also left a synthetic test-mode subscription (`sub_1UIo4u…`) in the account; harmless, and
       cancellable whenever convenient.
-- [ ] 3.9 Add one required database-conformance workflow triggered by `workers/**`, `shared/**`,
+- [x] 3.9 Add one required database-conformance workflow triggered by `workers/**`, `shared/**`,
       authoritative migrations/schemas, and relevant root package/lock files. Run the Worker PGlite
       conformance job and the migration-runner job against an ephemeral PostgreSQL service with no
       production secrets; combine them in an always-reporting required gate. Fail rather than skip when
       the database is unavailable. Add a separate scheduled compatibility job against an isolated,
       auto-created Neon branch with guaranteed cleanup.
+      <br>**3.9 landed (workflow written; not yet proven in CI).** `.github/workflows/database-conformance.yml`
+      adds jobs `worker-conformance` (`npm run test:db`) and `migration-runner` (service-container
+      Postgres 17; `test:migrations`, `test:operations`, `test:migrations:e2e`), combined by the
+      always-running `Database Conformance Gate` — **require that check, then add it to branch
+      protection.** `neon-compatibility` is scheduled/manual only, creates `ci-compat-<run>` via the
+      Neon API from `NEON_COMPAT_PARENT_BRANCH_ID`, runs `migrate:apply`/`migrate:verify`, and deletes
+      the branch in an `if: always()` step. It needs repo secret `NEON_COMPAT_API_KEY` (not the production-environment `NEON_API_KEY`) and vars
+      `NEON_PROJECT_ID`, `NEON_COMPAT_PARENT_BRANCH_ID`, and has **never run**: dispatch it once
+      before trusting it. `GET /live`, `/api/live`, `/ready`, `/api/ready` are served by
+      `workers/src/health.ts` (`handleLiveProbe`, `handleReadyProbe`); `reconcile-route-matrix.py`
+      now reports 0 absent routes. `/ready` is 503 without a database connection string; an R2
+      failure alone stays ready. `migrations-e2e.yml` is left in place, so the e2e suite runs twice
+      until Phase 5 removes one copy.
 
 > **Integration checkpoint — parity PRs.** Implement Phase 3 as one or more independently safe,
 > reviewable PRs based on the latest `main`; split by coherent responsibility when that reduces review

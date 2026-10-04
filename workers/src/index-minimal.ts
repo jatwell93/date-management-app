@@ -10,7 +10,7 @@
  */
 
 import { CatalogueImportMessage, Env } from './types/env';
-import { handleHealthCheck } from './health';
+import { handleHealthCheck, handleLiveProbe, handleReadyProbe } from './health';
 import { createWorkersDatabase } from './database';
 import { runScheduledTick } from './scheduled/dispatcher';
 import * as Sentry from '@sentry/cloudflare';
@@ -469,6 +469,17 @@ const sentryWrappedHandlers = Sentry.withSentry(
         if (pathname === '/health' || pathname === '/api/health') {
           const healthResponse = await handleHealthCheck(request, env);
           return maybeCompressJsonResponse(request, healthResponse);
+        }
+
+        // Orchestrator probes (no auth), mirroring Express's /live and /ready.
+        // GET only, like Express: a POST must not trigger the database check.
+        if (method === 'GET') {
+          if (pathname === '/live' || pathname === '/api/live') {
+            return handleLiveProbe(request, env);
+          }
+          if (pathname === '/ready' || pathname === '/api/ready') {
+            return await handleReadyProbe(request, env);
+          }
         }
 
         // Root metadata endpoint for human-friendly API discovery
