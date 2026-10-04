@@ -22,6 +22,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
+import { deriveSubscriptionAccess } from '../subscription-status';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from '../__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
@@ -207,7 +208,78 @@ describe('POST /api/webhooks/stripe', () => {
     });
   });
 
+  describe('signed bodies that are not events', () => {
+    // A valid signature proves who sent the body, not that it is an event
+    // object. `null` parses fine and used to throw a TypeError on `event.id`,
+    // escaping the handler instead of answering 400.
+    it.each([['null'], ['[]'], ['"text"'], ['7']])(
+      'answers 400 and claims nothing for the signed body %s',
+      async (rawBody) => {
+        const timestamp = Math.floor(Date.now() / 1000);
+        const request = new Request('https://worker.test/api/webhooks/stripe', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'stripe-signature': `t=${timestamp},v1=${await signStripePayload(rawBody, timestamp)}`,
+          },
+          body: rawBody,
+        });
+
+        const response = await handleStripeWebhook(request, ENV);
+
+        expect(response.status).toBe(400);
+        expect(await sql`SELECT id FROM processed_webhook_events`).toHaveLength(0);
+      },
+    );
+  });
+
   describe('subscription state', () => {
+    it('creates the subscription when an updated event arrives before any created event', async () => {
+      // Stripe gives no ordering guarantee between events. The write is an
+      // upsert, so an `updated` that wins the race still bootstraps the row.
+      expect(await subscriptionRow()).toBeUndefined();
+
+      const response = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_updated_first',
+            type: 'customer.subscription.updated',
+            tier: 'starter',
+            status: 'active',
+            metadataOrganizationId: ORG,
+          }),
+        ),
+        ENV,
+      );
+
+      expect(response.status).toBe(200);
+      const row = await subscriptionRow();
+      expect(row.tier_level).toBe('starter');
+      expect(row.stripe_subscription_id).toBe(SUBSCRIPTION);
+      expect(row.stripe_customer_id).toBe(CUSTOMER);
+    });
+
+    it('stores the free tier when the first event for an organization names no tier', async () => {
+      // With a stored row the tier is kept (next test); with none there is
+      // nothing to keep, and the column is NOT NULL.
+      const response = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_no_tier_first',
+            type: 'customer.subscription.created',
+            tier: null,
+            metadataOrganizationId: ORG,
+          }),
+        ),
+        ENV,
+      );
+
+      expect(response.status).toBe(200);
+      const row = await subscriptionRow();
+      expect(row.tier_level).toBe('free');
+      expect(row.stripe_subscription_id).toBe(SUBSCRIPTION);
+    });
+
     it('writes the subscription a created event describes', async () => {
       const periodEnd = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
       const request = await stripeRequest(
@@ -234,6 +306,41 @@ describe('POST /api/webhooks/stripe', () => {
       expect(row.stripe_subscription_id).toBe(SUBSCRIPTION);
       expect(row.billing_cycle).toBe('annual');
       expect(row.past_due_since).toBeNull();
+    });
+
+    it('restores paid access to an organization whose trial had already lapsed', async () => {
+      // Express wrote a downgrade when a trial ended, so a late payment had to
+      // undo it. Here the lapse is derived from `trial_end_date` and never
+      // stored, so recovery is simply the subscription event overwriting the
+      // trial columns.
+      await sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, trial_end_date, updated_at)
+        VALUES (${ORG}, 'professional', 'trialing', NOW() - INTERVAL '3 days', NOW())
+      `;
+      const lapsed = deriveSubscriptionAccess(await subscriptionRow());
+      expect(lapsed).toMatchObject({ effectiveTier: 'free', lapsed: true });
+
+      const response = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_late_payment',
+            type: 'customer.subscription.created',
+            tier: 'starter',
+            status: 'active',
+            metadataOrganizationId: ORG,
+          }),
+        ),
+        ENV,
+      );
+
+      expect(response.status).toBe(200);
+      const row = await subscriptionRow();
+      expect(row.trial_end_date).toBeNull();
+      expect(deriveSubscriptionAccess(row)).toMatchObject({
+        effectiveTier: 'starter',
+        lapsed: false,
+      });
     });
 
     it('translates every tier spelling Stripe price metadata may carry', async () => {

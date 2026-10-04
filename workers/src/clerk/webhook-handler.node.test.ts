@@ -580,6 +580,252 @@ describe('handleClerkWebhook idempotency (real SQL)', () => {
     expect(await countUsers('user_1')).toBe(1);
   });
 
+  describe('request validation', () => {
+    const rawRequest = async (
+      eventId: string,
+      rawBody: string,
+      overrides: { signature?: string } = {},
+    ): Promise<Response> => {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      return handleClerkWebhook(
+        new Request('https://api.test/api/webhooks/clerk', {
+          method: 'POST',
+          headers: {
+            'svix-id': eventId,
+            'svix-timestamp': timestamp,
+            'svix-signature':
+              overrides.signature ?? (await signClerkWebhook(eventId, timestamp, rawBody)),
+          },
+          body: rawBody,
+        }),
+        ENV,
+        'https://app.test',
+      );
+    };
+
+    it('refuses a request without the Svix headers and claims nothing', async () => {
+      const response = await handleClerkWebhook(
+        new Request('https://api.test/api/webhooks/clerk', { method: 'POST', body: '{}' }),
+        ENV,
+        'https://app.test',
+      );
+
+      expect(response.status).toBe(400);
+      expect(await sql`SELECT id FROM clerk_webhook_events`).toHaveLength(0);
+    });
+
+    it('refuses a forged signature and writes nothing', async () => {
+      const body = JSON.stringify(
+        userCreatedEvent({ clerkUserId: 'user_x', email: 'x@acme.test', clerkOrgId: 'org_x' }),
+      );
+
+      const response = await rawRequest('msg_forged', body, {
+        signature: `v1,${btoa('not-the-real-signature-bytes-0123456')}`,
+      });
+
+      expect(response.status).toBe(400);
+      expect(await sql`SELECT id FROM clerk_webhook_events`).toHaveLength(0);
+      expect(await countUsers('user_x')).toBe(0);
+    });
+
+    it('answers 500 while no signing secret is configured, without claiming', async () => {
+      const body = JSON.stringify(
+        userCreatedEvent({ clerkUserId: 'user_x', email: 'x@acme.test', clerkOrgId: 'org_x' }),
+      );
+      const timestamp = String(Math.floor(Date.now() / 1000));
+
+      const response = await handleClerkWebhook(
+        new Request('https://api.test/api/webhooks/clerk', {
+          method: 'POST',
+          headers: {
+            'svix-id': 'msg_unconfigured',
+            'svix-timestamp': timestamp,
+            'svix-signature': await signClerkWebhook('msg_unconfigured', timestamp, body),
+          },
+          body,
+        }),
+        { ...ENV, CLERK_WEBHOOK_SECRET: undefined } as unknown as Env,
+        'https://app.test',
+      );
+
+      expect(response.status).toBe(500);
+      expect(await sql`SELECT id FROM clerk_webhook_events`).toHaveLength(0);
+    });
+
+    // A valid signature proves who sent the body, not that it is an event
+    // object. `null` parses fine and used to throw a TypeError on `event.type`,
+    // escaping the handler instead of answering 400.
+    it.each([['not json'], ['null'], ['[]'], ['"text"'], ['7']])(
+      'answers 400 and claims nothing for the signed body %s',
+      async (rawBody) => {
+        const response = await rawRequest('msg_not_event', rawBody);
+
+        expect(response.status).toBe(400);
+        expect(await sql`SELECT id FROM clerk_webhook_events`).toHaveLength(0);
+      },
+    );
+  });
+
+  describe('organizationMembership.deleted', () => {
+    const membershipDeletedEvent = (clerkUserId: string, clerkOrgId: string | null) => ({
+      type: 'organizationMembership.deleted',
+      data: {
+        public_user_data: { user_id: clerkUserId },
+        ...(clerkOrgId ? { organization: { id: clerkOrgId, name: 'Acme', slug: 'acme' } } : {}),
+      },
+    });
+
+    const userRow = async (clerkUserId: string) =>
+      (
+        await sql`
+          SELECT id, deleted_at, organization_id
+          FROM users
+          WHERE clerk_user_id = ${clerkUserId}`
+      )[0] as { id: number; deleted_at: string | null; organization_id: string } | undefined;
+
+    it('soft-deletes the member and leaves the row, and the audit trail, in place', async () => {
+      await deliver(
+        'msg_seed_member',
+        userCreatedEvent({
+          clerkUserId: 'user_leaver',
+          email: 'leaver@acme.test',
+          clerkOrgId: 'org_clerk_a',
+          role: 'org:member',
+        }),
+      );
+      await deliver(
+        'msg_seed_grant',
+        membershipCreatedEvent({
+          clerkUserId: 'user_leaver',
+          email: 'leaver@acme.test',
+          clerkOrgId: 'org_clerk_a',
+          role: 'org:admin',
+        }),
+      );
+      const before = await userRow('user_leaver');
+      const auditBefore =
+        await sql`SELECT id FROM org_audit_log WHERE target_user_id = ${before!.id}`;
+      expect(auditBefore.length).toBeGreaterThan(0);
+
+      const response = await deliver(
+        'msg_leave',
+        membershipDeletedEvent('user_leaver', 'org_clerk_a'),
+      );
+
+      expect(response.status).toBe(200);
+      const after = await userRow('user_leaver');
+      // Same row, retired — not removed — so everything that references it survives.
+      expect(after?.id).toBe(before!.id);
+      expect(after?.deleted_at).not.toBeNull();
+      const auditAfter =
+        await sql`SELECT id FROM org_audit_log WHERE target_user_id = ${before!.id}`;
+      expect(auditAfter).toHaveLength(auditBefore.length);
+    });
+
+    it('retires only the named member of the named organization', async () => {
+      await deliver(
+        'msg_seed_a',
+        userCreatedEvent({
+          clerkUserId: 'user_a',
+          email: 'a@acme.test',
+          clerkOrgId: 'org_clerk_a',
+        }),
+      );
+      await deliver(
+        'msg_seed_b',
+        userCreatedEvent({
+          clerkUserId: 'user_b',
+          email: 'b@acme.test',
+          clerkOrgId: 'org_clerk_a',
+        }),
+      );
+      await deliver(
+        'msg_seed_c',
+        userCreatedEvent({
+          clerkUserId: 'user_c',
+          email: 'c@other.test',
+          clerkOrgId: 'org_clerk_c',
+        }),
+      );
+
+      await deliver('msg_leave_a', membershipDeletedEvent('user_a', 'org_clerk_a'));
+
+      expect((await userRow('user_a'))?.deleted_at).not.toBeNull();
+      expect((await userRow('user_b'))?.deleted_at).toBeNull();
+      expect((await userRow('user_c'))?.deleted_at).toBeNull();
+    });
+
+    it('ignores a departure from an organization the member has since left for another', async () => {
+      // Clerk's membership events are per organization, and `users` holds one row
+      // per Clerk user, re-pointed at the latest organization. A late "left A"
+      // must not retire a member who now belongs to B.
+      await deliver(
+        'msg_seed_old',
+        userCreatedEvent({
+          clerkUserId: 'user_mover',
+          email: 'm@acme.test',
+          clerkOrgId: 'org_clerk_a',
+        }),
+      );
+      await deliver(
+        'msg_move',
+        membershipCreatedEvent({
+          clerkUserId: 'user_mover',
+          email: 'm@acme.test',
+          clerkOrgId: 'org_clerk_b',
+          role: 'org:member',
+        }),
+      );
+
+      await deliver('msg_late_leave', membershipDeletedEvent('user_mover', 'org_clerk_a'));
+
+      expect((await userRow('user_mover'))?.deleted_at).toBeNull();
+    });
+
+    it('does not retire a member because the event names an organization this database has never seen', async () => {
+      await deliver(
+        'msg_seed_known',
+        userCreatedEvent({
+          clerkUserId: 'user_known',
+          email: 'k@acme.test',
+          clerkOrgId: 'org_clerk_a',
+        }),
+      );
+
+      await deliver(
+        'msg_unknown_org',
+        membershipDeletedEvent('user_known', 'org_clerk_never_seen'),
+      );
+
+      expect((await userRow('user_known'))?.deleted_at).toBeNull();
+    });
+
+    it('lets a later membership re-admit a retired member', async () => {
+      await deliver(
+        'msg_seed_back',
+        userCreatedEvent({
+          clerkUserId: 'user_back',
+          email: 'back@acme.test',
+          clerkOrgId: 'org_clerk_a',
+        }),
+      );
+      await deliver('msg_gone', membershipDeletedEvent('user_back', 'org_clerk_a'));
+      expect((await userRow('user_back'))?.deleted_at).not.toBeNull();
+
+      await deliver(
+        'msg_returned',
+        membershipCreatedEvent({
+          clerkUserId: 'user_back',
+          email: 'back@acme.test',
+          clerkOrgId: 'org_clerk_a',
+          role: 'org:member',
+        }),
+      );
+
+      expect((await userRow('user_back'))?.deleted_at).toBeNull();
+    });
+  });
+
   it('gives an organization one trial subscription across distinct events', async () => {
     // Two different event ids for the same organization both reach
     // ensureTrialSubscription — the claim cannot dedupe these, so the unique

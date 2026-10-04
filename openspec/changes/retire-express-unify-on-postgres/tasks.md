@@ -3111,6 +3111,29 @@ equivalent, a relocated home, or an explicit retirement decision.
       **Decision (reviewer, 2026-10-05): cap refusals stay HTTP 402.** Express was
       inconsistent (feature-gate middleware 403, invite-path seat limit 402); the Worker's 402
       fits "upgrade required" and no frontend code branches on either status for these routes.
+      **Batch 2 — `webhook-security`, `concurrency`, `scheduled-job-idempotency`.** Worked the
+      73 rows. Most were already covered by the 3.1 and 3.3 tests the manifest predates; 60 are
+      re-pointed to `worker-equivalent-exists` with path:line citations, 12 are proposed
+      `retire`, and one (duplicate inventory guard) stays a rewrite under 3.10. Working them found and fixed three defects, each pinned by a test that fails
+      without the fix: a signed webhook body of `null` threw a `TypeError` in both the Stripe and
+      Clerk handlers (and a bare array, string or number was claimed and acknowledged as an event
+      by the Clerk handler); and an `organizationMembership.deleted` event naming an organization
+      this database has never seen soft-deleted the user in whichever organization they belong to.
+      New tests also cover `organizationMembership.deleted` end to end (it had none), Clerk signature
+      and header refusals, a Stripe `updated` event arriving before `created`, the free-tier default
+      for a first event with no tier, recovery of a lapsed trial by a subscription event, and the
+      two unique indexes that close duplicate-barcode and concurrent-catalogue-import races.
+      **Two items need the reviewer, flagged in the manifest.** (1) The Worker's tier caps are soft
+      under concurrency, so Express's "three concurrent creates, limit two, exactly two land"
+      guarantee is retired (`multi-tenant-usage-limits` concurrency row and the counter rows);
+      confirm that is acceptable before `USAGE_LIMITS_ENFORCE` is switched on. (2) The Worker does
+      not reject a duplicate inventory item (same product, expiry and location) where Express
+      returned 409. **Decided (reviewer, 2026-10-05): rebuild the guard, keyed on the Express
+      triple** (a second location for the same product and expiry is legitimate stock). Tracked
+      as task 3.10; the manifest row returns to `worker-shaped-rewrite`. Also decided in review:
+      soft caps are acceptable, an expired trial lapsing to `free` is correct, and re-linking an
+      existing user on a duplicate email (instead of Express's `ConflictError`) is correct because
+      Clerk already enforces one email per instance.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
@@ -3667,6 +3690,24 @@ equivalent, a relocated home, or an explicit retirement decision.
       now reports 0 absent routes. `/ready` is 503 without a database connection string; an R2
       failure alone stays ready. `migrations-e2e.yml` is left in place, so the e2e suite runs twice
       until Phase 5 removes one copy.
+- [ ] 3.10 Rebuild the duplicate-inventory guard that Express's `data-integrity.middleware` provided
+      and the Worker never had (found by 3.2 batch 2, manifest part 1 row 843). Express refused a
+      second `inventory_items` row with the same `product_id`, `expiry_date` and `location_id` with
+      409; the Worker's `createInventoryItem` inserts unconditionally and the table has no quantity
+      column, so a duplicate counts as a second unit. **Must land before Phase 4 deletes `backend/`,**
+      which removes the only copy of the rule.
+      <br>Scope: (a) a read-only production check for existing duplicate triples, host printed
+      first, and a dedupe plan if any exist, since a unique index cannot build over duplicates;
+      (b) a unique index on `(organization_id, product_id, expiry_date, location_id)` through the
+      migration checklist (manifest, fingerprint, prod schema, the three id lists), noting that the
+      status column is deliberately not part of the key unless the reviewer decides retired rows
+      should not block a re-add; (c) a `WHERE NOT EXISTS` fast path in `createInventoryItem` with the
+      unique violation mapped to 409 in the handler, as `handleCreateProduct` does; (d) the
+      expiry and catalogue import paths, which already merge rows and use `ON CONFLICT DO NOTHING`,
+      checked against the new index; (e) pglite tests with a seeded foreign organization, a second
+      location (admitted) and a different expiry (admitted), mutation-verified by dropping the index.
+      `database.ts` `createInventoryItem` is also the active-expiry cap's INSERT, so the guard must
+      not disturb the cap's `COUNT(*)` predicate.
 
 > **Integration checkpoint — parity PRs.** Implement Phase 3 as one or more independently safe,
 > reviewable PRs based on the latest `main`; split by coherent responsibility when that reduces review
