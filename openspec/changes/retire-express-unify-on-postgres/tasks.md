@@ -3108,6 +3108,9 @@ equivalent, a relocated home, or an explicit retirement decision.
       retired"); removing the filter fails two tests. The other 75 `feature-limits` rows belong
       to the storage-quota, upload, subscription/trial and dunning domains and move with those
       batches.
+      **Decision (reviewer, 2026-10-05): cap refusals stay HTTP 402.** Express was
+      inconsistent (feature-gate middleware 403, invite-path seat limit 402); the Worker's 402
+      fits "upgrade required" and no frontend code branches on either status for these routes.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
