@@ -472,11 +472,14 @@ const sentryWrappedHandlers = Sentry.withSentry(
         }
 
         // Orchestrator probes (no auth), mirroring Express's /live and /ready.
-        if (pathname === '/live' || pathname === '/api/live') {
-          return handleLiveProbe(request, env);
-        }
-        if (pathname === '/ready' || pathname === '/api/ready') {
-          return await handleReadyProbe(request, env);
+        // GET only, like Express: a POST must not trigger the database check.
+        if (method === 'GET') {
+          if (pathname === '/live' || pathname === '/api/live') {
+            return handleLiveProbe(request, env);
+          }
+          if (pathname === '/ready' || pathname === '/api/ready') {
+            return await handleReadyProbe(request, env);
+          }
         }
 
         // Root metadata endpoint for human-friendly API discovery

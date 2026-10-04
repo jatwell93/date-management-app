@@ -330,18 +330,29 @@ describe('liveness and readiness probes', () => {
     expect(((await response.json()) as any).status).toBe('not ready');
   });
 
-  it('/ready stays ready when only R2 is down', async () => {
+  it('/ready never calls R2, so a down or hung bucket cannot affect it', async () => {
     vi.mocked(neon).mockReturnValueOnce(stubNeonQuery(() => Promise.resolve([{ '?column?': 1 }])));
+    const list = vi.fn().mockRejectedValue(new Error('R2 down'));
     const response = await get(
       '/ready',
-      probeEnv({
-        CSV_UPLOADS: {
-          list: vi.fn().mockRejectedValue(new Error('R2 down')),
-        } as unknown as R2Bucket,
-      }),
+      probeEnv({ CSV_UPLOADS: { list } as unknown as R2Bucket }),
     );
 
     expect(response.status).toBe(200);
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it.each(['/live', '/ready'])('%s does not run the probe for a POST', async (path) => {
+    vi.mocked(neon).mockClear();
+    const response = await worker.fetch(
+      new Request(`https://example.com${path}`, { method: 'POST' }),
+      probeEnv(),
+      { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext,
+    );
+
+    expect(neon).not.toHaveBeenCalled();
+    const body = (await response.text().catch(() => '')) as string;
+    expect(body).not.toMatch(/"status":\s*"(alive|ready)"/);
   });
 });
 

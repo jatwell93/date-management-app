@@ -51,6 +51,10 @@ export interface HealthCheckResult {
 export async function healthCheck(
   env: Env,
   includeConnectivity: boolean = false,
+  // `r2: false` leaves the bucket probe out of a deep check. Readiness does not
+  // depend on R2, and the probe has no timeout, so a hung bucket call would
+  // otherwise stall every readiness poll for no decision value.
+  connectivity: { r2?: boolean } = {},
 ): Promise<HealthCheckResult> {
   const startTime = Date.now();
   const result: HealthCheckResult = {
@@ -104,7 +108,7 @@ export async function healthCheck(
   };
 
   // Optional: Check R2 connectivity
-  if (includeConnectivity && env.CSV_UPLOADS) {
+  if (includeConnectivity && connectivity.r2 !== false && env.CSV_UPLOADS) {
     const r2Start = Date.now();
     try {
       // Try to list objects (limit 1) to verify bucket access
@@ -316,7 +320,7 @@ export async function handleReadyProbe(request: Request, env: Env): Promise<Resp
     });
 
   try {
-    const result = await healthCheck(env, true);
+    const result = await healthCheck(env, true, { r2: false });
     if (result.checks.config.status !== 'pass') {
       return notReady('Required configuration missing');
     }
@@ -327,7 +331,9 @@ export async function handleReadyProbe(request: Request, env: Env): Promise<Resp
       status: 200,
       headers: getCorsHeaders(request, env),
     });
-  } catch {
+  } catch (error) {
+    // Keep the cause out of the response, but leave a server-side trace.
+    console.error('Readiness probe failed:', error);
     return notReady('Readiness check failed');
   }
 }

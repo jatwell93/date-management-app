@@ -45,6 +45,7 @@ jobs:
   changes:
     name: Detect database-relevant changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       database: ${{ steps.filter.outputs.database }}
     steps:
@@ -114,6 +115,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.database == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: ./workers
@@ -167,7 +169,12 @@ jobs:
           --health-retries 10
 
     steps:
+      # Full history: baseline.fingerprint.test regenerates the pre-0001 Prisma
+      # schema with `git show ae26d623~1:...`, which a depth-1 checkout cannot
+      # resolve ("fatal: invalid object name 'ae26d623~1'").
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -213,6 +220,7 @@ jobs:
     if: always()
     needs: [changes, worker-conformance, migration-runner]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Evaluate database conformance job results
         env:
@@ -252,6 +260,10 @@ jobs:
   # NEON_PROJECT_ID and NEON_COMPAT_PARENT_BRANCH_ID (a non-production branch to
   # fork from, so no production data is copied into CI). The job fails when any
   # is unset: a compatibility job that silently skips proves nothing.
+  #
+  # NEON_API_KEY is declared per step, only where the Neon API is called, so the
+  # install and test steps never see it. Values derived from API responses reach
+  # shell code only through `env:`, never through `${{ }}` inside `run:`.
   neon-compatibility:
     name: Neon Compatibility (scheduled)
     needs: changes
@@ -259,9 +271,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
       NEON_PARENT_BRANCH_ID: ${{ vars.NEON_COMPAT_PARENT_BRANCH_ID }}
+      NEON_BRANCH_NAME: ci-compat-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7
 
@@ -278,6 +290,8 @@ jobs:
         run: npm ci
 
       - name: Require Neon configuration
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
           missing=0
           for v in NEON_API_KEY NEON_PROJECT_ID NEON_PARENT_BRANCH_ID; do
@@ -290,28 +304,30 @@ jobs:
 
       - name: Create isolated Neon branch
         id: branch
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
           set -euo pipefail
-          name="ci-compat-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          body=$(node -e 'process.stdout.write(JSON.stringify({branch:{name:process.argv[1],parent_id:process.argv[2]},endpoints:[{type:"read_write"}]}))' "$name" "$NEON_PARENT_BRANCH_ID")
+          body=$(node -e 'process.stdout.write(JSON.stringify({branch:{name:process.argv[1],parent_id:process.argv[2]},endpoints:[{type:"read_write"}]}))' "$NEON_BRANCH_NAME" "$NEON_PARENT_BRANCH_ID")
           resp=$(curl -sS --fail-with-body -X POST \
             -H "Authorization: Bearer ${NEON_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "$body" \
             "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches")
           branch_id=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).branch.id))')
-          # Record the id BEFORE anything else can fail, so cleanup always has it.
           echo "branch_id=${branch_id}" >> "$GITHUB_OUTPUT"
-          echo "Created Neon branch ${name} (${branch_id})."
+          echo "Created Neon branch ${NEON_BRANCH_NAME} (${branch_id})."
 
-      # The branch is unpooled-reachable at the endpoint host the API returns.
       - name: Resolve connection details
-        id: conn
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          BRANCH_ID: ${{ steps.branch.outputs.branch_id }}
         run: |
           set -euo pipefail
+          query=$(node -e 'process.stdout.write(new URLSearchParams({branch_id:process.argv[1],database_name:"neondb",role_name:"neondb_owner"}).toString())' "$BRANCH_ID")
           resp=$(curl -sS --fail-with-body \
             -H "Authorization: Bearer ${NEON_API_KEY}" \
-            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?branch_id=${{ steps.branch.outputs.branch_id }}&database_name=neondb&role_name=neondb_owner")
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?${query}")
           uri=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).uri))')
           echo "::add-mask::${uri}"
           host=$(node -e 'process.stdout.write(new URL(process.argv[1]).hostname)' "$uri")
@@ -322,7 +338,7 @@ jobs:
       - name: Apply and verify migrations on the Neon branch
         env:
           MIGRATION_ALLOWED_DATABASE: neondb
-          MIGRATION_ENVIRONMENT: ci
+          MIGRATION_ENVIRONMENT: test
           MIGRATION_TARGET_KIND: primary
           MIGRATION_ROLE: neondb_owner
           MIGRATION_DEPLOYMENT_SHA: ${{ github.sha }}
@@ -330,11 +346,36 @@ jobs:
           npm run migrate:apply
           npm run migrate:verify
 
-      # Guaranteed cleanup: runs on success, failure and cancellation. A failed
-      # delete fails the job so a leaked branch is visible.
+      # Guaranteed cleanup: runs on success, failure and cancellation. When the
+      # create step failed after the API call succeeded (so no branch id was
+      # recorded), fall back to finding the branch by its deterministic name. A
+      # failed delete fails the job so a leaked branch is visible.
       - name: Delete Neon branch
-        if: always() && steps.branch.outputs.branch_id != ''
+        if: always()
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          BRANCH_ID: ${{ steps.branch.outputs.branch_id }}
         run: |
-          curl -sS --fail-with-body -X DELETE \
-            -H "Authorization: Bearer ${NEON_API_KEY}" \
-            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${{ steps.branch.outputs.branch_id }}"
+          set -euo pipefail
+          if [ -z "${NEON_API_KEY:-}" ] || [ -z "${NEON_PROJECT_ID:-}" ]; then
+            echo "Neon is not configured; nothing was created."
+            exit 0
+          fi
+          ids="${BRANCH_ID:-}"
+          if [ -z "$ids" ]; then
+            query=$(node -e 'process.stdout.write(new URLSearchParams({search:process.argv[1]}).toString())' "$NEON_BRANCH_NAME")
+            resp=$(curl -sS --fail-with-body \
+              -H "Authorization: Bearer ${NEON_API_KEY}" \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches?${query}")
+            ids=$(printf '%s' "$resp" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write((JSON.parse(s).branches||[]).filter(b=>b.name===process.argv[1]).map(b=>b.id).join(" ")))' "$NEON_BRANCH_NAME")
+          fi
+          if [ -z "$ids" ]; then
+            echo "No branch named ${NEON_BRANCH_NAME} exists; nothing to delete."
+            exit 0
+          fi
+          for id in $ids; do
+            curl -sS --fail-with-body -X DELETE \
+              -H "Authorization: Bearer ${NEON_API_KEY}" \
+              "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches/${id}"
+            echo "Deleted Neon branch ${id}."
+          done
