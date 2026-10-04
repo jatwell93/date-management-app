@@ -324,7 +324,7 @@ jobs:
           BRANCH_ID: ${{ steps.branch.outputs.branch_id }}
         run: |
           set -euo pipefail
-          query=$(node -e 'process.stdout.write(new URLSearchParams({branch_id:process.argv[1],database_name:"neondb",role_name:"neondb_owner"}).toString())' "$BRANCH_ID")
+          query=$(node -e 'process.stdout.write(new URLSearchParams({branch_id:process.argv[1],database_name:"neondb",role_name:"neondb_owner",pooled:"false"}).toString())' "$BRANCH_ID")
           resp=$(curl -sS --fail-with-body \
             -H "Authorization: Bearer ${NEON_API_KEY}" \
             "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?${query}")
@@ -332,6 +332,12 @@ jobs:
           echo "::add-mask::${uri}"
           host=$(node -e 'process.stdout.write(new URL(process.argv[1]).hostname)' "$uri")
           echo "::add-mask::${host}"
+          case "$host" in
+            *-pooler.*)
+              echo "::error::Neon returned a pooled endpoint; migrations need the direct one."
+              exit 1
+              ;;
+          esac
           echo "DATABASE_URL_UNPOOLED=${uri}" >> "$GITHUB_ENV"
           echo "MIGRATION_ALLOWED_HOST=${host}" >> "$GITHUB_ENV"
 
