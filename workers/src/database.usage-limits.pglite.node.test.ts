@@ -306,6 +306,69 @@ describe('Workers tier usage limits (real SQL)', () => {
     });
   });
 
+  // The cap counts live rows, so anything that removes or retires a row has to
+  // give the slot back. Express's "counter stays accurate across creations and
+  // deletions" row (multi-tenant-usage-limits.test.ts:506) asserted this against
+  // a counter column; here there is no counter to drift, so the property to
+  // prove is that the COUNT in the INSERT agrees with what the caller can see.
+  describe('slots are returned when rows are removed or retired', () => {
+    it('admits a product once another is deleted', async () => {
+      await seedProducts(5);
+      const db = makeDb();
+      expect(await db.createProduct(ORG, { barcode: 'BAR-X', name: 'Blocked' }, 5)).toBeNull();
+
+      const rows = await sql`SELECT id FROM products WHERE organization_id = ${ORG} LIMIT 1`;
+      const removed = await db.deleteProduct(ORG, Number(rows[0].id));
+      expect(removed).toEqual({ outcome: 'deleted' });
+
+      const created = await db.createProduct(ORG, { barcode: 'BAR-Y', name: 'Admitted' }, 5);
+      expect(created?.name).toBe('Admitted');
+      expect(await countProducts()).toBe(5);
+    });
+
+    it('does not count a discarded inventory item against the active-expiry cap', async () => {
+      await sql`INSERT INTO users (id, organization_id, username, role, updated_at)
+                VALUES (${USER_ID}, ${ORG}, ${'actor'}, ${'admin'}, NOW())`;
+      const productRows = await sql`
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${ORG}, ${'BAR-D'}, ${'SKU-D'}, ${'Discard product'}, 5, NOW()) RETURNING id`;
+      const productId = Number(productRows[0].id);
+      for (let i = 0; i < 3; i += 1) {
+        await sql`
+          INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+          VALUES (${ORG}, ${productId}, ${locationId}, ${'2099-01-01'}, ${'Discarded'}, NOW())`;
+      }
+
+      const item = await makeDb().createInventoryItem(
+        ORG,
+        USER_ID,
+        { productId, expiryDate: '2099-06-01', locationId },
+        1,
+      );
+
+      expect(item).not.toBeNull();
+    });
+
+    it('admits a user once another is soft-deleted', async () => {
+      const adminRows = await sql`
+        INSERT INTO users (organization_id, username, role, updated_at)
+        VALUES (${ORG}, ${'admin'}, ${'admin'}, NOW()) RETURNING id`;
+      const actor = { userId: Number(adminRows[0].id), ipAddress: null };
+      const leaverRows = await sql`
+        INSERT INTO users (organization_id, username, role, updated_at)
+        VALUES (${ORG}, ${'leaver'}, ${'team_member'}, NOW()) RETURNING id`;
+      const db = makeDb();
+      const seat = (username: string) =>
+        db.createOrganizationUser(ORG, { username, role: 'team_member', seatCap: 2, actor });
+      expect(await seat('blocked')).toBeNull();
+
+      expect(await db.softDeleteUser(ORG, Number(leaverRows[0].id))).toBe(true);
+
+      const created = await seat('replacement');
+      expect(created).not.toBeNull();
+    });
+  });
+
   describe('usage reporting', () => {
     it('counts SKUs, users and active expiries for the organization only', async () => {
       await seedProducts(3);
@@ -313,6 +376,9 @@ describe('Workers tier usage limits (real SQL)', () => {
       await sql`INSERT INTO users (organization_id, username, role, updated_at) VALUES (${ORG}, ${'a'}, ${'admin'}, NOW())`;
       await sql`INSERT INTO users (organization_id, username, role, updated_at) VALUES (${ORG}, ${'b'}, ${'team_member'}, NOW())`;
       await sql`INSERT INTO users (organization_id, username, role, updated_at) VALUES (${OTHER_ORG}, ${'c'}, ${'admin'}, NOW())`;
+      // A soft-deleted user is invisible to listUsers, so it must not be
+      // reported (or enforced) as a seat either.
+      await sql`INSERT INTO users (organization_id, username, role, updated_at, deleted_at) VALUES (${ORG}, ${'gone'}, ${'team_member'}, NOW(), NOW())`;
 
       const productRows = await sql`
         SELECT id FROM products WHERE organization_id = ${ORG} LIMIT 1`;

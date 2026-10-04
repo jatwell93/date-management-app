@@ -1039,7 +1039,8 @@ async function insertOrganizationUser(
       INSERT INTO users (organization_id, username, role, created_at, updated_at)
       SELECT ${organizationId}, ${username}, ${role}, NOW(), NOW()
       WHERE (
-        SELECT COUNT(*) FROM users WHERE organization_id = ${organizationId}
+        SELECT COUNT(*) FROM users
+        WHERE organization_id = ${organizationId} AND deleted_at IS NULL
       ) < ${seatCap}
       RETURNING id, email, username, role, clerk_user_id, created_at
     ),
@@ -1732,7 +1733,7 @@ export function createWorkersDatabase(env: Env): Database {
       // so the number shown matches the number enforced against.
       const [skus, users, activeExpiries] = await Promise.all([
         sql`SELECT COUNT(*)::int as count FROM products WHERE organization_id = ${organizationId}`,
-        sql`SELECT COUNT(*)::int as count FROM users WHERE organization_id = ${organizationId}`,
+        sql`SELECT COUNT(*)::int as count FROM users WHERE organization_id = ${organizationId} AND deleted_at IS NULL`,
         sql`
           SELECT COUNT(*)::int as count FROM inventory_items
           WHERE organization_id = ${organizationId}
