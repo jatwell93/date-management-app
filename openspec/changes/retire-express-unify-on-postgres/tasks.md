@@ -3639,7 +3639,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       always-running `Database Conformance Gate` — **require that check, then add it to branch
       protection.** `neon-compatibility` is scheduled/manual only, creates `ci-compat-<run>` via the
       Neon API from `NEON_COMPAT_PARENT_BRANCH_ID`, runs `migrate:apply`/`migrate:verify`, and deletes
-      the branch in an `if: always()` step. It needs repo secret `NEON_API_KEY` and vars
+      the branch in an `if: always()` step. It needs repo secret `NEON_COMPAT_API_KEY` (not the production-environment `NEON_API_KEY`) and vars
       `NEON_PROJECT_ID`, `NEON_COMPAT_PARENT_BRANCH_ID`, and has **never run**: dispatch it once
       before trusting it. `GET /live`, `/api/live`, `/ready`, `/api/ready` are served by
       `workers/src/health.ts` (`handleLiveProbe`, `handleReadyProbe`); `reconcile-route-matrix.py`

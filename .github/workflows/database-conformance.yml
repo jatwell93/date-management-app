@@ -256,7 +256,7 @@ jobs:
 
   # Scheduled compatibility check against real Neon. Not part of the gate.
   #
-  # Needs repository secret NEON_API_KEY and repository variables
+  # Needs repository secret NEON_COMPAT_API_KEY (a key separate from the production-environment NEON_API_KEY) and repository variables
   # NEON_PROJECT_ID and NEON_COMPAT_PARENT_BRANCH_ID (a non-production branch to
   # fork from, so no production data is copied into CI). The job fails when any
   # is unset: a compatibility job that silently skips proves nothing.
@@ -291,7 +291,7 @@ jobs:
 
       - name: Require Neon configuration
         env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_COMPAT_API_KEY }}
         run: |
           missing=0
           for v in NEON_API_KEY NEON_PROJECT_ID NEON_PARENT_BRANCH_ID; do
@@ -305,7 +305,7 @@ jobs:
       - name: Create isolated Neon branch
         id: branch
         env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_COMPAT_API_KEY }}
         run: |
           set -euo pipefail
           body=$(node -e 'process.stdout.write(JSON.stringify({branch:{name:process.argv[1],parent_id:process.argv[2]},endpoints:[{type:"read_write"}]}))' "$NEON_BRANCH_NAME" "$NEON_PARENT_BRANCH_ID")
@@ -320,7 +320,7 @@ jobs:
 
       - name: Resolve connection details
         env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_COMPAT_API_KEY }}
           BRANCH_ID: ${{ steps.branch.outputs.branch_id }}
         run: |
           set -euo pipefail
@@ -353,7 +353,7 @@ jobs:
       - name: Delete Neon branch
         if: always()
         env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_COMPAT_API_KEY }}
           BRANCH_ID: ${{ steps.branch.outputs.branch_id }}
         run: |
           set -euo pipefail
