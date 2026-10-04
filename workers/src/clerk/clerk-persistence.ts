@@ -580,6 +580,10 @@ export async function processClerkWebhookEvent(
         // cannot be about any member here. Falling through to the unscoped
         // update below would retire the user from whichever organization they
         // actually belong to.
+        console.warn(
+          '[CLERK_WEBHOOK] Membership deleted for an organization this database has never seen; ignoring',
+          { clerkUserId, clerkOrganizationId },
+        );
         return;
       }
 

@@ -1,6 +1,7 @@
 import { createWorkersDatabase } from '../database';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
+import { isJsonObject } from '../utils/json-object';
 import {
   claimClerkWebhookEvent,
   completeClerkWebhookEvent,
@@ -44,9 +45,9 @@ export async function handleClerkWebhook(
     return errorResponse(message, 400, env, requestOrigin);
   }
 
-  let event: ClerkWebhookEventPayload;
+  let parsed: unknown;
   try {
-    event = JSON.parse(rawBody) as ClerkWebhookEventPayload;
+    parsed = JSON.parse(rawBody);
   } catch {
     return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
   }
@@ -55,9 +56,10 @@ export async function handleClerkWebhook(
   // would throw on the property read below and escape this handler; a bare
   // array, string or number would be claimed and acknowledged as an event of
   // type 'unknown'.
-  if (event === null || typeof event !== 'object' || Array.isArray(event)) {
+  if (!isJsonObject(parsed)) {
     return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
   }
+  const event = parsed as ClerkWebhookEventPayload;
 
   const eventType = typeof event.type === 'string' ? event.type : 'unknown';
 
