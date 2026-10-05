@@ -30,4 +30,32 @@ describe('Worker catalogue parser', () => {
 
     expect(row).toBeNull();
   });
+
+  // Task 3.2 batch 4. The Worker used to drop every character that was not a digit,
+  // dot or minus, so "12,50" became 1250 and "(12.50)" became +12.5. Cost cells now
+  // go through the same parser Express used (`shared/domain/product-import-cost.ts`).
+  it.each([
+    ['12,50', 12.5],
+    ['1.234,56', 1234.56],
+    ['1,234.56', 1234.56],
+    ['$7.53', 7.53],
+    ['(12.50)', -12.5],
+    ['AUD 7.53', 7.53],
+  ])('reads the cost cell %s as %d', (cell, expected) => {
+    const result = validateCatalogueRecords([
+      ['SKU', 'Name', 'Cost', 'Barcode'],
+      ['SKU-1', 'Milk', cell, 'BAR-1'],
+    ]);
+
+    expect(result.rows[0]?.costPrice).toBe(expected);
+  });
+
+  it('reads an optional retail price with the same rules', () => {
+    const result = validateCatalogueRecords([
+      ['SKU', 'Name', 'Cost', 'Retail Price', 'Barcode'],
+      ['SKU-1', 'Milk', '4,20', '€1.234,56', 'BAR-1'],
+    ]);
+
+    expect(result.rows[0]).toMatchObject({ costPrice: 4.2, retailPrice: 1234.56 });
+  });
 });
