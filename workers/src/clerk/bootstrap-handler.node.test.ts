@@ -218,9 +218,138 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
     expect(trial[0]?.status).toBe('trialing');
   });
 
+  describe('the token decides the organization and the role, not the body', () => {
+    const readUsers = async () =>
+      (await sql`SELECT clerk_user_id AS "clerkUserId", organization_id AS "organizationId", role FROM users ORDER BY id`) as unknown as Array<{
+        clerkUserId: string;
+        organizationId: string;
+        role: string;
+      }>;
+
+    it("refuses a signed-in outsider who names another organization's Clerk id", async () => {
+      await seedOrg('org-victim', 'clerk-org-victim', 'victim');
+      await seedUser('org-victim', 'clerk-boss', 'admin', 'boss@victim.test');
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest(
+          {
+            sub: 'clerk-outsider',
+            email: 'eve@evil.test',
+            username: 'eve',
+            org_id: 'clerk-org-eve',
+            org_role: 'org:member',
+          },
+          { clerkOrganizationId: 'clerk-org-victim', clerkMembershipRole: 'admin' },
+        ),
+        ENV,
+      );
+
+      expect(response.status).toBe(403);
+      // Refused before anything was written: no row for the outsider, and the
+      // victim organization still has exactly its own admin.
+      expect(await readUsers()).toEqual([
+        { clerkUserId: 'clerk-boss', organizationId: 'org-victim', role: 'admin' },
+      ]);
+      expect(
+        await sql`SELECT id FROM organizations WHERE clerk_organization_id = ${'clerk-org-eve'}`,
+      ).toHaveLength(0);
+    });
+
+    it('refuses a body organization when the token carries none', async () => {
+      await seedOrg('org-victim', 'clerk-org-victim', 'victim');
+      await seedUser('org-victim', 'clerk-boss', 'admin', 'boss@victim.test');
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest(
+          { sub: 'clerk-outsider', email: 'eve@evil.test', username: 'eve' },
+          { clerkOrganizationId: 'clerk-org-victim' },
+        ),
+        ENV,
+      );
+
+      expect(response.status).toBe(403);
+      expect(await readUsers()).toHaveLength(1);
+    });
+
+    it('ignores a role the body claims, and uses the one in the token', async () => {
+      await seedOrg('org-2', 'clerk-org-2', 'globex');
+      await seedUser('org-2', 'clerk-admin', 'admin', 'boss@globex.test');
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest(
+          {
+            sub: 'clerk-member',
+            email: 'm@globex.test',
+            username: 'member',
+            org_id: 'clerk-org-2',
+            org_role: 'org:member',
+          },
+          { clerkOrganizationId: 'clerk-org-2', clerkMembershipRole: 'admin' },
+        ),
+        ENV,
+      );
+
+      expect(response.status).toBe(201);
+      expect(((await response.json()) as BootstrapPayload).role).toBe('team_member');
+      expect((await readUsers()).find((u) => u.clerkUserId === 'clerk-member')?.role).toBe(
+        'team_member',
+      );
+    });
+
+    it.each([
+      ['org:admin', 'admin'],
+      ['owner', 'admin'],
+      ['org:manager', 'manager'],
+      ['org:member', 'team_member'],
+      ['org:something-new', 'team_member'],
+    ])(
+      'maps a token role of %s to %s when the organization already has an admin',
+      async (orgRole, expected) => {
+        await seedOrg('org-2', 'clerk-org-2', 'globex');
+        await seedUser('org-2', 'clerk-admin', 'admin', 'boss@globex.test');
+
+        const response = await handleOrganizationBootstrap(
+          bootstrapRequest({
+            sub: 'clerk-joiner',
+            email: 'j@globex.test',
+            username: 'joiner',
+            org_id: 'clerk-org-2',
+            org_role: orgRole,
+          }),
+          ENV,
+        );
+
+        expect(response.status).toBe(201);
+        expect(((await response.json()) as BootstrapPayload).role).toBe(expected);
+      },
+    );
+
+    it('still answers a returning user whose body names a different organization', async () => {
+      await seedOrg('org-2', 'clerk-org-2', 'globex');
+      await seedUser('org-2', 'clerk-returning', 'team_member', 'r@globex.test');
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest(
+          { sub: 'clerk-returning', email: 'r@globex.test', username: 'r', org_id: 'clerk-org-2' },
+          { clerkOrganizationId: 'clerk-org-other' },
+        ),
+        ENV,
+      );
+
+      // Idempotent: the stored row answers, and the body is never consulted.
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as BootstrapPayload).organizationId).toBe('org-2');
+    });
+  });
+
   it('creates a new org, trial subscription, and first admin for a brand-new user', async () => {
     const request = bootstrapRequest(
-      { sub: 'clerk-founder', email: 'founder@startup.test', username: 'founder' },
+      {
+        sub: 'clerk-founder',
+        email: 'founder@startup.test',
+        username: 'founder',
+        org_id: 'clerk-org-new',
+      },
       { clerkOrganizationId: 'clerk-org-new', organizationName: 'Startup Inc' },
     );
 
@@ -268,7 +397,12 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
 
     it('records the first admin a brand-new organization mints', async () => {
       const request = bootstrapRequest(
-        { sub: 'clerk-founder', email: 'founder@startup.test', username: 'founder' },
+        {
+          sub: 'clerk-founder',
+          email: 'founder@startup.test',
+          username: 'founder',
+          org_id: 'clerk-org-new',
+        },
         { clerkOrganizationId: 'clerk-org-new', organizationName: 'Startup Inc' },
         { 'CF-Connecting-IP': '198.51.100.22' },
       );
@@ -355,7 +489,12 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
       await sql`ALTER TABLE org_audit_log RENAME TO org_audit_log_hidden`;
       try {
         const request = bootstrapRequest(
-          { sub: 'clerk-resilient', email: 'resilient@startup.test', username: 'resilient' },
+          {
+            sub: 'clerk-resilient',
+            email: 'resilient@startup.test',
+            username: 'resilient',
+            org_id: 'clerk-org-resilient',
+          },
           { clerkOrganizationId: 'clerk-org-resilient', organizationName: 'Resilient Inc' },
         );
 
