@@ -3110,7 +3110,7 @@ export function createWorkersDatabase(env: Env): Database {
             (organization_id, product_id, expiry_date, location_id, status, created_at, updated_at)
           SELECT
             ${organizationId}, ${data.productId}, ${data.expiryDate}, ${data.locationId},
-            ${data.status ?? 'Normal'}, NOW(), NOW()
+            ${status}, NOW(), NOW()
           WHERE (
             SELECT COUNT(*) FROM inventory_items
             WHERE organization_id = ${organizationId}
@@ -3249,14 +3249,17 @@ export function createWorkersDatabase(env: Env): Database {
       // row is skipped: `resolved_products` finds no id for it and the
       // `WHERE rp.id IS NOT NULL` guard drops its inventory item too.
       //
-      // **One leg is not constraint-protected.** `inventory_items` has no
-      // unique index over (organization_id, product_id, location_id), so its
-      // idempotency is the `NOT EXISTS` guard: atomic within this statement,
-      // but not isolated against a concurrent seed of the same organization.
-      // Two simultaneous seeds can each insert one inventory item per pair.
-      // That is strictly no worse than Express, whose `findFirst`-then-create
-      // had the same race inside its transaction under READ COMMITTED, and
-      // closing it properly means a new unique index, which is a migration.
+      // **The inventory-items leg is protected by a constraint only in part.**
+      // Its idempotency is the `NOT EXISTS` guard, which keys on
+      // (organization_id, product_id, location_id) at any expiry: atomic within
+      // this statement, but not isolated against a concurrent seed of the same
+      // organization. The partial unique index from migration 0019,
+      // `inventory_items_active_triple_unique`, also covers expiry_date, and the
+      // seed derives expiry from CURRENT_DATE, so two simultaneous same-day seeds
+      // collide on identical keys and the `ON CONFLICT DO NOTHING` on the insert
+      // skips the loser. Two seeds that straddle midnight can still each insert
+      // one item per pair, which is no worse than Express, whose
+      // `findFirst`-then-create had the same race under READ COMMITTED.
       //
       // **Expiry months are per-row constants, where Express computed them.**
       // Its expression was `areaIndex === 2 ? 6 : productsCreatedCount % 2 === 0 ? 3 : 18`

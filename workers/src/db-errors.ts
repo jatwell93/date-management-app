@@ -20,9 +20,12 @@ function hasCode(value: unknown, code: string): boolean {
  * race that slips past it surfaces as a plain unique violation instead, and
  * `isDuplicateInventoryItem` treats both the same way.
  */
+export const DUPLICATE_INVENTORY_ITEM_MESSAGE =
+  'An inventory item with the same product, expiry date, and location already exists';
+
 export class DuplicateInventoryItemError extends Error {
   constructor() {
-    super('An inventory item with the same product, expiry date, and location already exists');
+    super(DUPLICATE_INVENTORY_ITEM_MESSAGE);
     this.name = 'DuplicateInventoryItemError';
   }
 }
