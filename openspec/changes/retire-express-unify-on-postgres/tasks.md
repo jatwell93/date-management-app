@@ -3156,6 +3156,23 @@ equivalent, a relocated home, or an explicit retirement decision.
       rows and (3) `requireMinRole` rows retire, as does the `can-upload` pair. Item (4), the
       missing-Stripe-id rule, retires too: a read-only production query on 2026-10-05 found 2
       `subscription_tiers` rows, both `trialing` with no Stripe id, and none `active` without one.
+      **Batch 4a — shared-domain tests that live only in `backend/`.** The domain-logic rows (925 in
+      all, 650 still reading "none found") are mostly Express unit tests, and many of them test
+      `shared/domain/*`, which the Worker imports. Deleting `backend/` in Phase 4 would have removed
+      the only test of that code. Six files are copied into `workers/src/shared-domain/` unchanged
+      apart from the import path (`credit-claim`, `markdown-matrix`, `supplier-policy`,
+      `brand-supplier`, `store-walk-tracking`, `platform-catalogue-shared`: 95 tests), plus a new
+      `markdown-lookups.test.ts` carrying the shared-only assertions from the Express
+      `inventory-markdown.helpers` test. 56 rows re-pointed to `worker-equivalent-exists`; 13
+      `inventory-markdown.helpers` rows decided (10 equivalent, 3 proposed `retire`: invalid-date
+      fallback, Prisma `Date` shape, Express service export). Each shared function was mutated and the
+      ported tests failed. Working the status rows found a real defect: `calculateInventoryStatus` in
+      `workers/src/upload/expiry-import.ts` used 7/14/30-day thresholds, copied from an Express CSV
+      parser that had missed the move to the shared 30/60/90-day windows, so an expiry-list import
+      labelled items differently from the nightly `markdown-recalculation` job. It now uses
+      `getMarkdownLevelForDays`; `expiry-import-status.test.ts` fails against the old code.
+      **Reviewer item:** Express's own `CSVParserService.calculateInventoryStatus` still has the old
+      thresholds. It is deleted with `backend/`, so nothing to fix there.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
