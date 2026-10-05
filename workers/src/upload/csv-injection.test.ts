@@ -109,6 +109,17 @@ describe('catalogue ingestion escapes spreadsheet formulas', () => {
     expect(catalogueField('Email: user@example.com', 'name')).toBe('Email: user@example.com');
   });
 
+  it('escapes by position, so multi-byte content neither hides a formula nor is mangled', () => {
+    // The Worker decodes uploads with TextDecoder, so non-ASCII cells are the
+    // normal case here rather than an edge. The escape looks at the first
+    // character only: a formula followed by multi-byte text is still escaped,
+    // and multi-byte text on its own is returned byte for byte.
+    expect(catalogueField('=日本語_TEST', 'name')).toBe("'=日本語_TEST");
+    expect(catalogueField('日本語の商品', 'name')).toBe('日本語の商品');
+    expect(catalogueField('Café Müller =1', 'name')).toBe('Café Müller =1');
+    expect(catalogueField('😀 promo', 'name')).toBe('😀 promo');
+  });
+
   it('stores cost and retail as numbers, so neither can carry a formula', () => {
     // These two are not escaped because they are never stored as text: parseCost
     // either yields a number or the row is rejected. Asserting the type is what
