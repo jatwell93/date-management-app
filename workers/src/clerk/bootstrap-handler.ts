@@ -39,7 +39,6 @@ interface OrganizationBootstrapBody {
   organizationName?: string;
   organizationSlug?: string;
   clerkOrganizationId?: string;
-  clerkMembershipRole?: string | null;
 }
 
 /** The canonical role set. Kept as a local alias of the shared `RoleValue`
@@ -261,10 +260,17 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
 
   const username =
     authResult.username || profile.username || deriveUsername({}, email, authResult.clerkUserId);
+  // The organization comes from the verified token, never from the body. The
+  // body is caller-controlled: letting it win let any signed-in user name
+  // someone else's Clerk organization and be linked into it. The body may still
+  // repeat the organization the token already names (the frontend does); it may
+  // not name a different one, and it may not name one the token omits. The
+  // latter is a session that has not yet picked up a just-created organization,
+  // and the safe answer is to refuse and let the client retry on a fresh token
+  // rather than to believe an unverified claim.
+  const claimedClerkOrgId = body.clerkOrganizationId?.trim() || null;
   const finalClerkOrgId =
-    body.clerkOrganizationId?.trim() ||
-    authResult.organizationId ||
-    `clerk-org-${authResult.clerkUserId}-${Date.now()}`;
+    authResult.organizationId || `clerk-org-${authResult.clerkUserId}-${Date.now()}`;
   const finalOrgName = body.organizationName?.trim() || `${email.split('@')[0]}'s Organization`;
   const finalOrgSlug = sanitizeSlug(
     body.organizationSlug?.trim() || finalOrgName,
@@ -297,6 +303,19 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
         isPlatformAdmin: isPlatformAdminUser(userId, env.PLATFORM_ADMIN_USER_IDS),
       },
       200,
+      env,
+      requestOrigin,
+    );
+  }
+
+  if (claimedClerkOrgId && claimedClerkOrgId !== authResult.organizationId) {
+    console.warn('[ORG_BOOTSTRAP] Body organization does not match the session token; refusing', {
+      clerkUserId: authResult.clerkUserId,
+      tokenHasOrganization: authResult.organizationId !== null,
+    });
+    return errorResponse(
+      'Organization does not match your session. Refresh and try again.',
+      403,
       env,
       requestOrigin,
     );
@@ -361,9 +380,7 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   `;
 
   const isFirstAdmin = activeAdmin.length === 0;
-  const assignedRole = isFirstAdmin
-    ? 'admin'
-    : normalizeBootstrapRole(body.clerkMembershipRole ?? authResult.organizationRole);
+  const assignedRole = isFirstAdmin ? 'admin' : normalizeBootstrapRole(authResult.organizationRole);
 
   await upsertClerkUser(sql, {
     clerkUserId: authResult.clerkUserId,
@@ -393,7 +410,7 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
     role: normalizeBootstrapRole(String(bootstrappedUser[0].role)),
     isFirstAdmin,
     isNewOrg,
-    clerkMembershipRole: body.clerkMembershipRole ?? authResult.organizationRole ?? null,
+    clerkMembershipRole: authResult.organizationRole ?? null,
     ipAddress: getClientIp(request),
   });
 
