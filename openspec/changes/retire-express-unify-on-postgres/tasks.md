@@ -3152,6 +3152,10 @@ equivalent, a relocated home, or an explicit retirement decision.
       that a missing Stripe id means no entitlement is proposed `retire`, because no Worker writer
       creates a non-trial row without one. Equivalent mutant noted: the `userId <= 0` guard in
       `isPlatformAdminUser` is redundant behind the token regex.
+      **Decided (reviewer, 2026-10-05):** items (1) backup and restore endpoints, (2) no-Origin
+      rows and (3) `requireMinRole` rows retire, as does the `can-upload` pair. Item (4), the
+      missing-Stripe-id rule, waits on a read-only production query for `active` rows with no
+      Stripe subscription id.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
