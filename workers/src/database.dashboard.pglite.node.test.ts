@@ -93,7 +93,7 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
       await seedItem({ offsetDays: 30 });
       // Outside the 0-30 window — must not count as expiring soon.
       await seedItem({ offsetDays: 31 });
-      await seedItem({ offsetDays: -10, status: 'Expired' });
+      await seedItem({ offsetDays: -11, status: 'Expired' });
 
       // Expired worklist: two past-expiry rows on product 1 (same product/loc/cost)
       // collapse to one line; a Markdown 3 future row on product 2 is a second line;
@@ -141,7 +141,9 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
       // Entered today already expired.
       await seedItem({ offsetDays: -10, status: 'Expired', createdOffsetDays: 0 });
       // Became actionable days ago (created before it crossed) — excluded.
-      await seedItem({ offsetDays: -10, status: 'Expired', createdOffsetDays: -5 });
+      // Its own expiry day: one active item per product, expiry and location is a
+      // unique index (migration 0019).
+      await seedItem({ offsetDays: -12, status: 'Expired', createdOffsetDays: -5 });
       // Not yet expired — excluded even though created today.
       await seedItem({ offsetDays: 40, status: 'Markdown 3', createdOffsetDays: 0 });
       // Dispositioned — excluded.

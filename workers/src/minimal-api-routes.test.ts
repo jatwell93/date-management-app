@@ -9,6 +9,7 @@ import { authenticateClerkRequest } from './clerk/bootstrap-handler';
 import type { Database } from './database';
 import type { Env } from './types/env';
 import { UNLIMITED_CAP } from './utils/usage-limits';
+import { DuplicateInventoryItemError } from './db-errors';
 
 vi.mock('./clerk/bootstrap-handler', () => ({
   authenticateClerkRequest: vi.fn(),
@@ -1851,6 +1852,56 @@ describe('minimal API route table', () => {
       enforced: false,
     });
     warn.mockRestore();
+  });
+
+  // Task 3.10: Express answered a duplicate product/expiry/location with 409.
+  // Both shapes must map to it: the typed refusal from the read in
+  // `createInventoryItem`, and the raw unique violation from the index that
+  // closes the race the read leaves open.
+  it.each([
+    ['the duplicate refusal', () => new DuplicateInventoryItemError()],
+    ['a unique violation from the index', () => Object.assign(new Error('dup'), { code: '23505' })],
+  ])('answers a duplicate inventory create with 409 on %s', async (_name, makeError) => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createInventoryItem = vi.fn().mockRejectedValue(makeError());
+    const database = tierDatabase('free', { createInventoryItem });
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/inventory-items', {
+        method: 'POST',
+        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+      }),
+      pathname: '/api/inventory-items',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(409);
+    await expect(response?.json()).resolves.toMatchObject({
+      error: expect.stringContaining('same product, expiry date, and location'),
+    });
+  });
+
+  it('answers an inventory update that collides with another active item with 409', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const updateInventoryItem = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('dup'), { code: '23505' }));
+    const database = tierDatabase('free', { updateInventoryItem });
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/inventory-items/7', {
+        method: 'PUT',
+        body: JSON.stringify({ locationId: 2 }),
+      }),
+      pathname: '/api/inventory-items/7',
+      method: 'PUT',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(409);
   });
 
   it('still records the crossing when enforcement IS on', async () => {

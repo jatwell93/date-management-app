@@ -1,3 +1,16 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "codemap": {
+      "args": [
+        "--project-root",
+        "C:\\Users\\josha\\date-management-app",
+        "mcp",
+        "--configured-version",
+        "4.5.1",
+        "--integration",
+        "claude-setup"
+      ],
+      "command": "C:\\Users\\josha\\scoop\\apps\\codemap\\current\\codemap.exe"
+    }
+  }
 }

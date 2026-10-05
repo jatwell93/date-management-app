@@ -386,8 +386,8 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
       VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}, NOW()),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}, NOW()),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'}, NOW()),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Expired'}, NOW()),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '3 days')::date, ${'Normal'}, NOW()),
              (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Processed'}, NOW()),
              (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '5 days')::date, ${'Normal'}, NOW())`;
 

@@ -213,11 +213,14 @@ describe('Workers tier usage limits (real SQL)', () => {
                 VALUES (${USER_ID}, ${ORG}, ${'actor'}, ${'admin'}, NOW())`;
     });
 
+    // Each item gets its own expiry day: one active item per product, expiry
+    // and location is a unique index (migration 0019), so identical rows would
+    // not seed.
     const seedItems = async (count: number, status = 'Normal') => {
       for (let i = 0; i < count; i += 1) {
         await sql`
           INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
-          VALUES (${ORG}, ${productId}, ${locationId}, ${'2099-01-01'}, ${status}, NOW())`;
+          VALUES (${ORG}, ${productId}, ${locationId}, DATE '2099-01-01' + ${i}::int, ${status}, NOW())`;
       }
     };
 

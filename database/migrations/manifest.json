@@ -437,6 +437,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0019",
+      "forward": "0019_inventory_items_active_triple_unique.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0019_inventory_items_active_triple_unique.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }

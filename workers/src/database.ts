@@ -63,6 +63,7 @@ import {
   type ClaimWriteResult,
 } from './credit-claim-database';
 import { assertReferencesBelongToOrganization } from './tenant-references';
+import { DuplicateInventoryItemError } from './db-errors';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -3070,6 +3071,27 @@ export function createWorkersDatabase(env: Env): Database {
         locationId: data.locationId,
       });
 
+      // One active item per (organization, product, expiry, location), as Express
+      // enforced (`data-integrity.middleware`). Checked here so the caller gets
+      // a precise refusal: the CTE below returns no row for a cap refusal too,
+      // and the handler could not tell the two apart. Items created directly in
+      // a terminal status sit outside the partial unique index, so they skip it.
+      // A concurrent duplicate that passes this read is stopped by
+      // `inventory_items_active_triple_unique` (migration 0019).
+      const status = data.status ?? 'Normal';
+      if (!TERMINAL_INVENTORY_STATUSES.includes(status)) {
+        const existing = await sql`
+          SELECT 1 FROM inventory_items
+          WHERE organization_id = ${organizationId}
+            AND product_id = ${data.productId}
+            AND expiry_date = ${data.expiryDate}
+            AND location_id = ${data.locationId}
+            AND status <> ALL(${TERMINAL_INVENTORY_STATUSES})
+          LIMIT 1
+        `;
+        if (existing.length > 0) throw new DuplicateInventoryItemError();
+      }
+
       // Atomic insert + audit via CTE so we never end up with an inventory
       // item lacking an audit row (or vice versa) on partial failure.
       //
@@ -3088,7 +3110,7 @@ export function createWorkersDatabase(env: Env): Database {
             (organization_id, product_id, expiry_date, location_id, status, created_at, updated_at)
           SELECT
             ${organizationId}, ${data.productId}, ${data.expiryDate}, ${data.locationId},
-            ${data.status ?? 'Normal'}, NOW(), NOW()
+            ${status}, NOW(), NOW()
           WHERE (
             SELECT COUNT(*) FROM inventory_items
             WHERE organization_id = ${organizationId}
@@ -3227,14 +3249,17 @@ export function createWorkersDatabase(env: Env): Database {
       // row is skipped: `resolved_products` finds no id for it and the
       // `WHERE rp.id IS NOT NULL` guard drops its inventory item too.
       //
-      // **One leg is not constraint-protected.** `inventory_items` has no
-      // unique index over (organization_id, product_id, location_id), so its
-      // idempotency is the `NOT EXISTS` guard: atomic within this statement,
-      // but not isolated against a concurrent seed of the same organization.
-      // Two simultaneous seeds can each insert one inventory item per pair.
-      // That is strictly no worse than Express, whose `findFirst`-then-create
-      // had the same race inside its transaction under READ COMMITTED, and
-      // closing it properly means a new unique index, which is a migration.
+      // **The inventory-items leg is protected by a constraint only in part.**
+      // Its idempotency is the `NOT EXISTS` guard, which keys on
+      // (organization_id, product_id, location_id) at any expiry: atomic within
+      // this statement, but not isolated against a concurrent seed of the same
+      // organization. The partial unique index from migration 0019,
+      // `inventory_items_active_triple_unique`, also covers expiry_date, and the
+      // seed derives expiry from CURRENT_DATE, so two simultaneous same-day seeds
+      // collide on identical keys and the `ON CONFLICT DO NOTHING` on the insert
+      // skips the loser. Two seeds that straddle midnight can still each insert
+      // one item per pair, which is no worse than Express, whose
+      // `findFirst`-then-create had the same race under READ COMMITTED.
       //
       // **Expiry months are per-row constants, where Express computed them.**
       // Its expression was `areaIndex === 2 ? 6 : productsCreatedCount % 2 === 0 ? 3 : 18`
@@ -3317,6 +3342,7 @@ export function createWorkersDatabase(env: Env): Database {
                 AND ii.product_id = rp.id
                 AND ii.location_id = a.id
             )
+          ON CONFLICT DO NOTHING
           RETURNING id
         )
         SELECT
