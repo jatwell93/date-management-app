@@ -190,8 +190,10 @@ describe('Workers seedDemoData (real SQL)', () => {
 
     // Delete one item, then re-seed: exactly that one comes back. The
     // NOT EXISTS guard is the only thing stopping the other seven from being
-    // duplicated, because inventory_items has no unique index over
-    // (organization_id, product_id, location_id) in production either.
+    // duplicated. It keys on product and area at any expiry, which is stricter
+    // than the unique index from migration 0019: that key includes the expiry
+    // date, and the seed's expiry is relative to today, so the index alone
+    // would not stop a re-seed on a later day.
     await sql`
       DELETE FROM inventory_items
       WHERE organization_id = ${ORG}

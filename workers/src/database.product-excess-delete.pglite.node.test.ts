@@ -93,7 +93,7 @@ describe('Workers excess-product export and product delete (real SQL)', () => {
     for (let i = 0; i < count; i += 1) {
       await sql`
         INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
-        VALUES (${organizationId}, ${productId}, ${locationId}, ${'2027-01-01'}, ${'Active'}, NOW())`;
+        VALUES (${organizationId}, ${productId}, ${locationId}, DATE '2027-01-01' + ${i}::int, ${'Active'}, NOW())`;
     }
   };
 

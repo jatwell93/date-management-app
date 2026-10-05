@@ -231,6 +231,8 @@ export const MIGRATION_ONLY_PARTIAL_INDEXES = new Set([
   "check_cycles|ON public.check_cycles USING btree (organization_id) WHERE (status = 'active'::text)|true|false|(status = 'active'::text)",
   // 0001: one active catalogue import per org
   "uploads|ON public.uploads USING btree (organization_id) WHERE ((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))|true|false|((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))",
+  // 0019: one active inventory item per product, expiry date and location
+  "inventory_items|ON public.inventory_items USING btree (organization_id, product_id, expiry_date, location_id) WHERE (status <> ALL (ARRAY['Processed'::text, 'Completed'::text, 'Discarded'::text, 'Archived'::text, 'Sold Through'::text]))|true|false|(status <> ALL (ARRAY['Processed'::text, 'Completed'::text, 'Discarded'::text, 'Archived'::text, 'Sold Through'::text]))",
 ]);
 
 /**

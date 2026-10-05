@@ -112,7 +112,7 @@ import {
 } from '../../shared/domain/product-validation';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
-import { isUniqueViolation } from './db-errors';
+import { isDuplicateInventoryItem, isUniqueViolation } from './db-errors';
 import { recordOutcome, sendClaim, sendFollowUp, uploadClaimPhoto } from './credit-claim-service';
 import { handleNotificationEmailQueue } from './notifications/notification-email-queue';
 
@@ -3286,6 +3286,13 @@ async function handleCreateInventoryItem(
     if (isReferentialError(message)) {
       return errorResponse(message, 400, env);
     }
+    if (isDuplicateInventoryItem(error)) {
+      return errorResponse(
+        'An inventory item with the same product, expiry date, and location already exists',
+        409,
+        env,
+      );
+    }
     console.error('handleCreateInventoryItem error:', error);
     return errorResponse('Internal server error', 500, env);
   }
@@ -3349,6 +3356,15 @@ async function handleUpdateInventoryItem(
     // reference check added there is handled here without an edit.
     if (isReferentialError(message)) {
       return errorResponse(message, 400, env);
+    }
+    // An update that moves an item onto another active item's product, expiry
+    // and location, or reinstates a retired one, hits the same unique index.
+    if (isUniqueViolation(error)) {
+      return errorResponse(
+        'An inventory item with the same product, expiry date, and location already exists',
+        409,
+        env,
+      );
     }
     console.error('handleUpdateInventoryItem error:', error);
     return errorResponse('Internal server error', 500, env);

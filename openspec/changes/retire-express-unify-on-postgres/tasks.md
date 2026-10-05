@@ -3730,6 +3730,22 @@ equivalent, a relocated home, or an explicit retirement decision.
       location (admitted) and a different expiry (admitted), mutation-verified by dropping the index.
       `database.ts` `createInventoryItem` is also the active-expiry cap's INSERT, so the guard must
       not disturb the cap's `COUNT(*)` predicate.
+      <br>**Progress (b)–(e) done; (a) open.** Reviewer decision 2026-10-05: retired items do not block
+      a re-add, so migration 0019 builds `inventory_items_active_triple_unique` as a *partial* unique
+      index (`WHERE status <> ALL(<terminal statuses>)`, the list the active-expiry cap uses). It is
+      migration-only in the Prisma comparison (`MIGRATION_ONLY_PARTIAL_INDEXES`), like the two earlier
+      partial indexes. `createInventoryItem` does a read for an active duplicate and throws
+      `DuplicateInventoryItemError` instead of using a `WHERE NOT EXISTS` in the INSERT: the CTE returns no
+      row for a cap refusal as well, so the handler could not tell the two apart. The create and update
+      handlers map both that error and a raw unique violation to 409. The catalogue seed's INSERT gained
+      `ON CONFLICT DO NOTHING`; the expiry import already skips on product and expiry and records a failed
+      row, so it needed no change. Pre-existing fixtures that seeded identical triples now vary the expiry.
+      Tests: `database.inventory-duplicate-guard.pglite.node.test.ts` (18; disabling the read fails 3,
+      making the index non-unique fails 4) and three route tests in `minimal-api-routes.test.ts`.
+      **(a) is blocking the merge:** the index build fails if production holds active duplicates. Run a
+      read-only `GROUP BY organization_id, product_id, expiry_date, location_id HAVING COUNT(*) > 1`
+      over active rows against production (direct URL, host printed first); if it lists groups, a dedupe
+      plan is needed before 0019 is applied.
 
 > **Integration checkpoint — parity PRs.** Implement Phase 3 as one or more independently safe,
 > reviewable PRs based on the latest `main`; split by coherent responsibility when that reduces review

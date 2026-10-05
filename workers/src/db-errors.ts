@@ -14,6 +14,24 @@ function hasCode(value: unknown, code: string): boolean {
 }
 
 /**
+ * Thrown by `createInventoryItem` when an active item already holds the same
+ * product, expiry date and location. It is the fast path in front of the
+ * `inventory_items_active_triple_unique` index (migration 0019); a concurrent
+ * race that slips past it surfaces as a plain unique violation instead, and
+ * `isDuplicateInventoryItem` treats both the same way.
+ */
+export class DuplicateInventoryItemError extends Error {
+  constructor() {
+    super('An inventory item with the same product, expiry date, and location already exists');
+    this.name = 'DuplicateInventoryItemError';
+  }
+}
+
+export function isDuplicateInventoryItem(error: unknown): boolean {
+  return error instanceof DuplicateInventoryItemError || isUniqueViolation(error);
+}
+
+/**
  * Detect a Postgres unique-violation. Prefer the SQLSTATE code over substring matching
  * the message, which is locale- and version-dependent.
  *

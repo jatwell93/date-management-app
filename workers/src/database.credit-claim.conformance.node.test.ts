@@ -151,7 +151,7 @@ describe('Worker claimable-pool conformance (Postgres vs shared TS)', () => {
     for (const w of scenario.writeOffs) {
       const org = w.org ?? ORG;
       await sql`INSERT INTO inventory_items (id, organization_id, product_id, location_id, expiry_date, status, updated_at)
-                VALUES (${w.txId}, ${org}, ${w.productId}, 1, '2026-01-01', ${'Expired'}, NOW())`;
+                VALUES (${w.txId}, ${org}, ${w.productId}, 1, DATE '2026-01-01' + ${w.txId}::int, ${'Expired'}, NOW())`;
       await sql`INSERT INTO expired_item_transactions (id, organization_id, inventory_item_id, action, units_discarded, credit_disposition, updated_at)
                 VALUES (${w.txId}, ${org}, ${w.txId}, ${'expired'}, ${w.units}, ${w.disposed ? 'DISPOSED' : 'PENDING'}, NOW())`;
       if (w.claimed) {

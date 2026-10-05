@@ -2912,6 +2912,14 @@
     },
     {
       "table": "inventory_items",
+      "name": "inventory_items_active_triple_unique",
+      "definition": "CREATE UNIQUE INDEX inventory_items_active_triple_unique ON public.inventory_items USING btree (organization_id, product_id, expiry_date, location_id) WHERE (status <> ALL (ARRAY['Processed'::text, 'Completed'::text, 'Discarded'::text, 'Archived'::text, 'Sold Through'::text]))",
+      "unique": true,
+      "primary": false,
+      "predicate": "(status <> ALL (ARRAY['Processed'::text, 'Completed'::text, 'Discarded'::text, 'Archived'::text, 'Sold Through'::text]))"
+    },
+    {
+      "table": "inventory_items",
       "name": "inventory_items_expiry_date_idx",
       "definition": "CREATE INDEX inventory_items_expiry_date_idx ON public.inventory_items USING btree (expiry_date)",
       "unique": false,

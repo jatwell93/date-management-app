@@ -63,6 +63,7 @@ import {
   type ClaimWriteResult,
 } from './credit-claim-database';
 import { assertReferencesBelongToOrganization } from './tenant-references';
+import { DuplicateInventoryItemError } from './db-errors';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -3070,6 +3071,27 @@ export function createWorkersDatabase(env: Env): Database {
         locationId: data.locationId,
       });
 
+      // One active item per (organization, product, expiry, location), as Express
+      // enforced (`data-integrity.middleware`). Checked here so the caller gets
+      // a precise refusal: the CTE below returns no row for a cap refusal too,
+      // and the handler could not tell the two apart. Items created directly in
+      // a terminal status sit outside the partial unique index, so they skip it.
+      // A concurrent duplicate that passes this read is stopped by
+      // `inventory_items_active_triple_unique` (migration 0019).
+      const status = data.status ?? 'Normal';
+      if (!TERMINAL_INVENTORY_STATUSES.includes(status)) {
+        const existing = await sql`
+          SELECT 1 FROM inventory_items
+          WHERE organization_id = ${organizationId}
+            AND product_id = ${data.productId}
+            AND expiry_date = ${data.expiryDate}
+            AND location_id = ${data.locationId}
+            AND status <> ALL(${TERMINAL_INVENTORY_STATUSES})
+          LIMIT 1
+        `;
+        if (existing.length > 0) throw new DuplicateInventoryItemError();
+      }
+
       // Atomic insert + audit via CTE so we never end up with an inventory
       // item lacking an audit row (or vice versa) on partial failure.
       //
@@ -3317,6 +3339,7 @@ export function createWorkersDatabase(env: Env): Database {
                 AND ii.product_id = rp.id
                 AND ii.location_id = a.id
             )
+          ON CONFLICT DO NOTHING
           RETURNING id
         )
         SELECT
