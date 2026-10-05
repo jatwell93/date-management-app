@@ -233,6 +233,25 @@ describe('organization entitlement gate (real SQL)', () => {
     expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
   });
 
+  // `resolveAuthenticatedUser` takes a Clerk user id and nothing else: no token,
+  // no claims. What a caller is entitled to is therefore whatever the two rows
+  // say today, whatever an older token said when it was minted. This pins that
+  // against real SQL with a caller whose stored role and tier are the LOWEST, so
+  // a join that substituted a default, or a lookup that trusted anything but the
+  // stored row, shows up as a higher role or tier than the rows grant.
+  it('reports the role and tier stored today, not a higher one', async () => {
+    await seedOrganization();
+    await harness.pg.query(`UPDATE users SET role = 'team_member' WHERE clerk_user_id = $1`, [
+      CLERK_USER,
+    ]);
+    await seedSubscription({ status: 'active', tierLevel: 'free' });
+
+    const auth = (await authenticate('GET')) as { role: string; organizationId: string };
+
+    expect(auth).toMatchObject({ organizationId: ORG, role: 'team_member' });
+    expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
+  });
+
   it('still rejects a caller with no user row', async () => {
     await seedOrganization();
     const response = (await resolveAuthenticatedUser(

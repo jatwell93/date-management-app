@@ -3134,6 +3134,24 @@ equivalent, a relocated home, or an explicit retirement decision.
       soft caps are acceptable, an expired trial lapsing to `free` is correct, and re-linking an
       existing user on a duplicate email (instead of Express's `ConflictError`) is correct because
       Clerk already enforces one email per instance.
+      **Batch 3 — `authorization-precedence`, `penetration`.** Worked the 55 rows. Most "no Worker
+      test" cells were stale: 42 are re-pointed to `worker-equivalent-exists` with citations (the
+      CSV-injection, billing URL and price, filename, role, audit and storage-quota tests already
+      existed) and 13 are proposed `retire`. None stays a rewrite. New tests, each failing under
+      mutation: unauthenticated callers are refused before the database is read; the platform-admin
+      allow-list refuses every malformed configuration; supplier-policy authorization on PATCH, on a
+      credit-type-only change and on a full replacement, plus bulk-attach dedup and the raw-list cap;
+      the tier claim in a token is never surfaced; the stored role and tier win; a hostile
+      organization field cannot stamp a created product; multi-byte CSV cells. Working the
+      bootstrap role row found a real defect, fixed first in #568: `POST /api/organization/bootstrap`
+      took the organization and role from the request body, so a signed-in outsider could join
+      another tenant as admin. **Reviewer items, flagged in the manifest:** (1) the six backup and
+      restore endpoint rows and the two no-Origin rows are proposed `retire` (operator tool and
+      bearer-token auth respectively); (2) the two `requireMinRole` rows are proposed `retire`
+      because the Worker lists allowed roles per gate and has no hierarchy; (3) the Express rule
+      that a missing Stripe id means no entitlement is proposed `retire`, because no Worker writer
+      creates a non-trial row without one. Equivalent mutant noted: the `userId <= 0` guard in
+      `isPlatformAdminUser` is redundant behind the token regex.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.

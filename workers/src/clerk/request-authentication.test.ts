@@ -136,4 +136,37 @@ describe('authenticateClerkRequest', () => {
 
     expect((result as { organizationId: string }).organizationId).toBe('org_from_token');
   });
+
+  // A stale or forged token can carry anything its issuer put there, including a
+  // subscription tier. The Worker decides entitlement from the subscription row
+  // (`resolveAuthenticatedUser`, `getOrganizationLaunchTier`), so the only safe
+  // thing for this function to do with such a claim is not to pass it on. The
+  // result is pinned to exactly the five identity fields: a sixth, added so that
+  // some later handler could "just read the tier off the context", fails here
+  // first. Express had to be told to override a stale tier from the database;
+  // here there is nothing to override because nothing is offered.
+  it('does not surface a tier or plan claim, however the token spells it', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_9',
+      org_id: 'org_from_token',
+      tier_level: 'enterprise',
+      tierLevel: 'enterprise',
+      subscription_tier: 'enterprise',
+      plan: 'enterprise',
+    });
+
+    const result = await authenticateClerkRequest(
+      requestWith({ Authorization: 'Bearer stale-token' }),
+      env,
+    );
+
+    expect(Object.keys(result as object).sort()).toEqual([
+      'clerkUserId',
+      'email',
+      'organizationId',
+      'organizationRole',
+      'username',
+    ]);
+    expect(JSON.stringify(result)).not.toContain('enterprise');
+  });
 });

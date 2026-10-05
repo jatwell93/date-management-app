@@ -356,6 +356,37 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
   // any fixture count keeps the assertions about references, not quota.
   const UNCAPPED = 1_000_000;
 
+  describe('createProduct stamps the caller organization', () => {
+    // Mass assignment: the Express test passed a body that also named an
+    // organization and asserted it was ignored. `createProduct` takes explicit
+    // fields, so there is nothing to spread, and this holds that shape in
+    // place: a caller-supplied organization, in either spelling, must not
+    // reach the INSERT.
+    it('ignores an organization named in the input, and keeps the row invisible to that organization', async () => {
+      const db = makeDb();
+      const hostile = {
+        barcode: 'BAR-NEW',
+        sku: 'SKU-NEW',
+        name: 'Planted Product',
+        costPrice: 5,
+        organizationId: OTHER_ORG,
+        organization_id: OTHER_ORG,
+      };
+
+      const created = await db.createProduct(ORG, hostile, UNCAPPED);
+
+      expect(created).not.toBeNull();
+      const stored = await sql`
+        SELECT organization_id AS "organizationId" FROM products WHERE id = ${created!.id}`;
+      expect(stored[0].organizationId).toBe(ORG);
+      expect(await db.findProductById(OTHER_ORG, created!.id)).toBeNull();
+      expect(await db.findProductById(ORG, created!.id)).toMatchObject({ name: 'Planted Product' });
+      // The foreign organization still has only the product it was seeded with.
+      const foreign = await sql`SELECT id FROM products WHERE organization_id = ${OTHER_ORG}`;
+      expect(foreign.map((r) => Number(r.id))).toEqual([foreignProductId]);
+    });
+  });
+
   describe('createInventoryItem cross-org references', () => {
     it("refuses to create an item pointing at another organization's product", async () => {
       const db = makeDb();
