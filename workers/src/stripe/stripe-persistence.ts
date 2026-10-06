@@ -10,6 +10,7 @@
  * Keeping the two shapes identical is the point: the Clerk one has real-SQL
  * concurrency coverage, and a Stripe variant that drifted would not inherit it.
  */
+import * as Sentry from '@sentry/cloudflare';
 import type { Database } from '../database';
 import { type LaunchTier } from '../utils/usage-limits';
 
@@ -360,7 +361,13 @@ export async function upsertSubscriptionFromStripe(
     sync.currentPeriodEndSeconds === null ? null : new Date(sync.currentPeriodEndSeconds * 1000);
   const isPastDue = sync.status === 'past_due';
 
+  // `prior` reads the row as it was before this statement, so the same round trip can say
+  // whether this event is the one that put the organization into dunning.
   const rows = await sql`
+    WITH prior AS (
+      SELECT past_due_since FROM subscription_tiers
+      WHERE organization_id = ${sync.organizationId}
+    )
     INSERT INTO subscription_tiers (
       organization_id,
       tier_level,
@@ -409,8 +416,26 @@ export async function upsertSubscriptionFromStripe(
       WHERE subscription_tiers.stripe_subscription_id IS NULL
          OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
          OR subscription_tiers.status IN ('canceled', 'cancelled', 'incomplete_expired')
-    RETURNING organization_id
+    RETURNING organization_id,
+              (${isPastDue}
+                 AND NOT EXISTS (SELECT 1 FROM prior WHERE past_due_since IS NOT NULL)
+              ) AS "enteredDunning"
   `;
+
+  // One alert per dunning episode, not per Stripe retry: `past_due_since` is kept across
+  // repeat `past_due` events, so only the event that sets it reports. Express raised a
+  // Sentry fatal when its nightly job downgraded the organization; the Worker derives the
+  // lapse at read time, so this transition is the one observable moment to alert on.
+  if (rows[0]?.enteredDunning === true) {
+    Sentry.captureMessage('[stripe] organization entered dunning (payment past due)', {
+      level: 'warning',
+      tags: { component: 'stripe-webhook', event: 'entered-dunning' },
+      extra: {
+        organizationId: sync.organizationId,
+        stripeSubscriptionId: sync.stripeSubscriptionId,
+      },
+    });
+  }
 
   return rows.length > 0;
 }

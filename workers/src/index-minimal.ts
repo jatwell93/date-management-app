@@ -1010,6 +1010,16 @@ function checkOrganizationEntitlement(
   // so one flag covers both: neither has ever refused a request on this
   // backend, and measure-only has to measure the whole gate to be worth
   // anything. The lock is checked first because it names a different remedy.
+  //
+  // **Only an expired trial is refused outright.** A cancellation or a
+  // non-payment lapse (`cancellation-window-elapsed`, `dunning-grace-elapsed`)
+  // degrades the organization to the free tier instead, and the free-tier caps
+  // (`USAGE_LIMITS_ENFORCE`) decide whether it can still create. That is what
+  // Express did: the dunning job moved the organization to free and locked
+  // creation only when usage was already over the free limits, and
+  // `docs/tier-downgrade-guide.md` promises the same. A blanket refusal here
+  // would stop a small store that stopped paying from adding a product it is
+  // allowed under the free plan. Decided 2026-10-07.
   const refusal =
     row.isCreationLocked === true
       ? {
@@ -1017,11 +1027,11 @@ function checkOrganizationEntitlement(
           message:
             'Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation.',
         }
-      : access.lapsed
+      : access.lapsed && access.reason === 'trial-expired'
         ? {
             reason: access.reason,
             message:
-              'Your subscription is no longer active, so new records cannot be created. Existing data stays available. Renew or upgrade to re-enable creation.',
+              'Your trial has ended, so new records cannot be created. Existing data stays available. Upgrade to re-enable creation.',
           }
         : null;
 

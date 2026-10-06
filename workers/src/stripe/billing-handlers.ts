@@ -196,9 +196,10 @@ function billingErrorResponse(error: unknown, env: Env, context: string): Respon
  * id back only `if (subscription)`, so an organization with no
  * `subscription_tiers` row got a fresh Stripe customer created and its id
  * thrown away, on every single attempt -- accumulating orphan customers and
- * guaranteeing the webhook could never attribute by customer id. Here the
- * absence of a row is refused up front instead: without one there is nowhere to
- * record the customer, and proceeding would repeat Express's leak.
+ * guaranteeing the webhook could never attribute by customer id. Here a missing
+ * row is created first (free tier), so there is always somewhere to record the
+ * customer and the organization can still check out. This replaces an earlier
+ * refusal (404) that stopped exactly the customer trying to pay.
  */
 export async function handleCreateCheckoutSession(
   request: Request,
@@ -221,14 +222,28 @@ export async function handleCreateCheckoutSession(
     validateRedirectUrl(body.successUrl, 'successUrl', hostnames);
     validateRedirectUrl(body.cancelUrl, 'cancelUrl', hostnames);
 
-    const subscription = await loadSubscription(db, organizationId);
+    let subscription = await loadSubscription(db, organizationId);
     if (!subscription) {
-      // See the doc comment: Express created a Stripe customer here and
-      // discarded the id. Refusing is the honest answer -- every organization
-      // gets a subscription_tiers row at bootstrap, so this means something is
-      // already wrong.
-      console.error(JSON.stringify({ event: 'checkout_without_subscription_row', organizationId }));
-      return errorResponse('No billing record found for this organization', 404, env);
+      // Every organization gets a subscription row at bootstrap, so this is a
+      // state nobody designed -- and it must not stop a customer who is trying
+      // to pay. Give the organization the row first (free, as the access rule
+      // already reads an organization with no row), so the Stripe customer
+      // created below always has somewhere to be recorded. `ON CONFLICT DO
+      // NOTHING` names no target for the reason `ensureTrialSubscription` gives:
+      // it is correct on both sides of migration 0012.
+      console.warn(
+        JSON.stringify({ event: 'checkout_created_missing_subscription_row', organizationId }),
+      );
+      await db.sql`
+        INSERT INTO subscription_tiers
+          (organization_id, tier_level, status, billing_cycle, created_at, updated_at)
+        VALUES (${organizationId}, 'free', 'active', 'monthly', NOW(), NOW())
+        ON CONFLICT DO NOTHING
+      `;
+      subscription = await loadSubscription(db, organizationId);
+      if (!subscription) {
+        throw new Error('subscription row missing after insert');
+      }
     }
 
     let customerId = subscription.stripe_customer_id;

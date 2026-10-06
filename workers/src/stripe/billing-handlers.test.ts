@@ -177,15 +177,41 @@ describe('handleCreateCheckoutSession', () => {
     expect(String(calls[0].body)).not.toContain('undefined');
   });
 
-  it('refuses rather than leaking a customer when no subscription row exists', async () => {
-    const calls = stubStripe([{ json: { id: 'cus_new' } }]);
-    const db = makeDb({});
+  it('creates the missing subscription row before the Stripe customer, so the customer is recorded', async () => {
+    // Express created a customer for an organization with no row and threw its id
+    // away. Refusing (the first fix) stopped that leak but also stopped the
+    // customer trying to pay. The row is now created first.
+    const calls = stubStripe([
+      { json: { id: 'cus_new' } },
+      { json: { id: 'cs_1', url: 'https://x' } },
+    ]);
+    const queries: string[] = [];
+    let rowExists = false;
+    const db = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ').replace(/\s+/g, ' ').trim();
+        queries.push(query);
+        if (query.startsWith('INSERT INTO subscription_tiers')) rowExists = true;
+        if (query.includes('FROM subscription_tiers')) {
+          return Promise.resolve(
+            rowExists ? [{ id: 9, stripe_customer_id: null, stripe_subscription_id: null }] : [],
+          );
+        }
+        return Promise.resolve([]);
+      }),
+    } as unknown as Database;
 
     const response = await handleCreateCheckoutSession(post(validBody), db, baseEnv(), ORG);
 
-    expect(response.status).toBe(404);
-    // Nothing was created in Stripe -- this is the Express leak, not reproduced.
-    expect(calls).toHaveLength(0);
+    expect(response.status).toBe(200);
+    const insertAt = queries.findIndex((q) => q.startsWith('INSERT INTO subscription_tiers'));
+    const updateAt = queries.findIndex((q) => q.startsWith('UPDATE subscription_tiers'));
+    expect(insertAt).toBeGreaterThanOrEqual(0);
+    expect(updateAt).toBeGreaterThan(insertAt);
+    expect(queries[insertAt]).toContain("'free'");
+    expect(queries[insertAt]).toContain('ON CONFLICT DO NOTHING');
+    expect(calls[0].url).toBe('https://api.stripe.com/v1/customers');
+    expect(calls[1].body.get('customer')).toBe('cus_new');
   });
 
   it('refuses a redirect to a foreign origin before calling Stripe', async () => {
