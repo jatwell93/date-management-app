@@ -45,10 +45,13 @@ describe('supplier-policy shared domain', () => {
       expect(isPolicyWrite({ creditType: 'NONE' }, baseline)).toBe(false);
     });
     it('uses bare supplier defaults as the create baseline', () => {
-      expect(isPolicyWrite({ name: 'New Supplier' }, null)).toBe(false);
-      expect(isPolicyWrite({ name: 'New Supplier', followUpDays: 7 }, null)).toBe(false);
+      // `name` is not a policy field. Express's service passed whole supplier inputs, and the
+      // point of the case is that unrelated fields do not make a write a policy write.
+      const input = (value: object) => value as Parameters<typeof isPolicyWrite>[0];
+      expect(isPolicyWrite(input({ name: 'New Supplier' }), null)).toBe(false);
+      expect(isPolicyWrite(input({ name: 'New Supplier', followUpDays: 7 }), null)).toBe(false);
       expect(
-        isPolicyWrite({ name: 'New Supplier', creditPolicyNote: 'Returns weekly' }, null),
+        isPolicyWrite(input({ name: 'New Supplier', creditPolicyNote: 'Returns weekly' }), null),
       ).toBe(true);
     });
 

@@ -103,7 +103,11 @@ describe('supplier writes: request validation', () => {
     const response = await dispatch(method, path, database, { ...base, creditType: 'PARTIAL' });
 
     expect(response?.status).toBe(400);
-    const body = await response?.json();
+    const body = (await response?.json()) as {
+      code?: string;
+      statusCode?: number;
+      errors: Array<{ field: string }>;
+    };
     expect(body).toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(body.errors).toContainEqual(expect.objectContaining({ field: 'creditType' }));
     expect(write).not.toHaveBeenCalled();
@@ -168,7 +172,11 @@ describe('supplier writes: request validation', () => {
     });
 
     expect(response?.status).toBe(400);
-    const body = await response?.json();
+    const body = (await response?.json()) as {
+      code?: string;
+      statusCode?: number;
+      errors: Array<{ field: string }>;
+    };
     expect(body.errors).toContainEqual(expect.objectContaining({ field }));
     expect(createSupplier).not.toHaveBeenCalled();
   });
@@ -214,7 +222,11 @@ describe('supplier writes: credit ratio', () => {
     });
 
     expect(response?.status).toBe(422);
-    const body = await response?.json();
+    const body = (await response?.json()) as {
+      code?: string;
+      statusCode?: number;
+      errors: Array<{ field: string }>;
+    };
     expect(body).toMatchObject({ code: 'POLICY_VALIDATION_ERROR', statusCode: 422 });
     // Only the ratio is wrong: store instructions and a contact are present.
     expect(body.errors).toEqual([expect.objectContaining({ field: 'policyCreditQty' })]);

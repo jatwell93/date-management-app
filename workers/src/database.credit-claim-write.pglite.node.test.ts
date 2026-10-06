@@ -139,7 +139,7 @@ describe('Workers credit-claim writes (real SQL)', () => {
     for (let i = 0; i < 2; i += 1) {
       const item = await sql`
         INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, updated_at)
-        VALUES (${ORG}, ${productId}, ${Number(area[0].id)}, NOW(), NOW())
+        VALUES (${ORG}, ${productId}, ${Number(area[0].id)}, NOW() + ${i + 1} * INTERVAL '1 day', NOW())
         RETURNING id`;
       const transaction = await sql`
         INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action,
