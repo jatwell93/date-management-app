@@ -88,101 +88,65 @@ describe('stripe-reconciliation job (real SQL)', () => {
     vi.restoreAllMocks();
   });
 
-  it('brings a diverged tier in line with Stripe', async () => {
-    await seedSubscription('org_diverged', {
-      tier: 'starter',
-      status: 'active',
-      stripeSubscriptionId: 'sub_diverged',
-    });
-    stripeReturns([stripeSub('sub_diverged', 'active', 'pro')]);
+  type Local = { tier: string; status: string; stripeSubscriptionId: string | null };
+  type Remote = { id: string; status: string; tier: string };
 
+  const reconcile = async (local: Local, remote: Remote[]) => {
+    await seedSubscription('org_under_test', local);
+    stripeReturns(remote.map((sub) => stripeSub(sub.id, sub.status, sub.tier)));
     const result = await run();
+    return { summary: result.summary, row: await rowFor('org_under_test') };
+  };
 
-    expect(result.summary).toMatchObject({ applied: 1, failures: 0 });
-    expect(await rowFor('org_diverged')).toMatchObject({
-      tier_level: 'professional',
-      status: 'active',
-    });
-  });
+  it.each<
+    [string, Local, Remote[], Record<string, number>, { tier_level: string; status: string }]
+  >([
+    [
+      'brings a diverged tier in line with Stripe',
+      { tier: 'starter', status: 'active', stripeSubscriptionId: 'sub_1' },
+      [{ id: 'sub_1', status: 'active', tier: 'pro' }],
+      { applied: 1, failures: 0 },
+      { tier_level: 'professional', status: 'active' },
+    ],
+    [
+      'reports no divergence, and leaves the row as it was, when local and Stripe agree',
+      { tier: 'professional', status: 'active', stripeSubscriptionId: 'sub_1' },
+      [{ id: 'sub_1', status: 'active', tier: 'pro' }],
+      { divergences: 0, missingInStripe: 0, failures: 0 },
+      { tier_level: 'professional', status: 'active' },
+    ],
+    [
+      'counts a status mismatch as a divergence',
+      { tier: 'professional', status: 'active', stripeSubscriptionId: 'sub_1' },
+      [{ id: 'sub_1', status: 'past_due', tier: 'pro' }],
+      { divergences: 1 },
+      { tier_level: 'professional', status: 'past_due' },
+    ],
+    [
+      'cancels a subscription Stripe reports as canceled, keeping the tier it paid for',
+      { tier: 'professional', status: 'active', stripeSubscriptionId: 'sub_1' },
+      [{ id: 'sub_1', status: 'canceled', tier: 'pro' }],
+      { applied: 1 },
+      { tier_level: 'professional', status: 'canceled' },
+    ],
+    [
+      'leaves alone a row with no Stripe subscription id, and does not count it',
+      { tier: 'professional', status: 'trialing', stripeSubscriptionId: null },
+      [],
+      { localLinked: 0, missingInStripe: 0, applied: 0 },
+      { tier_level: 'professional', status: 'trialing' },
+    ],
+    [
+      'reports a linked row Stripe does not know and changes nothing',
+      { tier: 'professional', status: 'active', stripeSubscriptionId: 'sub_missing' },
+      [{ id: 'sub_other', status: 'active', tier: 'pro' }],
+      { missingInStripe: 1, applied: 0 },
+      { tier_level: 'professional', status: 'active' },
+    ],
+  ])('%s', async (_label, local, remote, expectedSummary, expectedRow) => {
+    const { summary, row } = await reconcile(local, remote);
 
-  it('reports no divergence, and leaves the row as it was, when local and Stripe agree', async () => {
-    await seedSubscription('org_agree', {
-      tier: 'professional',
-      status: 'active',
-      stripeSubscriptionId: 'sub_agree',
-    });
-    stripeReturns([stripeSub('sub_agree', 'active', 'pro')]);
-
-    const result = await run();
-
-    expect(result.summary).toMatchObject({ divergences: 0, missingInStripe: 0, failures: 0 });
-    expect(await rowFor('org_agree')).toMatchObject({
-      tier_level: 'professional',
-      status: 'active',
-    });
-  });
-
-  it('counts a status mismatch as a divergence', async () => {
-    await seedSubscription('org_mismatch', {
-      tier: 'professional',
-      status: 'active',
-      stripeSubscriptionId: 'sub_mismatch',
-    });
-    stripeReturns([stripeSub('sub_mismatch', 'past_due', 'pro')]);
-
-    const result = await run();
-
-    expect(result.summary).toMatchObject({ divergences: 1 });
-    expect((await rowFor('org_mismatch')).status).toBe('past_due');
-  });
-
-  it('cancels a subscription Stripe reports as canceled, keeping the tier it paid for', async () => {
-    await seedSubscription('org_canceled', {
-      tier: 'professional',
-      status: 'active',
-      stripeSubscriptionId: 'sub_canceled',
-    });
-    stripeReturns([stripeSub('sub_canceled', 'canceled', 'pro')]);
-
-    await run();
-
-    expect(await rowFor('org_canceled')).toMatchObject({
-      status: 'canceled',
-      tier_level: 'professional',
-    });
-  });
-
-  it('leaves alone a row with no Stripe subscription id, and does not count it', async () => {
-    await seedSubscription('org_trial', {
-      tier: 'professional',
-      status: 'trialing',
-      stripeSubscriptionId: null,
-    });
-    stripeReturns([]);
-
-    const result = await run();
-
-    expect(result.summary).toMatchObject({ localLinked: 0, missingInStripe: 0, applied: 0 });
-    expect(await rowFor('org_trial')).toMatchObject({
-      status: 'trialing',
-      tier_level: 'professional',
-    });
-  });
-
-  it('reports a linked row Stripe does not know and changes nothing', async () => {
-    await seedSubscription('org_missing', {
-      tier: 'professional',
-      status: 'active',
-      stripeSubscriptionId: 'sub_missing',
-    });
-    stripeReturns([stripeSub('sub_other', 'active', 'pro')]);
-
-    const result = await run();
-
-    expect(result.summary).toMatchObject({ missingInStripe: 1, applied: 0 });
-    expect(await rowFor('org_missing')).toMatchObject({
-      status: 'active',
-      tier_level: 'professional',
-    });
+    expect(summary).toMatchObject(expectedSummary);
+    expect(row).toMatchObject(expectedRow);
   });
 });
