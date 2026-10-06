@@ -3,7 +3,7 @@ import type { Database } from '../database';
 import { parseCsvRecords } from './csv-parser';
 import { validateExpiryRecords, type ValidatedExpiryRow } from './expiry-parser';
 import type { UploadProcessingSummary } from './upload-handlers';
-import { getMarkdownLevelForDays } from '../../../shared/domain/markdown';
+import { calculateInventoryStatus } from '../inventory-status';
 
 const UNALLOCATED_DEPARTMENT_NAME = 'Unallocated';
 
@@ -17,26 +17,6 @@ function emptySummary(): UploadProcessingSummary {
     errorCount: 0,
     errors: [],
   };
-}
-
-/**
- * Inventory status derived from days-to-expiry, on the shared 30/60/90-day
- * markdown windows. This is the same rule the daily `markdown-recalculation`
- * job applies, so an imported item is not relabelled the first time that job
- * runs. It was ported from Express's `CSVParserService.calculateInventoryStatus`,
- * which still used the 7/14/30-day thresholds that Express's own
- * `inventory-markdown.helpers` had already replaced.
- */
-export function calculateInventoryStatus(
-  isoDate: string,
-  now: Date = new Date(),
-): 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' {
-  const expiry = new Date(`${isoDate}T00:00:00.000Z`).getTime();
-  const daysDiff = Math.ceil((expiry - now.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (daysDiff <= 0) return 'Expired';
-  const level = getMarkdownLevelForDays(daysDiff);
-  return level === null ? 'Normal' : (`Markdown ${level}` as const);
 }
 
 /**

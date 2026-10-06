@@ -16,12 +16,14 @@
  * is a bug this job does not carry: only statuses this job itself produces are
  * ever touched.
  *
- * Note — the CSV import path (`upload/expiry-import.ts calculateInventoryStatus`)
- * bands days at 7/14/30 rather than MARKDOWN_WINDOWS' 30/60/90, so an item's
- * status can legitimately differ between "just imported" and "after the next
- * tick". Aligning the two is a recorded follow-up, not part of this port.
+ * Note — every write path that names no status (the expiry list import,
+ * `POST /api/inventory-items`, an expiry edit) uses `calculateInventoryStatus`
+ * in `inventory-status.ts`, which is this same rule in TypeScript. The test
+ * `markdown-recalculation.pglite.node.test.ts` runs both over every band edge
+ * so the two cannot drift.
  */
 import { MARKDOWN_WINDOWS } from '../../../../shared/domain/markdown';
+import { RECALCULABLE_INVENTORY_STATUSES } from '../../inventory-status';
 import type { JobContext, ScheduledJob } from '../schedule';
 
 export const markdownRecalculationJob: ScheduledJob = {
@@ -47,7 +49,7 @@ export const markdownRecalculationJob: ScheduledJob = {
           SELECT id, status,
                  CEIL(EXTRACT(EPOCH FROM (expiry_date - ${asOf.toISOString()}::timestamp)) / 86400)::int AS days
           FROM inventory_items
-          WHERE status IN ('Normal', 'Markdown 1', 'Markdown 2', 'Markdown 3', 'Expired')
+          WHERE status = ANY(${[...RECALCULABLE_INVENTORY_STATUSES]})
         ) ii
       ),
       updated AS (
