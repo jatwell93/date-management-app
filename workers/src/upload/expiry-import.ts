@@ -5,8 +5,6 @@ import { validateExpiryRecords, type ValidatedExpiryRow } from './expiry-parser'
 import type { UploadProcessingSummary } from './upload-handlers';
 import { calculateInventoryStatus } from '../inventory-status';
 
-export { calculateInventoryStatus };
-
 const UNALLOCATED_DEPARTMENT_NAME = 'Unallocated';
 
 function emptySummary(): UploadProcessingSummary {

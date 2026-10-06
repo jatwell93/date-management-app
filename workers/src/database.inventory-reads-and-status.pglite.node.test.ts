@@ -50,14 +50,21 @@ describe('inventory reads and derived status (real SQL)', () => {
 
   const makeDb = () => createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
 
-  const seedItem = async (
-    org: string,
-    product: number,
-    location: number,
-    expiry: string,
-    createdAt: string,
+  const seedItem = async ({
+    org = ORG,
+    product = productId,
+    location,
+    expiry,
+    createdAt = '2026-01-01T00:00:00Z',
     status = 'Normal',
-  ) => {
+  }: {
+    org?: string;
+    product?: number;
+    location: number;
+    expiry: string;
+    createdAt?: string;
+    status?: string;
+  }) => {
     const rows = await sql`
       INSERT INTO inventory_items
         (organization_id, product_id, location_id, expiry_date, status, created_at, updated_at)
@@ -115,15 +122,27 @@ describe('inventory reads and derived status (real SQL)', () => {
 
   describe('findInventoryItemsByProductId', () => {
     it("returns the organization's items for the product, soonest expiry first, with the area", async () => {
-      const later = await seedItem(ORG, productId, aisle2, '2099-09-01', '2026-01-02T00:00:00Z');
-      const sooner = await seedItem(ORG, productId, aisle1, '2099-03-01', '2026-01-01T00:00:00Z');
-      await seedItem(
-        OTHER_ORG,
-        otherOrgProductId,
-        otherOrgAisle,
-        '2099-01-01',
-        '2026-01-01T00:00:00Z',
-      );
+      const later = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle2,
+        expiry: '2099-09-01',
+        createdAt: '2026-01-02T00:00:00Z',
+      });
+      const sooner = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: '2099-03-01',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+      await seedItem({
+        org: OTHER_ORG,
+        product: otherOrgProductId,
+        location: otherOrgAisle,
+        expiry: '2099-01-01',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
 
       const items = await makeDb().findInventoryItemsByProductId(ORG, productId);
 
@@ -132,13 +151,13 @@ describe('inventory reads and derived status (real SQL)', () => {
     });
 
     it("returns nothing when asked for another organization's product", async () => {
-      await seedItem(
-        OTHER_ORG,
-        otherOrgProductId,
-        otherOrgAisle,
-        '2099-01-01',
-        '2026-01-01T00:00:00Z',
-      );
+      await seedItem({
+        org: OTHER_ORG,
+        product: otherOrgProductId,
+        location: otherOrgAisle,
+        expiry: '2099-01-01',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
 
       const items = await makeDb().findInventoryItemsByProductId(ORG, otherOrgProductId);
 
@@ -148,9 +167,27 @@ describe('inventory reads and derived status (real SQL)', () => {
 
   describe('findRecentInventoryItemsByProductId', () => {
     it('returns the newest items first, up to the limit, with the area name', async () => {
-      const oldest = await seedItem(ORG, productId, aisle1, '2099-01-01', '2026-01-01T00:00:00Z');
-      const middle = await seedItem(ORG, productId, aisle2, '2099-01-02', '2026-01-02T00:00:00Z');
-      const newest = await seedItem(ORG, productId, aisle1, '2099-01-03', '2026-01-03T00:00:00Z');
+      const oldest = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: '2099-01-01',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+      const middle = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle2,
+        expiry: '2099-01-02',
+        createdAt: '2026-01-02T00:00:00Z',
+      });
+      const newest = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: '2099-01-03',
+        createdAt: '2026-01-03T00:00:00Z',
+      });
 
       const two = await makeDb().findRecentInventoryItemsByProductId(ORG, productId, 2);
       const all = await makeDb().findRecentInventoryItemsByProductId(ORG, productId, 10);
@@ -161,14 +198,20 @@ describe('inventory reads and derived status (real SQL)', () => {
     });
 
     it("never returns another organization's items", async () => {
-      const own = await seedItem(ORG, productId, aisle1, '2099-01-01', '2026-01-01T00:00:00Z');
-      await seedItem(
-        OTHER_ORG,
-        otherOrgProductId,
-        otherOrgAisle,
-        '2099-01-01',
-        '2026-02-01T00:00:00Z',
-      );
+      const own = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: '2099-01-01',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+      await seedItem({
+        org: OTHER_ORG,
+        product: otherOrgProductId,
+        location: otherOrgAisle,
+        expiry: '2099-01-01',
+        createdAt: '2026-02-01T00:00:00Z',
+      });
 
       const items = await makeDb().findRecentInventoryItemsByProductId(ORG, productId, 10);
       const foreign = await makeDb().findRecentInventoryItemsByProductId(
@@ -229,7 +272,13 @@ describe('inventory reads and derived status (real SQL)', () => {
     ) => makeDb().updateInventoryItem(ORG, USER_ID, id, data);
 
     it('re-derives the status when the expiry date is edited', async () => {
-      const id = await seedItem(ORG, productId, aisle1, dateInDays(120), '2026-01-01T00:00:00Z');
+      const id = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: dateInDays(120),
+        createdAt: '2026-01-01T00:00:00Z',
+      });
 
       const updated = await update(id, { expiryDate: dateInDays(5) });
 
@@ -237,53 +286,48 @@ describe('inventory reads and derived status (real SQL)', () => {
       expect(await statusOf(id)).toBe('Markdown 3');
     });
 
-    it('brings an expired item back to a live status when its date is corrected forward', async () => {
-      const id = await seedItem(
-        ORG,
-        productId,
-        aisle1,
-        dateInDays(-3),
-        '2026-01-01T00:00:00Z',
+    it.each([
+      [
+        'brings an expired item back to a live status when its date is corrected forward',
         'Expired',
-      );
+        'Normal',
+      ],
+      ['does not resurrect a disposed item when its date is edited', 'Processed', 'Processed'],
+    ])('%s', async (_label, startingStatus, expected) => {
+      const id = await seedItem({
+        location: aisle1,
+        expiry: dateInDays(-3),
+        status: startingStatus,
+      });
 
       const updated = await update(id, { expiryDate: dateInDays(120) });
 
-      expect(updated?.status).toBe('Normal');
+      expect(updated?.status).toBe(expected);
     });
 
     it('keeps a status the caller names, whatever the new date says', async () => {
-      const id = await seedItem(ORG, productId, aisle1, dateInDays(120), '2026-01-01T00:00:00Z');
+      const id = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: dateInDays(120),
+        createdAt: '2026-01-01T00:00:00Z',
+      });
 
       const updated = await update(id, { expiryDate: dateInDays(5), status: 'Markdown 1' });
 
       expect(updated?.status).toBe('Markdown 1');
     });
 
-    it('does not resurrect a disposed item when its date is edited', async () => {
-      const id = await seedItem(
-        ORG,
-        productId,
-        aisle1,
-        dateInDays(-3),
-        '2026-01-01T00:00:00Z',
-        'Processed',
-      );
-
-      const updated = await update(id, { expiryDate: dateInDays(120) });
-
-      expect(updated?.status).toBe('Processed');
-    });
-
     it('leaves the status alone when the edit does not touch the date', async () => {
-      const id = await seedItem(
-        ORG,
-        productId,
-        aisle1,
-        dateInDays(5),
-        '2026-01-01T00:00:00Z',
-        'Markdown 1',
-      );
+      const id = await seedItem({
+        org: ORG,
+        product: productId,
+        location: aisle1,
+        expiry: dateInDays(5),
+        createdAt: '2026-01-01T00:00:00Z',
+        status: 'Markdown 1',
+      });
 
       const updated = await update(id, { locationId: aisle2 });
 

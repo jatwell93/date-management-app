@@ -178,44 +178,127 @@ describe('GET /api/inventory-items/recent/product/:productId', () => {
     expect(response?.status).toBe(200);
     expect(findRecentInventoryItemsByProductId).toHaveBeenCalledWith(ORG, 3, expected);
   });
+});
 
-  it('does not serve a product id that is not a number', async () => {
-    const findRecentInventoryItemsByProductId = vi.fn();
-
-    const response = await dispatch(
+describe('requests refused before any write', () => {
+  const putBody = { status: 'Normal' };
+  it.each([
+    [
+      'POST with no productId',
+      'POST',
+      '/api/inventory-items',
+      { expiryDate: '2099-06-01', locationId: 4 },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'POST with a productId of 0',
+      'POST',
+      '/api/inventory-items',
+      { ...validCreate, productId: 0 },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'POST with a fractional productId',
+      'POST',
+      '/api/inventory-items',
+      { ...validCreate, productId: 1.5 },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'POST with no expiryDate',
+      'POST',
+      '/api/inventory-items',
+      { productId: 3, locationId: 4 },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'POST with an expiryDate that is not YYYY-MM-DD',
+      'POST',
+      '/api/inventory-items',
+      { ...validCreate, expiryDate: '01/06/2099' },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'POST with no locationId',
+      'POST',
+      '/api/inventory-items',
+      { productId: 3, expiryDate: '2099-06-01' },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'POST with a locationId of 0',
+      'POST',
+      '/api/inventory-items',
+      { ...validCreate, locationId: 0 },
+      'createInventoryItem',
+      400,
+    ],
+    [
+      'PUT with a fractional productId',
+      'PUT',
+      '/api/inventory-items/11',
+      { productId: 1.5 },
+      'updateInventoryItem',
+      400,
+    ],
+    [
+      'PUT with a fractional locationId',
+      'PUT',
+      '/api/inventory-items/11',
+      { locationId: 2.5 },
+      'updateInventoryItem',
+      400,
+    ],
+    [
+      'PUT with an expiryDate that is not YYYY-MM-DD',
+      'PUT',
+      '/api/inventory-items/11',
+      { expiryDate: 'tomorrow' },
+      'updateInventoryItem',
+      400,
+    ],
+    ['PUT with an id of 0', 'PUT', '/api/inventory-items/0', putBody, 'updateInventoryItem', 400],
+    [
+      'PUT with an id that is not a number (not served)',
+      'PUT',
+      '/api/inventory-items/abc',
+      putBody,
+      'updateInventoryItem',
+      404,
+    ],
+    [
+      'DELETE with an id of 0',
+      'DELETE',
+      '/api/inventory-items/0',
+      undefined,
+      'deleteInventoryItem',
+      400,
+    ],
+    [
+      'GET recent with a product id that is not a number (not served)',
       'GET',
       '/api/inventory-items/recent/product/abc',
-      database({ findRecentInventoryItemsByProductId }),
-    );
+      undefined,
+      'findRecentInventoryItemsByProductId',
+      404,
+    ],
+  ])('refuses before any write: %s', async (_label, method, path, body, writeMethod, status) => {
+    const write = vi.fn();
 
-    expect(response?.status ?? 404).toBe(404);
-    expect(findRecentInventoryItemsByProductId).not.toHaveBeenCalled();
+    const response = await dispatch(method, path, database({ [writeMethod]: write }), body);
+
+    expect(response?.status ?? 404).toBe(status);
+    expect(write).not.toHaveBeenCalled();
   });
 });
 
 describe('POST /api/inventory-items', () => {
-  it.each([
-    ['no productId', { expiryDate: '2099-06-01', locationId: 4 }],
-    ['a productId of 0', { ...validCreate, productId: 0 }],
-    ['a fractional productId', { ...validCreate, productId: 1.5 }],
-    ['no expiryDate', { productId: 3, locationId: 4 }],
-    ['an expiryDate that is not YYYY-MM-DD', { ...validCreate, expiryDate: '01/06/2099' }],
-    ['no locationId', { productId: 3, expiryDate: '2099-06-01' }],
-    ['a locationId of 0', { ...validCreate, locationId: 0 }],
-  ])('answers 400 for %s and writes nothing', async (_label, body) => {
-    const createInventoryItem = vi.fn();
-
-    const response = await dispatch(
-      'POST',
-      '/api/inventory-items',
-      database({ createInventoryItem }),
-      body,
-    );
-
-    expect(response?.status).toBe(400);
-    expect(createInventoryItem).not.toHaveBeenCalled();
-  });
-
   it('creates the item for the caller organization and user, and answers 201', async () => {
     const createInventoryItem = vi.fn().mockResolvedValue(item);
 
@@ -313,45 +396,6 @@ describe('PUT /api/inventory-items/:id', () => {
     methods: Partial<Record<keyof Database, unknown>> = {},
   ) => dispatch('PUT', path, database(methods), body);
 
-  it.each([
-    ['a fractional productId', { productId: 1.5 }],
-    ['a fractional locationId', { locationId: 2.5 }],
-    ['an expiryDate that is not YYYY-MM-DD', { expiryDate: 'tomorrow' }],
-  ])('answers 400 for %s and writes nothing', async (_label, body) => {
-    const updateInventoryItem = vi.fn();
-
-    const response = await put('/api/inventory-items/11', body, { updateInventoryItem });
-
-    expect(response?.status).toBe(400);
-    expect(updateInventoryItem).not.toHaveBeenCalled();
-  });
-
-  it('answers 400 for an id of 0', async () => {
-    const updateInventoryItem = vi.fn();
-
-    const response = await put(
-      '/api/inventory-items/0',
-      { status: 'Normal' },
-      { updateInventoryItem },
-    );
-
-    expect(response?.status).toBe(400);
-    expect(updateInventoryItem).not.toHaveBeenCalled();
-  });
-
-  it('does not serve an id that is not a number', async () => {
-    const updateInventoryItem = vi.fn();
-
-    const response = await put(
-      '/api/inventory-items/abc',
-      { status: 'Normal' },
-      { updateInventoryItem },
-    );
-
-    expect(response?.status ?? 404).toBe(404);
-    expect(updateInventoryItem).not.toHaveBeenCalled();
-  });
-
   it('updates every mutable field for the caller organization and user', async () => {
     const updateInventoryItem = vi.fn().mockResolvedValue(item);
 
@@ -419,19 +463,6 @@ describe('PUT /api/inventory-items/:id', () => {
 });
 
 describe('DELETE /api/inventory-items/:id', () => {
-  it('answers 400 for an id of 0 and deletes nothing', async () => {
-    const deleteInventoryItem = vi.fn();
-
-    const response = await dispatch(
-      'DELETE',
-      '/api/inventory-items/0',
-      database({ deleteInventoryItem }),
-    );
-
-    expect(response?.status).toBe(400);
-    expect(deleteInventoryItem).not.toHaveBeenCalled();
-  });
-
   it('answers 404 when the item is missing or belongs to another organization', async () => {
     const response = await dispatch(
       'DELETE',

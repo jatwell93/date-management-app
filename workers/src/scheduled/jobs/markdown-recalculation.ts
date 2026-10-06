@@ -23,6 +23,7 @@
  * so the two cannot drift.
  */
 import { MARKDOWN_WINDOWS } from '../../../../shared/domain/markdown';
+import { RECALCULABLE_INVENTORY_STATUSES } from '../../inventory-status';
 import type { JobContext, ScheduledJob } from '../schedule';
 
 export const markdownRecalculationJob: ScheduledJob = {
@@ -48,7 +49,7 @@ export const markdownRecalculationJob: ScheduledJob = {
           SELECT id, status,
                  CEIL(EXTRACT(EPOCH FROM (expiry_date - ${asOf.toISOString()}::timestamp)) / 86400)::int AS days
           FROM inventory_items
-          WHERE status IN ('Normal', 'Markdown 1', 'Markdown 2', 'Markdown 3', 'Expired')
+          WHERE status = ANY(${[...RECALCULABLE_INVENTORY_STATUSES]})
         ) ii
       ),
       updated AS (

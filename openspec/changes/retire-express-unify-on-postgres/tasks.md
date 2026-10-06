@@ -3256,7 +3256,8 @@ equivalent, a relocated home, or an explicit retirement decision.
       `/location/:id`, `POST /transaction`), service-to-repository delegation tests, and two
       driver-specific model cases. **Reviewer items:** the Worker answers 404 where Express answered
       403 for another organization's item (deliberate: a foreign id looks like a missing one); an
-      empty `PUT` is a no-op that answers 200 where Express's model returned null; the create audit
+      empty `PUT` is a no-op that answers 200 where Express's model returned null (reviewer
+      decision 2026-10-07: keep the 200); the create audit
       text no longer names the status. The 14 `expired-item` rows are left for the disposition batch.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger

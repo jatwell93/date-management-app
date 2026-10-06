@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateInventoryStatus } from './expiry-import';
+import { calculateInventoryStatus } from '../inventory-status';
 import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
 
 // Task 3.2 batch 4. The import used 7/14/30-day thresholds, ported from an Express

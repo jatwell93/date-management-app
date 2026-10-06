@@ -3,7 +3,8 @@ import { getMarkdownLevelForDays } from '../../shared/domain/markdown';
 export type InventoryStatus = 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired';
 
 /**
- * Statuses the daily `markdown-recalculation` job (and an expiry edit) may rewrite.
+ * Statuses the daily `markdown-recalculation` job and an expiry edit may rewrite. The job's
+ * WHERE clause and `updateInventoryItem` both read this list, so they cannot drift apart.
  * Every other status is a disposition (`Processed`, `Sold Through`, ...) and is never
  * resurrected by a date change.
  */
