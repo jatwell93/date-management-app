@@ -377,6 +377,52 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
     expect(trial[0]?.status).toBe('trialing');
   });
 
+  describe('the trial a new organization starts with', () => {
+    const founderRequest = () =>
+      bootstrapRequest(
+        {
+          sub: 'clerk-trial-founder',
+          email: 'trial@startup.test',
+          username: 'trialfounder',
+          org_id: 'clerk-org-trial',
+        },
+        { clerkOrganizationId: 'clerk-org-trial', organizationName: 'Trial Inc' },
+      );
+
+    it('is a 14-day trial of the professional tier, with its start recorded', async () => {
+      const response = await handleOrganizationBootstrap(founderRequest(), ENV);
+      const { organizationId } = (await response.json()) as BootstrapPayload;
+
+      const rows = await sql`
+        SELECT tier_level,
+               status,
+               trial_started_at IS NOT NULL AS has_start,
+               EXTRACT(EPOCH FROM (trial_end_date - trial_started_at)) / 86400 AS trial_days
+        FROM subscription_tiers WHERE organization_id = ${organizationId}`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tier_level: 'professional',
+        status: 'trialing',
+        has_start: true,
+      });
+      expect(Number(rows[0].trial_days)).toBeCloseTo(14, 1);
+    });
+
+    it('is created once: a repeat bootstrap adds no organization and no second trial', async () => {
+      const first = await handleOrganizationBootstrap(founderRequest(), ENV);
+      expect(first.status).toBe(201);
+      const second = await handleOrganizationBootstrap(founderRequest(), ENV);
+      expect(second.status).toBe(200);
+
+      const orgs = await sql`
+        SELECT id FROM organizations WHERE clerk_organization_id = ${'clerk-org-trial'}`;
+      expect(orgs).toHaveLength(1);
+      const trials = await sql`
+        SELECT id FROM subscription_tiers WHERE organization_id = ${String(orgs[0].id)}`;
+      expect(trials).toHaveLength(1);
+    });
+  });
+
   /**
    * Organization RBAC audit trail (migration 0013, task 3.1.g).
    *
