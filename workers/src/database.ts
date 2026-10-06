@@ -64,6 +64,7 @@ import {
 } from './credit-claim-database';
 import { assertReferencesBelongToOrganization } from './tenant-references';
 import { DuplicateInventoryItemError } from './db-errors';
+import { calculateInventoryStatus, RECALCULABLE_INVENTORY_STATUSES } from './inventory-status';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -3078,7 +3079,9 @@ export function createWorkersDatabase(env: Env): Database {
       // a terminal status sit outside the partial unique index, so they skip it.
       // A concurrent duplicate that passes this read is stopped by
       // `inventory_items_active_triple_unique` (migration 0019).
-      const status = data.status ?? 'Normal';
+      // Derived from the expiry date when the caller names no status, as Express did
+      // (`inventory.service.ts:164`); the live frontend never sends one.
+      const status = data.status ?? calculateInventoryStatus(data.expiryDate);
       if (!TERMINAL_INVENTORY_STATUSES.includes(status)) {
         const existing = await sql`
           SELECT 1 FROM inventory_items
@@ -3161,6 +3164,11 @@ export function createWorkersDatabase(env: Env): Database {
         locationId: data.locationId,
       });
 
+      // An expiry edit re-derives the status, as Express did (`inventory.service.ts:224`),
+      // unless the caller names one. Only the statuses the nightly job owns are rewritten:
+      // a disposed item keeps its status when its date is corrected.
+      const derivedStatus = data.expiryDate ? calculateInventoryStatus(data.expiryDate) : null;
+
       // Atomic update + audit via CTE.
       const rows = await sql`
         WITH updated AS (
@@ -3169,7 +3177,12 @@ export function createWorkersDatabase(env: Env): Database {
             product_id = COALESCE(${data.productId ?? null}, product_id),
             expiry_date = COALESCE(${data.expiryDate ?? null}, expiry_date),
             location_id = COALESCE(${data.locationId ?? null}, location_id),
-            status = COALESCE(${data.status ?? null}, status),
+            status = CASE
+              WHEN ${data.status ?? null}::text IS NOT NULL THEN ${data.status ?? null}::text
+              WHEN ${data.expiryDate ?? null}::text IS NOT NULL
+                AND status = ANY(${[...RECALCULABLE_INVENTORY_STATUSES]}) THEN ${derivedStatus}::text
+              ELSE status
+            END,
             updated_at = NOW()
           WHERE id = ${id} AND organization_id = ${organizationId}
           RETURNING id, product_id, expiry_date, location_id, status, created_at, updated_at

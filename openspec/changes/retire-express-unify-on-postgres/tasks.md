@@ -3231,6 +3231,33 @@ equivalent, a relocated home, or an explicit retirement decision.
       `index-minimal.ts:1531`; three rows depend on retiring it. An expired trial degrades to free,
       not starter as Express had it (#489). The top-level 500 catch for a thrown route handler has
       no direct test; export-excess is pinned only up to the point where the failure propagates.
+      **Batch 5a — inventory item rows.** 92 rows (`inventory.routes`, `inventory.service`,
+      `inventory.repository`, `inventory-item.model`, `inventory-tenant-filtering`,
+      `inventory-create-status`, `inventory-markdown-consistency`), the first of the remaining
+      `worker-shaped-rewrite` clusters. **Defect found and fixed:** Express derived an item's status
+      from its expiry date on create and on an expiry edit (`inventory.service.ts:164`, `:224`).
+      The Worker defaulted to `Normal` on create and kept the old status on an edit, and the live
+      frontend never sends a status (ScanPage.tsx:385, ExpiryEntriesPage.tsx:221). An item scanned
+      on the day it expired stayed `Normal`, and so off the expired worklist, until the nightly job
+      ran at 00:00 UTC. `createInventoryItem` now derives the status; `updateInventoryItem`
+      re-derives it on an expiry edit unless the caller names one, and never rewrites a disposed
+      status. The rule moved to `inventory-status.ts` so the import, the routes and the job share it.
+      New tests: `inventory-item-handlers.test.ts` (42 cases: validation, status mapping, partial
+      and full updates, referential and duplicate refusals, and that the retired Express routes are
+      not served); `database.inventory-reads-and-status.pglite.node.test.ts` (20 cases against real
+      SQL with a second organization seeded: the two product reads, derived status at every band
+      edge, disposed items kept);
+      `scheduled/jobs/markdown-recalculation.pglite.node.test.ts` (4 cases, the first test the job
+      has had: its SQL and the TypeScript rule agree at 13 band edges); and
+      `unhandled-error-response.test.ts`, which drives the real `fetch` to show a thrown handler
+      error becomes a 500 with no detail. That last one closes the gap noted in 4d and lets the
+      "returns 500 when X fails" rows in later batches point at one test. 31 mutations, all killed.
+      31 rows are proposed `retire`: the Express routes retired in 2.1 (`GET /:id`, `/product/:id`,
+      `/location/:id`, `POST /transaction`), service-to-repository delegation tests, and two
+      driver-specific model cases. **Reviewer items:** the Worker answers 404 where Express answered
+      403 for another organization's item (deliberate: a foreign id looks like a missing one); an
+      empty `PUT` is a no-op that answers 200 where Express's model returned null; the create audit
+      text no longer names the status. The 14 `expired-item` rows are left for the disposition batch.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
