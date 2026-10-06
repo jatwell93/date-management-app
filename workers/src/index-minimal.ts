@@ -4589,7 +4589,7 @@ export async function handleUploadInitiate(
 /**
  * PUT /upload/presigned/:key and /api/upload/presigned/:key
  */
-async function handleUploadPresigned(
+export async function handleUploadPresigned(
   request: Request,
   env: Env,
   key: string,

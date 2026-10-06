@@ -23,6 +23,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { deriveSubscriptionAccess } from '../subscription-status';
+import { createWorkersDatabase } from '../database';
+import { resolveMaxSkus } from '../utils/usage-limits';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from '../__tests__/pglite-db';
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
@@ -827,6 +829,77 @@ describe('POST /api/webhooks/stripe', () => {
       const rows = await sql`SELECT completed_at FROM processed_webhook_events`;
       expect(rows).toHaveLength(1);
       expect(rows[0].completed_at).not.toBeNull();
+    });
+  });
+
+  describe('tier changes', () => {
+    const seedSubscription = (tier: string) => sql`
+      INSERT INTO subscription_tiers
+        (organization_id, tier_level, status, stripe_customer_id,
+         stripe_subscription_id, updated_at)
+      VALUES (${ORG}, ${tier}, 'active', ${CUSTOMER}, ${SUBSCRIPTION}, NOW())
+    `;
+    const seedProducts = (count: number) => sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      SELECT ${ORG}, 'BAR-' || n, 'SKU-' || n, 'Product ' || n, 1, NOW()
+      FROM generate_series(1, ${count}::int) AS n
+    `;
+    const productCount = async () =>
+      Number(
+        (await sql`SELECT COUNT(*)::int AS n FROM products WHERE organization_id = ${ORG}`)[0].n,
+      );
+    const changeTier = async (id: string, tier: string) =>
+      handleStripeWebhook(
+        await stripeRequest(subscriptionEvent({ id, type: 'customer.subscription.updated', tier })),
+        ENV,
+      );
+    const makeDb = () => createWorkersDatabase(ENV);
+    const newProduct = { barcode: 'BAR-NEW', name: 'One more' };
+
+    it('stores the lower tier on a downgrade and keeps every product, even past the new cap', async () => {
+      const starterCap = resolveMaxSkus('starter', ENV);
+      await seedSubscription('professional');
+      await seedProducts(starterCap + 1);
+
+      const response = await changeTier('evt_downgrade', 'starter');
+
+      expect(response.status).toBe(200);
+      const row = await subscriptionRow();
+      expect(row.tier_level).toBe('starter');
+      expect(deriveSubscriptionAccess(row).effectiveTier).toBe('starter');
+      // Nothing is deleted or hidden to bring the organization under the new cap.
+      expect(await productCount()).toBe(starterCap + 1);
+    });
+
+    it('refuses a new product while the organization is over the lower tier cap', async () => {
+      const starterCap = resolveMaxSkus('starter', ENV);
+      await seedSubscription('professional');
+      await seedProducts(starterCap + 1);
+      await changeTier('evt_downgrade_blocked', 'starter');
+      const tier = deriveSubscriptionAccess(await subscriptionRow()).effectiveTier;
+
+      const created = await makeDb().createProduct(ORG, newProduct, resolveMaxSkus(tier, ENV));
+
+      expect(created).toBeNull();
+      expect(await productCount()).toBe(starterCap + 1);
+    });
+
+    it('stores the higher tier on an upgrade and admits the product the old cap refused', async () => {
+      const starterCap = resolveMaxSkus('starter', ENV);
+      await seedSubscription('starter');
+      await seedProducts(starterCap);
+      const refusedBefore = await makeDb().createProduct(ORG, newProduct, starterCap);
+      expect(refusedBefore).toBeNull();
+
+      const response = await changeTier('evt_upgrade', 'pro');
+
+      expect(response.status).toBe(200);
+      const row = await subscriptionRow();
+      expect(row.tier_level).toBe('professional');
+      const tier = deriveSubscriptionAccess(row).effectiveTier;
+      const created = await makeDb().createProduct(ORG, newProduct, resolveMaxSkus(tier, ENV));
+      expect(created).not.toBeNull();
+      expect(await productCount()).toBe(starterCap + 1);
     });
   });
 

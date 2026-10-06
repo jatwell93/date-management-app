@@ -3201,6 +3201,36 @@ equivalent, a relocated home, or an explicit retirement decision.
       survived the first time because a missing contact masked the ratio error, which is why the
       half-ratio tests now supply a contact. No defect found here, and `disposeClaimableWriteOff`,
       which had no test of any kind, is now covered.
+      **Batch 4d — subscription, storage quota, trial and upload rows.** The 60 rows still marked
+      `worker-shaped-rewrite` with no Worker test. Many "no Worker path" claims in them predate the
+      3.1 work: the storage-quota route, the claim-photo route, the claim-build route and the upload
+      guards all exist now. Three kinds of decision:
+      (1) *Covered by new tests* in `storage-quota-and-upload-guards.test.ts` (20 cases: the quota
+      figures, the 79%/80% warning line, over 100%, tier read from the organization and not the
+      query, the initiate required-field guards, the 2 MiB strategy boundary, direct upload with no
+      file, the presigned round trip and its token checks, and an export-excess read failure);
+      three real-SQL cases in `stripe/webhook-handler.node.test.ts` (a downgrade keeps every
+      product even past the new cap; a new product is refused while over it; an upgrade admits the
+      product the old cap refused); two in `clerk/bootstrap-handler.node.test.ts` (the trial is
+      Professional for 14 days with its start recorded; a repeat bootstrap adds nothing). 19
+      mutations across these were all killed. `handleUploadPresigned` is now exported so the
+      presigned round trip can be driven.
+      (2) *Already covered*, re-pointed to the existing Worker test (usage-limits, billing-handlers,
+      health, credit-claim-routes, catalogue-import-upsert, subscription-gating).
+      (3) *Proposed `retire`* (21 rows). Twelve test Express service methods with no caller outside
+      their own wrapper (`createSubscription`, `updateSubscription`, `reactivateSubscription`) or
+      the `convert-trial` route retired in 3.1.p. Two integration tests self-skip without a Stripe
+      key and assert `expect(true).toBe(true)` otherwise. Three depend on the analytics feature
+      gate, two on the unwritten trial conversion time and `trial_started` event (findings below),
+      one on the Express-only seed retirement threshold, and one on organization-delete cascade,
+      which is a schema property with no Worker delete route.
+      **Findings for the reviewer.** The Worker never writes `subscription_tiers.trial_converted_at`
+      (Express did, at `webhook.service.ts:691`); the trial-status response always returns null for
+      it, and nothing reads it. No `trial_started` event row is written either, and nothing reads
+      one. The analytics feature gate is still the open question recorded at
+      `index-minimal.ts:1531`; three rows depend on retiring it. An expired trial degrades to free,
+      not starter as Express had it (#489). The top-level 500 catch for a thrown route handler has
+      no direct test; export-excess is pinned only up to the point where the failure propagates.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
