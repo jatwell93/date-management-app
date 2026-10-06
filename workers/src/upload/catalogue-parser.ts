@@ -1,4 +1,5 @@
 import { escapeSpreadsheetFormula } from '../../../shared/domain/csv-injection';
+import { parseProductImportCost } from '../../../shared/domain/product-import-cost';
 
 export type ProductCatalogRow = {
   sku: string;
@@ -67,11 +68,15 @@ export function validateCatalogueRecords(records: string[][]): {
       rowErrors.push(`Row ${rowNumber}: Missing or malformed required product fields`);
       return;
     }
-    if (seenSkus.has(row.sku) || seenBarcodes.has(row.barcode)) {
+    // SKUs are compared case-insensitively, as Express did: "sku001" and "SKU001"
+    // in one file are the same product, and the second would otherwise be stored
+    // as a second product because the database key is case-sensitive.
+    const skuKey = row.sku.toLowerCase();
+    if (seenSkus.has(skuKey) || seenBarcodes.has(row.barcode)) {
       rowErrors.push(`Row ${rowNumber}: Duplicate SKU or barcode in upload`);
       return;
     }
-    seenSkus.add(row.sku);
+    seenSkus.add(skuKey);
     seenBarcodes.add(row.barcode);
     parsed.push({ ...row, rowNumber });
   });
@@ -116,11 +121,6 @@ export function normalizeHeader(header: string): string {
 }
 
 function parseCost(value: string): number | null {
-  const normalized = value.replace(/[^0-9.-]/g, '');
-  if (!normalized) {
-    return null;
-  }
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  const parsed = parseProductImportCost(value);
+  return parsed !== null && Number.isFinite(parsed) ? parsed : null;
 }
