@@ -3760,6 +3760,14 @@ equivalent, a relocated home, or an explicit retirement decision.
       do it here; otherwise this line is already satisfied by the time Phase 4 opens. The one
       module that legitimately survives into Phase 4 is `workers/src/utils/feature-gates.ts`,
       held until **#471** resolves.
+      **Reviewer decisions of 2026-10-08 that 4.1 carries out.** Delete `OfflineSyncService`
+      (`frontend/src/lib/offline-sync.ts`) and its tests (G8; close #480 as moot); delete
+      `email-templates/` (J6); in `src/database/migrations/baseline.fingerprint.test.ts` keep the
+      checked-in-fingerprint test and delete the two Prisma cross-comparison tests, with the
+      Prisma-only helpers in `catalog-comparison.ts` (`TEST_COMPARISON`, `isKnownColumnDifference`,
+      `PRISMA_ONLY_KNOWN_INDEXES`, `MIGRATION_ONLY_PARTIAL_INDEXES`); run
+      `npm run test:audit-manifest` once from the 4.0 tag, then retire the verifier with the audit
+      directory. The tracked SQLite files and upload blobs hold no customer data (Finding 23 checked).
       **Hazards found by the 2026-10-08 refresh of 2.5 (see its "Status refresh" section).**
       `scripts/verify-audit-manifest.js` indexes `backend/src/tests` and runs in `openspec-audit.yml`;
       `src/database/migrations/baseline.fingerprint.test.ts` reads
