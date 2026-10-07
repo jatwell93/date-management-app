@@ -65,12 +65,13 @@ scenarios:
             - statusCode: 200
             - hasHeader: 'content-encoding'
 
-  # Get current user (requires auth)
-  - name: 'Get Current User'
+  # List store areas (requires auth, any role). Replaces `GET /api/users/me`,
+  # retired with the rest of the legacy-auth routes in task 2.1.
+  - name: 'Get Store Areas'
     weight: 25
     flow:
       - get:
-          url: '/api/users/me'
+          url: '/api/store-areas'
           headers:
             Authorization: 'Bearer {{ $processEnvironment.LOAD_TEST_BEARER_TOKEN }}'
           afterResponse: 'countAuthRejections'
