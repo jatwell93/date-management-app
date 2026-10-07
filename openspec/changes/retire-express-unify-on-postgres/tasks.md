@@ -3357,6 +3357,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       retired here. **Still gated on the read-only production query:** `backfill-canonical-roles.js`
       (no CHECK constraint on `users.role`; 0014 normalised the values but nothing asserts they
       stayed canonical) and `migrate-upload-status.ts` (`uploads.status` is unconstrained text).
+      **Discharged 2026-10-08.** Production result 2026-10-08 (read-only, direct URL, host `ep-little-shape-a7d9w3d8.ap-southeast-2.aws.neon.tech` printed first): all 23 tables carrying `organization_id` hold no NULL; `users.role` holds only canonical values (5 rows: 2 `team_member`, 2 `admin`, 1 `manager`, none soft-deleted); `uploads` is empty, so no legacy `complete` status exists. Both scripts retire with the backend.
       <br>**Retired in this slice (21):** the ten superseded by the Phase 1 runner except
       `seed-tier-feature-flags.js`; `migrate-production-simple.js`, `migrate-production-doppler.js`,
       `backup.sh`; `neon-to-sqlite.ts`, `test-r2-connection.ts`, `debug-env.js`, `query-orgs.ts`;
@@ -3759,6 +3760,12 @@ equivalent, a relocated home, or an explicit retirement decision.
       do it here; otherwise this line is already satisfied by the time Phase 4 opens. The one
       module that legitimately survives into Phase 4 is `workers/src/utils/feature-gates.ts`,
       held until **#471** resolves.
+      **Hazards found by the 2026-10-08 refresh of 2.5 (see its "Status refresh" section).**
+      `scripts/verify-audit-manifest.js` indexes `backend/src/tests` and runs in `openspec-audit.yml`;
+      `src/database/migrations/baseline.fingerprint.test.ts` reads
+      `backend/prisma/production/schema.prisma`, and `catalog-comparison.ts` has a Prisma comparison
+      profile. Each needs a decision (run once from the tagged revision then retire, or rewrite)
+      before `backend/` is deleted, or its gate fails on the deletion PR.
       **Ordering constraint (2.5 Finding 24, part 2).** `backend/scripts/run-tests.js` backs
       `npm run test:backend:diff`, the pre-commit gate. Delete it **in this same commit** and never
       before — deleting it earlier removes the ability to verify the surrounding removals.
