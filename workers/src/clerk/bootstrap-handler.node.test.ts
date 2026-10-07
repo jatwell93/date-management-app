@@ -13,7 +13,7 @@
  * verification returns controlled claims (no network). Runs under
  * `vitest.node.config.mts` (`*.node.test.ts`, `npm run test:db`).
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { neon } from '@neondatabase/serverless';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
@@ -21,6 +21,13 @@ import { createPgliteHarness, createTaggedSql, type PgliteHarness } from '../__t
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
 const tokenHolder = vi.hoisted(() => ({ current: null as unknown }));
+// What Clerk's user lookup answers when a token lacks the email or username claim.
+const profileHolder = vi.hoisted(() => ({
+  current: { primaryEmailAddress: null, username: null } as {
+    primaryEmailAddress: { emailAddress: string } | null;
+    username: string | null;
+  },
+}));
 
 vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => sqlHolder.current),
@@ -28,9 +35,9 @@ vi.mock('@neondatabase/serverless', () => ({
 
 vi.mock('@clerk/backend', () => ({
   verifyToken: vi.fn(async () => tokenHolder.current),
-  // Only reached when the token lacks email/username; our claims always supply both.
+  // Only reached when the token lacks email/username; most claims below supply both.
   createClerkClient: vi.fn(() => ({
-    users: { getUser: vi.fn(async () => ({ primaryEmailAddress: null, username: null })) },
+    users: { getUser: vi.fn(async () => profileHolder.current) },
   })),
 }));
 
@@ -375,6 +382,61 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
     const trial = await sql`
       SELECT status FROM subscription_tiers WHERE organization_id = ${String(org[0].id)}`;
     expect(trial[0]?.status).toBe('trialing');
+  });
+
+  // Task 3.2 batch 6. Express hydrated a token that carried no email or username claim from
+  // Clerk (`clerk-auth.middleware.test.ts`). `users.email` and `users.username` are both
+  // unique, so a user must never be inserted with either missing.
+  describe('a token that carries no email or username claim', () => {
+    afterEach(() => {
+      profileHolder.current = { primaryEmailAddress: null, username: null };
+    });
+
+    it('takes the email and username from the Clerk user record', async () => {
+      profileHolder.current = {
+        primaryEmailAddress: { emailAddress: 'Hydrated@Shop.TEST' },
+        username: 'hydrated',
+      };
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest({ sub: 'clerk-bare', org_id: 'clerk-org-bare' }),
+        ENV,
+      );
+
+      expect(response.status).toBe(201);
+      const user = await sql`
+        SELECT email, username FROM users WHERE clerk_user_id = ${'clerk-bare'}`;
+      expect(user[0]).toMatchObject({ email: 'hydrated@shop.test', username: 'hydrated' });
+    });
+
+    it('derives a username from the email when Clerk has none either', async () => {
+      profileHolder.current = {
+        primaryEmailAddress: { emailAddress: 'no.username@shop.test' },
+        username: null,
+      };
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest({ sub: 'clerk-nameless', org_id: 'clerk-org-nameless' }),
+        ENV,
+      );
+
+      expect(response.status).toBe(201);
+      const user = await sql`
+        SELECT email, username FROM users WHERE clerk_user_id = ${'clerk-nameless'}`;
+      expect(user[0]?.email).toBe('no.username@shop.test');
+      expect(String(user[0]?.username)).not.toBe('');
+    });
+
+    it('refuses, and creates nothing, when no email can be found anywhere', async () => {
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest({ sub: 'clerk-noemail', org_id: 'clerk-org-noemail' }),
+        ENV,
+      );
+
+      expect(response.status).toBe(400);
+      expect(await sql`SELECT id FROM users WHERE clerk_user_id = ${'clerk-noemail'}`).toEqual([]);
+      expect(await sql`SELECT id FROM organizations`).toEqual([]);
+    });
   });
 
   describe('the trial a new organization starts with', () => {

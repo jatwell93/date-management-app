@@ -30,6 +30,22 @@ export class DuplicateInventoryItemError extends Error {
   }
 }
 
+/**
+ * Thrown by `createStoreArea` when the organization already has an area with the same name
+ * and sub-department. The unique index on (organization_id, name, sub_department) cannot
+ * stop this when the sub-department is NULL, because Postgres treats NULLs as distinct, so
+ * the two areas "Aisle 1" with no sub-department were both accepted. Express refused them in
+ * `store-area.service.ts` with a NULL-safe lookup; this is the same check.
+ */
+export const DUPLICATE_STORE_AREA_MESSAGE = 'Store area with this name already exists';
+
+export class DuplicateStoreAreaError extends Error {
+  constructor() {
+    super(DUPLICATE_STORE_AREA_MESSAGE);
+    this.name = 'DuplicateStoreAreaError';
+  }
+}
+
 export function isDuplicateInventoryItem(error: unknown): boolean {
   return error instanceof DuplicateInventoryItemError || isUniqueViolation(error);
 }

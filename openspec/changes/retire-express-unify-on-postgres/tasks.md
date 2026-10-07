@@ -3296,6 +3296,51 @@ equivalent, a relocated home, or an explicit retirement decision.
       **Open follow-up.** `unpaid` and `paused` Stripe statuses are not recognized by
       `deriveSubscriptionAccess`, which fails open on them (full entitlements). Set Stripe's
       "if all retries fail" action to cancel, not mark unpaid or pause, until that is handled.
+      **Batch 6 — the last 360 rows (products, uploads, credit claims, middleware, reports, the
+      long tail).** After this batch no row in the four 2.2 manifests is `worker-shaped-rewrite`.
+      284 rows re-pointed to Worker tests, 76 proposed `retire`. As in earlier batches most "none
+      found" claims were stale: credit claims, the master-catalogue seed, email, health, the
+      upload handlers and the tenant-isolation suites all had Worker tests by now. New tests carry
+      the real gaps: `product-read-create-handlers.test.ts` (list, by-barcode, by-sku, get-by-id
+      and create: organization hand-off, decoding, 404/409/500 mapping), `store-area-handlers.test.ts`,
+      `expired-item-handlers.test.ts`, `report-handlers.test.ts`, `markdown-config-handlers.test.ts`,
+      `inventory-status.test.ts`, `upload/catalogue-enrichment.test.ts`, plus cases added to the
+      catalogue parser, expiry-date parser, upload guards, credit-claim routes, rate limiting
+      through `fetch`, bootstrap hydration from Clerk, and several real-SQL suites.
+      **Real defects found by writing the missing tests, and fixed.** (1) The catalogue import had
+      no length limit on SKU, name or barcode (Express: 100, 200, 100); one cell could be as big as
+      the upload. (2) The Worker accepted an inventory expiry date any distance out; Express refused
+      more than five years (`data-integrity.middleware.ts`), which catches a mistyped year (2062 for
+      2026) that would store an item no expiry window ever reaches. Create and edit now answer 400.
+      (3) Two store areas with the same name and no sub-department were both accepted, because the
+      unique index treats NULL sub-departments as distinct; Express guarded this in
+      `store-area.service.ts`. `createStoreArea` now checks with `IS NOT DISTINCT FROM`, and renaming
+      onto an existing area answers 409 rather than 500. **Left as a check, not a constraint:** a
+      concurrent pair with no sub-department can still both land; closing that needs a unique index on
+      `COALESCE(sub_department, '')`, which fails to build if production already holds duplicates
+      (count them first). (4) Not a defect: `/ready` was already 503 for an empty readiness result,
+      but nothing asserted it.
+      **Decisions for the reviewer** (each is `retire` or an `eq` with a stated difference in the
+      manifest row; none blocks the audit). (a) Short or odd barcodes and long SKUs are accepted on
+      product create and edit; Express refused them (permissive validator mode, already decided with
+      issue #530 for barcodes; SKU length follows it). (b) Unknown CSV columns are ignored; Express
+      rejected the file. (c) `items-by-user` with a time frame of 0 or text returns all time (200);
+      Express answered 400. (d) DECIDED 2026-10-08: a failed import's source file is deleted and a failed upload is not
+      counted toward the storage quota; queued uploads count.
+      (Express counted only PROCESSING and COMPLETED.) (e) The rate limiter is one
+      limiter keyed on client IP; two users behind one shop IP share a bucket, where Express keyed
+      presigned uploads by user. (f) No email-history check on trial creation; Clerk allows one
+      account per email and a returning user never gets a second trial, but deleting the Clerk
+      account and re-registering gives a fresh trial. This is the "sign-up check" item left open in
+      5b. (g) DONE after review: a `STRIPE_SECRET_KEY` that is not `sk_` or `rk_` is refused with 503 before Stripe is called.
+      Also after review: ignored CSV columns are named in the import's completion message (queued path); duplicate
+      store-area checks cover renames; length limits measure the raw cell. `items-by-user` with an invalid time frame answers 400 (decided 2026-10-08).
+      **Not carried, by design.** Express error-class middleware, the zod `validateRequest`
+      middleware, the SQLite models, the storage-provider abstraction, the SendGrid templates, the
+      dormant daily-report job, `monthly-markdown`, and `getAllExpiredItemTransactions` (no caller).
+      **Still open from 5b.** `unpaid`/`paused` Stripe statuses; the analytics feature gate; the
+      Express routes repinned as "not served"; the #568 production comparison.
+      **Mutation run.** 38 mutations on the new code and tests: 35 killed; one skipped (the pattern matched two lines); one survivor was an equivalent no-op mutation of mine; one survivor (store-area ordering) exposed a weak test, which was fixed and then killed.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.

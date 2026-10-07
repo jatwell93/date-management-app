@@ -117,6 +117,7 @@ export async function processCatalogueImportJob(
           uploadId,
           'quota',
           `Catalogue would contain ${projectedCount} SKUs, exceeding the ${job.maxSkusSnapshot} SKU limit`,
+          env,
         );
         return;
       }
@@ -171,7 +172,7 @@ export async function processCatalogueImportJob(
     }
     await db.sql`
       UPDATE uploads SET status = ${hasErrors ? 'completed_with_errors' : 'completed'},
-             upload_progress = 100, processing_message = ${hasErrors ? 'Import completed with row errors' : 'Import completed'},
+             upload_progress = 100, processing_message = ${completionMessage(hasErrors, validation.ignoredColumns)},
              row_errors = ${JSON.stringify(finalErrors.slice(0, 100))},
              error_report_key = ${reportKey}, completed_at = NOW(), updated_at = NOW()
       WHERE id = ${uploadId}
@@ -184,6 +185,13 @@ export async function processCatalogueImportJob(
     `;
     throw error;
   }
+}
+
+function completionMessage(hasErrors: boolean, ignoredColumns: string[]): string {
+  const base = hasErrors ? 'Import completed with row errors' : 'Import completed';
+  return ignoredColumns.length > 0
+    ? `${base}. Ignored columns: ${ignoredColumns.join(', ')}`
+    : base;
 }
 
 export async function enrichImportedProductsSafely(
@@ -414,17 +422,37 @@ async function findIdentifierConflictErrors(
   );
 }
 
+/**
+ * Marks the import failed. When `env` is given the uploaded source file is also deleted: a
+ * failed import is not kept, and its bytes do not count toward the storage quota
+ * (`getStorageUsedBytes` ignores failed rows). The delete is best-effort; the row is already
+ * failed, and a leftover object is only wasted space.
+ */
 export async function failCatalogueImport(
   db: Database,
   uploadId: number,
   category: string,
   message: string,
+  env?: Env,
 ): Promise<void> {
-  await db.sql`
+  const rows = await db.sql`
     UPDATE uploads SET status = 'failed', failure_category = ${category}, error_message = ${message},
            processing_message = ${message}, failed_at = NOW(), updated_at = NOW()
     WHERE id = ${uploadId}
+    RETURNING file_key as "fileKey"
   `;
+  if (env && rows[0]?.fileKey) await discardSourceFile(env, String(rows[0].fileKey), uploadId);
+}
+
+async function discardSourceFile(env: Env, key: string, uploadId: number): Promise<void> {
+  try {
+    await env.CSV_UPLOADS.delete(key);
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { feature: 'catalogue-import', action: 'discard-failed-source' },
+      extra: { uploadId, key },
+    });
+  }
 }
 
 export async function enqueueCatalogueImport(
@@ -446,7 +474,13 @@ export async function enqueueCatalogueImport(
       extra: { uploadId },
     });
     try {
-      await failCatalogueImport(db, uploadId, 'enqueue', 'Catalogue import could not be queued');
+      await failCatalogueImport(
+        db,
+        uploadId,
+        'enqueue',
+        'Catalogue import could not be queued',
+        env,
+      );
     } catch (failureUpdateError) {
       Sentry.captureException(failureUpdateError, {
         tags: { feature: 'catalogue-import', action: 'enqueue-fail-update' },
@@ -475,4 +509,5 @@ async function completeCatalogueWithErrors(
            error_report_key = ${reportKey}, failed_at = NOW(), updated_at = NOW()
     WHERE id = ${job.id}
   `;
+  await discardSourceFile(env, job.fileKey, job.id);
 }

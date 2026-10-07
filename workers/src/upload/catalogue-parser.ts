@@ -21,16 +21,53 @@ export const PRODUCT_CATALOG_HEADER_ALIASES = {
   barcode: ['barcode', 'alias', 'ean', 'upc', 'gtin', 'productbarcode', 'barcodenumber'],
 } as const;
 
+// Express limits (`product-import.helpers.ts`). Without them a single cell can be as large as the
+// upload itself, and it is stored as the product name, SKU or barcode.
+const MAX_SKU_LENGTH = 100;
+const MAX_NAME_LENGTH = 200;
+const MAX_BARCODE_LENGTH = 100;
+
+/**
+ * Measured on the trimmed cell as the user wrote it, as Express did, not on the stored value:
+ * formula escaping prefixes an apostrophe, and a value at the limit must not be refused for it.
+ */
+function lengthErrors(
+  rowNumber: number,
+  record: string[],
+  indexes: { sku: number; name: number; barcode: number },
+): string[] {
+  const cell = (index: number) => (record[index] || '').trim();
+  const checks: Array<[string, string, number]> = [
+    ['SKU', cell(indexes.sku), MAX_SKU_LENGTH],
+    ['Name', cell(indexes.name), MAX_NAME_LENGTH],
+    ['Barcode', cell(indexes.barcode), MAX_BARCODE_LENGTH],
+  ];
+  return checks
+    .filter(([, value, max]) => value.length > max)
+    .map(
+      ([field, value, max]) =>
+        `Row ${rowNumber}: ${field} too long (max ${max} characters) - "${value.substring(0, 50)}...". Please ensure the ${field} value is ${max} characters or fewer.`,
+    );
+}
+
 export function validateCatalogueRecords(records: string[][]): {
   rows: ValidatedCatalogueRow[];
   rowErrors: string[];
   fatalErrors: string[];
   totalRows: number;
+  /** Header cells that matched no known column and were not read. */
+  ignoredColumns: string[];
 } {
   const fatalErrors: string[] = [];
   const rowErrors: string[] = [];
   if (records.length < 2) {
-    return { rows: [], rowErrors, fatalErrors: ['No product rows found'], totalRows: 0 };
+    return {
+      rows: [],
+      rowErrors,
+      fatalErrors: ['No product rows found'],
+      totalRows: 0,
+      ignoredColumns: [],
+    };
   }
 
   const headers = records[0].map(normalizeHeader);
@@ -52,6 +89,7 @@ export function validateCatalogueRecords(records: string[][]): {
       rowErrors,
       fatalErrors: [`Missing required column header(s): ${missing.join(', ')}`],
       totalRows: 0,
+      ignoredColumns: [],
     };
   }
 
@@ -68,6 +106,11 @@ export function validateCatalogueRecords(records: string[][]): {
       rowErrors.push(`Row ${rowNumber}: Missing or malformed required product fields`);
       return;
     }
+    const tooLong = lengthErrors(rowNumber, record, indexes);
+    if (tooLong.length > 0) {
+      rowErrors.push(...tooLong);
+      return;
+    }
     // SKUs are compared case-insensitively, as Express did: "sku001" and "SKU001"
     // in one file are the same product, and the second would otherwise be stored
     // as a second product because the database key is case-sensitive.
@@ -81,7 +124,24 @@ export function validateCatalogueRecords(records: string[][]): {
     parsed.push({ ...row, rowNumber });
   });
 
-  return { rows: parsed, rowErrors, fatalErrors, totalRows };
+  return {
+    rows: parsed,
+    rowErrors,
+    fatalErrors,
+    totalRows,
+    ignoredColumns: ignoredColumns(records[0]),
+  };
+}
+
+function ignoredColumns(headerRow: string[]): string[] {
+  const known = new Set(
+    Object.values(PRODUCT_CATALOG_HEADER_ALIASES)
+      .flat()
+      .map((alias) => normalizeHeader(alias)),
+  );
+  return headerRow
+    .map((header) => header.trim())
+    .filter((header) => header.length > 0 && !known.has(normalizeHeader(header)));
 }
 
 export function parseProductCatalogRow(

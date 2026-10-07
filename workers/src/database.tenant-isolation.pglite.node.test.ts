@@ -156,6 +156,35 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
       const product = await makeDb().findProductById(ORG, foreignProductId);
       expect(product).toBeNull();
     });
+
+    // Task 3.2 batch 6. The scan lookups are the hot path in the store, and a barcode or SKU is
+    // not secret, so the organization predicate is the only thing between a scan and another
+    // tenant's cost price.
+    it('findProductByBarcode and findProductBySku find their own product', async () => {
+      expect((await makeDb().findProductByBarcode(ORG, 'BAR-OWN'))?.id).toBe(ownProductId);
+      expect((await makeDb().findProductBySku(ORG, 'SKU-OWN'))?.id).toBe(ownProductId);
+    });
+
+    it('findProductByBarcode and findProductBySku return null for another organization key', async () => {
+      expect(await makeDb().findProductByBarcode(ORG, 'BAR-FOREIGN')).toBeNull();
+      expect(await makeDb().findProductBySku(ORG, 'SKU-FOREIGN')).toBeNull();
+    });
+
+    it('findProducts pages through the organization products in name order', async () => {
+      await sql`
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+        VALUES (${ORG}, 'BAR-OWN-2', 'SKU-OWN-2', 'Mike Own Product', 5, NOW()),
+               (${ORG}, 'BAR-OWN-3', 'SKU-OWN-3', 'Kilo Own Product', 5, NOW())`;
+
+      const names = async (options: { limit: number; offset: number }) =>
+        (await makeDb().findProducts(ORG, options)).map((p) => p.name);
+
+      expect(await names({ limit: 2, offset: 0 })).toEqual([
+        'Kilo Own Product',
+        'Mike Own Product',
+      ]);
+      expect(await names({ limit: 2, offset: 2 })).toEqual(['Zulu Own Product']);
+    });
   });
 
   describe('inventory items', () => {
@@ -220,6 +249,16 @@ describe('Workers cross-tenant read isolation (real SQL)', () => {
       expect(areas).toHaveLength(1);
       expect(areas[0].id).toBe(ownAreaId);
       expect(areas.some((a) => a.name === 'Alpha Foreign Aisle')).toBe(false);
+    });
+
+    it('findStoreAreas lists the caller areas in name order', async () => {
+      await sql`
+        INSERT INTO store_areas (organization_id, name, updated_at)
+        VALUES (${ORG}, 'Kilo Aisle', NOW()), (${ORG}, 'Mike Aisle', NOW())`;
+
+      const areas = await makeDb().findStoreAreas(ORG);
+
+      expect(areas.map((a) => a.name)).toEqual(['Kilo Aisle', 'Mike Aisle', 'Zulu Own Aisle']);
     });
   });
 });

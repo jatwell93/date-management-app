@@ -254,6 +254,98 @@ describe('Workers rehomed read queries (real SQL)', () => {
     });
   });
 
+  // Task 3.2 batch 6. Express tested these three through its report repository and routes.
+  describe('getActiveExpiryEntries', () => {
+    it('lists stock beyond 90 days, and leaves out past-expiry, dispositioned and foreign stock', async () => {
+      const product = await seedProduct('SKU-A');
+      const foreignProduct = await seedProduct('SKU-F', OTHER_ORG);
+      await seedInventoryItem({ productId: product, status: 'Normal', daysOut: 400 });
+      await seedInventoryItem({ productId: product, status: 'Normal', daysOut: 5 });
+      await seedInventoryItem({ productId: product, status: 'Expired', daysOut: -3 });
+      await seedInventoryItem({ productId: product, status: 'Sold Through', daysOut: 60 });
+      await seedInventoryItem({ productId: product, status: 'Processed', daysOut: 61 });
+      await seedInventoryItem({
+        organizationId: OTHER_ORG,
+        productId: foreignProduct,
+        status: 'Normal',
+        daysOut: 10,
+      });
+
+      const entries = await makeDb().getActiveExpiryEntries(ORG);
+
+      expect(entries.map((entry) => entry.productId)).toEqual([product, product]);
+      // Soonest first, and only the two live rows: 5 days out, then 400.
+      expect(entries).toHaveLength(2);
+      expect(entries[0].expiryDate < entries[1].expiryDate).toBe(true);
+    });
+  });
+
+  describe('getItemsByUserReport', () => {
+    const seedCreated = async (userId: number, daysAgo: number, organizationId = ORG) => {
+      await sql`
+        INSERT INTO audit_log (organization_id, user_id, action, change_description, created_at)
+        VALUES (${organizationId}, ${userId}, 'CREATE', 'inventory item created',
+                CURRENT_DATE - (${daysAgo} * INTERVAL '1 day'))`;
+    };
+
+    it('counts the items each user created, most first', async () => {
+      const admin = await seedUser('admin');
+      const member = await seedUser('team_member');
+      await seedCreated(admin, 1);
+      await seedCreated(member, 1);
+      await seedCreated(member, 2);
+
+      const report = await makeDb().getItemsByUserReport(ORG);
+
+      expect(report).toEqual([
+        { userId: member, userName: expect.any(String), itemCount: 2 },
+        { userId: admin, userName: expect.any(String), itemCount: 1 },
+      ]);
+    });
+
+    it('limits the count to the requested number of days', async () => {
+      const admin = await seedUser('admin');
+      await seedCreated(admin, 1);
+      await seedCreated(admin, 40);
+
+      expect((await makeDb().getItemsByUserReport(ORG, '30'))[0].itemCount).toBe(1);
+      expect((await makeDb().getItemsByUserReport(ORG, 'all-time'))[0].itemCount).toBe(2);
+    });
+
+    it('treats an absent time frame as all time', async () => {
+      const admin = await seedUser('admin');
+      await seedCreated(admin, 1);
+      await seedCreated(admin, 40);
+
+      expect((await makeDb().getItemsByUserReport(ORG))[0].itemCount).toBe(2);
+    });
+
+    it('excludes another organization’s activity', async () => {
+      const theirs = await seedUser('admin', OTHER_ORG);
+      await seedCreated(theirs, 1, OTHER_ORG);
+
+      expect(await makeDb().getItemsByUserReport(ORG)).toEqual([]);
+    });
+  });
+
+  describe('getItemsByDateReport', () => {
+    it('counts creations per day for the caller organization only', async () => {
+      const admin = await seedUser('admin');
+      const theirs = await seedUser('admin', OTHER_ORG);
+      await sql`
+        INSERT INTO audit_log (organization_id, user_id, action, change_description, created_at)
+        VALUES (${ORG}, ${admin}, 'CREATE', 'inventory item created', CURRENT_DATE - INTERVAL '1 day'),
+               (${ORG}, ${admin}, 'CREATE', 'inventory item created', CURRENT_DATE - INTERVAL '1 day'),
+               (${ORG}, ${admin}, 'UPDATE', 'inventory item updated', CURRENT_DATE - INTERVAL '1 day'),
+               (${OTHER_ORG}, ${theirs}, 'CREATE', 'inventory item created', CURRENT_DATE - INTERVAL '1 day')`;
+
+      const report = await makeDb().getItemsByDateReport(ORG);
+
+      expect(report).toHaveLength(1);
+      expect(report[0].itemCount).toBe(2);
+    });
+  });
+
   describe('getDashboardAnalytics', () => {
     it('counts products, inventory, expired, markdown and the 30-day expiry window', async () => {
       const area = await seedArea({ name: 'Shelf' });

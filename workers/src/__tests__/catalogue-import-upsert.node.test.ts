@@ -29,8 +29,14 @@ afterEach(async () => {
   await harness.close();
 });
 
-function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: number[] } {
+function makeEnv(csv: string): {
+  env: Env;
+  puts: Map<string, string>;
+  sent: number[];
+  deleted: string[];
+} {
   const puts = new Map<string, string>();
+  const deleted: string[] = [];
   const sent: number[] = [];
   const env = {
     CSV_UPLOADS: {
@@ -40,7 +46,9 @@ function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: numb
       put: async (key: string, value: string) => {
         puts.set(key, typeof value === 'string' ? value : '');
       },
-      delete: async () => undefined,
+      delete: async (key: string) => {
+        deleted.push(key);
+      },
     },
     CATALOGUE_IMPORT_QUEUE: {
       send: async (msg: { uploadId: number }) => {
@@ -48,7 +56,7 @@ function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: numb
       },
     },
   } as unknown as Env;
-  return { env, puts, sent };
+  return { env, puts, sent, deleted };
 }
 
 type SeedProductInput = {
@@ -272,6 +280,54 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     ]);
   });
 
+  // Task 3.2 batch 6. Express: supplier-credit.repository.test.ts, "reuses an existing confirmed
+  // brand without overwriting its advisory fields". A brand the user has confirmed or added is
+  // theirs; only an unconfirmed REFERENCE brand may be refreshed from the catalogue.
+  it.each(['CONFIRMED', 'USER_ADDED'])(
+    'reuses an existing %s brand for a matched product without overwriting its fields',
+    async (source) => {
+      await harness.pg.query(
+        `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Test Org', 'test-org', NOW())`,
+        [ORG],
+      );
+      await harness.pg.query(`
+        INSERT INTO master_catalogue_entries
+          (barcode, description, api_sku, brand_name, manufacturer_name, updated_at)
+        VALUES ('CAT-1', 'Catalogue product', 'API-1', 'Acme', 'Catalogue Maker', NOW())
+      `);
+      const supplier = await harness.pg.query(
+        `INSERT INTO suppliers (organization_id, name, updated_at) VALUES ($1, 'My Wholesaler', NOW()) RETURNING id`,
+        [ORG],
+      );
+      const supplierId = Number((supplier.rows[0] as { id: number }).id);
+      await harness.pg.query(
+        `INSERT INTO brands (organization_id, name, supplier_id, manufacturer_name, suggested_supplier_name, source, updated_at)
+         VALUES ($1, 'Acme', $2, 'My Maker', 'My Suggestion', $3, '2020-01-01')`,
+        [ORG, supplierId, source],
+      );
+
+      const { env } = makeEnv('SKU,Name,Barcode,Cost\nS1,Catalogue product,CAT-1,1.00\n');
+      await processCatalogueImportJob(await insertUpload(), env, harness.db);
+
+      const brands = await harness.pg.query(
+        `SELECT id, supplier_id, manufacturer_name, suggested_supplier_name, source, updated_at::date::text AS touched
+         FROM brands WHERE organization_id = $1`,
+        [ORG],
+      );
+      expect(brands.rows).toEqual([
+        expect.objectContaining({
+          supplier_id: supplierId,
+          manufacturer_name: 'My Maker',
+          suggested_supplier_name: 'My Suggestion',
+          source,
+          touched: '2020-01-01',
+        }),
+      ]);
+      const product = await getProduct(ORG, 'S1');
+      expect(Number(product?.brand_id)).toBe(Number((brands.rows[0] as { id: number }).id));
+    },
+  );
+
   it('classifies insert / update / unchanged / conflict and writes an error report', async () => {
     await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'Old Name', cost: 1.0 });
     await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Keep', cost: 2.0 });
@@ -371,12 +427,28 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     expect(upload.rows_processed).toBe(upload.rows_total);
   });
 
+  it('names the columns it ignored in the completion message, and deletes the source of a file that fails validation', async () => {
+    const ok = makeEnv('SKU,Name,Barcode,Cost,Pack Size,GST\nS1,One,B1,1.00,12,Y\n');
+    const okId = await insertUpload();
+    await processCatalogueImportJob(okId, ok.env, harness.db);
+    expect((await getUpload(okId)).processing_message).toBe(
+      'Import completed. Ignored columns: Pack Size, GST',
+    );
+    expect(ok.deleted).toEqual([]);
+
+    const bad = makeEnv('Name,Barcode\nOne,B1\n');
+    const badId = await insertUpload({ file_key: 'uploads/user-1/bad.csv' });
+    await processCatalogueImportJob(badId, bad.env, harness.db);
+    expect((await getUpload(badId)).status).toBe('failed');
+    expect(bad.deleted).toEqual(['uploads/user-1/bad.csv']);
+  });
+
   it('fails on quota breach with no partial product writes', async () => {
     await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
     await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Two', cost: 2.0 });
 
     const csv = ['SKU,Name,Barcode,Cost', 'S3,Three,B3,3.00', 'S4,Four,B4,4.00', ''].join('\n');
-    const { env } = makeEnv(csv);
+    const { env, deleted } = makeEnv(csv);
     const uploadId = await insertUpload({ max_skus_snapshot: 2 });
 
     await processCatalogueImportJob(uploadId, env, harness.db);
@@ -384,6 +456,8 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     const upload = await getUpload(uploadId);
     expect(upload.status).toBe('failed');
     expect(upload.failure_category).toBe('quota');
+    // A failed import's source file is not kept (and a failed row is not counted in the quota).
+    expect(deleted).toEqual(['uploads/user-1/catalogue.csv']);
     // Nothing inserted; catalogue unchanged.
     expect(await countProducts(ORG)).toBe(2);
     expect(await getProduct(ORG, 'S3')).toBeUndefined();

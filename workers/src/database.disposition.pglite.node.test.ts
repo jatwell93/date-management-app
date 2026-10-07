@@ -243,6 +243,43 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     ]);
   });
 
+  // Task 3.2 batch 6. Express threw for an inventory item that did not exist
+  // (`expired-item.service.test.ts`, "Throws when inventory item does not exist"). The Worker
+  // reads the item scoped to the caller's organization, so another organization's item is the
+  // same not-found, and nothing is written.
+  it('refuses an item that does not exist, and one owned by another organization', async () => {
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    await sql`INSERT INTO organizations (id, name, slug, updated_at)
+              VALUES ('org-b', 'Org B', 'org-b', NOW()) ON CONFLICT DO NOTHING`;
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, updated_at)
+      VALUES ('org-b', 'FOREIGN', 'FOREIGN', 'Foreign Item', 5, NOW())
+      RETURNING id`;
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, updated_at)
+      VALUES ('org-b', 'Foreign Shelf', NOW())
+      RETURNING id`;
+    const foreign = await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status, updated_at)
+      VALUES ('org-b', ${Number(productRows[0].id)}, ${Number(areaRows[0].id)}, (CURRENT_DATE - INTERVAL '1 day')::date, 'Expired', NOW())
+      RETURNING id`;
+    const foreignId = Number(foreign[0].id);
+
+    await expect(db.processExpiredItem(foreignId, USER_ID, ORG, 'expired', 1)).rejects.toThrow(
+      `Inventory item ${foreignId} not found`,
+    );
+    await expect(db.processExpiredItem(999999, USER_ID, ORG, 'sold_through')).rejects.toThrow(
+      'Inventory item 999999 not found',
+    );
+
+    expect(await sql`SELECT id FROM expired_item_transactions`).toEqual([]);
+    const untouched = await sql`SELECT status FROM inventory_items WHERE id = ${foreignId}`;
+    expect(untouched[0]?.status).toBe('Expired');
+    await sql`DELETE FROM inventory_items WHERE organization_id = 'org-b'`;
+    await sql`DELETE FROM products WHERE organization_id = 'org-b'`;
+    await sql`DELETE FROM store_areas WHERE organization_id = 'org-b'`;
+  });
+
   it('rejects a NULL cost_price — the real schema forbids it (issue #268)', async () => {
     // The old harness allowed NULL here, which was drift: the authoritative
     // baseline declares `cost_price DOUBLE PRECISION NOT NULL`

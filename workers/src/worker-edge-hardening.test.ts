@@ -292,3 +292,55 @@ describe('configuration validation, through /health', () => {
     expect(response.status).toBe(503);
   });
 });
+
+describe('rate limit, through the entry point', () => {
+  // Task 3.2 batch 6. Express tested each limiter as middleware (`rate-limiter.middleware.test.ts`).
+  // The Worker has one limiter, applied to every /api/ and /upload/ path at the entry point and
+  // keyed on the client IP, with a larger allowance for a request that carries an Authorization
+  // header. These tests send real requests, with a fixed IP (unlike `fetchWorker`, which rotates).
+  const limited = { RATE_LIMIT_MAX_REQUESTS: '2', RATE_LIMIT_MAX_AUTHENTICATED: '4' };
+  const ask = (ip: string, headers: Record<string, string> = {}) =>
+    worker.fetch(
+      new Request('https://api.example.com/api/products', {
+        headers: { 'CF-Connecting-IP': ip, ...headers },
+      }),
+      { ...testEnv(), ...limited } as Env,
+      ctx,
+    );
+
+  it('answers 429 with a retry time once the allowance for a client is spent', async () => {
+    const ip = '198.51.100.1';
+    await ask(ip);
+    await ask(ip);
+
+    const blocked = await ask(ip);
+
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
+    expect(blocked.headers.get('X-RateLimit-Remaining')).toBe('0');
+    await expect(blocked.json()).resolves.toMatchObject({
+      error: expect.stringContaining('Rate limit exceeded'),
+    });
+  });
+
+  it('does not count one client against another', async () => {
+    await ask('198.51.100.2');
+    await ask('198.51.100.2');
+    await ask('198.51.100.2');
+
+    const other = await ask('198.51.100.3');
+
+    expect(other.status).not.toBe(429);
+  });
+
+  it('gives a request that carries an Authorization header the larger allowance', async () => {
+    const ip = '198.51.100.4';
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      statuses.push((await ask(ip, { Authorization: 'Bearer x' })).status);
+    }
+
+    expect(statuses.slice(0, 4).every((status) => status !== 429)).toBe(true);
+    expect(statuses[4]).toBe(429);
+  });
+});

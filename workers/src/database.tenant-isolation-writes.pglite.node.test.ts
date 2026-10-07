@@ -47,6 +47,7 @@ vi.mock('@neondatabase/serverless', () => ({
 
 import { createWorkersDatabase } from './database';
 import { isReferentialError } from './tenant-references';
+import { DuplicateStoreAreaError } from './db-errors';
 
 const ORG = 'org-a';
 const OTHER_ORG = 'org-b';
@@ -178,6 +179,33 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       expect(audit).toHaveLength(0);
     });
 
+    // Task 3.2 batch 6. Express: integration/scan.test.ts. The scan flow resolves a barcode to a
+    // product and then saves an inventory item against the product id it was handed.
+    // `inventory_items.product_id` has no foreign key, so the organization check on create is the
+    // only thing keeping the second call from attaching another tenant's product.
+    it('saves a scanned barcode as an inventory item, and refuses the same flow for a foreign barcode', async () => {
+      const db = makeDb();
+
+      const scanned = await db.findProductByBarcode(ORG, 'BAR-OWN');
+      const created = await db.createInventoryItem(
+        ORG,
+        ownUserId,
+        { productId: scanned!.id, expiryDate: '2098-02-02', locationId: ownAreaId },
+        1_000_000,
+      );
+      expect(created).toMatchObject({ productId: ownProductId, locationId: ownAreaId });
+
+      expect(await db.findProductByBarcode(ORG, 'BAR-SECRET')).toBeNull();
+      await expect(
+        db.createInventoryItem(
+          ORG,
+          ownUserId,
+          { productId: foreignProductId, expiryDate: '2098-02-02', locationId: ownAreaId },
+          1_000_000,
+        ),
+      ).rejects.toThrow('Product does not exist');
+    });
+
     it("rejects repointing an item at another organization's product", async () => {
       const db = makeDb();
 
@@ -268,6 +296,97 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
   });
 
   describe('store area write and delete', () => {
+    // Task 3.2 batch 6. Express refused a second area with the same name and sub-department
+    // (`store-area.service.ts`, a NULL-safe lookup). The unique index cannot: Postgres treats
+    // NULLs as distinct, so two "Aisle 1" with no sub-department were both accepted.
+    it('creates an area in the caller organization and returns it with camelCase fields', async () => {
+      const area = await makeDb().createStoreArea(ORG, { name: 'Chilled', subDepartment: 'Dairy' });
+
+      expect(area).toMatchObject({ name: 'Chilled', subDepartment: 'Dairy', parentId: null });
+      const rows = await sql`SELECT organization_id FROM store_areas WHERE id = ${area.id}`;
+      expect(rows[0].organization_id).toBe(ORG);
+    });
+
+    it('refuses a second area with the same name when neither has a sub-department', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 1' });
+
+      await expect(db.createStoreArea(ORG, { name: 'Aisle 1' })).rejects.toThrow(
+        DuplicateStoreAreaError,
+      );
+      const rows =
+        await sql`SELECT id FROM store_areas WHERE organization_id = ${ORG} AND name = 'Aisle 1'`;
+      expect(rows).toHaveLength(1);
+    });
+
+    it('refuses a second area with the same name and sub-department', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 2', subDepartment: 'Dairy' });
+
+      await expect(
+        db.createStoreArea(ORG, { name: 'Aisle 2', subDepartment: 'Dairy' }),
+      ).rejects.toThrow(DuplicateStoreAreaError);
+    });
+
+    it('allows the same name under a different sub-department, or in another organization', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 3', subDepartment: 'Dairy' });
+
+      await expect(
+        db.createStoreArea(ORG, { name: 'Aisle 3', subDepartment: 'Bakery' }),
+      ).resolves.toMatchObject({ subDepartment: 'Bakery' });
+      await expect(db.createStoreArea(ORG, { name: 'Aisle 3' })).resolves.toMatchObject({
+        subDepartment: null,
+      });
+      await expect(
+        db.createStoreArea(OTHER_ORG, { name: 'Aisle 3', subDepartment: 'Dairy' }),
+      ).resolves.toMatchObject({ name: 'Aisle 3' });
+    });
+
+    it('refuses renaming an area onto another with the same name and no sub-department', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 6' });
+      const other = await db.createStoreArea(ORG, { name: 'Aisle 7' });
+
+      await expect(db.updateStoreArea(ORG, other.id, { name: 'Aisle 6' })).rejects.toThrow(
+        DuplicateStoreAreaError,
+      );
+      const rows = await sql`SELECT name FROM store_areas WHERE id = ${other.id}`;
+      expect(rows[0].name).toBe('Aisle 7');
+    });
+
+    it('refuses clearing a sub-department when it would collide, and allows an edit that keeps the area unique', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 8' });
+      const dairy = await db.createStoreArea(ORG, { name: 'Aisle 8', subDepartment: 'Dairy' });
+
+      await expect(db.updateStoreArea(ORG, dairy.id, { subDepartment: null })).rejects.toThrow(
+        DuplicateStoreAreaError,
+      );
+      // Renaming the area to its own current name is not a clash with itself.
+      await expect(db.updateStoreArea(ORG, dairy.id, { name: 'Aisle 8' })).resolves.toMatchObject({
+        subDepartment: 'Dairy',
+      });
+    });
+
+    it('leaves an own area unchanged when the update names no field', async () => {
+      const db = makeDb();
+      const area = await db.createStoreArea(ORG, { name: 'Aisle 5', subDepartment: 'Dairy' });
+
+      const updated = await db.updateStoreArea(ORG, area.id, {});
+
+      expect(updated).toMatchObject({ id: area.id, name: 'Aisle 5', subDepartment: 'Dairy' });
+    });
+
+    it('changes the sub-department of an own area, and leaves the name', async () => {
+      const db = makeDb();
+      const area = await db.createStoreArea(ORG, { name: 'Aisle 4' });
+
+      const updated = await db.updateStoreArea(ORG, area.id, { subDepartment: 'Frozen' });
+
+      expect(updated).toMatchObject({ id: area.id, name: 'Aisle 4', subDepartment: 'Frozen' });
+    });
+
     it("returns null and leaves another organization's area untouched on update", async () => {
       const db = makeDb();
 

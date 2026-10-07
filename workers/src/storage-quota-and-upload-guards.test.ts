@@ -14,7 +14,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
 import * as minimalEntrypoint from './index-minimal';
-import { handleUploadDirect, handleUploadInitiate, handleUploadPresigned } from './index-minimal';
+import {
+  handleUploadComplete,
+  handleUploadDirect,
+  handleUploadInitiate,
+  handleUploadPresigned,
+  handleUploadStatus,
+} from './index-minimal';
 import { authenticateClerkRequest } from './clerk/bootstrap-handler';
 import { STORAGE_LIMIT_BYTES_BY_TIER } from './utils/usage-limits';
 import type { Database } from './database';
@@ -187,6 +193,17 @@ describe('upload initiate: required fields', () => {
     expect(getStorageUsedBytes).not.toHaveBeenCalled();
   });
 
+  it('carries the import type into the direct upload URL, and defaults it to the product catalogue', async () => {
+    const { database } = databaseOnTier('free', 0);
+    const base = { filename: 'a.csv', contentType: 'text/csv', fileSize: 1024 };
+
+    const expiry = await (await initiate({ ...base, importType: 'expiry-list' }, database)).json();
+    const other = await (await initiate({ ...base, importType: 'anything-else' }, database)).json();
+
+    expect((expiry as { uploadUrl: string }).uploadUrl).toContain('importType=expiry-list');
+    expect((other as { uploadUrl: string }).uploadUrl).toContain('importType=product-catalog');
+  });
+
   it('chooses the direct strategy at exactly 2 MiB and the presigned strategy one byte over', async () => {
     const { database } = databaseOnTier('free', 0);
     const base = { filename: 'a.csv', contentType: 'text/csv' };
@@ -246,6 +263,130 @@ describe('direct upload: the file part', () => {
     const response = await direct(form, `uploads/user-${USER_ID + 1}/1-a.csv`, database);
 
     expect(response.status).toBe(403);
+  });
+
+  // Task 3.2 batch 6. Express checked size and type in its route middleware (multer) and the
+  // service; the Worker checks both in the handler, after authentication and before any write.
+  it('refuses a file over the size limit and writes nothing', async () => {
+    const put = vi.fn();
+    const form = new FormData();
+    form.set('file', new File([new Uint8Array(26 * 1024 * 1024)], 'big.csv', { type: 'text/csv' }));
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await direct(form, `uploads/user-${USER_ID}/1-big.csv`, database, {
+      CSV_UPLOADS: { put },
+    } as unknown as Env);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('File size exceeds'),
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the query string', `?importType=expiry-list`, new FormData()],
+    [
+      'the multipart body',
+      '',
+      (() => {
+        const body = new FormData();
+        body.set('importType', 'expiry-list');
+        return body;
+      })(),
+    ],
+  ])(
+    'reads the import type from %s and routes an expiry list to the expiry processor',
+    async (_label, query, form) => {
+      // A header-only expiry file reports "No expiry rows found"; the catalogue path would say
+      // "No product rows found", so the message shows which processor ran.
+      form.set('file', new File(['SKU,Used-By Date\n'], 'expiry.csv', { type: 'text/csv' }));
+      const key = `uploads/user-${USER_ID}/1-expiry.csv`;
+      const { database } = databaseOnTier('free', 0);
+
+      const response = await handleUploadDirect(
+        new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}${query}`, {
+          method: 'POST',
+          body: form,
+        }),
+        { ...ENV, CSV_UPLOADS: { put: vi.fn() } } as unknown as Env,
+        key,
+        database,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ errors: ['No expiry rows found'] });
+    },
+  );
+
+  it('refuses a file that is neither CSV nor text, and writes nothing', async () => {
+    const put = vi.fn();
+    const form = new FormData();
+    form.set('file', new File(['%PDF-1.7'], 'catalogue.pdf', { type: 'application/pdf' }));
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await direct(form, `uploads/user-${USER_ID}/1-catalogue.pdf`, database, {
+      CSV_UPLOADS: { put },
+    } as unknown as Env);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid file type. Only CSV files are allowed.',
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+});
+
+describe('upload complete and status: request guards', () => {
+  const complete = (body: unknown, database: Database, env: Env = ENV) =>
+    handleUploadComplete(
+      new Request('https://example.com/api/upload/complete', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+      env,
+      database,
+    );
+  const status = (key: string, database: Database, env: Env = ENV) =>
+    handleUploadStatus(
+      new Request(`https://example.com/api/upload/status/${encodeURIComponent(key)}`),
+      env,
+      key,
+      database,
+    );
+
+  it('refuses a completion with no key, before touching storage', async () => {
+    const head = vi.fn();
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await complete({}, database, { CSV_UPLOADS: { head } } as unknown as Env);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Missing required field: key',
+    });
+    expect(head).not.toHaveBeenCalled();
+  });
+
+  it('refuses to complete, or report the status of, a key that belongs to another user', async () => {
+    const head = vi.fn();
+    const env = { ...ENV, CSV_UPLOADS: { head } } as unknown as Env;
+    const { database } = databaseOnTier('free', 0);
+    const foreignKey = `uploads/user-${USER_ID + 1}/1-a.csv`;
+
+    expect((await complete({ key: foreignKey }, database, env)).status).toBe(403);
+    expect((await status(foreignKey, database, env)).status).toBe(403);
+    expect(head).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for the status of an upload that is not in storage', async () => {
+    const head = vi.fn().mockResolvedValue(null);
+    const env = { ...ENV, CSV_UPLOADS: { head } } as unknown as Env;
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await status(`uploads/user-${USER_ID}/1-a.csv`, database, env);
+
+    expect(response.status).toBe(404);
   });
 });
 

@@ -113,7 +113,9 @@ async function stripeRequest<T>(
   options: { body?: Record<string, unknown>; idempotencyKey?: string; method?: string } = {},
 ): Promise<T> {
   const apiKey = env.STRIPE_SECRET_KEY?.trim();
-  if (!apiKey) {
+  // A secret (`sk_`) or restricted (`rk_`) key. A publishable key (`pk_`) pasted into the secret
+  // slot is a misconfiguration; refuse it here, as Express did, rather than send it to Stripe.
+  if (!apiKey || !/^(sk|rk)_/.test(apiKey)) {
     throw new StripeNotConfiguredError();
   }
 

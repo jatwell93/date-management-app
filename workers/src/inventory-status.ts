@@ -35,3 +35,19 @@ export function calculateInventoryStatus(isoDate: string, now: Date = new Date()
   const level = getMarkdownLevelForDays(daysDiff);
   return level === null ? 'Normal' : (`Markdown ${level}` as const);
 }
+
+/** Express refused an expiry date further out than this (`data-integrity.middleware.ts`). */
+export const MAX_EXPIRY_YEARS_AHEAD = 5;
+
+export const EXPIRY_TOO_FAR_MESSAGE = `Expiry date cannot be more than ${MAX_EXPIRY_YEARS_AHEAD} years in the future`;
+
+/**
+ * True when `isoDate` (YYYY-MM-DD) is after today plus five years. The boundary day itself is
+ * allowed. Guards against a mistyped year (2062 for 2026), which would otherwise store an item
+ * that never reaches any expiry window.
+ */
+export function isExpiryBeyondHorizon(isoDate: string, now: Date = new Date()): boolean {
+  const horizon = new Date(now.getTime());
+  horizon.setUTCFullYear(horizon.getUTCFullYear() + MAX_EXPIRY_YEARS_AHEAD);
+  return isoDate > horizon.toISOString().slice(0, 10);
+}

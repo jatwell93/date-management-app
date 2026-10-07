@@ -519,6 +519,26 @@ describe('Workers tier usage limits (real SQL)', () => {
       expect(await makeDb().getStorageUsedBytes(ORG)).toBe(1500);
     });
 
+    // Task 3.2 batch 6. Express summed only PROCESSING and COMPLETED uploads
+    // (`quota-contract.test.ts`). A queued or in-flight import still holds its object, so it
+    // counts. A failed import's source file is deleted (`failCatalogueImport`), so a failed row
+    // does not count, like a deleted one. Reviewer decision, 2026-10-08.
+    it('counts queued and completed uploads, and leaves out failed and deleted ones', async () => {
+      await seedUploader();
+      for (const [key, status, bytes] of [
+        ['q1', 'queued', 100],
+        ['f1', 'failed', 200],
+        ['c1', 'completed', 400],
+        ['d1', 'deleted', 800],
+      ] as const) {
+        await sql`
+          INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+          VALUES (${ORG}, ${uploaderId}, ${key}, ${key + '.csv'}, ${bytes}, ${status}, NOW())`;
+      }
+
+      expect(await makeDb().getStorageUsedBytes(ORG)).toBe(500);
+    });
+
     // `uploads.file_size_bytes` is INTEGER, so no single row can exceed ~2.1GB
     // (the upload path caps files at 100MB anyway) -- but the SUM across rows
     // can, and SUM(integer) is bigint in Postgres. What this pins is that the

@@ -65,8 +65,13 @@ function dispatch(method: string, pathAndQuery: string, db: Database, body?: unk
   });
 }
 
-const item = { id: 11, productId: 3, expiryDate: '2099-06-01', locationId: 4, status: 'Normal' };
-const validCreate = { productId: 3, expiryDate: '2099-06-01', locationId: 4 };
+// Inside the five-year horizon the routes enforce, and moving with the clock.
+const daysAhead = (days: number) =>
+  new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+const FUTURE_DATE = daysAhead(365);
+const LATER_DATE = daysAhead(395);
+const item = { id: 11, productId: 3, expiryDate: FUTURE_DATE, locationId: 4, status: 'Normal' };
+const validCreate = { productId: 3, expiryDate: FUTURE_DATE, locationId: 4 };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -187,7 +192,7 @@ describe('requests refused before any write', () => {
       'POST with no productId',
       'POST',
       '/api/inventory-items',
-      { expiryDate: '2099-06-01', locationId: 4 },
+      { expiryDate: FUTURE_DATE, locationId: 4 },
       'createInventoryItem',
       400,
     ],
@@ -227,7 +232,7 @@ describe('requests refused before any write', () => {
       'POST with no locationId',
       'POST',
       '/api/inventory-items',
-      { productId: 3, expiryDate: '2099-06-01' },
+      { productId: 3, expiryDate: FUTURE_DATE },
       'createInventoryItem',
       400,
     ],
@@ -317,7 +322,7 @@ describe('POST /api/inventory-items', () => {
     expect(createInventoryItem).toHaveBeenCalledWith(
       ORG,
       USER_ID,
-      { productId: 3, expiryDate: '2099-06-01', locationId: 4, status: undefined },
+      { productId: 3, expiryDate: FUTURE_DATE, locationId: 4, status: undefined },
       expect.any(Number),
     );
   });
@@ -331,7 +336,7 @@ describe('POST /api/inventory-items', () => {
       database({ createInventoryItem }),
       {
         product_id: 3,
-        expiry_date: '2099-06-01',
+        expiry_date: FUTURE_DATE,
         location_id: 4,
       },
     );
@@ -339,7 +344,7 @@ describe('POST /api/inventory-items', () => {
     expect(response?.status).toBe(201);
     expect(createInventoryItem.mock.calls[0][2]).toMatchObject({
       productId: 3,
-      expiryDate: '2099-06-01',
+      expiryDate: FUTURE_DATE,
       locationId: 4,
     });
   });
@@ -359,6 +364,24 @@ describe('POST /api/inventory-items', () => {
 
     expect(response?.status).toBe(400);
     await expect(response?.json()).resolves.toMatchObject({ error: message });
+  });
+
+  it('answers 400 for an expiry date more than five years out, before any write', async () => {
+    // Task 3.2 batch 6. Express: "rejects expiry date more than 5 years out".
+    const createInventoryItem = vi.fn();
+
+    const response = await dispatch(
+      'POST',
+      '/api/inventory-items',
+      database({ createInventoryItem }),
+      { ...validCreate, expiryDate: daysAhead(365 * 5 + 10) },
+    );
+
+    expect(response?.status).toBe(400);
+    await expect(response?.json()).resolves.toMatchObject({
+      error: 'Expiry date cannot be more than 5 years in the future',
+    });
+    expect(createInventoryItem).not.toHaveBeenCalled();
   });
 
   it('answers 409 for a duplicate active item', async () => {
@@ -401,14 +424,14 @@ describe('PUT /api/inventory-items/:id', () => {
 
     const response = await put(
       '/api/inventory-items/11',
-      { productId: 3, expiryDate: '2099-07-01', locationId: 5, status: 'Markdown 1' },
+      { productId: 3, expiryDate: LATER_DATE, locationId: 5, status: 'Markdown 1' },
       { updateInventoryItem },
     );
 
     expect(response?.status).toBe(200);
     expect(updateInventoryItem).toHaveBeenCalledWith(ORG, USER_ID, 11, {
       productId: 3,
-      expiryDate: '2099-07-01',
+      expiryDate: LATER_DATE,
       locationId: 5,
       status: 'Markdown 1',
     });
@@ -425,6 +448,19 @@ describe('PUT /api/inventory-items/:id', () => {
       locationId: 5,
       status: undefined,
     });
+  });
+
+  it('answers 400 for an edited expiry date more than five years out, before any write', async () => {
+    const updateInventoryItem = vi.fn();
+
+    const response = await put(
+      '/api/inventory-items/11',
+      { expiryDate: daysAhead(365 * 5 + 10) },
+      { updateInventoryItem },
+    );
+
+    expect(response?.status).toBe(400);
+    expect(updateInventoryItem).not.toHaveBeenCalled();
   });
 
   it('answers 404 when the item is missing or belongs to another organization', async () => {
