@@ -54,6 +54,20 @@ function send(method: string, pathname: string, db: Database, body?: unknown) {
   });
 }
 
+/** POSTs `body` and expects a 400 with the named database write never called. */
+async function expectRefusedBeforeWrite(
+  path: string,
+  writeMethod: keyof Database,
+  body: unknown,
+): Promise<void> {
+  const write = vi.fn();
+
+  const response = await send('POST', path, database({ [writeMethod]: write }), body);
+
+  expect(response?.status).toBe(400);
+  expect(write).not.toHaveBeenCalled();
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -86,15 +100,8 @@ describe('POST /api/store-areas', () => {
   });
 
   it.each([{}, { name: '' }, { name: '   ' }, { name: 5 }])(
-    'answers 400 for the body %j, before any write',
-    async (body) => {
-      const createStoreArea = vi.fn();
-
-      const response = await send('POST', '/api/store-areas', database({ createStoreArea }), body);
-
-      expect(response?.status).toBe(400);
-      expect(createStoreArea).not.toHaveBeenCalled();
-    },
+    'refuses the area body %j before any write',
+    (body) => expectRefusedBeforeWrite('/api/store-areas', 'createStoreArea', body),
   );
 
   it.each([
@@ -115,6 +122,16 @@ describe('POST /api/store-areas', () => {
 });
 
 describe('PUT /api/store-areas/:id', () => {
+  it('answers 409 when the database layer reports a duplicate name and sub-department', async () => {
+    const updateStoreArea = vi.fn().mockRejectedValue(new DuplicateStoreAreaError());
+
+    const response = await send('PUT', '/api/store-areas/3', database({ updateStoreArea }), {
+      name: 'Aisle 1',
+    });
+
+    expect(response?.status).toBe(409);
+  });
+
   it('answers 409, not 500, when the rename collides with another area', async () => {
     const updateStoreArea = vi
       .fn()
@@ -140,21 +157,8 @@ describe('PUT /api/store-areas/:id', () => {
 });
 
 describe('POST /api/store-areas/check-cycles', () => {
-  it.each([{}, { name: '' }, { name: '  ' }])(
-    'answers 400 for the body %j, before any write',
-    async (body) => {
-      const createCheckCycle = vi.fn();
-
-      const response = await send(
-        'POST',
-        '/api/store-areas/check-cycles',
-        database({ createCheckCycle }),
-        body,
-      );
-
-      expect(response?.status).toBe(400);
-      expect(createCheckCycle).not.toHaveBeenCalled();
-    },
+  it.each([{}, { name: '' }, { name: '  ' }])('refuses the walk body %j before any write', (body) =>
+    expectRefusedBeforeWrite('/api/store-areas/check-cycles', 'createCheckCycle', body),
   );
 
   it('answers 409 when a walk is already active', async () => {
@@ -183,14 +187,9 @@ describe('POST /api/store-areas/bay-checks', () => {
     { storeAreaId: -4 },
     { storeAreaId: 1.5 },
     { storeAreaId: '3' },
-  ])('answers 400 for the body %j, before any write', async (body) => {
-    const recordBayCheck = vi.fn();
-
-    const response = await post(body, database({ recordBayCheck }));
-
-    expect(response?.status).toBe(400);
-    expect(recordBayCheck).not.toHaveBeenCalled();
-  });
+  ])('refuses the bay-check body %j before any write', (body) =>
+    expectRefusedBeforeWrite('/api/store-areas/bay-checks', 'recordBayCheck', body),
+  );
 
   it('records the check for the caller organization and user, accepting snake_case', async () => {
     const recordBayCheck = vi.fn().mockResolvedValue({ id: 5 });

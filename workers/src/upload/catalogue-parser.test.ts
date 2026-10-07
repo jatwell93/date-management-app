@@ -167,4 +167,25 @@ describe('Worker catalogue parser', () => {
     expect(result.totalRows).toBe(2000);
     expect(result.rowErrors).toEqual(['Row 1002: Missing or malformed required product fields']);
   });
+
+  // The limit applies to what the user wrote. Formula escaping adds a leading apostrophe to the
+  // stored value, which must not push a value that is exactly at the limit over it.
+  it('measures the length before formula escaping', () => {
+    const result = validateCatalogueRecords([
+      ['SKU', 'Name', 'Cost', 'Barcode'],
+      [`=${'x'.repeat(99)}`, 'Milk', '1.00', 'B1'],
+    ]);
+
+    expect(result.rowErrors).toEqual([]);
+    expect(result.rows[0].sku).toBe(`'=${'x'.repeat(99)}`);
+  });
+
+  it('lists the header columns it did not read', () => {
+    const result = validateCatalogueRecords([
+      ['Item Code', 'Pack Size', 'Item Description', 'GST', 'Cost Ex', 'Barcode', ''],
+      ['619647', '12', 'Nebuliser Tubing', 'Y', '7.53', '9318766200185', ''],
+    ]);
+
+    expect(result.ignoredColumns).toEqual(['Pack Size', 'GST']);
+  });
 });

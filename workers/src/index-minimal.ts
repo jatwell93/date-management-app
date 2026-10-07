@@ -746,6 +746,7 @@ export async function handleCatalogueImportQueue(
             Number(body.uploadId),
             'processing',
             'Catalogue import failed after repeated retries',
+            env,
           );
         } catch (failError) {
           Sentry.captureException(failError, {
@@ -770,6 +771,7 @@ import {
   Database,
   type BulkAttachResult,
   type BulkLinkResult,
+  type StoreArea,
   type Supplier,
   type SupplierWriteData,
   type UsageCounts,
@@ -3500,12 +3502,12 @@ async function handleUpdateStoreArea(
     data.parentId = body.parent_id;
   }
 
-  let updated;
+  let updated: StoreArea | null;
   try {
     updated = await db.updateStoreArea(auth.organizationId, id, data);
   } catch (error) {
     // A rename onto an existing (name, sub-department) is a client conflict, not a server fault.
-    if (isUniqueViolation(error)) {
+    if (error instanceof DuplicateStoreAreaError || isUniqueViolation(error)) {
       return errorResponse(DUPLICATE_STORE_AREA_MESSAGE, 409, env);
     }
     throw error;

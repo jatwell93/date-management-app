@@ -284,6 +284,22 @@ describe('handleCreateCheckoutSession', () => {
     expect(response.status).toBe(503);
   });
 
+  it('answers 503 and never calls Stripe when the key is not a secret or restricted key', async () => {
+    const db = makeDb({
+      'FROM subscription_tiers': [
+        { id: 7, stripe_customer_id: 'cus_1', stripe_subscription_id: null },
+      ],
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const env = { ...baseEnv(), STRIPE_SECRET_KEY: 'pk_live_publishable' } as unknown as Env;
+
+    const response = await handleCreateCheckoutSession(post(validBody), db, env, ORG);
+
+    expect(response.status).toBe(503);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
   it('varies the idempotency key with the redirect URLs', async () => {
     // The two live callers send the same successUrl and DIFFERENT cancelUrls
     // (TrialUpgradeFlow `/upgrade`, SubscriptionSettingsPage `/settings`).

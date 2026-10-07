@@ -3325,13 +3325,16 @@ equivalent, a relocated home, or an explicit retirement decision.
       product create and edit; Express refused them (permissive validator mode, already decided with
       issue #530 for barcodes; SKU length follows it). (b) Unknown CSV columns are ignored; Express
       rejected the file. (c) `items-by-user` with a time frame of 0 or text returns all time (200);
-      Express answered 400. (d) The storage quota counts queued and failed uploads, because their
-      objects stay in R2; Express counted only PROCESSING and COMPLETED. (e) The rate limiter is one
+      Express answered 400. (d) DECIDED 2026-10-08: a failed import's source file is deleted and a failed upload is not
+      counted toward the storage quota; queued uploads count.
+      (Express counted only PROCESSING and COMPLETED.) (e) The rate limiter is one
       limiter keyed on client IP; two users behind one shop IP share a bucket, where Express keyed
       presigned uploads by user. (f) No email-history check on trial creation; Clerk allows one
       account per email and a returning user never gets a second trial, but deleting the Clerk
       account and re-registering gives a fresh trial. This is the "sign-up check" item left open in
-      5b. (g) A `sk_` prefix check on `STRIPE_SECRET_KEY` was not carried; a wrong key fails at Stripe.
+      5b. (g) DONE after review: a `STRIPE_SECRET_KEY` that is not `sk_` or `rk_` is refused with 503 before Stripe is called.
+      Also after review: ignored CSV columns are named in the import's completion message (queued path); duplicate
+      store-area checks cover renames; length limits measure the raw cell. Open: `items-by-user` invalid time frame.
       **Not carried, by design.** Express error-class middleware, the zod `validateRequest`
       middleware, the SQLite models, the storage-provider abstraction, the SendGrid templates, the
       dormant daily-report job, `monthly-markdown`, and `getAllExpiredItemTransactions` (no caller).

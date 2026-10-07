@@ -29,8 +29,14 @@ afterEach(async () => {
   await harness.close();
 });
 
-function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: number[] } {
+function makeEnv(csv: string): {
+  env: Env;
+  puts: Map<string, string>;
+  sent: number[];
+  deleted: string[];
+} {
   const puts = new Map<string, string>();
+  const deleted: string[] = [];
   const sent: number[] = [];
   const env = {
     CSV_UPLOADS: {
@@ -40,7 +46,9 @@ function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: numb
       put: async (key: string, value: string) => {
         puts.set(key, typeof value === 'string' ? value : '');
       },
-      delete: async () => undefined,
+      delete: async (key: string) => {
+        deleted.push(key);
+      },
     },
     CATALOGUE_IMPORT_QUEUE: {
       send: async (msg: { uploadId: number }) => {
@@ -48,7 +56,7 @@ function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: numb
       },
     },
   } as unknown as Env;
-  return { env, puts, sent };
+  return { env, puts, sent, deleted };
 }
 
 type SeedProductInput = {
@@ -419,12 +427,28 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     expect(upload.rows_processed).toBe(upload.rows_total);
   });
 
+  it('names the columns it ignored in the completion message, and deletes the source of a file that fails validation', async () => {
+    const ok = makeEnv('SKU,Name,Barcode,Cost,Pack Size,GST\nS1,One,B1,1.00,12,Y\n');
+    const okId = await insertUpload();
+    await processCatalogueImportJob(okId, ok.env, harness.db);
+    expect((await getUpload(okId)).processing_message).toBe(
+      'Import completed. Ignored columns: Pack Size, GST',
+    );
+    expect(ok.deleted).toEqual([]);
+
+    const bad = makeEnv('Name,Barcode\nOne,B1\n');
+    const badId = await insertUpload({ file_key: 'uploads/user-1/bad.csv' });
+    await processCatalogueImportJob(badId, bad.env, harness.db);
+    expect((await getUpload(badId)).status).toBe('failed');
+    expect(bad.deleted).toEqual(['uploads/user-1/bad.csv']);
+  });
+
   it('fails on quota breach with no partial product writes', async () => {
     await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
     await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Two', cost: 2.0 });
 
     const csv = ['SKU,Name,Barcode,Cost', 'S3,Three,B3,3.00', 'S4,Four,B4,4.00', ''].join('\n');
-    const { env } = makeEnv(csv);
+    const { env, deleted } = makeEnv(csv);
     const uploadId = await insertUpload({ max_skus_snapshot: 2 });
 
     await processCatalogueImportJob(uploadId, env, harness.db);
@@ -432,6 +456,8 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     const upload = await getUpload(uploadId);
     expect(upload.status).toBe('failed');
     expect(upload.failure_category).toBe('quota');
+    // A failed import's source file is not kept (and a failed row is not counted in the quota).
+    expect(deleted).toEqual(['uploads/user-1/catalogue.csv']);
     // Nothing inserted; catalogue unchanged.
     expect(await countProducts(ORG)).toBe(2);
     expect(await getProduct(ORG, 'S3')).toBeUndefined();

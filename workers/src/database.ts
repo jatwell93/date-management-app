@@ -1767,7 +1767,7 @@ export function createWorkersDatabase(env: Env): Database {
         SELECT COALESCE(SUM(file_size_bytes), 0)::bigint as "usedBytes"
         FROM uploads
         WHERE organization_id = ${organizationId}
-          AND status <> 'deleted'
+          AND status NOT IN ('deleted', 'failed')
       `;
       return Number(rows[0]?.usedBytes ?? 0);
     },
@@ -3424,13 +3424,31 @@ export function createWorkersDatabase(env: Env): Database {
       data: { name?: string; subDepartment?: string | null; parentId?: number | null },
     ): Promise<StoreArea | null> {
       const existing = await sql`
-        SELECT id FROM store_areas
+        SELECT id, name, sub_department as "subDepartment" FROM store_areas
         WHERE id = ${id} AND organization_id = ${organizationId}
         LIMIT 1
       `;
       if (!existing[0]) {
         return null;
       }
+
+      // Same NULL-safe duplicate check as createStoreArea, on the name and sub-department the
+      // row would have after this update, ignoring the row itself. The unique index cannot stop
+      // two areas with no sub-department.
+      const nextName = data.name ?? String(existing[0].name);
+      const nextSubDepartment =
+        data.subDepartment === undefined
+          ? ((existing[0].subDepartment as string | null) ?? null)
+          : data.subDepartment;
+      const clash = await sql`
+        SELECT 1 FROM store_areas
+        WHERE organization_id = ${organizationId}
+          AND id <> ${id}
+          AND name = ${nextName}
+          AND sub_department IS NOT DISTINCT FROM ${nextSubDepartment}
+        LIMIT 1
+      `;
+      if (clash.length > 0) throw new DuplicateStoreAreaError();
 
       const rows = await sql`
         UPDATE store_areas

@@ -520,10 +520,10 @@ describe('Workers tier usage limits (real SQL)', () => {
     });
 
     // Task 3.2 batch 6. Express summed only PROCESSING and COMPLETED uploads
-    // (`quota-contract.test.ts`). The Worker keeps the stored object whatever the outcome of the
-    // import, so a queued or failed upload still occupies the bucket; it counts every row that
-    // has not been deleted. Pinned here so the difference is a decision rather than an accident.
-    it('counts queued and failed uploads, as well as completed ones,, because their objects stay in storage', async () => {
+    // (`quota-contract.test.ts`). A queued or in-flight import still holds its object, so it
+    // counts. A failed import's source file is deleted (`failCatalogueImport`), so a failed row
+    // does not count, like a deleted one. Reviewer decision, 2026-10-08.
+    it('counts queued and completed uploads, and leaves out failed and deleted ones', async () => {
       await seedUploader();
       for (const [key, status, bytes] of [
         ['q1', 'queued', 100],
@@ -536,7 +536,7 @@ describe('Workers tier usage limits (real SQL)', () => {
           VALUES (${ORG}, ${uploaderId}, ${key}, ${key + '.csv'}, ${bytes}, ${status}, NOW())`;
       }
 
-      expect(await makeDb().getStorageUsedBytes(ORG)).toBe(700);
+      expect(await makeDb().getStorageUsedBytes(ORG)).toBe(500);
     });
 
     // `uploads.file_size_bytes` is INTEGER, so no single row can exceed ~2.1GB

@@ -343,6 +343,32 @@ describe('Workers cross-tenant write and delete isolation (real SQL)', () => {
       ).resolves.toMatchObject({ name: 'Aisle 3' });
     });
 
+    it('refuses renaming an area onto another with the same name and no sub-department', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 6' });
+      const other = await db.createStoreArea(ORG, { name: 'Aisle 7' });
+
+      await expect(db.updateStoreArea(ORG, other.id, { name: 'Aisle 6' })).rejects.toThrow(
+        DuplicateStoreAreaError,
+      );
+      const rows = await sql`SELECT name FROM store_areas WHERE id = ${other.id}`;
+      expect(rows[0].name).toBe('Aisle 7');
+    });
+
+    it('refuses clearing a sub-department when it would collide, and allows an edit that keeps the area unique', async () => {
+      const db = makeDb();
+      await db.createStoreArea(ORG, { name: 'Aisle 8' });
+      const dairy = await db.createStoreArea(ORG, { name: 'Aisle 8', subDepartment: 'Dairy' });
+
+      await expect(db.updateStoreArea(ORG, dairy.id, { subDepartment: null })).rejects.toThrow(
+        DuplicateStoreAreaError,
+      );
+      // Renaming the area to its own current name is not a clash with itself.
+      await expect(db.updateStoreArea(ORG, dairy.id, { name: 'Aisle 8' })).resolves.toMatchObject({
+        subDepartment: 'Dairy',
+      });
+    });
+
     it('leaves an own area unchanged when the update names no field', async () => {
       const db = makeDb();
       const area = await db.createStoreArea(ORG, { name: 'Aisle 5', subDepartment: 'Dairy' });
