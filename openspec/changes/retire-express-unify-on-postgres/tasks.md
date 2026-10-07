@@ -3759,6 +3759,12 @@ equivalent, a relocated home, or an explicit retirement decision.
       do it here; otherwise this line is already satisfied by the time Phase 4 opens. The one
       module that legitimately survives into Phase 4 is `workers/src/utils/feature-gates.ts`,
       held until **#471** resolves.
+      **Hazards found by the 2026-10-08 refresh of 2.5 (see its "Status refresh" section).**
+      `scripts/verify-audit-manifest.js` indexes `backend/src/tests` and runs in `openspec-audit.yml`;
+      `src/database/migrations/baseline.fingerprint.test.ts` reads
+      `backend/prisma/production/schema.prisma`, and `catalog-comparison.ts` has a Prisma comparison
+      profile. Each needs a decision (run once from the tagged revision then retire, or rewrite)
+      before `backend/` is deleted, or its gate fails on the deletion PR.
       **Ordering constraint (2.5 Finding 24, part 2).** `backend/scripts/run-tests.js` backs
       `npm run test:backend:diff`, the pre-commit gate. Delete it **in this same commit** and never
       before — deleting it earlier removes the ability to verify the surrounding removals.
