@@ -8,7 +8,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import * as Sentry from '@sentry/cloudflare';
-import { enrichImportedProductsSafely } from './catalogue-import';
+import { enqueueCatalogueImport, enrichImportedProductsSafely } from './catalogue-import';
+import type { Env } from '../types/env';
 import type { Database } from '../database';
 
 vi.mock('@sentry/cloudflare', () => ({ captureException: vi.fn() }));
@@ -44,5 +45,25 @@ describe('enrichImportedProductsSafely', () => {
     await enrichImportedProductsSafely({ sql } as unknown as Database, 'org_1', []);
 
     expect(sql).not.toHaveBeenCalled();
+  });
+});
+
+describe('enqueueCatalogueImport', () => {
+  it('marks the import failed and deletes the source file when the queue send fails', async () => {
+    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const env = {
+      CATALOGUE_IMPORT_QUEUE: { send: vi.fn().mockRejectedValue(new Error('queue unavailable')) },
+      CSV_UPLOADS: { delete: deleteObject },
+    } as unknown as Env;
+    const sql = vi.fn((strings: TemplateStringsArray) =>
+      Promise.resolve(
+        strings.join('').includes("status = 'failed'") ? [{ fileKey: 'uploads/user-1/a.csv' }] : [],
+      ),
+    );
+
+    const queued = await enqueueCatalogueImport(env, { sql } as unknown as Database, 9);
+
+    expect(queued).toBe(false);
+    expect(deleteObject).toHaveBeenCalledWith('uploads/user-1/a.csv');
   });
 });

@@ -474,7 +474,13 @@ export async function enqueueCatalogueImport(
       extra: { uploadId },
     });
     try {
-      await failCatalogueImport(db, uploadId, 'enqueue', 'Catalogue import could not be queued');
+      await failCatalogueImport(
+        db,
+        uploadId,
+        'enqueue',
+        'Catalogue import could not be queued',
+        env,
+      );
     } catch (failureUpdateError) {
       Sentry.captureException(failureUpdateError, {
         tags: { feature: 'catalogue-import', action: 'enqueue-fail-update' },
