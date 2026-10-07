@@ -11,4 +11,8 @@ Quick non-negotiables:
   `npm run test:backend:diff` / `test:frontend:diff` / `npm run test:db`, plus `npm run lint`.
   (There is no root `npm test` / `npm run build` — it errors by design.)
 - Track non-trivial work in OpenSpec (`openspec list`); no ad-hoc TODO/planning files.
+- Conventional commits (`feat(workers): ...`); show the user a short summary (changes, tests run, risks) before pushing.
+- Use Context7 for current library/API docs without being asked.
+- Workers also need `(cd workers && npm run typecheck)` (CI type-checks test files).
+- Express (`backend/`) is being retired: new API behaviour goes in `workers/`.
 - This is a monorepo: code lives in `backend/`, `frontend/`, `workers/`, `shared/` — there is no root `src/` app.
