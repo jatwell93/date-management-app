@@ -3285,6 +3285,17 @@ equivalent, a relocated home, or an explicit retirement decision.
       created a session. (5) A missing or unknown organization on a Stripe event is acknowledged with
       nothing written, where Express threw; the Express critical alert carrying the customer email is
       not reproduced.
+      **Resolved 2026-10-07 (reviewer decisions).** (1) Only an expired trial is refused outright by
+      the entitlement gate; a cancellation or non-payment lapse degrades to the free tier and the free
+      caps decide what can still be created, as Express did and `tier-downgrade-guide.md` promises.
+      (2) The Worker raises a Sentry warning when a subscription first enters dunning, once per
+      episode (`stripe-persistence.ts`). Stripe sends the customer emails (failed payment, expiring
+      card); setup steps are in the PR. (3) No downgrade warning email: data is never deleted, so it is
+      deferred until a trial customer asks. (4) Checkout from an organization with no subscription row
+      creates the bootstrap trial row first and proceeds, instead of answering 404.
+      **Open follow-up.** `unpaid` and `paused` Stripe statuses are not recognized by
+      `deriveSubscriptionAccess`, which fails open on them (full entitlements). Set Stripe's
+      "if all retries fail" action to cancel, not mark unpaid or pause, until that is handled.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.

@@ -33,6 +33,13 @@ vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => sqlHolder.current),
 }));
 
+const sentry = vi.hoisted(() => ({ captureMessage: vi.fn() }));
+
+vi.mock('@sentry/cloudflare', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@sentry/cloudflare')>()),
+  captureMessage: sentry.captureMessage,
+}));
+
 import { handleStripeWebhook } from './webhook-handler';
 
 const WEBHOOK_SECRET = 'whsec_local_test_secret';
@@ -462,6 +469,69 @@ describe('POST /api/webhooks/stripe', () => {
       // clock, the 7-day grace would never elapse and a non-paying account would
       // keep full entitlements indefinitely.
       expect((await subscriptionRow()).past_due_since).toEqual(before);
+    });
+
+    describe('dunning alert', () => {
+      const send = async (id: string, status: string, metadata = true) =>
+        handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id,
+              type: 'customer.subscription.updated',
+              status,
+              ...(metadata ? { metadataOrganizationId: ORG } : {}),
+            }),
+          ),
+          ENV,
+        );
+      const entered = () =>
+        sentry.captureMessage.mock.calls.filter(([message]) =>
+          String(message).includes('entered dunning'),
+        );
+
+      beforeEach(() => sentry.captureMessage.mockClear());
+
+      it('raises one alert, naming the organization, when a subscription first goes past due', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await send('evt_dunning_1', 'past_due');
+
+        expect(entered()).toHaveLength(1);
+        // Logged as well, so the transition leaves a trace when no Sentry DSN is bound.
+        expect(
+          warn.mock.calls
+            .map((call) => String(call[0]))
+            .filter((line) => line.includes('subscription_entered_dunning')),
+        ).toHaveLength(1);
+        warn.mockRestore();
+        expect(entered()[0][1]).toMatchObject({
+          level: 'warning',
+          extra: { organizationId: ORG, stripeSubscriptionId: SUBSCRIPTION },
+        });
+      });
+
+      it('raises no further alert for the retries Stripe sends while it stays past due', async () => {
+        await send('evt_dunning_1', 'past_due');
+        await send('evt_dunning_2', 'past_due', false);
+        await send('evt_dunning_3', 'past_due', false);
+
+        expect(entered()).toHaveLength(1);
+      });
+
+      it('raises a new alert when an organization recovers and then lapses again', async () => {
+        await send('evt_dunning_1', 'past_due');
+        await send('evt_recovered', 'active', false);
+        await send('evt_dunning_2', 'past_due', false);
+
+        expect(entered()).toHaveLength(2);
+      });
+
+      it('raises no alert for a subscription that is not past due', async () => {
+        await send('evt_active', 'active');
+        await send('evt_trialing', 'trialing', false);
+
+        expect(entered()).toHaveLength(0);
+      });
     });
 
     it('cancels without discarding the tier the customer has paid through', async () => {

@@ -177,7 +177,7 @@ describe('organization entitlement gate (real SQL)', () => {
     expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('professional');
   });
 
-  it('refuses creation once the paid-through period has ended', async () => {
+  it('degrades to the free tier once the paid-through period has ended, and still allows creation', async () => {
     await seedOrganization();
     await seedSubscription({
       status: 'canceled',
@@ -186,17 +186,17 @@ describe('organization entitlement gate (real SQL)', () => {
       currentPeriodEnd: daysFromNow(-1),
     });
 
-    const blocked = await authenticate('POST');
-    expect((blocked as Response).status).toBe(403);
-    expect(await bodyOf(blocked as Response)).toMatchObject({
-      reason: 'cancellation-window-elapsed',
-    });
+    // The customer ended the paid relationship, not the data: the free-tier caps
+    // decide what they can still add, as Express's downgrade did. Only an expired
+    // trial is refused outright (see the trial test above).
+    expect(await authenticate('POST')).toMatchObject({ organizationId: ORG });
+    expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
     // Reads survive cancellation here, where Express rejects the request
     // outright. Recorded in task 3.1.k as a deliberate divergence.
     expect(await authenticate('GET')).toMatchObject({ organizationId: ORG });
   });
 
-  it('serves a past-due organization through the dunning grace and refuses after it', async () => {
+  it('serves a past-due organization through the dunning grace, then degrades it to free and still allows creation', async () => {
     await seedOrganization();
     await seedSubscription({
       status: 'past_due',
@@ -204,11 +204,17 @@ describe('organization entitlement gate (real SQL)', () => {
       pastDueSince: daysFromNow(-3),
     });
     expect(await authenticate('POST')).toMatchObject({ organizationId: ORG });
+    expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('professional');
 
-    await harness.pg.query(`UPDATE subscription_tiers SET past_due_since = $1`, [daysFromNow(-8)]);
-    const blocked = await authenticate('POST');
-    expect((blocked as Response).status).toBe(403);
-    expect(await bodyOf(blocked as Response)).toMatchObject({ reason: 'dunning-grace-elapsed' });
+    await harness.pg.query(
+      `UPDATE subscription_tiers SET past_due_since = $1 WHERE organization_id = $2`,
+      [daysFromNow(-8), ORG],
+    );
+
+    // Express moved the organization to free and locked creation only when usage
+    // was already over the free limits. The free-tier caps now do that job.
+    expect(await authenticate('POST')).toMatchObject({ organizationId: ORG });
+    expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
   });
 
   it('refuses creation for a creation-locked organization whose subscription is fine', async () => {
