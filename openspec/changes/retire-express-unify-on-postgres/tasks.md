@@ -3698,7 +3698,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       now reports 0 absent routes. `/ready` is 503 without a database connection string; an R2
       failure alone stays ready. `migrations-e2e.yml` is left in place, so the e2e suite runs twice
       until Phase 5 removes one copy.
-- [ ] 3.10 Rebuild the duplicate-inventory guard that Express's `data-integrity.middleware` provided
+- [x] 3.10 Rebuild the duplicate-inventory guard that Express's `data-integrity.middleware` provided
       and the Worker never had (found by 3.2 batch 2, manifest part 1 row 843). Express refused a
       second `inventory_items` row with the same `product_id`, `expiry_date` and `location_id` with
       409; the Worker's `createInventoryItem` inserts unconditionally and the table has no quantity
@@ -3716,7 +3716,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       location (admitted) and a different expiry (admitted), mutation-verified by dropping the index.
       `database.ts` `createInventoryItem` is also the active-expiry cap's INSERT, so the guard must
       not disturb the cap's `COUNT(*)` predicate.
-      <br>**Progress (b)–(e) done; (a) open.** Reviewer decision 2026-10-05: retired items do not block
+      <br>**Progress (b)–(e) done; (a) done.** Reviewer decision 2026-10-05: retired items do not block
       a re-add, so migration 0019 builds `inventory_items_active_triple_unique` as a *partial* unique
       index (`WHERE status <> ALL(<terminal statuses>)`, the list the active-expiry cap uses). It is
       migration-only in the Prisma comparison (`MIGRATION_ONLY_PARTIAL_INDEXES`), like the two earlier
@@ -3728,10 +3728,12 @@ equivalent, a relocated home, or an explicit retirement decision.
       row, so it needed no change. Pre-existing fixtures that seeded identical triples now vary the expiry.
       Tests: `database.inventory-duplicate-guard.pglite.node.test.ts` (18; disabling the read fails 3,
       making the index non-unique fails 4) and three route tests in `minimal-api-routes.test.ts`.
-      **(a) is blocking the merge:** the index build fails if production holds active duplicates. Run a
-      read-only `GROUP BY organization_id, product_id, expiry_date, location_id HAVING COUNT(*) > 1`
-      over active rows against production (direct URL, host printed first); if it lists groups, a dedupe
-      plan is needed before 0019 is applied.
+      **(a) DONE 2026-10-08.** Read-only check against production (direct URL, host
+      `ep-little-shape-a7d9w3d8.ap-southeast-2.aws.neon.tech`, printed first; `SELECT`s only): migration
+      0019 is already applied (`inventory_items_active_triple_unique` present), `inventory_items`
+      holds 3 rows (all `Expired`, all active), none with a NULL location or expiry, and the
+      `GROUP BY organization_id, product_id, expiry_date, location_id HAVING COUNT(*) > 1` query over
+      active rows returns 0 groups. No dedupe is needed.
 
 > **Integration checkpoint — parity PRs.** Implement Phase 3 as one or more independently safe,
 > reviewable PRs based on the latest `main`; split by coherent responsibility when that reduces review
