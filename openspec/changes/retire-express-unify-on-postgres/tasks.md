@@ -3259,6 +3259,32 @@ equivalent, a relocated home, or an explicit retirement decision.
       empty `PUT` is a no-op that answers 200 where Express's model returned null (reviewer
       decision 2026-10-07: keep the 200); the create audit
       text no longer names the status. The 14 `expired-item` rows are left for the disposition batch.
+      **Batch 5b — subscription, billing, webhook and quota rows.** 123 rows (`subscription.routes`,
+      `storage-quota.routes`, `subscription-billing.helpers`, `dunning.service`, `stripe-sync.job`,
+      `webhook.service`, `webhook.routes`, `webhook.edge-cases`, `feature-gate.middleware`,
+      `multi-tenant-feature-gates`, `atomicity`, `auth-bypass-safety`). Most "no Worker test" claims
+      were stale: billing, webhook, gating and quota now have Worker suites. Two new tests carry the
+      gaps: `subscription-read-handlers.test.ts` (15 cases for `GET /api/subscription/current` and
+      `/trial-status`: status normalization, the trial countdown, unknown status and tier handling,
+      and a check that the limits shown match the write-side caps for every tier) and
+      `scheduled/jobs/stripe-reconciliation.pglite.node.test.ts` (6 cases: the job against real SQL,
+      which rows it considers and what a Stripe subscription does to the stored row). 14 mutations:
+      12 killed, one equivalent (the `free` fallback in trial-status is unreachable because
+      `normalizeLaunchTier` always returns a known tier), one killed by the existing unit test.
+      80 rows re-pointed to Worker tests, 43 proposed `retire`: `convert-trial` and `can-upload` (routes
+      retired), the Stripe events the receiver deliberately does not handle, the analytics feature gate,
+      the usage counters, and the Express test-mode auth bypass.
+      **Findings for the reviewer.** (1) A lapsed organization within the free limits: Express locked
+      creation only when usage was over the free limits after a dunning downgrade; the Worker gate
+      refuses every POST from a lapsed organization. It is measure-only today
+      (`SUBSCRIPTION_GATE_ENFORCE=false`), so decide before the flag is flipped. (2) No alert when an
+      organization lapses for non-payment: Express sent a Sentry fatal per dunning downgrade, and the
+      Worker derives the lapse at read time so there is no event to alert on. (3) No downgrade warning
+      email and no payment-failed email from the Worker; the receiver writes state only. (4) The
+      Worker refuses a checkout for an organization with no subscription row (404), where Express
+      created a session. (5) A missing or unknown organization on a Stripe event is acknowledged with
+      nothing written, where Express threw; the Express critical alert carrying the customer email is
+      not reproduced.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
