@@ -4,7 +4,7 @@
  * Every organization gets a `subscription_tiers` row at bootstrap, so a missing row is a state
  * nobody designed. Express created a Stripe customer for it and threw the id away; a later fix
  * refused with a 404, which stopped the customer who was trying to pay. The handler now creates the
- * row first, so the customer it creates always has somewhere to be recorded. The unit test in
+ * row first (the same trial row bootstrap grants), so the customer it creates always has somewhere to be recorded. The unit test in
  * `billing-handlers.test.ts` checks the order of the statements; this one checks the rows.
  *
  * Only `fetch` (the Stripe API) is stubbed.
@@ -14,6 +14,7 @@ import type { Env } from '../types/env';
 import type { Database } from '../database';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from '../__tests__/pglite-db';
 import { handleCreateCheckoutSession } from './billing-handlers';
+import { ensureTrialSubscription } from '../clerk/clerk-persistence';
 
 const ORG = 'org_checkout';
 const ENV = {
@@ -42,7 +43,8 @@ describe('create-checkout-session with no subscription row (real SQL)', () => {
   const rows = async () =>
     await harness.pg
       .query(
-        `SELECT tier_level, status, stripe_customer_id FROM subscription_tiers WHERE organization_id = $1`,
+        `SELECT tier_level, status, stripe_customer_id, trial_end_date IS NOT NULL AS has_trial_end
+         FROM subscription_tiers WHERE organization_id = $1`,
         [ORG],
       )
       .then((result) => result.rows as Array<Record<string, unknown>>);
@@ -85,12 +87,17 @@ describe('create-checkout-session with no subscription row (real SQL)', () => {
     vi.restoreAllMocks();
   });
 
-  it('creates a free subscription row holding the new Stripe customer, and answers 200', async () => {
+  it('creates the bootstrap trial row holding the new Stripe customer, and answers 200', async () => {
     const response = await handleCreateCheckoutSession(checkoutRequest(), db, ENV, ORG);
 
     expect(response.status).toBe(200);
     expect(await rows()).toEqual([
-      { tier_level: 'free', status: 'active', stripe_customer_id: 'cus_new' },
+      {
+        tier_level: 'professional',
+        status: 'trialing',
+        stripe_customer_id: 'cus_new',
+        has_trial_end: true,
+      },
     ]);
   });
 
@@ -100,6 +107,15 @@ describe('create-checkout-session with no subscription row (real SQL)', () => {
 
     expect(stripeCalls.filter((url) => url.endsWith('/customers'))).toHaveLength(1);
     expect(await rows()).toHaveLength(1);
+  });
+
+  it('leaves nothing for a redelivered organization.created to suppress: the trial is already recorded once', async () => {
+    await handleCreateCheckoutSession(checkoutRequest(), db, ENV, ORG);
+
+    await ensureTrialSubscription(db.sql, ORG);
+
+    expect(await rows()).toHaveLength(1);
+    expect((await rows())[0]).toMatchObject({ tier_level: 'professional', status: 'trialing' });
   });
 
   it('leaves an existing row alone', async () => {
@@ -113,7 +129,12 @@ describe('create-checkout-session with no subscription row (real SQL)', () => {
 
     expect(response.status).toBe(200);
     expect(await rows()).toEqual([
-      { tier_level: 'professional', status: 'trialing', stripe_customer_id: 'cus_existing' },
+      {
+        tier_level: 'professional',
+        status: 'trialing',
+        stripe_customer_id: 'cus_existing',
+        has_trial_end: false,
+      },
     ]);
     expect(stripeCalls.filter((url) => url.endsWith('/customers'))).toHaveLength(0);
   });

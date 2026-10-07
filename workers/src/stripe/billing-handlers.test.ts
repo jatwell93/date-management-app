@@ -208,7 +208,7 @@ describe('handleCreateCheckoutSession', () => {
     const updateAt = queries.findIndex((q) => q.startsWith('UPDATE subscription_tiers'));
     expect(insertAt).toBeGreaterThanOrEqual(0);
     expect(updateAt).toBeGreaterThan(insertAt);
-    expect(queries[insertAt]).toContain("'free'");
+    expect(queries[insertAt]).toContain("'trialing'");
     expect(queries[insertAt]).toContain('ON CONFLICT DO NOTHING');
     expect(calls[0].url).toBe('https://api.stripe.com/v1/customers');
     expect(calls[1].body.get('customer')).toBe('cus_new');

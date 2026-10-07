@@ -927,14 +927,19 @@ export async function resolveAuthenticatedUser(
 }
 
 /**
- * Refuses creation for an organization that is creation-locked or whose
- * subscription has lapsed. Returns a 403 to short-circuit on, or `null`.
+ * Refuses creation for an organization that is creation-locked or whose trial
+ * has expired. Returns a 403 to short-circuit on, or `null`.
+ *
+ * Other lapse states (`cancellation-window-elapsed`, `dunning-grace-elapsed`) are
+ * not refused here: they degrade the organization to the free tier, and the
+ * free-tier caps (`USAGE_LIMITS_ENFORCE`) decide whether it can still create.
+ * Decided 2026-10-07; see the policy comment at the refusal below.
  *
  * **Creation only, deliberately.** Reads and edits of existing data stay open in
  * every lapsed state — including a cancellation past its paid-through window,
  * where Express rejects the request outright. That divergence is a product
- * decision recorded in task 3.1.k: one rule for every lapse reason, and a
- * customer never loses access to data they already own over a billing state.
+ * decision recorded in task 3.1.k: a customer never loses access to data they
+ * already own over a billing state.
  *
  * The two triggers are one control from opposite directions. `is_creation_locked`
  * is a stored flag Express's webhook and dunning paths set on an over-limit

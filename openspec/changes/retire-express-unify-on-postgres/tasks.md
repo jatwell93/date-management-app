@@ -3292,7 +3292,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       episode (`stripe-persistence.ts`). Stripe sends the customer emails (failed payment, expiring
       card); setup steps are in the PR. (3) No downgrade warning email: data is never deleted, so it is
       deferred until a trial customer asks. (4) Checkout from an organization with no subscription row
-      creates a free row first and proceeds, instead of answering 404.
+      creates the bootstrap trial row first and proceeds, instead of answering 404.
       **Open follow-up.** `unpaid` and `paused` Stripe statuses are not recognized by
       `deriveSubscriptionAccess`, which fails open on them (full entitlements). Set Stripe's
       "if all retries fail" action to cancel, not mark unpaid or pause, until that is handled.

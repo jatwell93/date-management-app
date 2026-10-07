@@ -362,7 +362,10 @@ export async function upsertSubscriptionFromStripe(
   const isPastDue = sync.status === 'past_due';
 
   // `prior` reads the row as it was before this statement, so the same round trip can say
-  // whether this event is the one that put the organization into dunning.
+  // whether this event is the one that put the organization into dunning. Serialized events
+  // report exactly once per episode; two `past_due` deliveries racing on the same row can each
+  // see an empty `prior` and both alert, a duplicate warning accepted like the soft caps in
+  // `utils/usage-limits.ts`.
   const rows = await sql`
     WITH prior AS (
       SELECT past_due_since FROM subscription_tiers
@@ -427,6 +430,15 @@ export async function upsertSubscriptionFromStripe(
   // Sentry fatal when its nightly job downgraded the organization; the Worker derives the
   // lapse at read time, so this transition is the one observable moment to alert on.
   if (rows[0]?.enteredDunning === true) {
+    // Logged as well as sent: with no Sentry DSN bound, the log is the only trace of the
+    // moment a paying customer starts failing to pay.
+    console.warn(
+      JSON.stringify({
+        event: 'subscription_entered_dunning',
+        organizationId: sync.organizationId,
+        stripeSubscriptionId: sync.stripeSubscriptionId,
+      }),
+    );
     Sentry.captureMessage('[stripe] organization entered dunning (payment past due)', {
       level: 'warning',
       tags: { component: 'stripe-webhook', event: 'entered-dunning' },

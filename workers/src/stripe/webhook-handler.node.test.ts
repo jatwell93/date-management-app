@@ -492,9 +492,18 @@ describe('POST /api/webhooks/stripe', () => {
       beforeEach(() => sentry.captureMessage.mockClear());
 
       it('raises one alert, naming the organization, when a subscription first goes past due', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
         await send('evt_dunning_1', 'past_due');
 
         expect(entered()).toHaveLength(1);
+        // Logged as well, so the transition leaves a trace when no Sentry DSN is bound.
+        expect(
+          warn.mock.calls
+            .map((call) => String(call[0]))
+            .filter((line) => line.includes('subscription_entered_dunning')),
+        ).toHaveLength(1);
+        warn.mockRestore();
         expect(entered()[0][1]).toMatchObject({
           level: 'warning',
           extra: { organizationId: ORG, stripeSubscriptionId: SUBSCRIPTION },

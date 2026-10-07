@@ -1,4 +1,5 @@
 import type { Database } from '../database';
+import { ensureTrialSubscription } from '../clerk/clerk-persistence';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
 import {
@@ -197,7 +198,7 @@ function billingErrorResponse(error: unknown, env: Env, context: string): Respon
  * `subscription_tiers` row got a fresh Stripe customer created and its id
  * thrown away, on every single attempt -- accumulating orphan customers and
  * guaranteeing the webhook could never attribute by customer id. Here a missing
- * row is created first (free tier), so there is always somewhere to record the
+ * row is created first (the bootstrap trial), so there is always somewhere to record the
  * customer and the organization can still check out. This replaces an earlier
  * refusal (404) that stopped exactly the customer trying to pay.
  */
@@ -226,20 +227,16 @@ export async function handleCreateCheckoutSession(
     if (!subscription) {
       // Every organization gets a subscription row at bootstrap, so this is a
       // state nobody designed -- and it must not stop a customer who is trying
-      // to pay. Give the organization the row first (free, as the access rule
-      // already reads an organization with no row), so the Stripe customer
-      // created below always has somewhere to be recorded. `ON CONFLICT DO
-      // NOTHING` names no target for the reason `ensureTrialSubscription` gives:
-      // it is correct on both sides of migration 0012.
+      // to pay. Give the organization the row first, so the Stripe customer
+      // created below always has somewhere to be recorded. It is the same trial
+      // row bootstrap grants (`ensureTrialSubscription`), not a bespoke free one:
+      // the likeliest cause of a missing row is a dropped `organization.created`
+      // webhook, and when Clerk redelivers it the trial must find itself already
+      // recorded rather than be suppressed by a different row's ON CONFLICT.
       console.warn(
         JSON.stringify({ event: 'checkout_created_missing_subscription_row', organizationId }),
       );
-      await db.sql`
-        INSERT INTO subscription_tiers
-          (organization_id, tier_level, status, billing_cycle, created_at, updated_at)
-        VALUES (${organizationId}, 'free', 'active', 'monthly', NOW(), NOW())
-        ON CONFLICT DO NOTHING
-      `;
+      await ensureTrialSubscription(db.sql, organizationId);
       subscription = await loadSubscription(db, organizationId);
       if (!subscription) {
         throw new Error('subscription row missing after insert');
