@@ -4,7 +4,7 @@
 Node/Express/TypeScript backend · React frontend · Cloudflare Workers · shared libs.
 Neon PostgreSQL database · Clerk authentication · Sentry monitoring · Stripe payments.
 
-**Last updated:** July 2026
+**Last updated:** October 2026
 
 ---
 
@@ -28,25 +28,17 @@ This is a monorepo. There is **no** root `src/` app — packages live in subfold
 | Path        | What it is                                                                                                                                                                     |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `backend/`  | Express/TypeScript API. Prisma (v6) + tsyringe DI + SWC. Layered: `backend/src/{routes,controllers,services,repositories,db,models,middleware}`. Tests in `backend/src/tests`. |
-| `frontend/` | React (CRA) app.                                                                                                                                                               |
-| `workers/`  | Cloudflare Workers. Real-SQL tests via pglite (`npm run test:db`).                                                                                                             |
+| `frontend/` | React (Vite) app.                                                                                                                                                              |
+| `workers/`  | Cloudflare Workers, the deployed API (`src/index-minimal.ts`). Real-SQL tests via pglite (`npm run test:db`).                                                                  |
 | `shared/`   | Code shared across packages (e.g. domain logic).                                                                                                                               |
 | `e2e/`      | Playwright end-to-end tests.                                                                                                                                                   |
 | `docs/`     | Operational and reference documentation.                                                                                                                                       |
 | `openspec/` | Change proposals and specs (see §5).                                                                                                                                           |
 
+**Express is being retired** (OpenSpec `retire-express-unify-on-postgres`): new API behaviour goes in `workers/`, not `backend/`. The layering below applies to `backend/` only while it exists.
+
 **Backend layering** (keep it clean): `routes → controllers → services → repositories/db`.
 Controllers coordinate HTTP; business logic lives in services; DB access lives in repositories. Use DI (tsyringe) rather than hardcoding dependencies. Use strict TypeScript — no unjustified `any`.
-
-### Understanding structure quickly
-
-Use **codemap** — scoped and diff-aware, generated on demand:
-
-```bash
-codemap --diff          # what changed vs main — best default for routine work
-codemap backend         # scope to one package (backend | frontend | workers)
-codemap .               # full map (~1,700 lines — only when you truly need it)
-```
 
 ---
 
@@ -98,6 +90,9 @@ Run the gate for the package(s) you changed. There is **no** root `npm test` / `
 npm run test:backend:diff        # backend changes
 npm run test:frontend:diff       # frontend changes
 npm run test:db                  # worker DB changes (pglite real-SQL)
+(cd workers && npm run typecheck)  # CI type-checks workers including test files; plain tsc --noEmit does not
+npm run test:audit-manifest      # when you touch the 2.2 test-audit manifests
+npm run test:operations          # when you touch src/operations
 
 # Fuller coverage run when warranted
 npm run test:backend:coverage
