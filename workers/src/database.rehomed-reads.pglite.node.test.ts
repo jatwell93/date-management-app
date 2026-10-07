@@ -312,17 +312,12 @@ describe('Workers rehomed read queries (real SQL)', () => {
       expect((await makeDb().getItemsByUserReport(ORG, 'all-time'))[0].itemCount).toBe(2);
     });
 
-    it('treats an absent, zero or unreadable time frame as all time, as the route passes it through', async () => {
-      // Express answered 400 for a time frame of 0. The Worker route forwards the raw value and
-      // the query falls back to all time, which is the lenient reading the UI relies on when it
-      // sends nothing.
+    it('treats an absent time frame as all time', async () => {
       const admin = await seedUser('admin');
       await seedCreated(admin, 1);
       await seedCreated(admin, 40);
 
-      for (const timeFrame of [undefined, '0', 'abc']) {
-        expect((await makeDb().getItemsByUserReport(ORG, timeFrame))[0].itemCount).toBe(2);
-      }
+      expect((await makeDb().getItemsByUserReport(ORG))[0].itemCount).toBe(2);
     });
 
     it('excludes another organization’s activity', async () => {

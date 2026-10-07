@@ -79,6 +79,23 @@ describe('GET /api/reports/items-by-user', () => {
   });
 });
 
+describe('GET /api/reports/items-by-user with an invalid time frame', () => {
+  it.each(['0', '-7', 'abc', '1.5', '30days'])(
+    'answers 400 for %j without reading',
+    async (timeFrame) => {
+      const getItemsByUserReport = vi.fn();
+
+      const response = await get(
+        `/api/reports/items-by-user?timeFrame=${timeFrame}`,
+        database({ getItemsByUserReport }),
+      );
+
+      expect(response?.status).toBe(400);
+      expect(getItemsByUserReport).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe.each([
   ['/api/reports/expiry-overall', 'getOverallExpiryReport'],
   ['/api/reports/loss-by-department', 'getLossByDepartmentReport'],

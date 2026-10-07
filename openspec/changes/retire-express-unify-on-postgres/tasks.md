@@ -3334,7 +3334,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       account and re-registering gives a fresh trial. This is the "sign-up check" item left open in
       5b. (g) DONE after review: a `STRIPE_SECRET_KEY` that is not `sk_` or `rk_` is refused with 503 before Stripe is called.
       Also after review: ignored CSV columns are named in the import's completion message (queued path); duplicate
-      store-area checks cover renames; length limits measure the raw cell. Open: `items-by-user` invalid time frame.
+      store-area checks cover renames; length limits measure the raw cell. `items-by-user` with an invalid time frame answers 400 (decided 2026-10-08).
       **Not carried, by design.** Express error-class middleware, the zod `validateRequest`
       middleware, the SQLite models, the storage-provider abstraction, the SendGrid templates, the
       dormant daily-report job, `monthly-markdown`, and `getAllExpiredItemTransactions` (no caller).

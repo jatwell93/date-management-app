@@ -1461,6 +1461,11 @@ async function handleGetItemsByUserReport(
   if (auth instanceof Response) return auth;
   const url = new URL(request.url);
   const timeFrame = url.searchParams.get('timeFrame') || undefined;
+  // Absent or `all-time` means all time; otherwise a whole number of days. Anything else is a
+  // client mistake and is refused, as Express did, rather than shown as the wrong report.
+  if (timeFrame !== undefined && timeFrame !== 'all-time' && !/^[1-9][0-9]*$/.test(timeFrame)) {
+    return errorResponse('Invalid timeFrame value', 400, env);
+  }
   const report = await db.getItemsByUserReport(auth.organizationId, timeFrame);
   return jsonResponse(report, 200, env);
 }
