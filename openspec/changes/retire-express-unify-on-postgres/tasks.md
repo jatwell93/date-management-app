@@ -843,7 +843,7 @@
 Inventory **everything `backend/` owns**, not just HTTP routes. For each item, record a target: a Worker
 equivalent, a relocated home, or an explicit retirement decision.
 
-- [ ] 2.1 Generate a mounted-route matrix from `backend/src/index.ts` plus router mount prefixes—not
+- [x] 2.1 Generate a mounted-route matrix from `backend/src/index.ts` plus router mount prefixes—not
       filenames. For every Express and Worker method/path, record mounted/reachable status, frontend or
       operator consumer, auth type, role, tenant derivation, feature/usage limits, validation, rate limit,
       raw-body needs, request/response/status contract, side effects, and keep/replace/retire decision.
@@ -852,7 +852,11 @@ equivalent, a relocated home, or an explicit retirement decision.
       checkout/cancel/portal/convert-trial, logout, health/metrics/alerts, product export/update/delete/
       legacy-upload, advanced reports, and backup create/list/restore. Do not implement the currently
       unmounted `admin.metrics.routes.ts` merely because its file exists.
-- [ ] 2.2 Produce a test-coverage manifest mapping every backend test file/behaviour to an existing
+      **CLOSED 2026-10-08.** Re-derived from the mounted routers and `MINIMAL_API_ROUTES`: all 116
+      mounted Express routes are in `audit/2.1-route-matrix.md` and every row carries a decision. The 25
+      Express routes with no Worker route are all `retire`. The legacy-auth set (login, register,
+      `users/me`, `reset-pin`) is retired and pinned by `workers/src/retired-routes.test.ts`.
+- [x] 2.2 Produce a test-coverage manifest mapping every backend test file/behaviour to an existing
       Worker equivalent, a **Worker-shaped rewrite** (Phase 3.2), or an explicit retirement. Preserve named
       gates for tenant isolation, penetration, concurrency, feature limits, webhook security, scheduled-job
       idempotency, authorization precedence, and negative/error cases; zero rows may remain unresolved at
@@ -870,8 +874,8 @@ equivalent, a relocated home, or an explicit retirement decision.
       proven by mutation. The same PR added `.github/workflows/workers-test.yml`: **the Worker
       suites previously ran in no workflow at all**, which is why two `health.test.ts` tests sat
       red on `main` from 2026-06-09 (`d11d1f97`) unnoticed. `Workers CI Gate` is now a required
-      check. This does not close 2.2 — it removes two rows from 3.2's rewrite scope (see below)
-      and leaves the rest of the manifest to finish.
+      check. That PR removed two rows from 3.2's rewrite scope.
+      **CLOSED 2026-10-08.** All four manifests are fully decided; see task 3.2 for the outcome.
 - [x] 2.3 Produce an action-level schedule matrix from actual `SchedulerService` registrations and
       dormant job exports—not a six-file list. Include markdown recalculation, backup, trial expiration,
       dunning, Stripe sync, both credit-claim schedules, webhook monitoring, metrics, and report email.

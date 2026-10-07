@@ -451,8 +451,8 @@ describe('API config guard', () => {
     expect(body.error || body.message).not.toContain('database connection string');
   });
 
-  it('returns 500 when database config is missing for /api/users/me', async () => {
-    const response = await SELF.fetch('https://example.com/api/users/me');
+  it('returns 500 when database config is missing for /api/users', async () => {
+    const response = await SELF.fetch('https://example.com/api/users');
     expect(response.status).toBe(500);
     const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();

@@ -311,10 +311,8 @@ const RE_STORAGE_QUOTA_USER = /^\/api\/storage-quota\/[^/]+$/;
 // handler and gets a 400 for a non-numeric id rather than a 404.
 const RE_PRODUCT_ID = /^\/api\/products\/[^/]+$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
-  ['GET', '/api/users/me', handleGetCurrentUser],
   ['GET', '/api/users', handleListUsers],
   ['POST', '/api/users', handleCreateLegacyUser],
-  ['PUT', /^\/api\/users\/\d+\/reset-pin$/, handleResetUserPin],
   ['PUT', RE_USER_ID, handleUpdateUser, 'path'],
   ['DELETE', RE_USER_ID, handleDeleteUser, 'path'],
   ['GET', '/api/products', handleGetProducts],
@@ -1068,34 +1066,6 @@ function checkOrganizationEntitlement(
     403,
     env,
     requestOrigin,
-  );
-}
-
-/**
- * GET /api/users/me
- */
-async function handleGetCurrentUser(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateApiRequest(request, env, db);
-  if (auth instanceof Response) {
-    return auth;
-  }
-
-  const user = await db.findUserById(auth.userId);
-
-  if (!user) {
-    return errorResponse('User not found', 404, env);
-  }
-
-  return jsonResponse(
-    {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      createdAt: user.createdAt,
-    },
-    200,
-    env,
   );
 }
 
@@ -3740,23 +3710,6 @@ async function handleUpdateUser(
   // response shape stays exactly what it was before the trail was added.
   const { previousRole: _previousRole, ...user } = updated;
   return jsonResponse(user, 200, env);
-}
-
-/**
- * PUT /api/users/:id/reset-pin — deprecated under Clerk. Returns 410 Gone with guidance.
- *
- * Authentication is required so this endpoint cannot be used as an unauthenticated
- * existence-probe for user IDs (review #1).
- */
-async function handleResetUserPin(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateApiRequest(request, env, db);
-  if (auth instanceof Response) return auth;
-
-  return errorResponse(
-    'PIN login is no longer supported. Use Clerk-managed password reset.',
-    410,
-    env,
-  );
 }
 
 /**
