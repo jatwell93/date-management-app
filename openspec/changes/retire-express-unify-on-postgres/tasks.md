@@ -3357,6 +3357,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       retired here. **Still gated on the read-only production query:** `backfill-canonical-roles.js`
       (no CHECK constraint on `users.role`; 0014 normalised the values but nothing asserts they
       stayed canonical) and `migrate-upload-status.ts` (`uploads.status` is unconstrained text).
+      **Discharged 2026-10-08.** Production result 2026-10-08 (read-only, direct URL, host `ep-little-shape-a7d9w3d8.ap-southeast-2.aws.neon.tech` printed first): all 23 tables carrying `organization_id` hold no NULL; `users.role` holds only canonical values (5 rows: 2 `team_member`, 2 `admin`, 1 `manager`, none soft-deleted); `uploads` is empty, so no legacy `complete` status exists. Both scripts retire with the backend.
       <br>**Retired in this slice (21):** the ten superseded by the Phase 1 runner except
       `seed-tier-feature-flags.js`; `migrate-production-simple.js`, `migrate-production-doppler.js`,
       `backup.sh`; `neon-to-sqlite.ts`, `test-r2-connection.ts`, `debug-env.js`, `query-orgs.ts`;
