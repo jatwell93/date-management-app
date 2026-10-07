@@ -63,7 +63,7 @@ import {
   type ClaimWriteResult,
 } from './credit-claim-database';
 import { assertReferencesBelongToOrganization } from './tenant-references';
-import { DuplicateInventoryItemError } from './db-errors';
+import { DuplicateInventoryItemError, DuplicateStoreAreaError } from './db-errors';
 import { calculateInventoryStatus, RECALCULABLE_INVENTORY_STATUSES } from './inventory-status';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
@@ -3380,6 +3380,18 @@ export function createWorkersDatabase(env: Env): Database {
       organizationId: string,
       data: { name: string; subDepartment?: string | null; parentId?: number | null },
     ): Promise<StoreArea> {
+      // `IS NOT DISTINCT FROM` so two areas with no sub-department collide; the unique index
+      // alone lets them both in. A concurrent pair with a sub-department is still stopped by
+      // the index and surfaces as a unique violation, which the route answers the same way.
+      const existing = await sql`
+        SELECT 1 FROM store_areas
+        WHERE organization_id = ${organizationId}
+          AND name = ${data.name}
+          AND sub_department IS NOT DISTINCT FROM ${data.subDepartment ?? null}
+        LIMIT 1
+      `;
+      if (existing.length > 0) throw new DuplicateStoreAreaError();
+
       const rows = await sql`
         INSERT INTO store_areas (
           organization_id,

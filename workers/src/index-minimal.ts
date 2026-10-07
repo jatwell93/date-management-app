@@ -114,10 +114,13 @@ import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
 import {
   DUPLICATE_INVENTORY_ITEM_MESSAGE,
+  DUPLICATE_STORE_AREA_MESSAGE,
+  DuplicateStoreAreaError,
   isDuplicateInventoryItem,
   isUniqueViolation,
 } from './db-errors';
 import { recordOutcome, sendClaim, sendFollowUp, uploadClaimPhoto } from './credit-claim-service';
+import { EXPIRY_TOO_FAR_MESSAGE, isExpiryBeyondHorizon } from './inventory-status';
 import { handleNotificationEmailQueue } from './notifications/notification-email-queue';
 
 /** Outcomes the outcome route accepts, matching the backend's `claimOutcomeSchema`. */
@@ -3259,6 +3262,9 @@ async function handleCreateInventoryItem(
   if (!expiryDate || typeof expiryDate !== 'string' || !ISO_DATE_RE.test(expiryDate)) {
     return errorResponse('Missing or invalid expiryDate (expected YYYY-MM-DD)', 400, env);
   }
+  if (isExpiryBeyondHorizon(expiryDate)) {
+    return errorResponse(EXPIRY_TOO_FAR_MESSAGE, 400, env);
+  }
   if (locationId === undefined || !Number.isInteger(locationId) || locationId < 1) {
     return errorResponse('Missing or invalid locationId', 400, env);
   }
@@ -3349,6 +3355,9 @@ async function handleUpdateInventoryItem(
   }
   if (body.expiryDate !== undefined && !ISO_DATE_RE.test(body.expiryDate)) {
     return errorResponse('Invalid expiryDate (expected YYYY-MM-DD)', 400, env);
+  }
+  if (body.expiryDate !== undefined && isExpiryBeyondHorizon(body.expiryDate)) {
+    return errorResponse(EXPIRY_TOO_FAR_MESSAGE, 400, env);
   }
 
   try {
@@ -3444,8 +3453,8 @@ async function handleCreateStoreArea(request: Request, db: Database, env: Env): 
     });
     return jsonResponse(area, 201, env);
   } catch (error) {
-    if (isUniqueViolation(error)) {
-      return errorResponse('Store area with this name already exists', 409, env);
+    if (error instanceof DuplicateStoreAreaError || isUniqueViolation(error)) {
+      return errorResponse(DUPLICATE_STORE_AREA_MESSAGE, 409, env);
     }
     console.error('handleCreateStoreArea error:', error);
     return errorResponse('Internal server error', 500, env);
@@ -3491,7 +3500,16 @@ async function handleUpdateStoreArea(
     data.parentId = body.parent_id;
   }
 
-  const updated = await db.updateStoreArea(auth.organizationId, id, data);
+  let updated;
+  try {
+    updated = await db.updateStoreArea(auth.organizationId, id, data);
+  } catch (error) {
+    // A rename onto an existing (name, sub-department) is a client conflict, not a server fault.
+    if (isUniqueViolation(error)) {
+      return errorResponse(DUPLICATE_STORE_AREA_MESSAGE, 409, env);
+    }
+    throw error;
+  }
   if (!updated) {
     return errorResponse('Store area not found', 404, env);
   }

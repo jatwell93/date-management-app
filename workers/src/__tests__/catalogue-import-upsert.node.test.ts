@@ -272,6 +272,54 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     ]);
   });
 
+  // Task 3.2 batch 6. Express: supplier-credit.repository.test.ts, "reuses an existing confirmed
+  // brand without overwriting its advisory fields". A brand the user has confirmed or added is
+  // theirs; only an unconfirmed REFERENCE brand may be refreshed from the catalogue.
+  it.each(['CONFIRMED', 'USER_ADDED'])(
+    'reuses an existing %s brand for a matched product without overwriting its fields',
+    async (source) => {
+      await harness.pg.query(
+        `INSERT INTO organizations (id, name, slug, updated_at) VALUES ($1, 'Test Org', 'test-org', NOW())`,
+        [ORG],
+      );
+      await harness.pg.query(`
+        INSERT INTO master_catalogue_entries
+          (barcode, description, api_sku, brand_name, manufacturer_name, updated_at)
+        VALUES ('CAT-1', 'Catalogue product', 'API-1', 'Acme', 'Catalogue Maker', NOW())
+      `);
+      const supplier = await harness.pg.query(
+        `INSERT INTO suppliers (organization_id, name, updated_at) VALUES ($1, 'My Wholesaler', NOW()) RETURNING id`,
+        [ORG],
+      );
+      const supplierId = Number((supplier.rows[0] as { id: number }).id);
+      await harness.pg.query(
+        `INSERT INTO brands (organization_id, name, supplier_id, manufacturer_name, suggested_supplier_name, source, updated_at)
+         VALUES ($1, 'Acme', $2, 'My Maker', 'My Suggestion', $3, '2020-01-01')`,
+        [ORG, supplierId, source],
+      );
+
+      const { env } = makeEnv('SKU,Name,Barcode,Cost\nS1,Catalogue product,CAT-1,1.00\n');
+      await processCatalogueImportJob(await insertUpload(), env, harness.db);
+
+      const brands = await harness.pg.query(
+        `SELECT id, supplier_id, manufacturer_name, suggested_supplier_name, source, updated_at::date::text AS touched
+         FROM brands WHERE organization_id = $1`,
+        [ORG],
+      );
+      expect(brands.rows).toEqual([
+        expect.objectContaining({
+          supplier_id: supplierId,
+          manufacturer_name: 'My Maker',
+          suggested_supplier_name: 'My Suggestion',
+          source,
+          touched: '2020-01-01',
+        }),
+      ]);
+      const product = await getProduct(ORG, 'S1');
+      expect(Number(product?.brand_id)).toBe(Number((brands.rows[0] as { id: number }).id));
+    },
+  );
+
   it('classifies insert / update / unchanged / conflict and writes an error report', async () => {
     await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'Old Name', cost: 1.0 });
     await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Keep', cost: 2.0 });

@@ -21,6 +21,26 @@ export const PRODUCT_CATALOG_HEADER_ALIASES = {
   barcode: ['barcode', 'alias', 'ean', 'upc', 'gtin', 'productbarcode', 'barcodenumber'],
 } as const;
 
+// Express limits (`product-import.helpers.ts`). Without them a single cell can be as large as the
+// upload itself, and it is stored as the product name, SKU or barcode.
+const MAX_SKU_LENGTH = 100;
+const MAX_NAME_LENGTH = 200;
+const MAX_BARCODE_LENGTH = 100;
+
+function lengthErrors(rowNumber: number, row: ProductCatalogRow): string[] {
+  const checks: Array<[string, string, number]> = [
+    ['SKU', row.sku, MAX_SKU_LENGTH],
+    ['Name', row.name, MAX_NAME_LENGTH],
+    ['Barcode', row.barcode, MAX_BARCODE_LENGTH],
+  ];
+  return checks
+    .filter(([, value, max]) => value.length > max)
+    .map(
+      ([field, value, max]) =>
+        `Row ${rowNumber}: ${field} too long (max ${max} characters) - "${value.substring(0, 50)}...". Please ensure the ${field} value is ${max} characters or fewer.`,
+    );
+}
+
 export function validateCatalogueRecords(records: string[][]): {
   rows: ValidatedCatalogueRow[];
   rowErrors: string[];
@@ -66,6 +86,11 @@ export function validateCatalogueRecords(records: string[][]): {
     const row = parseProductCatalogRow(record, { ...indexes, retail: retailIndex });
     if (!row) {
       rowErrors.push(`Row ${rowNumber}: Missing or malformed required product fields`);
+      return;
+    }
+    const tooLong = lengthErrors(rowNumber, row);
+    if (tooLong.length > 0) {
+      rowErrors.push(...tooLong);
       return;
     }
     // SKUs are compared case-insensitively, as Express did: "sku001" and "SKU001"

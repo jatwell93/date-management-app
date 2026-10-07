@@ -1763,7 +1763,11 @@ describe('minimal API route table', () => {
     const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
       request: new Request('https://example.com/api/inventory-items', {
         method: 'POST',
-        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+        body: JSON.stringify({
+          productId: 1,
+          expiryDate: new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10),
+          locationId: 1,
+        }),
       }),
       pathname: '/api/inventory-items',
       method: 'POST',
@@ -1836,7 +1840,11 @@ describe('minimal API route table', () => {
     const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
       request: new Request('https://example.com/api/inventory-items', {
         method: 'POST',
-        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+        body: JSON.stringify({
+          productId: 1,
+          expiryDate: new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10),
+          locationId: 1,
+        }),
       }),
       pathname: '/api/inventory-items',
       method: 'POST',
@@ -1869,7 +1877,11 @@ describe('minimal API route table', () => {
     const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
       request: new Request('https://example.com/api/inventory-items', {
         method: 'POST',
-        body: JSON.stringify({ productId: 1, expiryDate: '2099-01-01', locationId: 1 }),
+        body: JSON.stringify({
+          productId: 1,
+          expiryDate: new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10),
+          locationId: 1,
+        }),
       }),
       pathname: '/api/inventory-items',
       method: 'POST',

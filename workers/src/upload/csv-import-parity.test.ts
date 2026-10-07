@@ -88,7 +88,7 @@ describe('CSV structure', () => {
   });
 
   it('reads a file larger than 100KB', () => {
-    const padding = 'x'.repeat(200);
+    const padding = 'x'.repeat(190);
     const lines = Array.from({ length: 600 }, (_, i) => `S${i},${padding} ${i},B${i},1.00`);
     const text = HEADER + lines.join('\n') + '\n';
 

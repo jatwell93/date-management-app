@@ -631,6 +631,31 @@ describe('credit-claim write routes', () => {
       expect(finalizeSentClaim).not.toHaveBeenCalled();
     });
 
+    it('returns the claim to draft, and never marks it sent, when the provider rejects the message', async () => {
+      // Task 3.2 batch 6. The provider answers, but with a refusal (a 422 for an unverified
+      // sender, say). The claim must not be recorded as sent, and must be sendable again.
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{"message":"invalid sender"}', { status: 422 }));
+      const revertClaimToDraft = vi.fn().mockResolvedValue(undefined);
+      const finalizeSentClaim = vi.fn();
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim()),
+        reserveClaimForSending: vi.fn().mockResolvedValue(true),
+        listClaimPhotoKeys: vi.fn().mockResolvedValue([]),
+        revertClaimToDraft,
+        finalizeSentClaim,
+      });
+
+      await expect(sendClaim(db, configuredEnv(bucket), ORG, 1)).rejects.toThrow(
+        'Resend send failed (422)',
+      );
+
+      expect(revertClaimToDraft).toHaveBeenCalledWith(ORG, 1);
+      expect(finalizeSentClaim).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
     /**
      * A claim stuck in SENDING cannot be moved by any route — re-sending needs DRAFT,
      * follow-ups need a chaseable status, and `recordOutcome` refuses anything that is
@@ -889,6 +914,25 @@ describe('credit-claim write routes', () => {
       expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe(
         'trial_reminder_sent:org_1:iso:5',
       );
+      fetchSpy.mockRestore();
+    });
+
+    it('posts one message with the sender, recipient, subject, html and text, authorised by the API key', async () => {
+      // Task 3.2 batch 6. Express: "sendEmail sends payload with html and text".
+      const fetchSpy = acceptEmails();
+
+      await sendClaimEmail(configuredEnv(), message);
+
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://api.resend.com/emails');
+      expect((init.headers as Record<string, string>).Authorization).toBe('Bearer test-key');
+      expect(JSON.parse(String(init.body))).toEqual({
+        from: 'claims@pharmacy.test',
+        to: ['supplier@x.test'],
+        subject: 'subject',
+        html: '<p>hi</p>',
+        text: 'hi',
+      });
       fetchSpy.mockRestore();
     });
 
@@ -1183,6 +1227,19 @@ describe('credit-claim write routes', () => {
       expect(recordClaimOutcome).not.toHaveBeenCalled();
     });
 
+    it('refuses an outcome while the claim is still being sent', async () => {
+      const recordClaimOutcome = vi.fn().mockResolvedValue(true);
+      const db = createAuthenticatedDb({
+        findCreditClaim: vi.fn().mockResolvedValue(draftClaim({ status: 'SENDING' })),
+        recordClaimOutcome,
+      });
+
+      const result = await recordOutcome(db, ORG, 1, 'CREDITED', 10, null);
+
+      expect(result).toMatchObject({ ok: false, code: 'VALIDATION' });
+      expect(recordClaimOutcome).not.toHaveBeenCalled();
+    });
+
     it.each(['CREDITED', 'REJECTED', 'CANCELLED'])(
       'refuses a second outcome for a claim already settled as %s',
       async (status) => {
@@ -1348,6 +1405,45 @@ describe('credit-claim write routes', () => {
     });
   });
 
+  describe('GET /api/supplier-credits/claims and /recovery-report', () => {
+    // Task 3.2 batch 6. `minimal-api-routes.test.ts` covers `?view=open`; the other two
+    // branches of the mapping, and the report body, were not asserted anywhere.
+    it.each([
+      ['settled', ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED']],
+      ['all', undefined],
+      [null, undefined],
+    ])('maps ?view=%s to the statuses %j', async (view, statuses) => {
+      const listCreditClaims = vi.fn().mockResolvedValue([{ id: 1 }]);
+      const db = createAuthenticatedDb({ listCreditClaims });
+      const query = view === null ? '' : `?view=${view}`;
+
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request(`https://example.com/api/supplier-credits/claims${query}`),
+        pathname: '/api/supplier-credits/claims',
+        method: 'GET',
+        db,
+        env: bareEnv(),
+      });
+
+      expect(response?.status).toBe(200);
+      expect(listCreditClaims).toHaveBeenCalledWith(ORG, statuses);
+    });
+
+    it('returns the recovery report exactly as the database produced it', async () => {
+      const report = { outstandingValue: 12.5, unclaimedValue: 3, suppliers: [{ supplierId: 1 }] };
+      const db = createAuthenticatedDb({ getRecoveryReport: vi.fn().mockResolvedValue(report) });
+
+      const response = await dispatch(
+        'GET',
+        '/api/supplier-credits/recovery-report',
+        db,
+        bareEnv(),
+      );
+
+      expect(await response?.json()).toEqual(report);
+    });
+  });
+
   describe('route table', () => {
     it.each([
       ['POST', '/api/supplier-credits/claims'],
@@ -1363,6 +1459,23 @@ describe('credit-claim write routes', () => {
           (typeof match === 'string' ? match === pathname : match.test(pathname)),
       );
       expect(matched).toBe(true);
+    });
+
+    // Task 3.2 batch 6. Express: supplier-credit.routes.test.ts "rejects an invalid supplier ID
+    // before controller access (400)". The Worker's route patterns only match a numeric id, so a
+    // non-numeric one reaches no handler and the database is never touched; the answer is the
+    // router's 404 rather than Express's 400.
+    it.each([
+      ['PUT', '/api/supplier-credits/suppliers/not-a-number'],
+      ['PATCH', '/api/supplier-credits/suppliers/not-a-number'],
+      ['DELETE', '/api/supplier-credits/suppliers/not-a-number/policy'],
+    ])('does not route %s %s to any handler', async (method, pathname) => {
+      const db = createAuthenticatedDb({});
+
+      const response = await dispatch(method, pathname, db, bareEnv());
+
+      expect(response).toBeNull();
+      expect(db.sql).not.toHaveBeenCalled();
     });
 
     it('does not let the claim-detail route swallow the sub-resource paths', async () => {

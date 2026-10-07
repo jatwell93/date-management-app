@@ -519,6 +519,26 @@ describe('Workers tier usage limits (real SQL)', () => {
       expect(await makeDb().getStorageUsedBytes(ORG)).toBe(1500);
     });
 
+    // Task 3.2 batch 6. Express summed only PROCESSING and COMPLETED uploads
+    // (`quota-contract.test.ts`). The Worker keeps the stored object whatever the outcome of the
+    // import, so a queued or failed upload still occupies the bucket; it counts every row that
+    // has not been deleted. Pinned here so the difference is a decision rather than an accident.
+    it('counts queued and failed uploads, as well as completed ones,, because their objects stay in storage', async () => {
+      await seedUploader();
+      for (const [key, status, bytes] of [
+        ['q1', 'queued', 100],
+        ['f1', 'failed', 200],
+        ['c1', 'completed', 400],
+        ['d1', 'deleted', 800],
+      ] as const) {
+        await sql`
+          INSERT INTO uploads (organization_id, user_id, file_key, file_name, file_size_bytes, status, updated_at)
+          VALUES (${ORG}, ${uploaderId}, ${key}, ${key + '.csv'}, ${bytes}, ${status}, NOW())`;
+      }
+
+      expect(await makeDb().getStorageUsedBytes(ORG)).toBe(700);
+    });
+
     // `uploads.file_size_bytes` is INTEGER, so no single row can exceed ~2.1GB
     // (the upload path caps files at 100MB anyway) -- but the SUM across rows
     // can, and SUM(integer) is bigint in Postgres. What this pins is that the

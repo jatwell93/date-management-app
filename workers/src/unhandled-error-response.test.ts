@@ -77,6 +77,23 @@ describe('an error thrown inside a route handler', () => {
     expect(text).not.toContain('secret_table');
   });
 
+  it('includes the error message, and only in development', async () => {
+    // Task 3.2 batch 6. Express: "exposes error message in development".
+    database.findInventoryItems.mockRejectedValue(new Error('relation "secret_table" is locked'));
+    database.countInventoryItems.mockResolvedValue(0);
+    const request = () =>
+      new Request('https://example.com/api/inventory-items', {
+        headers: { Authorization: 'Bearer token' },
+      });
+
+    const development = await worker.fetch(request(), { ...ENV, NODE_ENV: 'development' }, ctx);
+    const production = await worker.fetch(request(), ENV, ctx);
+
+    expect(development.status).toBe(500);
+    expect(await development.text()).toContain('secret_table');
+    expect(await production.text()).not.toContain('secret_table');
+  });
+
   it('answers 200 for the same route when the read succeeds, so the 500 is the catch and not the route', async () => {
     database.findInventoryItems.mockResolvedValue([]);
     database.countInventoryItems.mockResolvedValue(0);

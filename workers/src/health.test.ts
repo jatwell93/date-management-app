@@ -323,6 +323,15 @@ describe('liveness and readiness probes', () => {
     expect(JSON.stringify(body)).not.toContain('password');
   });
 
+  it('/ready is 503 when the readiness query answers with no row', async () => {
+    // Task 3.2 batch 6. Express: "not ready when database readiness probe returns non-ready value".
+    vi.mocked(neon).mockReturnValueOnce(stubNeonQuery(() => Promise.resolve([])));
+    const response = await get('/ready', probeEnv());
+
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as any).status).toBe('not ready');
+  });
+
   it('/ready is 503 when no database connection string is configured', async () => {
     const response = await get('/ready', probeEnv({ NEON_CONNECTION_STRING: undefined }));
 
