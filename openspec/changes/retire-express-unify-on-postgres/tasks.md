@@ -3070,277 +3070,74 @@ equivalent, a relocated home, or an explicit retirement decision.
             now name their area instead of indexing it — an index column can be silently misaligned
             by inserting a row above it, a name cannot. Three of the seed mutations were re-applied
             against the rewritten statement and still caught.
-- [ ] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
+- [x] 3.2 Write the migrated test coverage **once, against the Worker's `Request`/`Response` model** on
       pglite/Neon (there is no Express-shaped Postgres intermediate to port from). Reproduce the named gates
       from 2.2 — tenant isolation, penetration, concurrency, feature limits, webhook security,
       scheduled-job idempotency, authorization precedence — and get it green before any deletion.
-      **The `tenant-isolation` gate is satisfied in advance (PRs #462, #466).** Cross-tenant
-      **read** scoping is covered by `workers/src/database.tenant-isolation.pglite.node.test.ts`
-      (11 tests) and cross-tenant **write/delete** by
-      `workers/src/database.tenant-isolation-writes.pglite.node.test.ts` (19 tests), both against
-      real SQL on pglite. The corresponding Part 4 rows moved from `worker-shaped-rewrite` to
-      `worker-equivalent-exists`. Treat these as the template for the remaining gates: real SQL,
-      foreign rows seeded so they WOULD be returned if scoping regressed, names chosen to sort
-      first under each `ORDER BY`, assertions on row identity rather than count, both halves
-      asserted (the attacker's call had no effect AND the victim's row is untouched), and every
-      test verified to fail with its predicate removed.
-      **Method note, learned the hard way.** Both PRs found live vulnerabilities, and both were
-      found by *working* a row that claimed a property was untested — not by reading the Worker and
-      judging it equivalent. #466's leak (`updateInventoryItem` accepting another tenant's
-      `productId`, then uncorrelated report JOINs resolving it) has no Express analogue at all, so
-      no manifest row predicted it. Work the remaining gates by exercising the Worker against real
-      SQL; a row that says "no Worker test exists" is the most likely place to find a defect.
-      **Batch 1 — `feature-limits` core (usage caps).** Worked the 33 rows for
-      `multi-tenant-usage-limits` and `feature-gate.middleware`. Result: 14 re-pointed to
-      `worker-equivalent-exists` with path:line citations (the Worker gained SKU, expiry and
-      seat caps in 3.1.a/3.1.j, after these rows were written, so several said "blocked on
-      Phase 3.1" when it had shipped); 19 proposed `retire`. Retirements fall in three classes:
-      the `tier_feature_flags` gate (deliberately not rehomed, `index-minimal.ts:1531`); Express
-      tier constants the Worker table deliberately differs from (pinned against the shared
-      source of truth in `utils/usage-limits.test.ts`); and the 80% warning attached to create
-      responses and the 403 upgrade CTA, which have no consumer in `frontend/src`.
-      **Defect found by working a row (the method note again).** The seat cap and
-      `getUsageCounts` counted `users` without `deleted_at IS NULL`, so a user removed through
-      `DELETE /api/users/:id` vanished from the list but kept its seat. Latent while
-      `USAGE_LIMITS_ENFORCE` is off, a hard lock-out once it is on. Fixed in
-      `workers/src/database.ts` and covered in
-      `database.usage-limits.pglite.node.test.ts` ("slots are returned when rows are removed or
-      retired"); removing the filter fails two tests. The other 75 `feature-limits` rows belong
-      to the storage-quota, upload, subscription/trial and dunning domains and move with those
-      batches.
-      **Decision (reviewer, 2026-10-05): cap refusals stay HTTP 402.** Express was
-      inconsistent (feature-gate middleware 403, invite-path seat limit 402); the Worker's 402
-      fits "upgrade required" and no frontend code branches on either status for these routes.
-      **Batch 2 — `webhook-security`, `concurrency`, `scheduled-job-idempotency`.** Worked the
-      73 rows. Most were already covered by the 3.1 and 3.3 tests the manifest predates; 60 are
-      re-pointed to `worker-equivalent-exists` with path:line citations, 12 are proposed
-      `retire`, and one (duplicate inventory guard) stays a rewrite under 3.10. Working them found and fixed three defects, each pinned by a test that fails
-      without the fix: a signed webhook body of `null` threw a `TypeError` in both the Stripe and
-      Clerk handlers (and a bare array, string or number was claimed and acknowledged as an event
-      by the Clerk handler); and an `organizationMembership.deleted` event naming an organization
-      this database has never seen soft-deleted the user in whichever organization they belong to.
-      New tests also cover `organizationMembership.deleted` end to end (it had none), Clerk signature
-      and header refusals, a Stripe `updated` event arriving before `created`, the free-tier default
-      for a first event with no tier, recovery of a lapsed trial by a subscription event, and the
-      two unique indexes that close duplicate-barcode and concurrent-catalogue-import races.
-      **Two items need the reviewer, flagged in the manifest.** (1) The Worker's tier caps are soft
-      under concurrency, so Express's "three concurrent creates, limit two, exactly two land"
-      guarantee is retired (`multi-tenant-usage-limits` concurrency row and the counter rows);
-      confirm that is acceptable before `USAGE_LIMITS_ENFORCE` is switched on. (2) The Worker does
-      not reject a duplicate inventory item (same product, expiry and location) where Express
-      returned 409. **Decided (reviewer, 2026-10-05): rebuild the guard, keyed on the Express
-      triple** (a second location for the same product and expiry is legitimate stock). Tracked
-      as task 3.10; the manifest row returns to `worker-shaped-rewrite`. Also decided in review:
-      soft caps are acceptable, an expired trial lapsing to `free` is correct, and re-linking an
-      existing user on a duplicate email (instead of Express's `ConflictError`) is correct because
-      Clerk already enforces one email per instance.
-      **Batch 3 — `authorization-precedence`, `penetration`.** Worked the 55 rows. Most "no Worker
-      test" cells were stale: 42 are re-pointed to `worker-equivalent-exists` with citations (the
-      CSV-injection, billing URL and price, filename, role, audit and storage-quota tests already
-      existed) and 13 are proposed `retire`. None stays a rewrite. New tests, each failing under
-      mutation: unauthenticated callers are refused before the database is read; the platform-admin
-      allow-list refuses every malformed configuration; supplier-policy authorization on PATCH, on a
-      credit-type-only change and on a full replacement, plus bulk-attach dedup and the raw-list cap;
-      the tier claim in a token is never surfaced; the stored role and tier win; a hostile
-      organization field cannot stamp a created product; multi-byte CSV cells. Working the
-      bootstrap role row found a real defect, fixed first in #568: `POST /api/organization/bootstrap`
-      took the organization and role from the request body, so a signed-in outsider could join
-      another tenant as admin. **Reviewer items, flagged in the manifest:** (1) the six backup and
-      restore endpoint rows and the two no-Origin rows are proposed `retire` (operator tool and
-      bearer-token auth respectively); (2) the two `requireMinRole` rows are proposed `retire`
-      because the Worker lists allowed roles per gate and has no hierarchy; (3) the Express rule
-      that a missing Stripe id means no entitlement is proposed `retire`, because no Worker writer
-      creates a non-trial row without one. Equivalent mutant noted: the `userId <= 0` guard in
-      `isPlatformAdminUser` is redundant behind the token regex.
-      **Decided (reviewer, 2026-10-05):** items (1) backup and restore endpoints, (2) no-Origin
-      rows and (3) `requireMinRole` rows retire, as does the `can-upload` pair. Item (4), the
-      missing-Stripe-id rule, retires too: a read-only production query on 2026-10-05 found 2
-      `subscription_tiers` rows, both `trialing` with no Stripe id, and none `active` without one.
-      **Batch 4a — shared-domain tests that live only in `backend/`.** The domain-logic rows (925 in
-      all, 650 still reading "none found") are mostly Express unit tests, and many of them test
-      `shared/domain/*`, which the Worker imports. Deleting `backend/` in Phase 4 would have removed
-      the only test of that code. Six files are copied into `workers/src/shared-domain/` unchanged
-      apart from the import path (`credit-claim`, `markdown-matrix`, `supplier-policy`,
-      `brand-supplier`, `store-walk-tracking`, `platform-catalogue-shared`: 95 tests), plus a new
-      `markdown-lookups.test.ts` carrying the shared-only assertions from the Express
-      `inventory-markdown.helpers` test. 56 rows re-pointed to `worker-equivalent-exists`; 13
-      `inventory-markdown.helpers` rows decided (10 equivalent, 3 proposed `retire`: invalid-date
-      fallback, Prisma `Date` shape, Express service export). Each shared function was mutated and the
-      ported tests failed. Working the status rows found a real defect: `calculateInventoryStatus` in
-      `workers/src/upload/expiry-import.ts` used 7/14/30-day thresholds, copied from an Express CSV
-      parser that had missed the move to the shared 30/60/90-day windows, so an expiry-list import
-      labelled items differently from the nightly `markdown-recalculation` job. It now uses
-      `getMarkdownLevelForDays`; `expiry-import-status.test.ts` fails against the old code.
-      **Reviewer item:** Express's own `CSVParserService.calculateInventoryStatus` still has the old
-      thresholds. It is deleted with `backend/`, so nothing to fix there.
-      **Batch 4b — CSV and cost parsing.** Two more import defects, both fixed with tests that fail
-      without the fix. (1) The Worker's catalogue cost parser removed every character that was not a
-      digit, dot or minus, so a European `12,50` was stored as 1250, `1.234,56` as 1.23456 and an
-      accounting-style `(12.50)` as +12.5, silently. Cost and retail cells now use the Express parser,
-      copied unchanged into `shared/domain/product-import-cost.ts`; its three Express suites (60 cases)
-      are ported and 30 of them fail against the old regex. (2) Duplicate SKUs within one file were
-      compared case-sensitively, so `sku001` and `SKU001` became two products; Express compared
-      case-insensitively. `csv-import-parity.test.ts` drives the Express CSV edge cases (empty and
-      whitespace files, BOM, CR/LF/CRLF, quoted fields, 1,000+ rows, headers, duplicate and unknown
-      columns, row errors) through `parseCsvRecords` and both validators; each parser and validator
-      guard was mutated. 95 rows decided. Two rows are proposed `retire` because the Express test
-      asserts nothing (the ANSI-encoding case has its `expect` commented out). Equivalent mutants
-      noted: the second blank-record guard in `validateCatalogueRecords` duplicates the one in
-      `parseCsvRecords`, and the three-digit-comma branch of `normalizeSingleComma` is shadowed by
-      `stripNonNumericCostCharacters`.
-      **Batch 4c — supplier-credit routes.** 42 rows (`supplier-credit.service`,
-      `supplier-policy-request-schema`). The Worker validates in the route handlers and enforces
-      tenant ownership inside single SQL statements, so two new tests carry them:
-      `supplier-credit-handlers.test.ts` (58 cases: credit-type and field limits, half credit ratios,
-      PATCH merge against PUT replacement and the policy timestamp, bulk-id caps and de-duplication,
-      brand-review paging, result-to-status mapping) and
-      `database.supplier-credit-writes.pglite.node.test.ts` (17 cases against real SQL with a second
-      organization seeded: dispose-write-off idempotency and the claimed conflict, brand-supplier
-      confirmation, product-supplier assignment and clearing, brand creation with its correction,
-      correction review and cursor paging). 25 mutations across the two files were all killed; one
-      survived the first time because a missing contact masked the ratio error, which is why the
-      half-ratio tests now supply a contact. No defect found here, and `disposeClaimableWriteOff`,
-      which had no test of any kind, is now covered.
-      **Batch 4d — subscription, storage quota, trial and upload rows.** The 60 rows still marked
-      `worker-shaped-rewrite` with no Worker test. Many "no Worker path" claims in them predate the
-      3.1 work: the storage-quota route, the claim-photo route, the claim-build route and the upload
-      guards all exist now. Three kinds of decision:
-      (1) *Covered by new tests* in `storage-quota-and-upload-guards.test.ts` (20 cases: the quota
-      figures, the 79%/80% warning line, over 100%, tier read from the organization and not the
-      query, the initiate required-field guards, the 2 MiB strategy boundary, direct upload with no
-      file, the presigned round trip and its token checks, and an export-excess read failure);
-      three real-SQL cases in `stripe/webhook-handler.node.test.ts` (a downgrade keeps every
-      product even past the new cap; a new product is refused while over it; an upgrade admits the
-      product the old cap refused); two in `clerk/bootstrap-handler.node.test.ts` (the trial is
-      Professional for 14 days with its start recorded; a repeat bootstrap adds nothing). 19
-      mutations across these were all killed. `handleUploadPresigned` is now exported so the
-      presigned round trip can be driven.
-      (2) *Already covered*, re-pointed to the existing Worker test (usage-limits, billing-handlers,
-      health, credit-claim-routes, catalogue-import-upsert, subscription-gating).
-      (3) *Proposed `retire`* (21 rows). Twelve test Express service methods with no caller outside
-      their own wrapper (`createSubscription`, `updateSubscription`, `reactivateSubscription`) or
-      the `convert-trial` route retired in 3.1.p. Two integration tests self-skip without a Stripe
-      key and assert `expect(true).toBe(true)` otherwise. Three depend on the analytics feature
-      gate, two on the unwritten trial conversion time and `trial_started` event (findings below),
-      one on the Express-only seed retirement threshold, and one on organization-delete cascade,
-      which is a schema property with no Worker delete route.
-      **Findings for the reviewer.** The Worker never writes `subscription_tiers.trial_converted_at`
-      (Express did, at `webhook.service.ts:691`); the trial-status response always returns null for
-      it, and nothing reads it. No `trial_started` event row is written either, and nothing reads
-      one. The analytics feature gate is still the open question recorded at
-      `index-minimal.ts:1531`; three rows depend on retiring it. An expired trial degrades to free,
-      not starter as Express had it (#489). The top-level 500 catch for a thrown route handler has
-      no direct test; export-excess is pinned only up to the point where the failure propagates.
-      **Batch 5a — inventory item rows.** 92 rows (`inventory.routes`, `inventory.service`,
-      `inventory.repository`, `inventory-item.model`, `inventory-tenant-filtering`,
-      `inventory-create-status`, `inventory-markdown-consistency`), the first of the remaining
-      `worker-shaped-rewrite` clusters. **Defect found and fixed:** Express derived an item's status
-      from its expiry date on create and on an expiry edit (`inventory.service.ts:164`, `:224`).
-      The Worker defaulted to `Normal` on create and kept the old status on an edit, and the live
-      frontend never sends a status (ScanPage.tsx:385, ExpiryEntriesPage.tsx:221). An item scanned
-      on the day it expired stayed `Normal`, and so off the expired worklist, until the nightly job
-      ran at 00:00 UTC. `createInventoryItem` now derives the status; `updateInventoryItem`
-      re-derives it on an expiry edit unless the caller names one, and never rewrites a disposed
-      status. The rule moved to `inventory-status.ts` so the import, the routes and the job share it.
-      New tests: `inventory-item-handlers.test.ts` (42 cases: validation, status mapping, partial
-      and full updates, referential and duplicate refusals, and that the retired Express routes are
-      not served); `database.inventory-reads-and-status.pglite.node.test.ts` (20 cases against real
-      SQL with a second organization seeded: the two product reads, derived status at every band
-      edge, disposed items kept);
-      `scheduled/jobs/markdown-recalculation.pglite.node.test.ts` (4 cases, the first test the job
-      has had: its SQL and the TypeScript rule agree at 13 band edges); and
-      `unhandled-error-response.test.ts`, which drives the real `fetch` to show a thrown handler
-      error becomes a 500 with no detail. That last one closes the gap noted in 4d and lets the
-      "returns 500 when X fails" rows in later batches point at one test. 31 mutations, all killed.
-      31 rows are proposed `retire`: the Express routes retired in 2.1 (`GET /:id`, `/product/:id`,
-      `/location/:id`, `POST /transaction`), service-to-repository delegation tests, and two
-      driver-specific model cases. **Reviewer items:** the Worker answers 404 where Express answered
-      403 for another organization's item (deliberate: a foreign id looks like a missing one); an
-      empty `PUT` is a no-op that answers 200 where Express's model returned null (reviewer
-      decision 2026-10-07: keep the 200); the create audit
-      text no longer names the status. The 14 `expired-item` rows are left for the disposition batch.
-      **Batch 5b — subscription, billing, webhook and quota rows.** 123 rows (`subscription.routes`,
-      `storage-quota.routes`, `subscription-billing.helpers`, `dunning.service`, `stripe-sync.job`,
-      `webhook.service`, `webhook.routes`, `webhook.edge-cases`, `feature-gate.middleware`,
-      `multi-tenant-feature-gates`, `atomicity`, `auth-bypass-safety`). Most "no Worker test" claims
-      were stale: billing, webhook, gating and quota now have Worker suites. Two new tests carry the
-      gaps: `subscription-read-handlers.test.ts` (15 cases for `GET /api/subscription/current` and
-      `/trial-status`: status normalization, the trial countdown, unknown status and tier handling,
-      and a check that the limits shown match the write-side caps for every tier) and
-      `scheduled/jobs/stripe-reconciliation.pglite.node.test.ts` (6 cases: the job against real SQL,
-      which rows it considers and what a Stripe subscription does to the stored row). 14 mutations:
-      12 killed, one equivalent (the `free` fallback in trial-status is unreachable because
-      `normalizeLaunchTier` always returns a known tier), one killed by the existing unit test.
-      80 rows re-pointed to Worker tests, 43 proposed `retire`: `convert-trial` and `can-upload` (routes
-      retired), the Stripe events the receiver deliberately does not handle, the analytics feature gate,
-      the usage counters, and the Express test-mode auth bypass.
-      **Findings for the reviewer.** (1) A lapsed organization within the free limits: Express locked
-      creation only when usage was over the free limits after a dunning downgrade; the Worker gate
-      refuses every POST from a lapsed organization. It is measure-only today
-      (`SUBSCRIPTION_GATE_ENFORCE=false`), so decide before the flag is flipped. (2) No alert when an
-      organization lapses for non-payment: Express sent a Sentry fatal per dunning downgrade, and the
-      Worker derives the lapse at read time so there is no event to alert on. (3) No downgrade warning
-      email and no payment-failed email from the Worker; the receiver writes state only. (4) The
-      Worker refuses a checkout for an organization with no subscription row (404), where Express
-      created a session. (5) A missing or unknown organization on a Stripe event is acknowledged with
-      nothing written, where Express threw; the Express critical alert carrying the customer email is
-      not reproduced.
-      **Resolved 2026-10-07 (reviewer decisions).** (1) Only an expired trial is refused outright by
-      the entitlement gate; a cancellation or non-payment lapse degrades to the free tier and the free
-      caps decide what can still be created, as Express did and `tier-downgrade-guide.md` promises.
-      (2) The Worker raises a Sentry warning when a subscription first enters dunning, once per
-      episode (`stripe-persistence.ts`). Stripe sends the customer emails (failed payment, expiring
-      card); setup steps are in the PR. (3) No downgrade warning email: data is never deleted, so it is
-      deferred until a trial customer asks. (4) Checkout from an organization with no subscription row
-      creates the bootstrap trial row first and proceeds, instead of answering 404.
-      **Open follow-up.** `unpaid` and `paused` Stripe statuses are not recognized by
-      `deriveSubscriptionAccess`, which fails open on them (full entitlements). Set Stripe's
-      "if all retries fail" action to cancel, not mark unpaid or pause, until that is handled.
-      **Batch 6 — the last 360 rows (products, uploads, credit claims, middleware, reports, the
-      long tail).** After this batch no row in the four 2.2 manifests is `worker-shaped-rewrite`.
-      284 rows re-pointed to Worker tests, 76 proposed `retire`. As in earlier batches most "none
-      found" claims were stale: credit claims, the master-catalogue seed, email, health, the
-      upload handlers and the tenant-isolation suites all had Worker tests by now. New tests carry
-      the real gaps: `product-read-create-handlers.test.ts` (list, by-barcode, by-sku, get-by-id
-      and create: organization hand-off, decoding, 404/409/500 mapping), `store-area-handlers.test.ts`,
-      `expired-item-handlers.test.ts`, `report-handlers.test.ts`, `markdown-config-handlers.test.ts`,
-      `inventory-status.test.ts`, `upload/catalogue-enrichment.test.ts`, plus cases added to the
-      catalogue parser, expiry-date parser, upload guards, credit-claim routes, rate limiting
-      through `fetch`, bootstrap hydration from Clerk, and several real-SQL suites.
-      **Real defects found by writing the missing tests, and fixed.** (1) The catalogue import had
-      no length limit on SKU, name or barcode (Express: 100, 200, 100); one cell could be as big as
-      the upload. (2) The Worker accepted an inventory expiry date any distance out; Express refused
-      more than five years (`data-integrity.middleware.ts`), which catches a mistyped year (2062 for
-      2026) that would store an item no expiry window ever reaches. Create and edit now answer 400.
-      (3) Two store areas with the same name and no sub-department were both accepted, because the
-      unique index treats NULL sub-departments as distinct; Express guarded this in
-      `store-area.service.ts`. `createStoreArea` now checks with `IS NOT DISTINCT FROM`, and renaming
-      onto an existing area answers 409 rather than 500. **Left as a check, not a constraint:** a
-      concurrent pair with no sub-department can still both land; closing that needs a unique index on
-      `COALESCE(sub_department, '')`, which fails to build if production already holds duplicates
-      (count them first). (4) Not a defect: `/ready` was already 503 for an empty readiness result,
-      but nothing asserted it.
-      **Decisions for the reviewer** (each is `retire` or an `eq` with a stated difference in the
-      manifest row; none blocks the audit). (a) Short or odd barcodes and long SKUs are accepted on
-      product create and edit; Express refused them (permissive validator mode, already decided with
-      issue #530 for barcodes; SKU length follows it). (b) Unknown CSV columns are ignored; Express
-      rejected the file. (c) `items-by-user` with a time frame of 0 or text returns all time (200);
-      Express answered 400. (d) DECIDED 2026-10-08: a failed import's source file is deleted and a failed upload is not
-      counted toward the storage quota; queued uploads count.
-      (Express counted only PROCESSING and COMPLETED.) (e) The rate limiter is one
-      limiter keyed on client IP; two users behind one shop IP share a bucket, where Express keyed
-      presigned uploads by user. (f) No email-history check on trial creation; Clerk allows one
-      account per email and a returning user never gets a second trial, but deleting the Clerk
-      account and re-registering gives a fresh trial. This is the "sign-up check" item left open in
-      5b. (g) DONE after review: a `STRIPE_SECRET_KEY` that is not `sk_` or `rk_` is refused with 503 before Stripe is called.
-      Also after review: ignored CSV columns are named in the import's completion message (queued path); duplicate
-      store-area checks cover renames; length limits measure the raw cell. `items-by-user` with an invalid time frame answers 400 (decided 2026-10-08).
-      **Not carried, by design.** Express error-class middleware, the zod `validateRequest`
-      middleware, the SQLite models, the storage-provider abstraction, the SendGrid templates, the
-      dormant daily-report job, `monthly-markdown`, and `getAllExpiredItemTransactions` (no caller).
-      **Still open from 5b.** `unpaid`/`paused` Stripe statuses; the analytics feature gate; the
-      Express routes repinned as "not served"; the #568 production comparison.
-      **Mutation run.** 38 mutations on the new code and tests: 35 killed; one skipped (the pattern matched two lines); one survivor was an equivalent no-op mutation of mine; one survivor (store-area ordering) exposed a weak test, which was fixed and then killed.
+      **CLOSED 2026-10-08 (PRs #462, #466, and audit batches 1–6, ending at #577).** All 2.2 manifest
+      rows are decided: none is `worker-shaped-rewrite` (the duplicate-inventory guard was rebuilt in
+      3.10, whose production duplicate check (a) is still open). `node scripts/verify-audit-manifest.js` reports 0 failures, which proves
+      every citation exists, every negative is qualified, and no equivalence rests on a test that cannot fail.
+      **Method that found the defects.** Work a row that claims a property is untested, against real SQL
+      with foreign rows seeded so they would be returned if scoping regressed; assert row identity, not
+      counts; assert both halves (the attacker's call had no effect AND the victim's row is untouched);
+      and verify each test fails with its predicate or fix removed. Reading the Worker and judging it
+      equivalent found none of the defects below; writing the missing test found all of them.
+      **Gates reproduced** (rows are `worker-equivalent-exists` / `retire`; the cited tests are the
+      evidence, mostly pglite real SQL where the property lives in SQL):
+      | Gate | eq / retire | Principal evidence |
+      | ---- | ----------- | ------------------ |
+      | tenant-isolation | 55 / 53 | `database.tenant-isolation.pglite.node.test.ts`, `database.tenant-isolation-writes.pglite.node.test.ts`, `multi-tenant-isolation.test.ts`, plus per-domain pglite suites |
+      | authorization-precedence | 51 / 41 | `authorization-gates.test.ts`, `constants/roles.test.ts`, `subscription-gating.node.test.ts`, `clerk/request-authentication.test.ts` (route-level, mocked auth: the property is handler ordering) |
+      | penetration | 31 / 24 | `upload/csv-injection.test.ts`, `multi-tenant-isolation.test.ts`, tenant-isolation pglite suites, `clerk/request-authentication.test.ts` |
+      | feature-limits | 80 / 80 | `database.usage-limits.pglite.node.test.ts`, `utils/usage-limits.test.ts`, `feature-gates-integration.test.ts`, `stripe/webhook-handler.node.test.ts` |
+      | webhook-security | 41 / 1 | `stripe/webhook-handler.node.test.ts`, `clerk/webhook-handler.node.test.ts`, both `webhook-signature.test.ts`, `scheduled/scheduled.pglite.node.test.ts` |
+      | scheduled-job-idempotency | 17 / 5 | `scheduled/scheduled.pglite.node.test.ts`, `scheduled/jobs/*.pglite.node.test.ts`, `scheduled/dispatcher.test.ts` |
+      | concurrency | 12 / 15 | `database.usage-limits.pglite.node.test.ts`, `database.inventory-duplicate-guard.pglite.node.test.ts`, `catalogue-import-upsert.node.test.ts`, `catalogue-import-loadtest.node.test.ts` |
+      **Real defects found by working rows, each fixed with a test that fails without the fix.**
+      Live cross-tenant leaks (#462, #466; #466's `updateInventoryItem` accepting another tenant's
+      `productId` has no Express analogue). Bootstrap took organization and role from the request body, so
+      an outsider could join another tenant as admin (#568). Seat cap and usage counts included
+      soft-deleted users. A webhook body of `null` threw in both the Stripe and Clerk handlers, and a
+      Clerk `organizationMembership.deleted` for an unknown organization soft-deleted the user in their
+      real one. The expiry-list import used 7/14/30-day status thresholds instead of the shared
+      30/60/90-day windows. The catalogue cost parser stored European `12,50` as 1250 and `(12.50)` as
+      +12.5; SKU duplicates within a file were case-sensitive. Inventory status was not derived from the
+      expiry date on create or edit. The catalogue import had no length limit on SKU, name or barcode;
+      inventory expiry dates were accepted any distance out (Express: five years); two store areas with
+      the same name and no sub-department were both accepted (NULLs are distinct in the unique index).
+      After bot review: store-area rename duplicates answer 409, a failed import's source file is deleted
+      on every failure path including enqueue failure, and a `STRIPE_SECRET_KEY` that is not `sk_`/`rk_`
+      answers 503 before Stripe is called. Shared-domain tests that lived only in `backend/` (95 tests,
+      six files) were copied to `workers/src/shared-domain/`, and the cost parser moved to
+      `shared/domain/product-import-cost.ts`, so deleting `backend/` removes no live coverage.
+      Mutation runs over every batch killed all non-equivalent mutants.
+      **Standing reviewer decisions** (also recorded in the manifest rows).
+      Cap refusals stay HTTP 402; tier caps are soft under concurrency (acceptable; confirm before
+      `USAGE_LIMITS_ENFORCE` is switched on); an expired trial lapses to `free`; a duplicate email
+      re-links the existing user. The duplicate-inventory guard is rebuilt on the Express triple (3.10).
+      Retired by decision: backup and restore endpoints, no-Origin rows, `requireMinRole`, the
+      `can-upload` pair, the missing-Stripe-id rule (production query 2026-10-05: no active row without
+      one), `convert-trial`, usage counters, the analytics feature gate rows, and Express-internal
+      layers (error-class middleware, zod `validateRequest`, SQLite models, storage-provider
+      abstraction, SendGrid templates, dormant daily report, `monthly-markdown`).
+      Behaviour differences accepted: foreign ids answer 404, not 403; an empty `PUT` answers 200;
+      short or odd barcodes and long SKUs are accepted on product create and edit; unknown CSV columns
+      are ignored and named in the import's completion message; `items-by-user` with an invalid time
+      frame answers 400; queued uploads count toward the storage quota and failed ones do not; a lapsed
+      organization degrades to the free tier and the free caps decide; a dunning episode raises a
+      Sentry warning once; no downgrade-warning email; checkout without a subscription row creates the
+      bootstrap trial first; one rate limiter keyed on client IP.
+      **Open follow-ups (none blocks Phase 4).** (1) `unpaid`/`paused` Stripe statuses fail open in
+      `deriveSubscriptionAccess`; set Stripe's "if all retries fail" action to cancel until handled.
+      (2) Analytics feature gate (`index-minimal.ts:1531`), decided in 2.1. (3) Express routes repinned as
+      "not served": `GET /api/inventory-items/:id`, `/product/:id`, `/location/:id`, purchase orders,
+      `/storage-quota/:id/can-upload`, `POST /subscription/convert-trial`; confirm in 2.1. (4) #568
+      production comparison against Clerk memberships. (5) Email-history trial check, revisit in 5b.
+      (6) Concurrent store-area pair with no sub-department can still both land; closing it needs a
+      unique index on `COALESCE(sub_department, '')`, which fails to build if production holds
+      duplicates (count first). (7) Rate limiter could key authenticated requests on user id.
+      (8) Trial conversion time (`trial_converted_at`) and a `trial_started` event are not written.
 - [x] 3.3 Rehome the scheduled jobs per 2.3 (Cron Triggers / Queues) or execute their retirement; verify
       each fires on schedule. Add the Worker `scheduled()` dispatcher and Wrangler Cron Trigger
       declarations; test dispatch, overlap prevention, retry/idempotency, and alerting.
