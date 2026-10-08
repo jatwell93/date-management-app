@@ -9,7 +9,7 @@ name: Migrations E2E (real PostgreSQL)
 # bump both the tag and the digest.
 #
 # Triggered on EVERY pull request and push to main/master — NO `paths:` filter.
-# This is deliberate and matches backend-test.yml: a required status check must
+# This is deliberate and matches workers-test.yml: a required status check must
 # always report. A workflow filtered out by `paths:` never runs, so its check
 # never appears and a required check waits forever — permanently blocking any
 # PR that does not touch that path. The `changes` job below does path detection
@@ -151,7 +151,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Covers: fresh install, adoption, concurrent refusal, interruption/recovery (real partial non-tx DDL), checksum drift, catalog drift, safe down, forward fix." >> $GITHUB_STEP_SUMMARY
 
-  # THE required status check — same pattern as backend-test.yml.
+  # THE required status check — same pattern as workers-test.yml.
   # Runs unconditionally so it can never be skipped. If `changes` fails, the
   # e2e job is skipped and a required check placed on `e2e` would pass
   # without any test having run. This gate inspects the real results.

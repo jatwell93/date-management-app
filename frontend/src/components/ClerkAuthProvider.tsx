@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useUser, useAuth, useOrganization, ClerkProvider } from '@clerk/clerk-react';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import * as Sentry from '@sentry/react';
-import { offlineSyncService } from '../lib/offline-sync';
 import { RoleValue, normalizeRole } from '../constants/roles';
 
 interface ClerkAuthProviderProps {
@@ -96,14 +95,6 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('session');
     localStorage.removeItem('authToken');
   }, []);
-
-  useEffect(() => {
-    offlineSyncService.setAuthTokenProvider(async () => (await getToken()) || token);
-
-    return () => {
-      offlineSyncService.setAuthTokenProvider(() => null);
-    };
-  }, [getToken, token]);
 
   // Handle Clerk authentication state changes
   useEffect(() => {

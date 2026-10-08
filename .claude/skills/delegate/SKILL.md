@@ -137,7 +137,6 @@ git diff --name-only main...HEAD    # or: git status --porcelain for uncommitted
 
 | Changed | Gate |
 | --- | --- |
-| `backend/**` | `doppler run -- npm run test:backend:diff` |
 | `frontend/**` | `npm run test:frontend:diff` |
 | `workers/**`, `shared/**` | `npm run test:db` |
 | `src/database/migrations/**`, `database/migrations/**` | `npm run test:migrations` (root `src/` — the Postgres runner. `node:test`, compiles first, no Doppler needed) |
@@ -153,8 +152,6 @@ the ones the local gate compiles. Task 1.8 shipped green locally and failed CI b
 
 Doppler notes (both are real, previously-hit failure modes):
 
-- Backend tests run **without** Doppler bleed `.env.production` R2 config and produce a
-  false storage-factory failure — so use `doppler run --` for the normal backend run.
 - If the change is gated on a secret being **unset**, *also* run that test **without**
   Doppler for CI parity. Doppler injects real secrets that mask env-absence bugs.
 
@@ -164,8 +161,6 @@ The gate passing is necessary, not sufficient. Read `git diff` against `AGENTS.m
 
 - **Reuse before creating** — did it add a file where an existing service/controller/
   component should have been extended? This is the most common GLM failure mode.
-- **Backend layering** — `routes → controllers → services → repositories/db`. Business
-  logic in services, DB access in repositories, tsyringe DI not hardcoded deps.
 - **Tests exist** for the new behaviour, and actually assert something.
 - **No unjustified `any`**, no hardcoded secrets, no mock data in production paths.
 - Scope — nothing edited outside the task group.

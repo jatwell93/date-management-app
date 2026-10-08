@@ -1,7 +1,7 @@
 # AGENTS.md
 
 **Monorepo development guide for AI-assisted work.**
-Node/Express/TypeScript backend · React frontend · Cloudflare Workers · shared libs.
+TypeScript Cloudflare Workers API · React frontend · shared libs.
 Neon PostgreSQL database · Clerk authentication · Sentry monitoring · Stripe payments.
 
 **Last updated:** October 2026
@@ -25,20 +25,16 @@ Neon PostgreSQL database · Clerk authentication · Sentry monitoring · Stripe 
 
 This is a monorepo. There is **no** root `src/` app — packages live in subfolders:
 
-| Path        | What it is                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `backend/`  | Express/TypeScript API. Prisma (v6) + tsyringe DI + SWC. Layered: `backend/src/{routes,controllers,services,repositories,db,models,middleware}`. Tests in `backend/src/tests`. |
-| `frontend/` | React (Vite) app.                                                                                                                                                              |
-| `workers/`  | Cloudflare Workers, the deployed API (`src/index-minimal.ts`). Real-SQL tests via pglite (`npm run test:db`).                                                                  |
-| `shared/`   | Code shared across packages (e.g. domain logic).                                                                                                                               |
-| `e2e/`      | Playwright end-to-end tests.                                                                                                                                                   |
-| `docs/`     | Operational and reference documentation.                                                                                                                                       |
-| `openspec/` | Change proposals and specs (see §5).                                                                                                                                           |
+| Path        | What it is                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| `frontend/` | React (Vite) app.                                                                                             |
+| `workers/`  | Cloudflare Workers, the deployed API (`src/index-minimal.ts`). Real-SQL tests via pglite (`npm run test:db`). |
+| `shared/`   | Code shared across packages (e.g. domain logic).                                                              |
+| `e2e/`      | Playwright end-to-end tests.                                                                                  |
+| `docs/`     | Operational and reference documentation.                                                                      |
+| `openspec/` | Change proposals and specs (see §5).                                                                          |
 
-**Express is being retired** (OpenSpec `retire-express-unify-on-postgres`): new API behaviour goes in `workers/`, not `backend/`. The layering below applies to `backend/` only while it exists.
-
-**Backend layering** (keep it clean): `routes → controllers → services → repositories/db`.
-Controllers coordinate HTTP; business logic lives in services; DB access lives in repositories. Use DI (tsyringe) rather than hardcoding dependencies. Use strict TypeScript — no unjustified `any`.
+**Express is retired** (OpenSpec `retire-express-unify-on-postgres`): the API is `workers/` on Neon Postgres, and `backend/` no longer exists. The last Express revision is the tag `express-sqlite-last`; `docs/express-retirement-recovery.md` says how to read or restore it. Use strict TypeScript — no unjustified `any`.
 
 ---
 
@@ -60,7 +56,7 @@ Agents are trusted to use judgment; there's no rigid state machine. The through-
 - **Non-trivial or spec-affecting work:** open an OpenSpec proposal first (§5), get it approved, then implement.
 - **Human gate before pushing:** present a short summary (what changed, tests run + result, anything risky). Push/PR only after the user approves.
 
-Commits use conventional format, e.g. `feat(backend): add markdown resolver`. Include a `Refs: <change-id>` line when tied to an OpenSpec change.
+Commits use conventional format, e.g. `feat(workers): add markdown resolver`. Include a `Refs: <change-id>` line when tied to an OpenSpec change.
 
 ---
 
@@ -87,15 +83,12 @@ Run the gate for the package(s) you changed. There is **no** root `npm test` / `
 
 ```bash
 # Component test gate (fast, diff-scoped — this is the minimum before commit)
-npm run test:backend:diff        # backend changes
 npm run test:frontend:diff       # frontend changes
 npm run test:db                  # worker DB changes (pglite real-SQL)
 (cd workers && npm run typecheck)  # CI type-checks workers including test files; plain tsc --noEmit does not
-npm run test:audit-manifest      # when you touch the 2.2 test-audit manifests
 npm run test:operations          # when you touch src/operations
 
 # Fuller coverage run when warranted
-npm run test:backend:coverage
 npm run test:frontend:coverage
 
 # Lint (root ESLint covers all packages) — must exit 0
@@ -116,7 +109,7 @@ ocr review --from main --to feature-branch --format json --audience agent --back
 
 Notes:
 
-- Backend tests: run via `doppler run -- npm test` when a real secret is needed; for logic gated on a secret being **unset**, also run without Doppler for CI parity.
+- Tests that need a real secret run via `doppler run --`; for logic gated on a secret being **unset**, also run without Doppler for CI parity.
 - `doppler run -- cs delta` (CodeSense) is a separately authorized provider check, not part of the local loop.
 
 ---

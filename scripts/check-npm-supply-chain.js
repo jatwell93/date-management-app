@@ -3,7 +3,7 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 
-const packageDirs = ['.', 'backend', 'frontend', 'workers'];
+const packageDirs = ['.', 'frontend', 'workers'];
 const dependencyFields = [
   'dependencies',
   'devDependencies',

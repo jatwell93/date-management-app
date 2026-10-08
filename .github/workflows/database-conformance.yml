@@ -169,12 +169,7 @@ jobs:
           --health-retries 10
 
     steps:
-      # Full history: baseline.fingerprint.test regenerates the pre-0001 Prisma
-      # schema with `git show ae26d623~1:...`, which a depth-1 checkout cannot
-      # resolve ("fatal: invalid object name 'ae26d623~1'").
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7

@@ -7,7 +7,6 @@ module.exports = [
   '**/.turbo/**',
   '**/.next/**',
   '**/frontend/build/**',
-  '**/backend/dist/**',
   '**/uploads/**',
   '**/backups/**',
   '**/brand-identity/**', // Design-system reference assets are not runtime source

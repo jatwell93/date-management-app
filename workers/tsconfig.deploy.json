@@ -4,9 +4,6 @@
     "node_modules",
     "dist",
     "src/**/*.test.ts",
-    "src/__tests__/**",
-    "../backend/src/tests",
-    "../backend/src/**/*.test.ts",
-    "../backend/src/**/__mocks__"
+    "src/__tests__/**"
   ]
 }

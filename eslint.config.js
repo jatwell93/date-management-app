@@ -74,19 +74,6 @@ module.exports = [
     },
   },
   {
-    files: [
-      'backend/src/tests/**/*.{js,jsx,ts,tsx}',
-      'backend/src/**/*.test.{js,jsx,ts,tsx}',
-      'backend/scripts/**/*.{js,jsx,ts,tsx}',
-      'backend/test-setup-neon.js',
-    ],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      'no-unused-vars': 'off',
-    },
-  },
-  {
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
@@ -96,21 +83,6 @@ module.exports = [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
-      prettier: prettierPlugin,
-    },
-    rules: baseTsRules,
-  },
-  {
-    files: ['backend/**/*.{ts,tsx}'],
-    languageOptions: {
-      parser: tsParser,
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      globals: globals.node,
-    },
-    plugins: {
-      '@typescript-eslint': tsPlugin,
-      import: importPlugin,
       prettier: prettierPlugin,
     },
     rules: baseTsRules,
@@ -169,7 +141,7 @@ module.exports = [
     },
   },
   {
-    files: ['backend/**/*.{js,jsx}', 'scripts/**/*.{js,jsx}', '*.js'],
+    files: ['scripts/**/*.{js,jsx}', '*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',
@@ -251,19 +223,6 @@ module.exports = [
     rules: baseJsRules,
   },
   {
-    files: ['backend/scripts/**/*.{js,jsx}'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      globals: globals.node,
-    },
-    plugins: { prettier: prettierPlugin },
-    rules: {
-      ...baseJsRules,
-      'no-case-declarations': 'off',
-    },
-  },
-  {
     files: ['brand-identity/**/*.{ts,tsx}', 'frontend/*.ts'],
     languageOptions: {
       parser: tsParser,
@@ -315,19 +274,6 @@ module.exports = [
     files: ['scripts/**/*.test.js'],
     rules: {
       'no-redeclare': 'off',
-    },
-  },
-  {
-    files: [
-      'backend/src/tests/**/*.{js,jsx,ts,tsx}',
-      'backend/src/**/*.test.{js,jsx,ts,tsx}',
-      'backend/scripts/**/*.{js,jsx,ts,tsx}',
-      'backend/test-setup-neon.js',
-    ],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      'no-unused-vars': 'off',
     },
   },
   {

@@ -3080,9 +3080,9 @@ async function handleDeleteProduct(
  * Ports Express's `product.controller.ts` `updateProduct`. The 2.1 matrix row
  * called this `mounted+consumed` by "the ScanPage update flow"; that is not so.
  * ScanPage only reads products and creates them -- the sole PUT-to-products in
- * either frontend is the offline replay queue (`frontend/src/lib/offline-sync.ts:368`),
- * and `addOperation`, the only thing that feeds that queue, is called nowhere
- * outside its own tests. So this route has no live caller today and the row is
+ * either frontend was the offline replay queue (`offline-sync.ts`, deleted in 4.1,
+ * see tag `express-sqlite-last`), and `addOperation`, the only thing that fed it,
+ * was called nowhere outside its own tests. So this route has no live caller and the row is
  * corrected to `mounted+unconsumed`.
  *
  * It is rehomed rather than retired on the `export-excess` precedent from

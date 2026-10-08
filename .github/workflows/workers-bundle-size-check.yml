@@ -31,7 +31,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: workers/package-lock.json
 
-      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      # Keep npm major in sync with the lockfile generator (see workers-test.yml).
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
 

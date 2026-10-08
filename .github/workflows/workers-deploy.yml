@@ -104,7 +104,7 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
 
-      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      # Keep npm major in sync with the lockfile generator (see workers-test.yml).
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
 
@@ -216,7 +216,7 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
 
-      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      # Keep npm major in sync with the lockfile generator (see workers-test.yml).
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
 
@@ -457,8 +457,9 @@ jobs:
             printf "%s" "${STRIPE_SECRET_KEY}" | npx wrangler secret put STRIPE_SECRET_KEY --env production
           '
 
-      # The four checkout price IDs, from the same Doppler keys the backend
-      # reads (`services/subscription-billing.helpers.ts` STRIPE_PRICE_CATALOG).
+      # The four checkout price IDs, from the same Doppler keys the Worker
+      # reads (`workers/src/stripe/billing-handlers.ts` `allowedPriceIds()`:
+      # the four STRIPE_{STARTER,PROFESSIONAL}_{MONTHLY,ANNUAL}_PRICE_ID keys).
       #
       # Bound as secrets rather than written into `[env.production.vars]` for
       # two reasons: they differ between the Stripe test and live accounts, so

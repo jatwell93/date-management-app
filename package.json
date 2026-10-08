@@ -10,15 +10,12 @@
   "license": "Apache-2.0",
   "keywords": [],
   "scripts": {
-    "test": "echo \"Error: specify frontend or backend (npm run test:backend or npm run test:frontend)\" && exit 1",
+    "test": "echo \"Error: no root test suite. Run test:db, test:frontend:diff, test:migrations or test:operations\" && exit 1",
     "build:frontend": "npm run build --prefix frontend",
     "build:workers": "npm run build --prefix workers",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:backend": "npm run test --prefix backend",
-    "test:backend:coverage": "npm run test:coverage --prefix backend",
-    "test:backend:diff": "npm run test:diff --prefix backend",
     "test:db": "npm run test:db --prefix workers",
     "test:migrations": "npm run compile && node --test --test-concurrency=1 build/src/database/migrations/runner.test.js build/src/database/migrations/adopt.test.js build/src/database/migrations/baseline.fingerprint.test.js build/src/database/migrations/commands.test.js build/src/database/migrations/log.test.js build/src/database/migrations/pglite-client.test.js",
     "test:migrations:e2e": "npm run compile && node --test --test-concurrency=1 \"build/src/database/migrations/e2e.test.js\"",
@@ -33,8 +30,6 @@
     "test:stripe-config": "node --test scripts/validate-stripe-deployment-config.test.js",
     "test:neon-scripts": "node --test scripts/check-neon-pitr.test.js scripts/create-neon-snapshot.test.js scripts/neon-poll-operations.test.js",
     "test:tooling": "node --test scripts/lint-diff.test.js scripts/memvid-exec.test.js scripts/mem-memory-scripts.test.js scripts/root-package-scripts.test.js scripts/workers-dev-local.test.js scripts/verify-scheduled-triggers.test.js scripts/backup-retention.test.js scripts/artillery-processor.test.js",
-    "test:audit-columns": "node --test scripts/check-audit-columns.test.js && node scripts/check-audit-columns.js",
-    "test:audit-manifest": "node --test scripts/check-audit-columns.test.js scripts/verify-audit-manifest.test.js && node scripts/verify-audit-manifest.js",
     "mem:log": "node scripts/mem-log.js",
     "mem:recall": "node scripts/mem-recall.js",
     "mem:rebuild": "node scripts/mem-rebuild.js",
@@ -81,8 +76,6 @@
     "wrangler": "4.144.0"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "pg": "8.22.0",
-    "prisma": "^6.19.3"
+    "pg": "8.22.0"
   }
 }

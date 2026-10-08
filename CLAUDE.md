@@ -8,11 +8,11 @@ Quick non-negotiables:
 - Reuse existing code before adding files; cite lines as `path/file.ts:42`.
 - Add/adjust tests for what you touch. Never commit secrets.
 - Before committing, run the diff-scoped gate for the package you changed:
-  `npm run test:backend:diff` / `test:frontend:diff` / `npm run test:db`, plus `npm run lint`.
+  `npm run test:frontend:diff` / `npm run test:db`, plus `npm run lint`.
   (There is no root `npm test` / `npm run build` — it errors by design.)
 - Track non-trivial work in OpenSpec (`openspec list`); no ad-hoc TODO/planning files.
 - Conventional commits (`feat(workers): ...`); show the user a short summary (changes, tests run, risks) before pushing.
 - Use Context7 for current library/API docs without being asked.
 - Workers also need `(cd workers && npm run typecheck)` (CI type-checks test files).
-- Express (`backend/`) is being retired: new API behaviour goes in `workers/`.
-- This is a monorepo: code lives in `backend/`, `frontend/`, `workers/`, `shared/` — there is no root `src/` app.
+- Express (`backend/`) is retired: the API is `workers/` on Neon Postgres. The last Express revision is the tag `express-sqlite-last` (see `docs/express-retirement-recovery.md`).
+- This is a monorepo: code lives in `frontend/`, `workers/`, `shared/` — there is no root `src/` app.
