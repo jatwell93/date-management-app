@@ -1,21 +1,11 @@
 /**
  * Shared catalog comparison logic for structural schema comparison.
  *
- * Used by both the baseline fingerprint test (cross-comparison layers) and
- * the adoption command (catalog verification against the checked-in fingerprint).
- *
- * Two comparison profiles:
- * - **test**: used by the fingerprint test's cross-comparison against the
- *   Prisma-generated schema. Applies broad exception rules (any `updated_at`
- *   default difference, any timestamptz/timestamp(3) difference), filters
- *   migration-only partial indexes and Prisma-only known indexes, and excludes
- *   CHECK/UNIQUE constraints from the main comparison (Prisma cannot express
- *   them; they are verified separately by counting).
- * - **adoption**: used by the adoption command against an existing production
- *   database. Uses strict comparison — all migration-owned indexes and
- *   CHECK/UNIQUE constraints are required, and column exceptions must be
- *   exact table/column/expected/actual tuples. Broad Prisma-comparison rules
- *   do NOT apply to adoption.
+ * Used by the adoption command and the post-adoption verifier, which compare
+ * the migration-replayed catalog against an existing production database.
+ * The comparison is strict: all migration-owned indexes and CHECK/UNIQUE
+ * constraints are required, and column exceptions must be exact
+ * table/column/expected/actual tuples.
  */
 import {
   columnStructuralKey,
@@ -89,184 +79,32 @@ export function computeStructuralKeys(catalog: NormalizedCatalog): CatalogStruct
 
 /**
  * Configuration controlling how two catalogs are compared.
- *
- * The test profile applies broad exception rules for Prisma-vs-migration
- * differences. The adoption profile is strict — all migration-owned objects
- * are required, and exceptions must be exact tuples.
  */
 export interface ComparisonConfig {
   /** Include CHECK constraints in the mismatch check. */
   includeCheckConstraints: boolean;
   /** Include UNIQUE constraints in the mismatch check. */
   includeUniqueConstraints: boolean;
-  /** Filter migration-only partial indexes (test profile only). */
-  filterMigrationOnlyIndexes: boolean;
-  /** Filter Prisma-only known indexes (test profile only). */
-  filterPrismaOnlyIndexes: boolean;
-  /** Filter migration-only tables like legacy `migrations` (test profile only). */
-  filterMigrationOnlyTables: boolean;
-  /** Apply broad column exception rules (test profile only). */
-  applyBroadColumnExceptions: boolean;
 }
 
 /**
- * Test comparison profile: used by the fingerprint test's cross-comparison
- * against the Prisma-generated schema. Broad exception rules, filtered
- * indexes, CHECK/UNIQUE excluded from main comparison.
- */
-export const TEST_COMPARISON: ComparisonConfig = {
-  includeCheckConstraints: false,
-  includeUniqueConstraints: false,
-  filterMigrationOnlyIndexes: true,
-  filterPrismaOnlyIndexes: true,
-  filterMigrationOnlyTables: true,
-  applyBroadColumnExceptions: true,
-};
-
-/**
  * Adoption comparison profile: used by the adoption command against an
- * existing production database. Strict — all migration-owned indexes and
- * CHECK/UNIQUE constraints are required, no broad exception rules.
+ * existing production database. Strict: all migration-owned indexes and
+ * CHECK/UNIQUE constraints are required.
  */
 export const ADOPTION_COMPARISON: ComparisonConfig = {
   includeCheckConstraints: true,
   includeUniqueConstraints: true,
-  filterMigrationOnlyIndexes: false,
-  filterPrismaOnlyIndexes: false,
-  filterMigrationOnlyTables: false,
-  applyBroadColumnExceptions: false,
 };
-
-// ---------------------------------------------------------------------------
-// Allowlist for known, accepted differences (test profile only)
-// ---------------------------------------------------------------------------
-
-/**
- * Known, accepted differences between the migration-derived schema and the
- * Prisma-shaped production schema. Each entry is documented with its cause.
- *
- * These broad rules apply ONLY to the test comparison profile. The adoption
- * profile uses exact tuple exceptions instead.
- *
- * 1. **`updated_at` default**: migration-added tables set
- *    `DEFAULT CURRENT_TIMESTAMP` on `updated_at` columns; Prisma's `@updatedAt`
- *    directive does not generate a database-level default.
- *
- * 2. **Timestamp type**: migration-added columns use `timestamp with time zone`
- *    (TIMESTAMPTZ) while the Prisma schema declares them as `DateTime` which
- *    Prisma maps to `timestamp(3) without time zone`.
- *
- * 3. **`expired_item_transactions.markdown_level`**: migration 0002 uses
- *    `smallint`, Prisma schema declares `Int` (maps to `integer`).
- */
-export function isKnownColumnDifference(migrationKey: string, productionKey: string): boolean {
-  const m = migrationKey.split('|');
-  const p = productionKey.split('|');
-  const column = m[1];
-
-  // `updated_at` default: migration has CURRENT_TIMESTAMP, Prisma has no default.
-  if (
-    column === 'updated_at' &&
-    m[2] === p[2] &&
-    m[3] === p[3] &&
-    m[4] === 'CURRENT_TIMESTAMP' &&
-    p[4] === 'null'
-  ) {
-    return true;
-  }
-
-  // Timestamp type: migration uses timestamptz, Prisma uses timestamp(3).
-  if (
-    m[2] === 'timestamp with time zone' &&
-    p[2] === 'timestamp(3) without time zone' &&
-    m[3] === p[3] &&
-    m[4] === p[4]
-  ) {
-    return true;
-  }
-
-  // `expired_item_transactions.markdown_level`: migration 0002 uses `smallint`,
-  // Prisma schema declares `Int` (maps to `integer`).
-  if (
-    m[0] === 'expired_item_transactions' &&
-    m[1] === 'markdown_level' &&
-    m[2] === 'smallint' &&
-    p[2] === 'integer' &&
-    m[3] === p[3] &&
-    m[4] === p[4]
-  ) {
-    return true;
-  }
-
-  // `tier_feature_flags.limit_value`: migration 0010 widens the column to
-  // `bigint` so it can hold storage_bytes tier limits (up to 100 GB) that
-  // exceed the int4 range. The Prisma production schema still declares `Int`
-  // (int4), so the migration-derived schema is intentionally wider. This is an
-  // expand-compatible widening with no data loss.
-  if (
-    m[0] === 'tier_feature_flags' &&
-    m[1] === 'limit_value' &&
-    m[2] === 'bigint' &&
-    p[2] === 'integer' &&
-    m[3] === p[3] &&
-    m[4] === p[4]
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Migration-only partial indexes that Prisma cannot express in the schema
- * definition. These are created by the migrations but absent from the
- * Prisma-generated schema.
- *
- * For the test profile, these are filtered from the index comparison.
- * For the adoption profile, these are REQUIRED — if they're missing from
- * the production database, that's a mismatch.
- */
-export const MIGRATION_ONLY_PARTIAL_INDEXES = new Set([
-  // 0004: one active cycle per org
-  "check_cycles|ON public.check_cycles USING btree (organization_id) WHERE (status = 'active'::text)|true|false|(status = 'active'::text)",
-  // 0001: one active catalogue import per org
-  "uploads|ON public.uploads USING btree (organization_id) WHERE ((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))|true|false|((import_type = 'product-catalog'::text) AND (status = ANY (ARRAY['pending'::text, 'queued'::text, 'validating'::text, 'processing'::text])))",
-  // 0019: one active inventory item per product, expiry date and location
-  "inventory_items|ON public.inventory_items USING btree (organization_id, product_id, expiry_date, location_id) WHERE (status <> ALL (ARRAY['Processed'::text, 'Completed'::text, 'Discarded'::text, 'Archived'::text, 'Sold Through'::text]))|true|false|(status <> ALL (ARRAY['Processed'::text, 'Completed'::text, 'Discarded'::text, 'Archived'::text, 'Sold Through'::text]))",
-]);
-
-/**
- * Prisma-only indexes that the migration series does not create. These are
- * known gaps — the Prisma schema declares an index that no migration adds.
- *
- * For the test profile, these are filtered from the index comparison.
- * For the adoption profile, these are NOT filtered — if the production
- * database has an index that the migration series doesn't create, it must
- * be listed as an explicit adoption exception.
- */
-export const PRISMA_ONLY_KNOWN_INDEXES = new Set([
-  'check_cycles|ON public.check_cycles USING btree (status)|false|false|null',
-]);
-
-/**
- * Tables that may exist in the migration-derived schema but not in the
- * Prisma-generated schema (or vice versa). The legacy `migrations` table
- * records the retired SQLite migration runner's history.
- *
- * For the test profile, these are filtered. For the adoption profile, they
- * are NOT filtered — both sides are migration-derived and should match.
- */
-export const MIGRATION_ONLY_TABLES = new Set(['migrations']);
 
 // ---------------------------------------------------------------------------
 // Exact adoption column exceptions
 // ---------------------------------------------------------------------------
 
 /**
- * An exact column exception for the adoption profile. Unlike the broad test
- * profile rules, this specifies the exact table, column, and expected/actual
- * definitions. An adoption exception must be investigated and documented
- * before being added.
+ * An exact column exception for the adoption profile: the exact table, column,
+ * and expected/actual definitions. An adoption exception must be investigated
+ * and documented before being added.
  */
 export interface AdoptionColumnException {
   table: string;
@@ -351,25 +189,18 @@ export interface CatalogDiff {
  * `actual` is the existing database's catalog (what's in production).
  *
  * The `config` parameter controls which exception rules and filters apply:
- * - `TEST_COMPARISON`: broad rules for Prisma-vs-migration comparison.
- * - `ADOPTION_COMPARISON`: strict rules for production database adoption.
- *
- * For the adoption profile, `adoptionColumnExceptions` provides exact
- * table/column/expected/actual tuples for accepted column differences.
+ * `adoptionColumnExceptions` provides exact table/column/expected/actual
+ * tuples for accepted column differences.
  */
 export function compareCatalogs(
   expected: CatalogStructuralKeys,
   actual: CatalogStructuralKeys,
-  config: ComparisonConfig = TEST_COMPARISON,
+  config: ComparisonConfig,
   adoptionColumnExceptions: readonly AdoptionColumnException[] = [],
 ): CatalogDiff {
   // Tables
-  const expectedTables = config.filterMigrationOnlyTables
-    ? new Set(expected.tables.filter((t) => !MIGRATION_ONLY_TABLES.has(t)))
-    : new Set(expected.tables);
-  const actualTables = config.filterMigrationOnlyTables
-    ? new Set(actual.tables.filter((t) => !MIGRATION_ONLY_TABLES.has(t)))
-    : new Set(actual.tables);
+  const expectedTables = new Set(expected.tables);
+  const actualTables = new Set(actual.tables);
   const tablesOnlyInExpected = [...expectedTables].filter((t) => !actualTables.has(t)).sort();
   const tablesOnlyInActual = [...actualTables].filter((t) => !expectedTables.has(t)).sort();
 
@@ -379,12 +210,8 @@ export function compareCatalogs(
   const colsOnlyInExpectedRaw = [...expectedColKeys].filter((k) => !actualColKeys.has(k));
   const colsOnlyInActualRaw = [...actualColKeys].filter((k) => !expectedColKeys.has(k));
 
-  const colsOnlyInExpectedFiltered = config.filterMigrationOnlyTables
-    ? colsOnlyInExpectedRaw.filter((k) => !k.startsWith('migrations|'))
-    : colsOnlyInExpectedRaw;
-  const colsOnlyInActualFiltered = config.filterMigrationOnlyTables
-    ? colsOnlyInActualRaw.filter((k) => !k.startsWith('migrations|'))
-    : colsOnlyInActualRaw;
+  const colsOnlyInExpectedFiltered = colsOnlyInExpectedRaw;
+  const colsOnlyInActualFiltered = colsOnlyInActualRaw;
 
   const columnsOnlyInExpected: string[] = [];
   const columnsOnlyInActual: string[] = [];
@@ -398,9 +225,7 @@ export function compareCatalogs(
       return `${aParts[0]}|${aParts[1]}` === tableCol;
     });
     if (matchingActual) {
-      const isKnown = config.applyBroadColumnExceptions
-        ? isKnownColumnDifference(expKey, matchingActual)
-        : matchesAdoptionException(expKey, matchingActual, adoptionColumnExceptions);
+      const isKnown = matchesAdoptionException(expKey, matchingActual, adoptionColumnExceptions);
       if (isKnown) {
         columnsWithKnownDifferences.push(
           `${tableCol}: expected=${parts.slice(2).join(',')} vs actual=${matchingActual.split('|').slice(2).join(',')}`,
@@ -431,51 +256,27 @@ export function compareCatalogs(
   const idxOnlyInExpectedRaw = setDifference(expected.indexes, actual.indexes);
   const idxOnlyInActualRaw = setDifference(actual.indexes, expected.indexes);
 
-  const idxOnlyInExpected = idxOnlyInExpectedRaw
-    .filter((k) => {
-      if (config.filterMigrationOnlyTables && k.startsWith('migrations|')) return false;
-      if (config.filterMigrationOnlyIndexes && MIGRATION_ONLY_PARTIAL_INDEXES.has(k)) return false;
-      return true;
-    })
-    .sort();
-  const idxOnlyInActual = idxOnlyInActualRaw
-    .filter((k) => {
-      if (config.filterMigrationOnlyTables && k.startsWith('migrations|')) return false;
-      if (config.filterPrismaOnlyIndexes && PRISMA_ONLY_KNOWN_INDEXES.has(k)) return false;
-      return true;
-    })
-    .sort();
+  const idxOnlyInExpected = [...idxOnlyInExpectedRaw].sort();
+  const idxOnlyInActual = [...idxOnlyInActualRaw].sort();
 
   // Constraints (FK + PK)
-  const conOnlyInExpected = setDifference(expected.constraints, actual.constraints)
-    .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
-    .sort();
-  const conOnlyInActual = setDifference(actual.constraints, expected.constraints)
-    .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
-    .sort();
+  const conOnlyInExpected = setDifference(expected.constraints, actual.constraints).sort();
+  const conOnlyInActual = setDifference(actual.constraints, expected.constraints).sort();
 
   // CHECK constraints
   const checkOnlyInExpected = config.includeCheckConstraints
-    ? setDifference(expected.checkConstraints, actual.checkConstraints)
-        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
-        .sort()
+    ? setDifference(expected.checkConstraints, actual.checkConstraints).sort()
     : [];
   const checkOnlyInActual = config.includeCheckConstraints
-    ? setDifference(actual.checkConstraints, expected.checkConstraints)
-        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
-        .sort()
+    ? setDifference(actual.checkConstraints, expected.checkConstraints).sort()
     : [];
 
   // UNIQUE constraints
   const uniqueOnlyInExpected = config.includeUniqueConstraints
-    ? setDifference(expected.uniqueConstraints, actual.uniqueConstraints)
-        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
-        .sort()
+    ? setDifference(expected.uniqueConstraints, actual.uniqueConstraints).sort()
     : [];
   const uniqueOnlyInActual = config.includeUniqueConstraints
-    ? setDifference(actual.uniqueConstraints, expected.uniqueConstraints)
-        .filter((k) => !config.filterMigrationOnlyTables || !k.startsWith('migrations|'))
-        .sort()
+    ? setDifference(actual.uniqueConstraints, expected.uniqueConstraints).sort()
     : [];
 
   // Functions and triggers
