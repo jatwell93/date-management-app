@@ -3743,9 +3743,16 @@ equivalent, a relocated home, or an explicit retirement decision.
 
 ## Phase 4 — Delete Express + Prisma + SQLite together (gated on Phases 1–3)
 
-- [ ] 4.0 Tag the last Express+SQLite-capable revision immediately before the retirement commit so the
+- [x] 4.0 Tag the last Express+SQLite-capable revision immediately before the retirement commit so the
       fallback is recoverable by `git revert`/checkout if a post-deletion regression appears. Document and
       test the exact recovery commands while the tagged revision is still present.
+      **DONE 2026-10-08.** Annotated tag `express-sqlite-last` on `1731fa25`, cut after the Express
+      suite passed there (176 files, 2020 tests, 9 skipped). Recovery commands and their
+      verification are in `docs/express-retirement-recovery.md`: a fresh worktree at the tag
+      installs and runs the Express suite (it needs `npx prisma generate` on a fresh checkout, now in
+      the steps); a deleted file is recoverable byte-for-byte from the tag; and deleting `backend/` in
+      one commit then `git revert`ing it leaves a tree identical to the tag. If 4.1 is based on a
+      later `main` commit, the tag stays valid as long as nothing since removed `backend/`.
 - [ ] 4.1 **Only once the rehoming checklist (2.5) is fully satisfied and the Phase 1 runner has proven a
       real reversible schema change and its down path (1.6)**, remove `backend/` in one controlled retirement: the Express
       server, Prisma client, `better-sqlite3`, the Prisma **base** (SQLite) schema, the runtime
