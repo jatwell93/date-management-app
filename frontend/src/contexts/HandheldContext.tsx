@@ -6,7 +6,6 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { IHandheldContext } from '../types/handheld';
 import { useHandheldDetection } from '../hooks/useHandheldDetection';
 import { SYNC_STRATEGIES, STORAGE_KEYS, DEFAULTS } from '../config/handheld';
-import { offlineSyncService } from '../lib/offline-sync';
 
 type SyncStrategy = (typeof SYNC_STRATEGIES)[keyof typeof SYNC_STRATEGIES];
 
@@ -50,9 +49,6 @@ export const HandheldProvider: React.FC<HandheldProviderProps> = ({ children }) 
   const setSyncStrategy = useCallback((strategy: SyncStrategy) => {
     setSyncStrategyState(strategy);
     localStorage.setItem(STORAGE_KEYS.SYNC_STRATEGY, strategy);
-
-    // Update the offline sync service with the new strategy
-    offlineSyncService.setSyncStrategy(strategy);
   }, []);
 
   // Haptic enabled setter

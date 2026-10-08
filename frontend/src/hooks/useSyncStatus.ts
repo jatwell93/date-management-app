@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPendingInventoryItemCount } from '../lib/sync-manager';
-import { offlineSyncService } from '../lib/offline-sync';
 
 export function useSyncStatus(isLoggedIn: boolean): {
   isOnline: boolean;
@@ -12,11 +11,9 @@ export function useSyncStatus(isLoggedIn: boolean): {
 
   const refreshPendingQueueCount = useCallback(async () => {
     try {
-      const pendingInventoryCount = await getPendingInventoryItemCount();
-      const operationQueueCount = offlineSyncService.getPendingOperationCount();
-      setPendingQueueCount(pendingInventoryCount + operationQueueCount);
+      setPendingQueueCount(await getPendingInventoryItemCount());
     } catch (_error) {
-      setPendingQueueCount(offlineSyncService.getPendingOperationCount());
+      setPendingQueueCount(0);
     }
   }, []);
 
