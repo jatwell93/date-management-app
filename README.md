@@ -1,28 +1,25 @@
 # Date Management Application
 
-Full-stack expiry and inventory management app for pharmacy operations. The workspace contains a React frontend, an Express/TypeScript backend, Cloudflare Workers edge API code, Prisma-backed data access, local SQLite development, Neon PostgreSQL production workflows, and Cloudflare R2 upload storage.
+Full-stack expiry and inventory management app for pharmacy operations. The workspace contains a React frontend, the Cloudflare Workers API (the only backend), Neon PostgreSQL with a SQL migration runner, and Cloudflare R2 upload storage. The earlier Express/Prisma/SQLite backend is retired (tag `express-sqlite-last`).
 
 ## Start Here
 
 For daily development, use:
 
-- [backend/README.md](backend/README.md) - backend setup, scripts, database, storage, and deployment notes
 - [frontend/README.md](frontend/README.md) - frontend setup and CRA workflow
-- [workers/README.md](workers/README.md) - Cloudflare Workers implementation and deployment
+- [workers/README.md](workers/README.md) - Cloudflare Workers API: local dev, configuration, deployment
+- [docs/migrations.md](docs/migrations.md) - database migration runner
 - [docs/DOCUMENTATION_QUICK_REFERENCE.md](docs/DOCUMENTATION_QUICK_REFERENCE.md) - documentation index by role and task
-- [AGENTS.md](AGENTS.md) - project rules for AI-assisted Express/TypeScript work
+- [AGENTS.md](AGENTS.md) - project rules for AI-assisted work
 
 ## Quick Setup
 
 ```bash
-# Backend
-cd backend
+# Workers API (needs workers/.dev.vars; see workers/README.md)
+cd workers
 npm install
-cp .env.example .env
-npm run migrate
-npm run seed
-npm run seed:tier-flags
-npm run dev
+cp .dev.vars.example .dev.vars
+npm run dev:local
 ```
 
 ```bash
@@ -33,7 +30,7 @@ npm start
 ```
 
 ```bash
-# Workers
+# Workers checks
 cd workers
 npm install
 npm run test
@@ -44,18 +41,11 @@ npm run build
 
 ```text
 .
-├── backend/
-│   ├── src/
-│   │   ├── controllers/      # HTTP request handlers
-│   │   ├── routes/           # Express route definitions
-│   │   ├── services/         # Business logic
-│   │   ├── repositories/     # Data access
-│   │   ├── database/         # Database client factories
-│   │   ├── middleware/       # Auth, validation, rate limiting
-│   │   ├── storage/          # Local/R2 storage providers
-│   │   └── tests/            # Jest tests
-│   ├── prisma/               # Prisma schema and migrations
-│   └── docs/                 # Backend-specific operations guides
+├── src/
+│   ├── database/migrations/  # Migration runner and CLIs
+│   └── operations/           # Operator scripts (webhook diagnostics, catalogue seed)
+├── database/migrations/      # Numbered .up.sql / .down.sql history
+├── shared/                   # Domain logic shared by frontend and Workers
 ├── frontend/
 │   └── src/
 │       ├── components/       # React UI components
@@ -64,7 +54,7 @@ npm run build
 │       ├── hooks/            # React hooks
 │       └── theme/            # Semantic design tokens
 ├── workers/
-│   └── src/                  # Cloudflare Workers API handlers and middleware
+│   └── src/                  # Cloudflare Workers API: routes, SQL, auth, billing, jobs
 ├── docs/                     # Project documentation and runbooks
 └── openspec/                 # Active and archived project change specs
 ```
@@ -73,7 +63,7 @@ npm run build
 
 - Inventory, product, store-area, expiry, and markdown workflows.
 - CSV/XLSX upload processing with validation, storage quota checks, and R2/local storage support.
-- Multi-tenant organization isolation with Clerk-backed auth context, tenant-scoped services, and role-aware access control.
+- Multi-tenant organization isolation with Clerk-backed auth context, tenant-scoped queries, and role-aware access control.
 - Subscription, trial, billing, dunning, and Stripe webhook flows.
 - Reporting, dashboard, usage, monitoring, and operational metrics.
 - PWA/offline scanning workflows, handheld scanner support, and semantic brand token enforcement.
@@ -85,9 +75,8 @@ Run these from the repository root unless noted.
 
 | Task                   | Command                          |
 | ---------------------- | -------------------------------- |
-| Backend tests          | `npm run test:backend`           |
-| Backend changed tests  | `npm run test:backend:diff`      |
-| Backend coverage       | `npm run test:backend:coverage`  |
+| Workers SQL tests      | `npm run test:db`                |
+| Migration tests        | `npm run test:migrations`        |
 | Frontend changed tests | `npm run test:frontend:diff`     |
 | Frontend coverage      | `npm run test:frontend:coverage` |
 | Frontend build         | `npm run build:frontend`         |
@@ -115,8 +104,8 @@ Key references:
 
 - Work from feature branches, not `main`.
 - Track scoped changes in OpenSpec.
-- Keep controllers thin and put business logic in services.
-- Prefer repositories/data-access helpers over direct database work in controllers.
+- Tenant data access goes through `workers/src/database.ts`, with `organizationId` as the first parameter.
+- Schema changes are numbered migrations in `database/migrations/` (see `docs/migrations.md`).
 - Write tests before production code for behavior changes.
 - Do not commit secrets or production credentials.
 

@@ -3855,8 +3855,12 @@ equivalent, a relocated home, or an explicit retirement decision.
       lint rule (none exist in live code) were replaced with the real pattern. `AGENTS.md`: one stale
       `backend/src` ast-grep scope fixed; the other hits are intentional. The PR template has no
       triplicated-schema or parity rule (fixed in #586), so 5.2 needed no template edit.
-- [ ] 5.3 Update `workers/README.md` (remove the "reuse 100% of the backend via express-adapter" framing;
+- [x] 5.3 Update `workers/README.md` (remove the "reuse 100% of the backend via express-adapter" framing;
       document the Worker as the sole API, the local-dev-on-Postgres flow, and where jobs/scripts now live).
+      **DONE 2026-10-09.** `workers/README.md` rewritten: the Worker is the sole API, with the real
+      layout, request pipeline, cron/queues and test commands; the Express adapter, stale defaults and
+      "import backend routes" roadmap are gone. Root `README.md` (part of 5.3a) fixed in the same change;
+      the `docs/` sweep remains.
 - [ ] 5.3a Update or explicitly retire all dual-environment/Express/SQLite guidance in root `README.md`,
       `AGENTS.md`, `docs/` developer, environment, QA, troubleshooting, security, deployment, backup and
       operational runbooks. Rehome still-valid material from `backend/docs/` before deleting the directory.
