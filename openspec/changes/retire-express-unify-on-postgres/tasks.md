@@ -3845,10 +3845,16 @@ equivalent, a relocated home, or an explicit retirement decision.
 
 ## Phase 5 — Conventions & closeout
 
-- [ ] 5.1 Rewrite `openspec/project.md` golden rules 5 & 6 for a single backend / single migration path,
+- [x] 5.1 Rewrite `openspec/project.md` golden rules 5 & 6 for a single backend / single migration path,
       naming the Phase 1 runner as the authoritative mechanism (replacing `prisma db push`).
-- [ ] 5.2 Update the PR/contribution checklist to drop the triplicated-schema and dual-backend-parity
+- [x] 5.2 Update the PR/contribution checklist to drop the triplicated-schema and dual-backend-parity
       rules and replace them with the single-backend equivalents.
+      **DONE 2026-10-09.** `openspec/project.md` rules 5 and 6 now describe one Worker and one
+      migration path (runner in `src/database/migrations/`, history in `database/migrations/`). The stale
+      Prisma `tenant(orgId)` snippet, `createOrgFixtures`/`TEST_AUTH_BYPASS` and the `no-client-organization-id`
+      lint rule (none exist in live code) were replaced with the real pattern. `AGENTS.md`: one stale
+      `backend/src` ast-grep scope fixed; the other hits are intentional. The PR template has no
+      triplicated-schema or parity rule (fixed in #586), so 5.2 needed no template edit.
 - [ ] 5.3 Update `workers/README.md` (remove the "reuse 100% of the backend via express-adapter" framing;
       document the Worker as the sole API, the local-dev-on-Postgres flow, and where jobs/scripts now live).
 - [ ] 5.3a Update or explicitly retire all dual-environment/Express/SQLite guidance in root `README.md`,

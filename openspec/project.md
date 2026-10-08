@@ -7,7 +7,7 @@ status: draft
 
 # Purpose
 
-Define canonical conventions for **tenant-scoped development** across backend, workers, and frontend layers so that any engineer can quickly reason about data isolation.
+Define canonical conventions for **tenant-scoped development** across the Worker API and frontend layers so that any engineer can quickly reason about data isolation.
 
 ## Golden Rules
 
@@ -15,25 +15,23 @@ Define canonical conventions for **tenant-scoped development** across backend, w
 2. **Service Boundary = Tenant Boundary** – every service method requires active org context.
 3. **Delete = Cascade** – FK relations specify `onDelete: CASCADE` to prevent orphan data.
 4. **Logs & Metrics include `organizationId`** – necessary for tenant-level debugging.
-5. **Dual-backend parity is explicit** – logic implemented in both `workers/` and `backend/` sources shared values from `shared/domain/*` and has a conformance test that compares PostgreSQL/pglite and SQLite outputs, including row order.
-6. **Schema changes stay triplicated intentionally** – a column/table/index change represented in `backend/prisma/schema.prisma`, hand-written Neon SQL under `backend/prisma/neon-sql/*.sql` (+ rollback), and runtime SQLite migrations under `backend/src/migrations/` must be kept in sync. Production is authoritative through `npm run migrate:prod` (`prisma db push`); `prisma/neon-sql` is review/operator SQL, not a Prisma-managed migration folder.
+5. **One API, one source of truth** – the API is the Cloudflare Worker in `workers/` on Neon Postgres. Logic shared with the frontend lives in `shared/domain/*`, and behaviour that depends on SQL is covered by a real-SQL test (`npm run test:db`, pglite), including row order. The Express/SQLite backend is retired; the last revision is the tag `express-sqlite-last`.
+6. **Schema changes go through one migration path** – a column/table/index change is a numbered pair `database/migrations/NNNN_*.up.sql` and `.down.sql`, applied by the runner in `src/database/migrations/`, which is the authority. Update the manifest and catalog fingerprint with it (`npm run test:migrations` checks both).
 
-## Backend Patterns
+## Worker Patterns
 
-| Pattern                           | Implementation                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------- |
-| **OrganizationContextMiddleware** | Sets `req.organizationId` from Clerk claim → used downstream                 |
-| **tenant(orgId)** helper          | Prisma extension adding `{ where: { organizationId: orgId } }` automatically |
-| **LimitError**                    | Thrown when usage exceeds tier limits; caught by `errorHandler` → 409        |
+| Pattern                            | Implementation                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **`authenticateApiRequest`**       | Verifies the Clerk token, then reads `organization_id` and `role` from the `users` row (`workers/src/index-minimal.ts`)  |
+| **Explicit `organizationId`**      | First, required parameter on every tenant-data method in `workers/src/database.ts`; each query filters `organization_id` |
+| **`checkOrganizationEntitlement`** | Gates the request on the organization's subscription state before the handler runs                                       |
 
 Example:
 
 ```ts
-export function listInventory(req: Request, res: Response) {
-  const orgId = getOrgId(req);
-  const items = prisma.inventoryItem.tenant(orgId).findMany();
-  res.json(items);
-}
+const auth = await authenticateApiRequest(request, env, db);
+if (auth instanceof Response) return auth;
+const items = await db.findInventoryItems(auth.organizationId, { limit, offset });
 ```
 
 ## Frontend Patterns
@@ -44,18 +42,14 @@ export function listInventory(req: Request, res: Response) {
 
 ## Database Naming
 
-- Tables: singular PascalCase (`Product`)
-- Tenant key: `organizationId` (UUID, indexed)
+- Tables: plural snake_case (`products`, `inventory_items`)
+- Tenant key: `organization_id` (indexed); the Worker maps it to `organizationId` in results
 
 ## Testing
 
-- Helpers: `createOrgFixtures(count)` returns seeded org IDs.
-- Integration tests always use `TEST_AUTH_BYPASS` with default `'default-org'` unless overriding.
-
-## Lint Rule (eslint-plugin-local)
-
-`no-client-organization-id` — forbids `req.body.organizationId` usage in controllers.
+- Tenant-isolation tests seed rows for a second organization and assert they never appear (`npm run test:db`, pglite).
+- Mutation-verify a new isolation test: remove the `organization_id` predicate and confirm the test fails.
 
 ---
 
-_Last reviewed: Jun 2026_
+_Last reviewed: Oct 2026_
