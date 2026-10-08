@@ -1,216 +1,118 @@
-# Rollback Procedure: Cloudflare Workers → VPS Express
+# Rollback Procedure: Cloudflare Worker
 
 ## Overview
 
-This procedure documents how to quickly revert from production Cloudflare Workers deployment back to the VPS/Express server. Use this shit hits the fan:
+Use this procedure when a production deploy of the Worker (`workers/`) is causing errors and you need to return to a known-good state.
 
-- Cloudflare Workers deployment has critical bugs requiring immediate rollback
-- R2 or Neon integration is causing cascade failures
-- Need to return to last-known-good VPS deployment
+The Worker is the only API. There is no fallback server. The earlier VPS/Express rollback target is retired; the last Express revision is the tag `express-sqlite-last` and is for reading or recovery only, not for serving traffic (see [`express-retirement-recovery.md`](./express-retirement-recovery.md)). The March 2026 drill of the old VPS procedure is kept unedited as a dated record in [`rollback-drill-2026-03-07.md`](./rollback-drill-2026-03-07.md).
 
-**Expected Duration**: 15-30 minutes total (mostly DNS propagation time)  
-**Downtime**: 5-10 minutes during DNS switch  
-**Data Loss Risk**: None (all data remains in Neon, is backed up, and can be recovered)
+Rollback has three layers. Work them in order, and stop at the first one that fixes the problem:
+
+1. **Worker rollback**: redeploy known-good code. Fastest. No database change.
+2. **Forward-fix migration**: a new migration that corrects a bad schema change.
+3. **Neon restore**: catastrophic only (data corruption).
+
+Do not default to a down migration. Down migrations are manual-only and destructive.
+
+The full decision tree, thresholds and commands live in [`migrations-deploy-runbook.md`](./migrations-deploy-runbook.md), Step 4. This page is the short operator path.
+
+**Data loss risk**: none for layer 1. Layers 2 and 3 are covered by [`neon-backup-restore.md`](./neon-backup-restore.md).
 
 ---
 
 ## Prerequisites
 
-Before executing rollback, ensure:
-
-- [ ] VPS server is running and accessible (SSH into VPS to verify)
-- [ ] Express server is configured in production mode
-- [ ] PostgreSQL/SQLite database connection is tested
-- [ ] `.env` file on VPS is up-to-date with current API keys
-- [ ] Domain registrar or DNS provider access is available
-- [ ] Team is aware of rollback (post to #incidents Slack channel)
+- [ ] GitHub access to run the `Deploy Workers API` workflow (Actions tab)
+- [ ] The SHA of the last known-good deploy
+- [ ] Access to Sentry and Cloudflare Workers logs
+- [ ] Team is aware of the rollback (post in the incident channel)
 
 ---
 
 ## Step-by-Step Rollback
 
-### Phase 1: Verification (5 minutes)
-
-**1.1 SSH into VPS and verify Express server**
+### Phase 1: Confirm the problem
 
 ```bash
-ssh root@your-vps-ip
+# Health check (deep also checks R2 and the database)
+curl https://<api-host>/health
+curl "https://<api-host>/health?deep=true"
 
-# Navigate to app directory
-cd /home/date-management-app
-
-# Verify Express server is not already running
-pm2 list
-
-# If it's not running (Linux/macOS):
-NODE_ENV=production npm run start
-# Or if using PM2:
-pm2 start ecosystem.config.js --env production
-
-# Windows command shell equivalent:
-cmd /c set NODE_ENV=production&& npm start
+# Live logs
+cd workers
+npm run tail:prod
 ```
 
-**Expected Output**: Express server starts without errors, listens on configured port.
+Check Sentry for new unresolved fatal issues, and the 5xx rate against the thresholds in the runbook (Step 3, "Stop / rollback thresholds").
 
-**1.2 Verify database connectivity**
+### Phase 2: Worker rollback (layer 1)
+
+Choose one:
 
 ```bash
-# From VPS, test liveness and readiness probes
-curl http://localhost:3000/health/live
-curl http://localhost:3000/health/ready
-
-# Detailed health endpoint (tier flags + DB):
-curl http://localhost:3000/health/health
+# Option 1: revert the merge commit on main.
+# A merge to main redeploys the Worker (about 35 minutes including migration prep).
+git revert <merge-sha>
+git push origin main
 ```
 
-**1.3 Verify frontend can reach VPS** (if available)
+```text
+# Option 2: manual workflow_dispatch from a known-good SHA.
+# Actions -> Deploy Workers API -> Run workflow
+# Set "Use workflow from" to the known-good SHA.
+# Always available; not gated by PRODUCTION_AUTO_DEPLOY_ENABLED.
+```
+
+Use Option 2 when you cannot wait for a revert to go through review. Migrations are expand-compatible, so the previous Worker works against the current schema.
+
+### Phase 3: Stop scheduled jobs if they are part of the problem
+
+The hourly cron runs jobs that write data (Stripe reconciliation, emails, markdown recalculation). To stop all of them without a deploy:
 
 ```bash
-# From local machine, test connectivity to VPS
-curl http://your-vps-domain.com/health/live
-# Should return 200 success
+cd workers
+wrangler secret put SCHEDULED_JOBS_DISABLED --env production
+# enter: true
 ```
 
----
+It takes effect on the next tick. Delete the secret (or set it to anything other than `true`) to re-enable.
 
-### Phase 2: DNS Switchover (10 minutes)
+### Phase 4: Schema or data problem
 
-**2.1 Update DNS A record to point to VPS**
+- If the schema change itself is broken, write a forward-fix migration (runbook Step 4b).
+- If data is corrupted, restore from a Neon snapshot (runbook Step 4c, and [`neon-backup-restore.md`](./neon-backup-restore.md)). The restore swaps in for the production branch and keeps the connection string, so the Worker does not need repointing.
 
-Access your domain registrar or DNS provider (Cloudflare, Route53, GoDaddy, etc.):
-
-| Current (Cloudflare Workers)  | New (VPS)                             |
-| ----------------------------- | ------------------------------------- |
-| CNAME → workers.dev subdomain | A record → `xxx.xxx.xxx.xxx` (VPS IP) |
-
-**Steps:**
-
-1. Log in to DNS provider dashboard
-2. Find your domain's DNS settings
-3. Locate the A record for `api.yourdomain.com` (or your API subdomain)
-4. Change value to VPS IP address
-5. Set TTL to 300 seconds (5 minutes) for faster propagation
-6. Save/Apply changes
-
-**Expected**: DNS change visible within 1-5 minutes (varies by provider)
-
-**2.2 Verify DNS propagation**
+### Phase 5: Verify
 
 ```bash
-# From local machine, repeatedly check DNS
-nslookup api.yourdomain.com
-# or
-dig api.yourdomain.com
-
-# Watch for IP address changing to VPS IP
-# Repeat every 30 seconds until updated
+curl https://<api-host>/health
+curl "https://<api-host>/health?deep=true"
 ```
 
----
-
-### Phase 3: Frontend Configuration Switch (5 minutes)
-
-**3.1 Update frontend API URL to point to VPS**
-
-In frontend `.env` file:
-
-```env
-# Before (Cloudflare Workers)
-REACT_APP_API_URL=https://api.yourdomain.com  # resolves to Cloudflare Workers
-
-# After (VPS)
-REACT_APP_API_URL=https://api.yourdomain.com  # now resolves to VPS IP
-```
-
-**3.2 Rebuild and redeploy frontend**
-
-```bash
-# If using static hosting (Vercel, Netlify, GitHub Pages):
-npm run build
-# Upload build/ directory to hosting provider
-# (most providers auto-deploy on push to main)
-
-# If using traditional server hosting:
-npm run build
-scp -r build/* root@frontend-server:/var/www/html/
-# Restart nginx or apache
-ssh root@frontend-server "systemctl restart nginx"
-```
-
-**Expected**: Frontend starts loading data from VPS API
-
----
-
-### Phase 4: Verification (5 minutes)
-
-**4.1 Test API endpoints from browser/Postman**
-
-```bash
-# Test liveness/readiness endpoints (public)
-curl https://api.yourdomain.com/health/live
-curl https://api.yourdomain.com/health/ready
-curl https://api.yourdomain.com/health/health
-
-# Test product list (requires auth)
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  https://api.yourdomain.com/api/products
-
-# Test CSV upload endpoint (requires auth)
-curl -X POST \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "file=@test.csv" \
-  https://api.yourdomain.com/api/upload
-```
-
-**Expected**: Liveness returns 200, readiness/health reflect configuration state, protected endpoints return 200 with valid token.
-
-**4.2 Test frontend user flows**
-
-1. Open frontend in browser
-2. Log in with test user
-3. Navigate to dashboard - should load product data
-4. Upload a test CSV file - should process and store
-
-**Expected**: All user-facing flows work without errors
-
-**4.3 Monitor error logs**
-
-```bash
-# SSH into VPS
-ssh root@your-vps-ip
-
-# Check Express server logs for errors
-pm2 logs
-
-# Look for any ERROR or WARN messages
-# Should see only normal API requests
-```
+1. Sign in to the frontend with a test user.
+2. The dashboard loads product data.
+3. Upload a small CSV; it processes and stores.
+4. Sentry shows no new fatal issues and the 5xx rate is back to normal.
 
 ---
 
 ## Emergency Abort (If Rollback Fails)
 
-If any step fails:
-
-1. **Immediately revert DNS**: Point A record back to Cloudflare Workers IP
-2. **Restart Workers deployment**: `wrangler deploy` from local
-3. **Revert frontend env vars**: Set `REACT_APP_API_URL` back to Workers subdomain
-4. **Rebuild frontend**: `npm run build && npm run deploy`
-5. **Post incident**: Document what failed for post-mortem
+1. Stop further deploys: do not merge to main until the cause is known.
+2. Redeploy the last SHA that was known-good before the incident using Option 2.
+3. If the new deploy made it worse, redeploy the SHA from before the first bad one.
+4. Post the incident status and escalate per the [Incident Response Plan](./incident-response-plan.md).
 
 ---
 
 ## Post-Rollback Tasks
 
-**After successful rollback, complete these:**
-
-- [ ] **Stop Workers deployment**: Deploy empty Workers endpoint or update router to return 410 Gone
-- [ ] **Log incident**: Create incident ticket with timestamp and reason
-- [ ] **Notify customers**: Post update to status page
-- [ ] **Preserve logs**: Download Workers logs for debugging before disabling
-- [ ] **Schedule incident review**: Post-mortem within 24 hours
-- [ ] **Update runbook**: Document any new learnings
+- [ ] **Log incident**: create an incident ticket with timestamp and reason
+- [ ] **Notify customers**: post an update to the status page
+- [ ] **Preserve logs**: save Workers logs and the Sentry issue links
+- [ ] **Re-enable scheduled jobs** if you disabled them
+- [ ] **Schedule incident review**: post-mortem within 24 hours
+- [ ] **Update runbook**: record anything new
 
 ---
 
@@ -221,41 +123,30 @@ If any step fails:
 
 ### Prerequisites
 
-- [ ] VPS SSH access verified
-- [ ] Express server started and healthy
-- [ ] Database connectivity confirmed
-- [ ] DNS provider access available
-- [ ] Team notified in #incidents
+- [ ] Known-good SHA identified
+- [ ] Team notified in the incident channel
 
-### DNS Switchover
+### Rollback
 
-- [ ] DNS A record updated to VPS IP
-- [ ] DNS propagation verified (nslookup/dig)
-- [ ] TTL set to 300 seconds
-
-### Frontend Update
-
-- [ ] Frontend .env updated to point to VPS API_URL
-- [ ] Frontend rebuilt (npm run build)
-- [ ] Frontend redeployed
+- [ ] Worker redeployed from known-good SHA (or revert merged)
+- [ ] Deploy workflow finished green
+- [ ] Scheduled jobs disabled (if needed)
 
 ### Verification
 
-- [ ] API liveness responds (GET /health/live)
-- [ ] API readiness checked (GET /health/ready)
-- [ ] Detailed health checked (GET /health/health)
-- [ ] Product list loads (GET /api/products)
-- [ ] CSV upload works (POST /api/upload)
+- [ ] GET /health responds
+- [ ] GET /health?deep=true responds
 - [ ] Frontend login successful
 - [ ] Dashboard loads product data
-- [ ] No errors in Express logs
+- [ ] CSV upload works
+- [ ] No new fatal issues in Sentry
 
 ### Post-Rollback
 
-- [ ] Workers deployment stopped/disabled
 - [ ] Incident logged with timestamp
 - [ ] Customer notification posted to status page
-- [ ] Logs preserved for debugging
+- [ ] Logs preserved
+- [ ] Scheduled jobs re-enabled
 - [ ] Post-mortem scheduled for 24 hours
 
 **Rollback Completed**: **\_** (timestamp)  
@@ -267,78 +158,29 @@ If any step fails:
 
 ## Monitoring During Rollback
 
-Watch these metrics during rollback:
+| Metric            | Normal | Alert |
+| ----------------- | ------ | ----- |
+| API response time | <500ms | >2s   |
+| Error rate        | <0.1%  | >1%   |
 
-| Metric                   | Normal      | Alert    |
-| ------------------------ | ----------- | -------- |
-| API Response Time        | <500ms      | >2s      |
-| Error Rate               | <0.1%       | >1%      |
-| Database Connection Pool | 5-10 active | >15 or 0 |
-| Memory Usage             | <60%        | >80%     |
-| CPU Usage                | <40%        | >70%     |
+If alerts persist, check:
 
-If alerts trigger, check:
-
-1. Database connection string (verify PostgreSQL running)
-2. API key/auth settings in .env
-3. Express server logs for errors
-4. VPS disk space (errors if <5% free)
-5. Network connectivity (ping VPS from local)
-
----
-
-## Recovery from Partial Rollback
-
-**If DNS is updated but API is unreachable:**
-
-```bash
-# Immediately revert DNS
-# (takes precedence over infrastructure issues)
-
-# Then fix API:
-ssh root@your-vps-ip
-pm2 logs             # Check error
-pm2 restart app      # Restart Express
-pm2 status           # Verify it's running
-
-# Retry from Phase 2 (DNS verification)
-```
-
-**If frontend won't load after ENV change:**
-
-```bash
-# Clear browser cache
-# Hard refresh: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
-
-# If still breaks, check frontend build
-npm run build
-npm start  # test locally before deploying
-```
+1. Worker secrets are present (`wrangler secret list --env production`)
+2. Neon branch status and compute (scale-to-zero cold starts are expected)
+3. Hyperdrive binding and connection string
+4. Clerk and Stripe status pages
 
 ---
 
 ## Related Procedures
 
+- **[Migrations deploy runbook](./migrations-deploy-runbook.md)** - Step 4, the full rollback decision tree
 - **[Restore from Neon Backup](./neon-backup-restore.md)** - If data corruption during rollback
 - **[Master Disaster Recovery Plan](./disaster-recovery.md)** - Complete failure scenarios
 - **[Incident Response Plan](./incident-response-plan.md)** - Escalation and team contacts
 
 ---
 
-## Appendix: VPS Server Details
-
-| Component           | Location                     | Command                         |
-| ------------------- | ---------------------------- | ------------------------------- |
-| **Express App**     | `/home/date-management-app`  | `npm run start`                 |
-| **Environment**     | `.env` (production)          | Update API keys here            |
-| **Database**        | PostgreSQL/SQLite            | `psql` or `sqlite3`             |
-| **Logs**            | `pm2 logs`                   | Monitor in real-time            |
-| **Process Manager** | PM2                          | `pm2 start ecosystem.config.js` |
-| **Nginx (if used)** | `/etc/nginx/sites-available` | `systemctl restart nginx`       |
-| **SSL Cert**        | Let's Encrypt                | Auto-renewal via certbot        |
-
----
-
-**Last Updated**: March 7, 2026  
+**Last Updated**: October 9, 2026  
 **Next Review**: Quarterly (before each disaster recovery drill)  
 **Owner**: DevOps / On-Call Engineer

@@ -28,51 +28,35 @@
 - npm ≥9.x
 - Git
 
-**Quick Setup (30 minutes):**
+**Setup:**
 
 ```bash
 # 1. Clone the repository
 git clone <repository-url>
 cd date-management-app
 
-# 2. Run automated setup
-cd backend
-npm run setup
-
-# This script will:
-# - Check Node.js version
-# - Install dependencies
-# - Create .env from .env.example
-# - Run database migrations
-# - Seed test data
-# - Run initial tests
-```
-
-**Manual Setup (if needed):**
-
-```bash
-# Install dependencies
+# 2. Install dependencies for each package
 npm install
+(cd workers && npm install)
+(cd frontend && npm install)
 
-# Set up environment
-cp .env.example .env
+# 3. Configure the Worker (your own Neon branch)
+cd workers
+cp .dev.vars.example .dev.vars
+# Fill in NEON_CONNECTION_STRING, JWT_SECRET, CLERK_SECRET_KEY.
+# Keep secrets out of git.
+cd ..
 
-# Review and update .env with your settings
-# At minimum, ensure these are set:
-# - NODE_ENV=development
-# - JWT_SECRET=dev-secret-change-in-production
-# - PORT=3001
+# 4. Apply migrations to YOUR development Neon branch. The migrate:* commands
+#    need DATABASE_URL_UNPOOLED and the MIGRATION_* guards set (see
+#    docs/migrations.md section 2). Never point them at production.
+npm run migrate:status
 
-# Run migrations
-npm run migrate
-
-# Seed test data
-npm run seed
-npm run seed:tier-flags
-
-# Verify setup
-npm test
+# 5. Verify setup
+npm run test:db
 ```
+
+The Worker is the only API, and it runs against Postgres (Neon). There is no local SQLite database. See [`workers/README.md`](../workers/README.md) for what `npm run dev:local` simulates and what needs a real Neon branch, and [`migrations.md`](./migrations.md) for the migration commands and their environment contracts.
 
 ---
 
@@ -84,35 +68,25 @@ npm test
 # Start the Worker as the local dev API (the frontend targets it on :8787):
 npm run dev:local --prefix workers   # serves http://localhost:8787
 
-# Start backend development server (from backend/) — Express, still present
-# until Phase 4 of retire-express-unify-on-postgres:
-npm run dev
-
-# Server runs on http://localhost:3001
-# Auto-reloads on file changes
+# Start the frontend (separate terminal):
+npm start --prefix frontend          # serves http://localhost:3002
 ```
 
 ### Environment Variables
 
-The app loads environment variables from:
-
-1. `.env` - General settings
-2. `.env.development` - Development-specific (loaded when NODE_ENV=development)
-3. `.env.production` - Production-specific (loaded when NODE_ENV=production)
+- Worker: `workers/.dev.vars` (local) and `wrangler secret` / `workers/wrangler.toml` vars (deployed)
+- Frontend: `frontend/.env` or Doppler `dev`
+- Migration tooling: the shell environment (see `docs/migrations.md`)
 
 **Development defaults:**
 
-- Database: SQLite (`database.sqlite`)
-- Storage: Local filesystem (`./uploads`)
+- Database: your own Neon branch
+- Storage: `STORAGE_PROVIDER=local` (Miniflare's local R2 emulation)
 - Auth: Clerk (development keys)
 
 ### Auto-Reload
 
-The dev server uses `nodemon` to watch for changes:
-
-- **Watches:** `src/`, `.env`, `.env.development`
-- **Extensions:** `.ts`, `.json`
-- **Debounce:** 2 seconds
+`wrangler dev` reloads the Worker when you save. The frontend dev server reloads on save too.
 
 **Tip:** If auto-reload isn't working, restart the dev server.
 
@@ -123,27 +97,27 @@ The dev server uses `nodemon` to watch for changes:
 ### Test Commands
 
 ```bash
-# Run all tests (development database - SQLite)
-npm run test:dev
+# Worker unit and handler tests (vitest)
+(cd workers && npm test)
 
-# Run tests with coverage report
-npm run test:coverage
+# Real-SQL tests against the authoritative migrations (pglite)
+npm run test:db
 
-# Run only tests that changed (fast CI)
-npm run test:diff
+# Type-check the Worker including test files (CI runs this)
+(cd workers && npm run typecheck)
 
-# Run tests in watch mode (re-run on file change)
-npm run test:watch
+# Frontend tests for changed files
+npm run test:frontend:diff
 
-# Run tests with verbose output
-npm run test:verbose
+# Migration runner tests, and operator-tool tests
+npm run test:migrations
+npm run test:operations
 
-# Run tests against production database (PostgreSQL via Neon)
-npm run test:prod
-
-# Run tests on both databases (comprehensive)
-npm run test:both
+# Repo tooling tests
+npm run test:tooling
 ```
+
+Do not run `npm run test:prod` or `npm run test:both`: they target the production database. There is no root `npm test`; it errors by design.
 
 ### Writing Tests
 
@@ -153,41 +127,35 @@ npm run test:both
 2. **GREEN:** Write minimal code to pass
 3. **REFACTOR:** Clean up without breaking tests
 
-**Test structure:**
+**Where tests go:**
+
+- Pure logic shared with the frontend: `shared/domain/*.test.ts`
+- Handler behavior with a fake `Database`: `workers/src/*.test.ts`
+- Anything in `workers/src/database.ts`: a real-SQL test, `workers/src/*.pglite.node.test.ts`, run by `npm run test:db`
+
+**Real-SQL test shape:**
 
 ```typescript
-// src/__tests__/services/my-service.test.ts
-import { MyService } from '../../services/my-service';
+// workers/src/database.my-feature.pglite.node.test.ts
+import { createPgliteHarness, seedOrganization } from './__tests__/pglite-db';
 
-describe('MyService', () => {
-  describe('methodName', () => {
-    it('should do expected behavior', () => {
-      // Arrange
-      const service = new MyService();
-      const input = {
-        /* test data */
-      };
-
-      // Act
-      const result = service.methodName(input);
-
-      // Assert
-      expect(result).toBe(expected);
-    });
-
-    it('should handle edge case', () => {
-      // Test edge cases, errors, boundaries
-    });
+describe('my feature', () => {
+  it('does not return another organization rows', async () => {
+    const harness = await createPgliteHarness();
+    await seedOrganization(harness.pg, 'org-a');
+    await seedOrganization(harness.pg, 'org-b');
+    // Seed a row for org-b that WOULD be returned if the predicate regressed,
+    // then act as org-a and assert on identity, not just count.
   });
 });
 ```
 
 **Testing guidelines:**
 
-- ✅ Test business logic in services
-- ✅ Test validation logic
+- ✅ Test business logic and validation
 - ✅ Test error handling
-- ✅ Mock external dependencies
+- ✅ Seed a second organization for any tenant data
+- ✅ Prove a new test can fail: remove the line it guards and watch it fail
 - ✅ Use descriptive test names
 - ❌ Don't test implementation details
 - ❌ Don't test external libraries
@@ -197,11 +165,11 @@ describe('MyService', () => {
 **Target:** >80% coverage for new code
 
 ```bash
-# Generate coverage report
-npm run test:coverage
+# Worker coverage
+npm run test:coverage --prefix workers
 
-# Open coverage report in browser
-open coverage/lcov-report/index.html
+# Frontend coverage
+npm run test:frontend:coverage
 ```
 
 ---
@@ -210,59 +178,54 @@ open coverage/lcov-report/index.html
 
 ### Migrations
 
+Schema changes are numbered SQL migrations applied by the runner in `src/database/migrations/`. Production changes go through the deploy workflow only; see [`migrations.md`](./migrations.md).
+
 ```bash
-# Run pending migrations
-npm run migrate
-# or
-npm run db:migrate
-
-# Check migration status
+# Check applied and pending migrations
 npm run migrate:status
-# or
-npm run db:status
 
-# Rollback last migration
-npm run migrate:rollback
-# or
-npm run db:rollback
+# Apply pending migrations (needs the MIGRATION_* environment from docs/migrations.md)
+npm run migrate:apply
 
-# Reset database (delete + migrate + seed)
-npm run db:reset
+# Verify the database matches the expected schema
+npm run migrate:verify
+
+# Seed reference data (tier feature flags)
+npm run migrate:seed
 ```
+
+There is no automated rollback. Down migrations are manual-only and destructive; recover with a forward-fix migration (see [`rollback-procedure.md`](./rollback-procedure.md)).
 
 ### Seeding Data
 
 ```bash
-# Seed default users
-npm run seed
+# Tier feature flags
+npm run migrate:seed
 
-# Seed tier feature flags
-npm run seed:tier-flags
-
-# Reset and seed everything
-npm run db:reset
+# Master catalogue (operator tool)
+npm run seed:master-catalogue
 ```
 
-### Prisma Studio (Database GUI)
+### Database GUI
 
-```bash
-# Open Prisma Studio
-npm run db:studio
-
-# Opens browser at http://localhost:5555
-# Browse tables, edit data, run queries
-```
+Use the Neon console, or `psql` against your Neon branch.
 
 ### Creating Migrations
 
 ```bash
-# 1. Modify prisma/schema.prisma
-# 2. Generate migration
-npx prisma migrate dev --name description-of-change
-
-# 3. Migration files created in prisma/migrations/
-# 4. Commit migration files to git
+# 1. Add database/migrations/NNNN_description.up.sql and .down.sql
+#    Make it idempotent: IF NOT EXISTS on every object, foreign keys inline in CREATE TABLE
+# 2. Add the entry to database/migrations/manifest.json
+# 3. Regenerate the catalog fingerprint (do not hand-edit it)
+npm run compile && node scripts/regenerate-catalog-fingerprint.js
+# 4. Update the hard-coded id lists in the migration tests (runner, adopt, e2e)
+npm run test:migrations
+# 5. Run the full real-SQL suite: a new constraint can break fixtures in other tests
+npm run test:db
+# 6. Commit the SQL, manifest, fingerprint and test changes together
 ```
+
+`docs/migrations.md` describes each gate and what it checks.
 
 ---
 
@@ -270,95 +233,45 @@ npx prisma migrate dev --name description-of-change
 
 ### Add a New API Endpoint
 
-1. **Define route:** `src/routes/resource.routes.ts`
+1. **Add the query:** in `workers/src/database.ts`, with `organizationId` as the first parameter and an `organization_id` predicate in the SQL.
 
    ```typescript
-   router.post('/resources', authenticateToken, resourceController.create);
-   ```
-
-2. **Create controller:** `src/controllers/resourceController.ts`
-
-   ```typescript
-   export const resourceController = {
-     async create(req: Request, res: Response) {
-       try {
-         const data = await resourceService.create(req.body);
-         res.status(201).json(data);
-       } catch (error) {
-         res.status(400).json({ error: error.message });
-       }
-     },
-   };
-   ```
-
-3. **Create service:** `src/services/resourceService.ts`
-
-   ```typescript
-   export class ResourceService {
-     async create(data: CreateResourceDTO): Promise<Resource> {
-       // Validation
-       // Business logic
-       // Database operations
-       return resource;
-     }
+   async findResources(organizationId: string) {
+     return this.sql`SELECT id, name FROM resources WHERE organization_id = ${organizationId}`;
    }
    ```
 
-4. **Write tests:** `src/__tests__/services/resourceService.test.ts`
-
-5. **Register route:** In `src/index.ts`:
-   ```typescript
-   import resourceRoutes from './routes/resource.routes';
-   app.use('/api/resources', resourceRoutes);
-   ```
-
-### Add a Database Model
-
-1. **Update Prisma schema:** `prisma/schema.prisma`
-
-   ```prisma
-   model Resource {
-     id             Int      @id @default(autoincrement())
-     name           String
-     organizationId Int
-     createdAt      DateTime @default(now())
-     updatedAt      DateTime @updatedAt
-
-     organization Organization @relation(fields: [organizationId], references: [id])
-
-     @@index([organizationId])
-     @@map("resources")
-   }
-   ```
-
-2. **Generate migration:**
-
-   ```bash
-   npx prisma migrate dev --name add_resource_model
-   ```
-
-3. **Generate Prisma client:**
-
-   ```bash
-   npx prisma generate
-   ```
-
-4. **Create TypeScript types:** `src/types/Resource.ts`
+2. **Write the handler:** in `workers/src/index-minimal.ts` (or a module it imports). Take the organization from `auth.organizationId`, never from the request.
 
    ```typescript
-   export interface Resource {
-     id: number;
-     name: string;
-     organizationId: number;
-     createdAt: Date;
-     updatedAt: Date;
-   }
-
-   export interface CreateResourceDTO {
-     name: string;
-     organizationId: number;
-   }
+   const auth = await authenticateApiRequest(request, env, db);
+   if (auth instanceof Response) return auth;
+   const rows = await db.findResources(auth.organizationId);
+   return jsonResponse(rows, 200, env, requestOrigin);
    ```
+
+3. **Register the route:** add a `[method, path, handler]` entry to the route table in `workers/src/minimal-api-routes.ts`.
+
+4. **Write tests:** a handler test with a fake `Database`, and a real-SQL isolation test in `workers/src/*.pglite.node.test.ts` that seeds a second organization.
+
+### Add a Database Table
+
+1. **Write the migration:** `database/migrations/NNNN_add_resources.up.sql` and `.down.sql`. Include `organization_id` NOT NULL with a foreign key to `organizations(id)`, and an index on it.
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS resources (
+     id              SERIAL PRIMARY KEY,
+     name            TEXT NOT NULL,
+     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+     created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+     updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+   );
+   CREATE INDEX IF NOT EXISTS resources_organization_id_idx ON resources (organization_id);
+   ```
+
+2. **Register and verify it:** follow "Creating Migrations" above. The tenant-scope invariant test fails if a new table has no constrained `organization_id` and is not listed as unscoped with a reason.
+
+3. **Add types:** next to the handler, or in `shared/domain/` if the frontend uses them.
 
 ### Format Code
 
@@ -373,26 +286,17 @@ npm run lint
 npm run lint:fix
 
 # Type-check without compiling
-npm run type-check
+npm run compile
+(cd workers && npm run typecheck)
 ```
 
 ---
 
 ## Debugging
 
-### VS Code Debugging
+### Debugging the Worker
 
-**Press F5** to start debugging with these configurations:
-
-1. **Debug Backend (Node.js)** - Start dev server with debugger attached
-2. **Debug Current Test File** - Debug the currently open test file
-3. **Debug All Tests** - Debug entire test suite
-4. **Debug Workers (Wrangler)** - Debug Cloudflare Workers locally
-
-**Breakpoints:**
-
-- Click left gutter in editor to add breakpoint
-- Breakpoints work in both TypeScript source and tests
+`npm run dev:local --prefix workers` runs `wrangler dev`, which prints request logs and `console.log` output. Pass wrangler flags after `--`, for example `-- --log-level debug`. To debug a single test, run it with vitest and a breakpoint in your editor.
 
 ### Console Logging
 
@@ -401,25 +305,21 @@ npm run type-check
 console.log('Debug info:', { variable });
 
 // Use Sentry for production
-import * as Sentry from '@sentry/node';
+import * as Sentry from '@sentry/cloudflare';
 Sentry.captureMessage('Something happened', 'info');
 ```
 
 ### Database Debugging
 
 ```bash
-# Check database state
-npm run db:studio
-
 # Check migration status
-npm run db:status
+npm run migrate:status
 
-# View database file directly (SQLite)
-sqlite3 database.sqlite
-.schema
-SELECT * FROM migrations;
-.quit
+# Look at data: use the Neon console, or psql against your Neon branch
+psql "$DATABASE_URL" -c '\dt'
 ```
+
+Never point debugging tools at the production database from a development shell.
 
 ---
 
@@ -510,33 +410,17 @@ ubs $(git diff --name-only)
 
 ### Deployment Steps
 
-**Backend (Node.js):**
+**Worker (Cloudflare):**
+
+Merging to `main` runs `.github/workflows/workers-deploy.yml`: migration prep first, then the Worker deploy (about 35 minutes in total). You do not run production migrations or deploys by hand. See [`migrations-deploy-runbook.md`](./migrations-deploy-runbook.md).
 
 ```bash
-# 1. Merge to main branch
-git checkout main
-git pull
+# Deploy to the development environment (manual)
+npm run deploy:dev --prefix workers
 
-# 2. Run production migrations
-npm run migrate:prod
-
-# 3. Deploy (varies by hosting provider)
-# See deployment-specific docs
-```
-
-**Workers (Cloudflare):**
-
-```bash
-# Deploy to development
-npm run workers:deploy:dev
-
-# Deploy to production
-npm run workers:deploy:prod
-
-# Set secrets if needed
-cd ../workers
-wrangler secret put DATABASE_URL
-wrangler secret put JWT_SECRET
+# Set a secret if needed
+cd workers
+wrangler secret put CLERK_SECRET_KEY --env production
 ```
 
 ### Frontend Pages Deployment Flow (Current Setup)
@@ -622,21 +506,7 @@ curl -sS "https://pr-96.date-management-frontend.pages.dev${pre_asset}" | rg -o 
 
 ### Rollback Procedure
 
-If deployment fails:
-
-```bash
-# 1. Revert code
-git revert <commit-hash>
-git push
-
-# 2. Roll back database if needed
-npm run migrate:rollback
-
-# 3. Redeploy previous version
-npm run workers:deploy:prod
-```
-
-See [docs/rollback-procedure.md](./rollback-procedure.md) for detailed steps.
+If deployment fails, follow [docs/rollback-procedure.md](./rollback-procedure.md). In short: redeploy a known-good SHA with the `Deploy Workers API` workflow (`workflow_dispatch`), or revert the merge commit. Do not use a down migration; use a forward-fix migration if the schema is wrong.
 
 ---
 
@@ -644,146 +514,60 @@ See [docs/rollback-procedure.md](./rollback-procedure.md) for detailed steps.
 
 ### Common Issues
 
+See [troubleshooting.md](./troubleshooting.md) for the full guide. The most common ones:
+
 #### Port Already in Use
 
-**Error:** `Error: listen EADDRINUSE: address already in use :::3001`
-
-**Solutions:**
-
-```bash
-# Option 1: Kill process using port 3001
-# macOS/Linux:
-lsof -ti:3001 | xargs kill -9
-
-# Windows:
-netstat -ano | findstr :3001
-taskkill /PID <PID> /F
-
-# Option 2: Use different port
-# Edit .env:
-PORT=3002
-```
-
-#### Database Locked
-
-**Error:** `SQLITE_BUSY: database is locked`
-
-**Solutions:**
-
-```bash
-# Option 1: Close Prisma Studio
-# (Prisma Studio holds a lock)
-
-# Option 2: Close all Node processes
-# macOS/Linux:
-killall node
-
-# Windows:
-taskkill /F /IM node.exe
-
-# Option 3: Delete lock files
-rm -f database.sqlite-shm database.sqlite-wal
-```
+`wrangler dev` uses 8787 and the frontend 3002. Find and stop the process, or pass `-- --port 8788` to `npm run dev:local`.
 
 #### Migration Failures
 
-**Error:** `Migration failed to apply`
-
-**Solutions:**
-
 ```bash
-# Option 1: Check migration status
-npm run db:status
-
-# Option 2: Reset database (CAUTION: deletes all data)
-npm run db:reset
-
-# Option 3: Manually fix and retry
-# 1. Check database state with Prisma Studio
-# 2. Fix inconsistencies
-# 3. Mark migration as applied (if safe)
+npm run migrate:status
+npm run migrate:verify
 ```
+
+Do not hand-edit a production schema. Fix forward with a new migration.
 
 #### Module Not Found
 
-**Error:** `Cannot find module 'X'`
-
-**Solutions:**
-
 ```bash
-# Reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
-
-# Regenerate Prisma client
-npx prisma generate
-
-# Clear Jest cache
-npx jest --clearCache
+# Reinstall dependencies in the affected package
+rm -rf node_modules package-lock.json && npm install
 ```
+
+Restore `package-lock.json` from git afterwards if you did not mean to change it.
 
 #### Test Failures
 
-**Error:** Tests failing unexpectedly
-
-**Solutions:**
-
 ```bash
-# 1. Clear test cache
-npx jest --clearCache
+# Run one real-SQL file
+(cd workers && npx vitest run --config vitest.node.config.mts src/database.tenant-isolation.pglite.node.test.ts)
 
-# 2. Run tests in isolation
-npm test -- --runInBand
-
-# 3. Check database state
-npm run db:reset
-npm test
-
-# 4. Verify environment
-echo $NODE_ENV  # Should be "test" during tests
+# Run the full real-SQL suite
+npm run test:db
 ```
 
 #### TypeScript Errors
 
-**Error:** `TS2307: Cannot find module`
-
-**Solutions:**
-
 ```bash
-# 1. Regenerate Prisma client
-npx prisma generate
-
-# 2. Restart TypeScript server (VS Code)
-# Command Palette > TypeScript: Restart TS Server
-
-# 3. Check tsconfig.json paths
-npm run type-check
+npm run compile
+(cd workers && npm run typecheck)
 ```
+
+In VS Code, run "TypeScript: Restart TS Server".
 
 #### Environment Variable Missing
 
-**Error:** `❌ JWT_SECRET environment variable is missing or empty`
-
-**Solutions:**
-
 ```bash
-# 1. Check .env file exists
-ls -la .env
-
-# 2. Copy from example if missing
-cp .env.example .env
-
-# 3. Verify variable is set
-cat .env | grep JWT_SECRET
-
-# 4. For development, set:
-JWT_SECRET=dev-secret-change-in-production
+# Worker: confirm workers/.dev.vars exists and has the keys from .dev.vars.example
+ls workers/.dev.vars
 ```
 
 ### Getting Help
 
 1. **Check documentation:**
-   - [README.md](../backend/README.md) - Project overview
+   - [README.md](../README.md) - Project overview
    - [environment-setup.md](./environment-setup.md) - Environment configuration
    - [AGENTS.md](../AGENTS.md) - Development standards
 
@@ -791,10 +575,10 @@ JWT_SECRET=dev-secret-change-in-production
 
    ```bash
    # Find similar patterns
-   grep -r "pattern" src/
+   grep -r "pattern" workers/src shared
 
    # Find how something is used
-   grep -r "functionName" src/
+   grep -r "functionName" workers/src shared
    ```
 
 3. **Check git history:**
@@ -818,29 +602,31 @@ JWT_SECRET=dev-secret-change-in-production
 
 ### Most Used Commands
 
-| Task              | Command              |
-| ----------------- | -------------------- |
-| Start dev server  | `npm run dev`        |
-| Run tests         | `npm test`           |
-| Run tests (watch) | `npm run test:watch` |
-| Database GUI      | `npm run db:studio`  |
-| Run migration     | `npm run migrate`    |
-| Format code       | `npm run format`     |
-| Check style       | `npm run lint`       |
-| Fix style         | `npm run lint:fix`   |
+| Task                | Command                              |
+| ------------------- | ------------------------------------ |
+| Start the Worker    | `npm run dev:local --prefix workers` |
+| Start the frontend  | `npm start --prefix frontend`        |
+| Real-SQL tests      | `npm run test:db`                    |
+| Worker typecheck    | `(cd workers && npm run typecheck)`  |
+| Frontend diff tests | `npm run test:frontend:diff`         |
+| Migration status    | `npm run migrate:status`             |
+| Migration tests     | `npm run test:migrations`            |
+| Format code         | `npm run format`                     |
+| Lint                | `npm run lint`                       |
+| Fix style           | `npm run lint:fix`                   |
 
 ### File Locations
 
-| Type            | Location               |
-| --------------- | ---------------------- |
-| Routes          | `src/routes/`          |
-| Controllers     | `src/controllers/`     |
-| Services        | `src/services/`        |
-| Database Models | `prisma/schema.prisma` |
-| Migrations      | `prisma/migrations/`   |
-| Tests           | `src/__tests__/`       |
-| Config          | `src/config/`          |
-| Types           | `src/types/`           |
+| Type             | Location                                   |
+| ---------------- | ------------------------------------------ |
+| Routes           | `workers/src/minimal-api-routes.ts`        |
+| Handlers         | `workers/src/index-minimal.ts` and modules |
+| SQL              | `workers/src/database.ts`                  |
+| Migrations       | `database/migrations/`                     |
+| Migration runner | `src/database/migrations/`                 |
+| Shared logic     | `shared/domain/`                           |
+| Worker tests     | `workers/src/`                             |
+| Worker config    | `workers/wrangler.toml`                    |
 
 ---
 

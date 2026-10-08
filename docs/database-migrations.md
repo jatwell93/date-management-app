@@ -1,25 +1,16 @@
 # Database Migrations Guide
 
-> **⚠️ This is not the production migration path.**
+> **The authoritative migration path is [`docs/migrations.md`](./migrations.md).**
+> Production schema changes are applied only by the migration runner in `src/database/migrations/`, against the history in `database/migrations/`, run by `.github/workflows/migration-prep.yml`. This guide is the developer-facing companion: how to work on a Neon development branch, how to write a migration, and what to do when something goes wrong.
 >
-> Production schema changes are applied **only** by the migration runner documented in
-> [`docs/migrations.md`](./migrations.md) — `src/database/migrations/` against the authoritative
-> history in `database/migrations/`, run by `.github/workflows/migration-prep.yml`.
->
-> **`prisma db push` and `prisma migrate deploy` are not how production schema changes are
-> applied.** The production sections below are retained for historical reference and are wrong
-> as operator instructions.
->
-> The rest of this document is scoped to the **Express/Prisma/SQLite backend** (`backend/`),
-> which is retained only as the rollback backend until it is removed. The SQLite/development
-> half remains accurate for local work.
+> The Express/Prisma/SQLite backend is retired. `prisma db push`, `prisma migrate` and a local `database.sqlite` no longer exist in this repository. Its last revision is the tag `express-sqlite-last`; see [`express-retirement-recovery.md`](./express-retirement-recovery.md).
 
-This guide covers database migrations for the Date Management App, supporting both local SQLite development and Neon PostgreSQL production.
+This guide covers database migrations for the Date Management App on Neon PostgreSQL.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Development Environment (SQLite)](#development-environment-sqlite)
+2. [Development Environment (Neon branch)](#development-environment-neon-branch)
 3. [Production Environment (Neon PostgreSQL)](#production-environment-neon-postgresql)
 4. [Neon Database Branching](#neon-database-branching)
 5. [Migration Workflow](#migration-workflow)
@@ -30,87 +21,56 @@ This guide covers database migrations for the Date Management App, supporting bo
 
 ## Overview
 
-The application uses a dual-database strategy:
+There is one database technology everywhere: PostgreSQL on Neon.
 
-| Environment | Database        | Schema File                | Connection     |
-| ----------- | --------------- | -------------------------- | -------------- |
-| Development | SQLite          | `schema.prisma`            | File-based     |
-| Production  | Neon PostgreSQL | `production/schema.prisma` | Connection URL |
+| Environment | Database                        | Schema source                       | Connection                               |
+| ----------- | ------------------------------- | ----------------------------------- | ---------------------------------------- |
+| Development | Your own Neon branch            | `database/migrations/*.up.sql`      | Direct (non-pooled) URL                  |
+| Real-SQL    | pglite (in-process, tests only) | The same migrations                 | In memory                                |
+| Production  | Neon PostgreSQL                 | The same migrations, via the runner | Hyperdrive (Worker), direct URL (runner) |
 
-Both schemas define identical models - only the datasource provider differs.
+The schema is defined by the ordered SQL history in `database/migrations/` and its `manifest.json`. There is no ORM schema file to keep in sync.
 
 ---
 
-## Development Environment (SQLite)
+## Development Environment (Neon branch)
 
 ### Setup
 
-SQLite requires no external database server. The database file is created automatically.
-
-```bash
-cd backend
-
-# Apply schema to SQLite (creates database.sqlite)
-npx prisma db push
-
-# Or run migrations
-npx prisma migrate dev
-```
+Create a Neon branch for your work (see [Neon Database Branching](#neon-database-branching)) and use its connection string. pglite covers SQL correctness in tests (`npm run test:db`), but it cannot stand in for the live driver, real concurrency or role grants; see `workers/README.md`.
 
 ### Configuration
 
 ```bash
-# backend/.env
-DATABASE_URL=file:./database.sqlite
+# workers/.dev.vars  (never commit)
+NEON_CONNECTION_STRING=postgresql://user:password@host/database?sslmode=require
 ```
+
+The migration commands read their own environment (`DATABASE_URL_UNPOOLED` and the `MIGRATION_*` guards). See [`migrations.md`](./migrations.md) section 2.
 
 ### Common Commands
 
 ```bash
-# Reset database (drops all data)
-npx prisma migrate reset
+# Show applied and pending migrations
+npm run migrate:status
 
-# View database in browser
-npx prisma studio
+# Apply pending migrations to the database in your environment
+npm run migrate:apply
 
-# Generate Prisma client
-npx prisma generate
+# Check the database matches the expected schema
+npm run migrate:verify
+
+# Run the real-SQL tests against the authoritative migrations (pglite)
+npm run test:db
 ```
 
 ---
 
 ## Production Environment (Neon PostgreSQL)
 
-### Setup
+Production schema changes are never applied by hand. A merge to `main` runs the deploy workflow, which runs migration prep (status, preflight, apply, seed, verify) and then deploys the Worker. See [`migrations-deploy-runbook.md`](./migrations-deploy-runbook.md).
 
-1. Create a Neon account at https://neon.tech
-2. Create a new project and database
-3. Copy the connection string
-
-### Configuration
-
-```bash
-# .env (root or backend/.env)
-DATABASE_URL=postgresql://user:password@host/database?sslmode=require
-```
-
-### Applying Schema to Neon
-
-```bash
-cd backend
-
-# Quick sync (no migration history)
-DATABASE_URL="your-neon-url" npx prisma db push --schema=./prisma/production/schema.prisma
-
-# Or with migration tracking
-DATABASE_URL="your-neon-url" npx prisma migrate deploy --schema=./prisma/production/schema.prisma
-```
-
-### Viewing Production Data
-
-```bash
-DATABASE_URL="your-neon-url" npx prisma studio --schema=./prisma/schema.neon.prisma
-```
+Credentials are stored in Doppler and GitHub environments. Do not copy a production connection string into a development shell.
 
 ---
 
@@ -120,8 +80,8 @@ Neon supports Git-like database branching for safe migrations.
 
 ### Why Use Branching?
 
-- **Safe migrations**: Test schema changes before applying to production
-- **Instant rollback**: Delete branch if migration fails
+- **Safe migrations**: Test schema changes before they reach production
+- **Instant rollback**: Delete the branch if a migration fails
 - **Preview environments**: Create database branches for PR previews
 - **Zero data risk**: Production data is never modified during testing
 
@@ -155,27 +115,15 @@ neonctl branches create --name dev/feature-xyz --project-id your-project-id
 
 ### Using a Branch
 
-```bash
-# Get branch connection string from Neon dashboard
-# Apply migrations to branch first
-DATABASE_URL="branch-connection-string" npx prisma db push --schema=./prisma/production/schema.prisma
-
-# Test your application against the branch
-DATABASE_URL="branch-connection-string" npm run dev
-```
+Point your environment at the branch's direct connection string, run the migration commands against it, and run the Worker with `npm run dev:local --prefix workers`.
 
 ### Promoting a Branch
 
-After testing, apply the same migration to production:
-
-```bash
-# Apply to production main branch
-   DATABASE_URL="production-connection-string" npx prisma db push --schema=./prisma/production/schema.prisma
-```
+You do not apply a branch to production by hand. Merge the migration PR; the deploy workflow applies it to production.
 
 ### Deleting a Branch
 
-After successful promotion, delete the development branch:
+After the PR merges, delete the development branch:
 
 **Via Dashboard:** Branches → Select branch → Delete
 
@@ -189,103 +137,58 @@ neonctl branches delete dev/feature-xyz --project-id your-project-id
 
 ## Migration Workflow
 
-### Adding a New Field
+### Adding a Field or Table
 
-1. **Update Prisma Schema**
+1. **Write the migration**: add `database/migrations/NNNN_description.up.sql` and `.down.sql`. Make it idempotent: `IF NOT EXISTS` on every object, and declare foreign keys inline inside `CREATE TABLE`. Tenant tables need `organization_id` NOT NULL with a foreign key.
 
-   ```prisma
-   // schema.prisma AND production/schema.prisma
-   model Product {
-     // ... existing fields
-     newField String? @map("new_field")  // Add new field
-   }
+   ```sql
+   ALTER TABLE products ADD COLUMN IF NOT EXISTS new_field TEXT;
    ```
 
-2. **Test Locally (SQLite)**
+2. **Register it**: add the entry to `database/migrations/manifest.json`, then regenerate the catalog fingerprint (do not hand-edit it):
 
    ```bash
-   npx prisma migrate dev --name add-new-field
-   npm test
+   npm run compile && node scripts/regenerate-catalog-fingerprint.js
    ```
 
-3. **Create Neon Branch**
-   - Create `dev/add-new-field` branch in Neon dashboard
-
-4. **Test on Branch**
+3. **Update the hard-coded id lists** in the migration tests, then run them:
 
    ```bash
-   DATABASE_URL="branch-url" npx prisma db push --schema=./prisma/production/schema.prisma
-   DATABASE_URL="branch-url" npm test
+   npm run test:migrations
    ```
 
-5. **Apply to Production**
+4. **Run the real-SQL suite**: a new constraint can break fixtures in other tests.
 
    ```bash
-   DATABASE_URL="production-url" npx prisma db push --schema=./prisma/production/schema.prisma
+   npm run test:db
    ```
 
-6. **Clean Up**
-   - Delete development branch
-   - Commit schema changes to git
+5. **Try it on a Neon branch**: apply it with the migration commands against your development branch.
 
-### Adding a New Table
+6. **Open the PR**: commit the SQL, manifest, fingerprint and test changes together. Merging deploys it.
 
-Same workflow as above. For tables with foreign keys, ensure parent tables exist first.
+For tables with foreign keys, make sure the parent tables exist first.
 
 ### Removing a Field/Table
 
-⚠️ **Destructive operations require extra care:**
+⚠️ **Destructive operations require extra care.** Use the expand/contract pattern:
 
 1. Deploy code that no longer uses the field
 2. Wait for all instances to update
-3. Remove field from schema
-4. Apply migration
+3. Add a contract migration that removes the field (the manifest declares the plan)
+4. Merge and deploy
 
 ---
 
 ## Rollback Procedures
 
-### SQLite (Development)
+There is no automated rollback. Down migrations are `manual-only` and `destructive`. Work the layers in order, and see [`rollback-procedure.md`](./rollback-procedure.md) and [`migrations-deploy-runbook.md`](./migrations-deploy-runbook.md) Step 4:
 
-```bash
-# Reset to last migration
-npx prisma migrate reset
+1. **Worker rollback**: redeploy a known-good SHA. Migrations are expand-compatible, so the previous Worker runs against the current schema.
+2. **Forward-fix**: a new migration that corrects the problem. This is the primary recovery path for a bad schema change.
+3. **Neon restore** (catastrophic only): restore from a pre-migration snapshot or point-in-time. See [`neon-backup-restore.md`](./neon-backup-restore.md).
 
-# Or restore from backup
-cp database.sqlite.backup database.sqlite
-```
-
-### Neon (Production)
-
-**Option 1: Point-in-Time Recovery (PITR)**
-
-- Neon supports PITR within retention window
-- Dashboard → Project → Restore → Select timestamp
-
-**Option 2: Branch Rollback**
-
-- If using branches, simply delete the problematic branch
-- Production remains unaffected
-
-**Option 3: Manual Rollback**
-
-```sql
--- Generate rollback SQL
--- Reverse the migration manually
-ALTER TABLE products DROP COLUMN new_field;
-```
-
-### Emergency Rollback Script
-
-Save rollback SQL alongside migrations:
-
-```
-prisma/neon-sql/
-├── 0001_initial.sql
-├── 0001_initial_rollback.sql  # Reverses 0001
-├── 0002_add_field.sql
-└── 0002_add_field_rollback.sql  # Reverses 0002
-```
+On a development branch, deleting the branch is the rollback.
 
 ---
 
@@ -293,19 +196,18 @@ prisma/neon-sql/
 
 ### Schema Changes
 
-1. ✅ Always update both `schema.prisma` AND `production/schema.prisma`
-2. ✅ Test migrations locally before production
-3. ✅ Use Neon branches for risky migrations
-4. ✅ Keep migration SQL files for audit trail
-5. ✅ Add rollback scripts for complex migrations
+1. ✅ One migration per logical change, with a `.down.sql`
+2. ✅ Make migrations idempotent
+3. ✅ Test on a Neon branch before the PR merges
+4. ✅ Keep the manifest and catalog fingerprint in the same commit
+5. ✅ Run the full `npm run test:db` after adding a constraint
 
 ### Naming Conventions
 
 ```
 Migrations:
-  0001_initial.sql
-  0002_add_user_email.sql
-  0003_add_product_category.sql
+  0019_inventory_items_active_triple_unique.up.sql
+  0019_inventory_items_active_triple_unique.down.sql
 
 Branches:
   dev/feature-name
@@ -316,16 +218,15 @@ Branches:
 ### Connection String Security
 
 1. ❌ Never commit connection strings to git
-2. ✅ Use environment variables
-3. ✅ Use Neon's connection pooling URL for serverless
+2. ✅ Use environment variables or Doppler
+3. ✅ Use the direct (non-pooled) URL for migrations; the runner rejects the pooled endpoint
 4. ✅ Rotate credentials periodically
 
 ### Performance Considerations
 
-1. **Add indexes** for frequently queried columns
-2. **Use connection pooling** for serverless (Neon provides this)
-3. **Batch large migrations** to avoid timeouts
-4. **Monitor query performance** via Neon dashboard
+1. **Add indexes** for frequently queried columns, and for `organization_id` on tenant tables
+2. **Batch large data migrations** to avoid timeouts
+3. **Monitor query performance** via the Neon dashboard
 
 ---
 
@@ -333,36 +234,31 @@ Branches:
 
 ### "Connection refused"
 
-- Check DATABASE_URL is correct
-- Verify Neon project is active (not suspended)
+- Check the connection string is correct
+- Verify the Neon project is active (not suspended)
 - Check SSL mode (`sslmode=require`)
 
 ### "Migration failed"
 
-- Check for conflicting changes
-- Verify foreign key constraints
-- Review migration SQL for syntax errors
+- Run `npm run migrate:status` to see what applied
+- Check for conflicting changes and foreign key constraints
+- The runner reports ledger problems such as `ledger-inconsistent`; see `migrations.md` for each one
 
 ### "Timeout during migration"
 
-- Large data migrations may timeout
-- Use Neon's direct connection (non-pooled) for migrations
-- Break migration into smaller steps
+- Large data migrations may time out
+- Migrations always use the direct (non-pooled) connection
+- Break the migration into smaller steps
 
 ### "Schema drift"
 
-If production schema differs from Prisma schema:
-
-```bash
-# Generate diff to see what's different
-npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/production/schema.prisma --script
-```
+`npm run migrate:verify` compares the database against the catalog fingerprint produced by the migration history, and reports the differences.
 
 ---
 
 ## Related Documentation
 
+- [Migrations (authoritative)](./migrations.md) - runner, commands, environment, gates
+- [Migrations deploy runbook](./migrations-deploy-runbook.md) - production deploy and rollback
 - [Cloudflare Setup](cloudflare-setup.md) - R2 storage configuration
-- [Storage Patterns](../backend/docs/storage-patterns.md) - File storage abstraction
-- [Prisma Documentation](https://www.prisma.io/docs) - Official Prisma docs
 - [Neon Documentation](https://neon.tech/docs) - Neon PostgreSQL docs

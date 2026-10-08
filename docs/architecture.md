@@ -2,15 +2,13 @@
 
 ## High-Level Topology
 
-The platform is split into an API backend, an edge API layer, and managed storage/data services.
+The platform is one API (a Cloudflare Worker), a React frontend, and managed storage/data services. The earlier Express/Prisma/SQLite backend is retired; its last revision is the tag `express-sqlite-last` (see [`express-retirement-recovery.md`](./express-retirement-recovery.md)).
 
-- Backend API (`backend/src/`): Express + TypeScript, Prisma, domain services, webhooks, scheduling.
-- Edge API (`workers/src/`): Cloudflare Workers handlers for low-latency API access.
-- Database: Neon Postgres in production, SQLite for local/test workflows. Production schema
-  changes are applied only by the migration runner in `src/database/migrations/` — see
-  [`docs/migrations.md`](./migrations.md).
+- API (`workers/src/`): Cloudflare Worker. One entry point, `index-minimal.ts`, handles routing, auth, rate limiting, webhooks, and scheduled jobs.
+- Database: Neon Postgres, reached through Hyperdrive. Production schema changes are applied only by the migration runner in `src/database/migrations/` — see [`docs/migrations.md`](./migrations.md). Real-SQL tests run the same migrations in pglite (`npm run test:db`).
 - Object Storage: Cloudflare R2 for CSV uploads and processed artifacts.
-- Observability: Sentry, application monitoring services, Workers metrics middleware.
+- Queues: catalogue import and notification email, declared in `workers/wrangler.toml`.
+- Observability: Sentry (`@sentry/cloudflare`), Workers logs and metrics.
 
 ## Component Diagram
 
@@ -19,142 +17,114 @@ React PWA / Admin UI
 	|
 	| HTTPS
 	v
-Cloudflare Worker Edge API (workers/src)
+Cloudflare Worker (workers/src/index-minimal.ts)
 	|
-	| JWT auth + org context + feature gates + rate limit
+	| security headers -> rate limit -> Clerk auth -> org entitlement gate -> handler
 	v
-Express Backend API (backend/src)
-	|
-	| ServiceProvider (request-scoped DI)
-	v
-Services -> Repositories/Prisma -> Neon Postgres
+workers/src/database.ts (org-scoped SQL) -> Neon Postgres (via Hyperdrive)
 	|
 	+-> CSV upload pipeline -> R2 object storage
 	|
-	+-> Scheduler jobs -> subscription, dunning, trial expiry, backups
+	+-> Queues -> catalogue import, notification emails
 	|
-	+-> Monitoring services -> Sentry + metrics snapshots
+	+-> Cron (hourly) -> scheduled/dispatcher.ts -> jobs (markdown, Stripe reconciliation, trial emails, ...)
+	|
+	+-> Sentry
 ```
 
 ## Request Flow
 
-1. Client sends request to Workers or backend API.
-2. Authentication middleware verifies JWT and resolves organization context.
-3. Feature gates and usage limit middleware enforce subscription-tier boundaries.
-4. Route delegates to service layer via ServiceProvider (DI container).
-5. Service layer calls repositories or Prisma models.
-6. Response and telemetry are emitted through error/metrics middleware.
+1. Client sends a request to the Worker.
+2. Rate limiting runs (`utils/minimal-rate-limit.ts`), with separate limits for authenticated and unauthenticated requests.
+3. `authenticateApiRequest` verifies the Clerk token, then reads `organization_id` and `role` from the `users` row.
+4. `checkOrganizationEntitlement` gates the request on the organization's subscription state.
+5. The handler calls `database.ts` methods. Each tenant method takes `organizationId` first.
+6. Security headers are applied to every response, including ones Sentry synthesizes for an unhandled throw.
 
 ## Security and Isolation Enforcement Points
 
-- Authentication boundary: JWT is validated before protected route execution.
-- Tenant boundary: `organizationId` is required for all tenant data reads/writes.
-- Authorization boundary: role and feature gates are evaluated before mutation endpoints.
-- Usage boundary: quota middleware prevents writes once plan limits are reached.
-- Data boundary: all Prisma/repository queries are org-scoped unless explicitly global.
+- Authentication boundary: the Clerk token is verified before any protected handler runs.
+- Tenant boundary: `organizationId` comes from the `users` row, never from the client, and is a required first parameter on every tenant method in `database.ts`.
+- Authorization boundary: role checks run in the handler before mutations.
+- Usage boundary: per-tier limits are enforced by counting rows in the same statement that inserts (`utils/usage-limits.ts`). The cap is soft under concurrency; see that file's header.
+- Data boundary: every query on a tenant table carries an `organization_id` predicate. Tenant-isolation tests (`database.tenant-isolation*.pglite.node.test.ts`) seed a second organization and assert none of its rows appear.
 
 ## Multi-Tenant Boundaries
 
 - Organization context is required for protected operations.
-- Data access is organization-scoped in services and query filters.
-- Tier limits and feature flags are enforced before write-heavy actions.
-- Webhook processing validates organization metadata and maps Stripe events to tenant records.
+- Data access is organization-scoped in the SQL itself, including joins (`p.organization_id = ii.organization_id`).
+- Tier limits and entitlement are checked before write-heavy actions.
+- Stripe webhook events map to tenant records through the subscription's organization metadata.
 
 ## Runtime Components
 
-- `ServiceProvider`: Request-scoped dependency container for auth, users, upload, analytics, reporting, subscriptions.
-- `SchedulerService`: Starts periodic jobs for markdown refresh, backup, trial lifecycle, dunning, and Stripe sync.
-- `WebhookService`: Signature verification, idempotency, event dispatch, monitoring signals.
+- `index-minimal.ts`: the `fetch`, `scheduled` and `queue` handlers.
+- `database.ts`: all SQL for tenant data.
+- `clerk/` and `stripe/`: token verification, bootstrap, billing handlers, and the two webhook receivers.
+- `scheduled/dispatcher.ts` and `scheduled/schedule.ts`: the hourly cron dispatcher and its job table.
+- `notifications/`: the email queue and trial emails.
 
 ## Scheduler Responsibilities
 
-- `SchedulerService.initialize()` registers cron schedules and starts background jobs.
-- Markdown refresh jobs perform bulk updates first, then safe per-item retry fallback.
-- Subscription lifecycle jobs (`trialExpiration`, `dunning`, `stripe sync`) are independent and non-fatal.
-- Backup job errors are logged and do not terminate process runtime.
+- One Cron Trigger (`0 * * * *`, production only) wakes the Worker hourly. `schedule.ts` decides which jobs are due; a daily job becomes due at its UTC hour and a delayed tick still catches up.
+- Each job is claimed with a row lease in `scheduled_job_runs` (migration 0016) before it runs, so overlapping ticks do not run a job twice. The Neon HTTP driver has no session, so advisory locks are not available.
+- Jobs run one at a time. A failing job is recorded and retried on the next tick; it does not stop the others.
+- Set the secret `SCHEDULED_JOBS_DISABLED="true"` to stop all jobs without a deploy.
 
 # Error Handling Patterns
 
 ## Error Taxonomy
 
-Use custom errors for predictable API behavior:
-
-- Validation/authn/authz/not-found/conflict/internal errors in `backend/src/errors/`.
-- Middleware maps typed errors to consistent JSON responses.
-- Unexpected errors are captured with context and redaction-safe metadata.
+- Handlers return explicit HTTP statuses through `errorResponse` (`utils/worker-response.ts`): validation 400, unauthenticated 401, forbidden 403, not found 404, conflict 409, rate limit 429.
+- Database errors are classified in `db-errors.ts`. A unique violation (SQLSTATE 23505) becomes a 409, for example a duplicate inventory item or store area.
+- Unexpected errors are captured in Sentry and return a generic client-safe response.
 
 ## Handling Rules
 
-- Validate early at route/middleware boundary.
-- Throw domain-specific errors from services.
-- Catch at orchestration boundaries only when adding context or fallback behavior.
-- Never swallow errors silently; record metrics/Sentry when recovery occurs.
+- Validate early, at the top of the handler.
+- Throw or return domain-specific errors from `database.ts`; map them to a status once, in the handler.
+- Catch only to add context or a fallback.
+- Never swallow errors silently; record to Sentry or the job summary when recovery occurs.
 
 ## Error Response Contract
 
-- API errors are normalized through global middleware.
-- Business errors return explicit HTTP status and stable message codes.
-- Unexpected errors return generic client-safe responses and full server-side telemetry.
+- Business errors return an explicit HTTP status and a stable message.
+- Unexpected errors return a generic message; full detail goes to server-side telemetry only.
 
 ## Retry and Recovery Policy
 
-- Webhooks: retry only for transient server failures.
-- Background jobs: continue processing remaining units after per-item failure.
-- Sync jobs: log divergence and recover state on next interval rather than hard-failing process.
+- Webhooks: the receivers verify the signature, claim the event in a ledger table, process it, then mark it complete. A failed delivery releases its claim so the provider's retry is processed.
+- Scheduled jobs: continue after a per-item failure and report `failed: true` in the job result so the run is retried on the next tick.
+- Queue consumers: retry then dead-letter (see the `*-dlq` queues in `wrangler.toml`).
 
 ## Recoverable vs Non-Recoverable (Webhook)
 
-- Non-recoverable data issues: return success response to stop retries and log with warning context.
-- Transient system failures: return retriable failure and capture error details.
-- Idempotency checks must run before side-effecting updates.
+- Non-recoverable data issues: acknowledge so the provider stops retrying, and log with warning context.
+- Transient system failures: return a retriable failure and capture the error.
+- Unhandled event types are acknowledged and logged, not dropped silently.
+- The claim ledger (`processed_webhook_events` for Stripe, `clerk_webhook_events` for Clerk) runs before any side effect, which makes redelivery idempotent.
 
 ## Observability Requirements
 
-- Every error path includes organization-aware context when available.
-- Structured logs avoid secrets and include correlation-friendly fields.
-- Sentry capture is required at orchestration boundaries where retries/rollbacks are decided.
+- Error paths include organization-aware context when available.
+- Logs avoid secrets and include correlation-friendly fields.
+- Sentry capture is required where retries or rollbacks are decided.
 
-# Dependency Injection Patterns
+# Data Access Patterns
 
-## Container Usage
+## Composition
 
-`ServiceProvider` is the canonical composition root for routes.
+There is no dependency-injection container. The Worker builds a `Database` from the request's environment (`utils/db-connection.ts`) and passes it to handlers. Handlers and jobs take their collaborators as explicit arguments, which is what lets tests substitute pglite.
 
-- Construct per request with organization context.
-- Use factory methods in tests (`forTesting`, `withClients`, `forOrganization`).
-- Resolve services lazily to keep startup overhead low.
+## Rules
 
-## ServiceProvider Lifecycle
+- Add tenant queries to `database.ts` with `organizationId` as the first, required parameter, so a call site that forgets it fails to compile.
+- Filter `organization_id` in every query, including each side of a join to another tenant table.
+- Do not read a counter column to enforce a limit; count rows in the statement that inserts.
+- Do not share mutable module state between requests.
 
-- One provider instance per request scope.
-- Provider instances must not be shared across requests.
-- Services are cached per provider instance only.
-- Test factories:
-  - `forOrganization` for org-scoped behavior
-  - `forTesting` for controlled auth bypass
-  - `withClients` for full dependency injection
+## Testing Strategy
 
-## Service Construction Rules
-
-- Services accept explicit dependencies (`PrismaClient`, storage provider, collaborator services).
-- Avoid direct singleton access in route handlers when DI is available.
-- Keep constructors side-effect free where possible.
-
-## Anti-Patterns to Avoid
-
-- Instantiating services directly in routes when ServiceProvider already composes them.
-- Using process-global mutable singletons for tenant-scoped dependencies.
-- Injecting partially initialized clients that bypass org scoping.
-
-## Testing Strategy for DI
-
-- Unit tests verify constructor and factory method contracts.
-- Integration tests verify dependency wiring and singleton-per-provider behavior.
-- Route integration tests verify organization-scoped ServiceProvider usage.
-
-## DI Verification Checklist
-
-- Service instances are lazy-created.
-- Service instances are singleton-per-provider, not singleton-per-process.
-- Provider isolation across organizations is verified in tests.
-- Prisma calls from org-scoped services include `organizationId` in filters.
+- Handler tests inject a fake `Database` and assert status and body.
+- Real-SQL tests (`*.pglite.node.test.ts`, `npm run test:db`) run the actual migrations and queries. Use them for anything in `database.ts`.
+- A new isolation test is not evidence until you remove the `organization_id` predicate and watch it fail.

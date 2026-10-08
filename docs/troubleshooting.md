@@ -37,9 +37,9 @@ npm install -g npm@latest
 npm install
 ```
 
-### Port 3001 already in use
+### Port 8787 or 3002 already in use
 
-**Symptoms:** `Error: listen EADDRINUSE :::3001`
+**Symptoms:** `Address already in use` from `wrangler dev` (Worker, port 8787) or the frontend dev server (port 3002)
 
 **Solutions:**
 
@@ -47,27 +47,26 @@ Linux/macOS:
 
 ```bash
 # Find process using port
-lsof -i :3001
+lsof -i :8787
 
 # Kill the process
 kill -9 <PID>
 
-# Or use a different port
-PORT=3002 npm run dev
+# Or use a different Worker port (extra args are forwarded to wrangler)
+npm run dev:local --prefix workers -- --port 8788
 ```
 
 Windows:
 
 ```bash
 # Find process using port
-netstat -ano | findstr :3001
+netstat -ano | findstr :8787
 
 # Kill the process
 taskkill /PID <PID> /F
-
-# Or use a different port
-set PORT=3002 && npm run dev
 ```
+
+If you move the Worker to another port, point the frontend at it with `REACT_APP_API_URL` (see [local-expect-qa.md](local-expect-qa.md)).
 
 ### TypeScript compilation errors
 
@@ -76,14 +75,14 @@ set PORT=3002 && npm run dev
 **Solution:**
 
 ```bash
-# Regenerate Prisma client
-npx prisma generate
+# Type-check the Worker, including test files (CI runs this)
+(cd workers && npm run typecheck)
 
-# Clear TypeScript cache
-rm -rf dist/ .tsbuildinfo
+# Type-check the root package (migration runner, operator tools)
+npm run compile
 
-# Retry
-npm run build
+# Clear stale build output and retry
+rm -rf build/ workers/dist/
 ```
 
 ### Hot reload not working
@@ -93,64 +92,56 @@ npm run build
 **Solution:**
 
 ```bash
-# Verify nodemon is installed
-npm ls nodemon
-
-# If not, reinstall
-npm install --save-dev nodemon
+# Worker: wrangler dev reloads on save. If it stalls, restart it
+npm run dev:local --prefix workers
 
 # Kill any lingering processes
 killall node  # or taskkill /IM node.exe /F on Windows
 
-# Restart development server
-npm run dev
+# Frontend: restart the dev server
+npm start --prefix frontend
 ```
 
 ---
 
 ## Database Issues
 
-### SQLite: "database.sqlite-wal" locked errors
+### Migrations: pending or failed
 
-**Symptoms:** `SQLITE_BUSY` or "database is locked"
+**Symptoms:** `relation "..." does not exist`, or a column the code expects is missing
 
-**Causes:** Multiple simultaneous connections, unfinished transactions
-
-**Solution:**
-
-```bash
-# Option 1: Restart the server
-npm run dev
-
-# Option 2: Remove WAL files and reset
-rm database.sqlite*
-npm run migrate:dev
-
-# Option 3: Check for zombie processes
-ps aux | grep node
-kill -9 <PID>
-
-# Option 4: Clear test locks
-npm run test -- --forceExit
-```
-
-### SQLite: Database reset fails
-
-**Symptoms:** `npx prisma migrate reset` hangs or fails
+**Cause:** The database is behind the migrations in `database/migrations/`.
 
 **Solution:**
 
 ```bash
-# Kill any active connections
-lsof | grep database.sqlite  # macOS/Linux
-netstat -an | findstr database.sqlite  # Windows
+# Show applied and pending migrations (needs the same DATABASE_URL env as migrate:apply)
+npm run migrate:status
 
-# Remove database file and reset
-rm database.sqlite*
-
-# Run migration again
-npx prisma migrate dev --name init
+# Check the database matches the expected schema
+npm run migrate:verify
 ```
+
+Production schema changes are applied only by the migration runner; see [migrations.md](migrations.md) and [migrations-deploy-runbook.md](migrations-deploy-runbook.md). Do not edit a production schema by hand.
+
+### Real-SQL tests (pglite): fail or cannot find a table
+
+**Symptoms:** `npm run test:db` fails with `relation "..." does not exist`, or one file fails when run with the others
+
+**Causes:** The test harness schema is behind a new migration, or a test reuses data from another test.
+
+**Solution:**
+
+```bash
+# Run one file
+cd workers
+npx vitest run --config vitest.node.config.mts src/database.tenant-isolation.pglite.node.test.ts
+
+# Run the whole real-SQL suite
+npm run test:db
+```
+
+The harness applies the real migrations. If a new migration changed a column type, check that any hand-written fixture SQL in `workers/src/__tests__/pglite-db.ts` still matches it.
 
 ### Neon: Connection timeout errors
 
@@ -228,26 +219,21 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 npm run start
 
 ### Local Storage: Files not persisting
 
-**Symptoms:** Uploaded files disappear after server restart
+**Symptoms:** Uploaded files disappear after restarting `npm run dev:local`
 
-**Causes:** Files stored in upload directory that was deleted
+**Causes:** In local dev the R2 `CSV_UPLOADS` bucket runs in Miniflare's local emulation, and its state was cleared or lives in a different directory.
 
 **Solution:**
 
 ```bash
-# Ensure uploads/ directory is writable
-mkdir -p uploads/
-chmod 755 uploads/
+# Local emulation state lives under workers/.wrangler/state
+ls workers/.wrangler/state
 
-# Check file ownership
-ls -la uploads/
-
-# If ownership is wrong
-chown $USER:$USER uploads/
-
-# Don't add uploads/ to .gitignore accidentally
-git check-ignore uploads/
+# Run dev:local from the same checkout each time so the state is reused
+npm run dev:local --prefix workers
 ```
+
+Local R2 state is disposable. Do not rely on it between machines.
 
 ### R2: 403 Forbidden errors
 
@@ -323,7 +309,7 @@ wrangler r2 object delete <bucket> test.txt
 ```bash
 # The presigned URL is valid for 1 hour
 # If testing manually, regenerate the URL:
-curl -X POST http://localhost:3001/api/upload/initiate \
+curl -X POST http://localhost:8787/api/upload/initiate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"filename":"test.csv","fileSize":1024,"contentType":"text/csv"}'
@@ -336,31 +322,31 @@ curl -X POST http://localhost:3001/api/upload/initiate \
 
 ## Authentication & Security
 
-### JWT token validation fails
+### Clerk token validation fails
 
-**Symptoms:** `401 Unauthorized` or "Invalid token"
+**Symptoms:** `401 Unauthorized`, "Invalid or expired token", "Missing or invalid Authorization header", or "User has not completed organization bootstrap"
 
 **Causes:**
 
-- Token expired
-- Wrong JWT_SECRET
-- Token malformed
+- Token expired (Clerk session tokens are short-lived; the frontend refreshes them)
+- `CLERK_SECRET_KEY` belongs to a different Clerk instance than the frontend's `REACT_APP_CLERK_PUBLISHABLE_KEY`
+- The request origin is not an allowed authorized party
+- The signed-in user has no `users` row yet (organization bootstrap has not run)
 
 **Solution:**
 
 ```bash
-# 1. Verify JWT_SECRET is consistent
-echo $JWT_SECRET
-
-# 2. Test token generation
-npm run test -- auth.test.ts
-
-# 3. Check token expiry
-# Tokens expire in 24 hours by default
-# See: backend/src/services/auth.service.ts
-
-# 4. For Workers, verify JWT_SECRET is in Secrets
+# 1. Confirm the secret is set (production)
 wrangler secret list --env production
+
+# 2. Locally, confirm workers/.dev.vars has CLERK_SECRET_KEY from the same
+#    Clerk instance as the frontend publishable key
+
+# 3. Reproduce the verification path in tests
+npm test --prefix workers -- request-authentication
+
+# 4. If the error is "has not completed organization bootstrap", sign out and in,
+#    and check the diagnostics fields in docs/local-expect-qa.md
 ```
 
 ### CORS errors in browser
@@ -369,27 +355,26 @@ wrangler secret list --env production
 
 **Causes:**
 
-- Frontend domain not in CORS_ORIGIN allowlist
+- `FRONTEND_URL` is unset or does not match the frontend origin exactly (production allows only that origin)
 - Credentials not sent with request
 
 **Solution:**
 
 ```bash
-# 1. Check CORS configuration
-echo $CORS_ORIGIN
+# 1. Check the Worker's FRONTEND_URL (production)
+wrangler secret list --env production
 
-# 2. Ensure frontend domain is included
-CORS_ORIGIN=http://localhost:3000,https://yourdomain.com
+# 2. Ensure it equals the frontend origin, with scheme and no trailing slash
+FRONTEND_URL=https://yourdomain.com
 
-# 3. Verify frontend sends credentials
+# 3. Verify frontend sends the bearer token
 // In fetch request:
 fetch(url, {
-  credentials: 'include',  // Required for CORS
   headers: { 'Authorization': `Bearer ${token}` }
 })
 
-# 4. For development, temporarily allow all origins
-CORS_ORIGIN="*"  # Only for dev! Uses stricter config in prod
+# 4. In non-production, or with FRONTEND_URL unset, the Worker reflects any origin.
+#    That is for development only: set FRONTEND_URL before a production deploy.
 ```
 
 ---
@@ -431,13 +416,12 @@ wrangler publish --env production
 ```bash
 # Don't import Node.js specific modules in Workers:
 ❌ import * as fs from 'fs'         // Node.js only
-❌ import sqlite3 from 'sqlite3'     // Native binding
-✅ import { Prisma } from '@prisma/client'  // OK
+❌ import bcrypt from 'bcrypt'       // Native binding
+✅ import { neon } from '@neondatabase/serverless'  // OK
 
 # For database access in Workers, use:
-- @neondatabase/serverless (recommended)
-- @vercel/postgres
-- With Hyperdrive for connection pooling
+- @neondatabase/serverless, through workers/src/database.ts
+- Hyperdrive for connection pooling
 
 # See: docs/workers-deployment.md
 ```
@@ -469,10 +453,8 @@ if (!cached) {
   await KV.put('key', JSON.stringify(result), { expirationTtl: 3600 });
 }
 
-# 4. Reduce payload size with Prisma select
-const users = await db.user.findMany({
-  select: { id: true, email: true },  // Only needed fields
-})
+# 4. Reduce payload size: select only the columns the response needs
+SELECT id, name, barcode FROM products WHERE organization_id = ${organizationId}
 ```
 
 ### Workers health check failing
@@ -517,48 +499,34 @@ psql $DATABASE_URL -c "SELECT 1"
 # 2. Add indexes
 # See: docs/performance.md#adding-indexes
 
-# 3. Profile with DevTools
-NODE_OPTIONS=--inspect npm run dev
-# Open chrome://inspect
+# 3. Watch live requests
+npm run tail:prod --prefix workers
 
 # 4. Monitor Hyperdrive pool
 # Check connection pool usage in Cloudflare Dashboard
 
-# 5. Enable response caching for read-heavy endpoints
-# See: backend/src/middleware/cache.middleware.ts
+# 5. Cache read-heavy responses with KV or the Cloudflare cache
+# See: docs/performance.md
 ```
 
 ### High memory usage
 
-**Symptoms:** Memory usage grows over time, server crashes
+**Symptoms:** Worker errors with memory limit exceeded, or 1102 resource-limit responses
 
 **Causes:**
 
-- Memory leak in service code
-- Large file buffering
-- Connection pooling issue
+- Large request body buffered whole (`request.json()` reads the entire body)
+- Large file parsed in one pass
+- Unbounded query result held in memory
 
 **Solution:**
 
 ```bash
-# 1. Monitor memory
-node --max-old-space-size=4096 index.js  # Increase heap
-
-# 2. Profile with Node inspector
-node --inspect=9229 index.js
-# Visit: chrome://inspect → Target → Memory tab
-
-# 3. Check for unfinished streams or connections
-# Ensure all file uploads are streamed, not buffered
-// Bad:
-const data = await readFile(path);  // Loads entire file in memory
-// Good:
-const stream = fs.createReadStream(path);
-stream.pipe(destination);
-
-# 4. Monitor Prisma connection pool
-// In backend/src/services/db.service.ts
-console.log(prisma.$metrics.connectionStats());
+# 1. Remember the limit: an isolate has 128 MB shared with other requests
+# 2. JSON bodies are capped at 1 MiB by default (workers/src/utils/body-limit.ts)
+# 3. Page large reads in SQL (LIMIT/OFFSET) instead of loading every row
+# 4. Offload heavy work (big CSV imports) to the queue consumer
+#    See: workers/README.md ("Scheduled jobs and queues")
 ```
 
 ---
@@ -603,8 +571,8 @@ npm test -- --forceExit  # Ensure all connections close
 # In playwright.config.ts:
 timeout: 60000,  // 60 seconds
 
-# 2. Check backend is running
-curl http://localhost:3001/health
+# 2. Check the Worker is running
+curl http://localhost:8787/health
 
 # 3. Add debugging
 // In test file:
@@ -624,24 +592,19 @@ npx playwright test --debug
 
 **Symptoms:** Tests fail when run together but pass individually
 
-**Causes:** Shared test data, transaction conflicts
+**Causes:** Shared test data, or a test that depends on another test's rows
 
 **Solution:**
 
 ```bash
-# 1. Use transactions for test cleanup
-// In beforeEach/afterEach:
-const tx = await prisma.$transaction(async (tx) => {
-  // Test runs in transaction
-  // Auto-rollback on completion
-});
+# 1. Give each test its own database: create the pglite harness in beforeEach
+const harness = await createPgliteHarness();   // workers/src/__tests__/pglite-db.ts
 
-# 2. Reset database between test files
-npm test -- --setupFilesAfterEnv=test-setup.js
+# 2. Seed what the test needs, including a second organization
+await seedOrganization(harness.pg, 'org-a');
 
 # 3. Use unique identifiers per test
 const testId = `test-${Date.now()}-${Math.random()}`;
-const user = await db.user.create({ data: { email: `${testId}@test.com` } });
 
 # 4. Don't rely on test order
 # Tests should be independent and runnable in any order
@@ -659,7 +622,7 @@ const user = await db.user.create({ data: { email: `${testId}@test.com` } });
 
 ```bash
 # 1. Check logs
-wrangler publish --env production --verbose
+wrangler tail --env production --format pretty
 
 # 2. Increase timeout
 wrangler publish --env production --no-bundle
@@ -710,11 +673,8 @@ wrangler secret list --env production
 # Frontend
 REACT_APP_LOG_LEVEL=debug npm start
 
-# Backend
-DEBUG=* npm run dev
-
 # Workers
-wrangler publish --env production --verbose
+wrangler tail --env production --format pretty
 
 # Test
 npm test -- --verbose
@@ -725,19 +685,13 @@ npm test -- --verbose
 1. **Application Logs**
 
    ```bash
-   # Backend: backend/logs/ or console output
-   npm run dev 2>&1 | tee app.log
-
-   # Workers: CloudFlare dashboard or wrangler tail
+   # Worker: Cloudflare dashboard or wrangler tail
    wrangler tail --env production
    ```
 
 2. **Database Logs**
 
    ```bash
-   # SQLite: Enable query logging
-   DATABASE_DEBUG=1 npm run dev
-
    # Neon: Check dashboard
    # https://console.neon.tech → Monitoring → Query Log
    ```
@@ -756,7 +710,7 @@ npm test -- --verbose
 | `connect ETIMEDOUT`             | Network timeout                   | Check firewall, VPN, DNS                |
 | `INVALID_ARGUMENT`              | Wrong env variable format         | Validate variable syntax                |
 | `SSL_CERTIFICATE_VERIFY_FAILED` | SSL/TLS issue                     | Ensure TLS setup, see database section  |
-| `CORS error`                    | Frontend domain not allowed       | Add to CORS_ORIGIN allowlist            |
+| `CORS error`                    | Frontend domain not allowed       | Set FRONTEND_URL on the Worker          |
 | `401 Unauthorized`              | Invalid or expired token          | Generate new token, check secret        |
 
 ### Getting Support
@@ -766,7 +720,7 @@ If you can't resolve the issue:
 1. **Check documentation**
    - This troubleshooting guide
    - [docs/developer-guide.md](developer-guide.md)
-   - [docs/dual-environment-guide.md](dual-environment-guide.md)
+   - [docs/architecture.md](architecture.md)
 
 2. **Check GitHub Issues**
    - Search existing issues
