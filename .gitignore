@@ -19,9 +19,13 @@ out/
 *.sqlite-wal
 *.sqlite
 
-# Database backups/backend/backups/
+# Database backups
 *.manifest.json
 *.pgdump.sql
+
+# Real pharmacy product export. Kept ignored even though backend/ was deleted,
+# because a local copy can remain at this path.
+backend/src/tests/fixtures/real-pharmacy-products.csv
 
 # Memvid local index
 # Derived index, rebuildable from memory.jsonl. See scripts/mem-rebuild.js.
@@ -34,7 +38,6 @@ project-memory.mv2
 .cache/
 node_modules/.cache/
 frontend/node_modules/.cache/
-backend/node_modules/.cache/
 
 # Logs
 *.log
@@ -43,9 +46,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # ESLint report artifacts
-backend/eslint-report.json
 .tmp-eslint-report.json
-backend/.tmp-eslint-report.json
 eslint-out.txt
 
 # OS generated files
@@ -88,13 +89,11 @@ brand-identity-pharma-apps/
 brand-identity/
 
 # Real pharmacy data with sensitive information
-backend/src/tests/fixtures/real-pharmacy-products.csv
 supplier-doc-examples/*
 !supplier-doc-examples/sample_100_ipa_price_brands.xlsx
 
 # Coverage
 coverage/
-backend/coverage/
 bug-scan-report.json
 bug-scan-report.txt
 .env

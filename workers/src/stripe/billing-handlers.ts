@@ -100,13 +100,13 @@ async function hashIdempotencyInput(input: string): Promise<string> {
 }
 
 /**
- * The price IDs this deployment sells, from the same four env keys Express
- * reads (`subscription-billing.helpers.ts` `STRIPE_PRICE_CATALOG`).
+ * The price IDs this deployment sells, from the four STRIPE_*_PRICE_ID env keys.
  *
- * Express also falls back to placeholder ids (`price_starter_monthly` and
- * friends) in development and test. That fallback is not reproduced: a
- * placeholder is not a real Stripe price, so allowing it only converts a clear
- * "not configured" error into an opaque Stripe 400 later in the flow.
+ * Express (retired; see tag `express-sqlite-last`) also fell back to
+ * placeholder ids (`price_starter_monthly` and friends) in development and
+ * test. That fallback is not reproduced: a placeholder is not a real Stripe
+ * price, so allowing it only converts a clear "not configured" error into an
+ * opaque Stripe 400 later in the flow.
  */
 function allowedPriceIds(env: Env): Set<string> {
   const keys = [

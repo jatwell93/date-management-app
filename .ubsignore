@@ -17,9 +17,6 @@ coverage/
 **/*.map
 **/*.min.js
 
-# Prisma / generated client
-backend/prisma/generated/
-
 # Environment files and examples (treat .env entries as false-positives)
 .env
 .env.*
@@ -33,11 +30,8 @@ node_modules/
 .cache/
 
 # Other noisy/generated artifacts
-backend/dist/
 frontend/build/
-backend/coverage/
 bug-scan-report.json
-bug-scan-backend.json
 **/*.test.*  
 **/*.spec.*  
 **/test/**  
