@@ -11,10 +11,21 @@ name: Workers Test
 #     coverage that must survive the Express deletion in
 #     `retire-express-unify-on-postgres`, and nothing enforced them on a PR.
 #
-# Structure deliberately mirrors backend-test.yml; see its header for why there
-# is no `paths:` filter, why detection is a separate job, and why the required
-# check must be the `gate` job rather than the test jobs themselves (a *skipped*
-# job counts as SUCCESS for a required check).
+# This workflow deliberately has NO `paths:` filter on its triggers. A required
+# status check must always report: a workflow filtered out by `paths:` never
+# runs, so its check never appears and a required check waits forever,
+# permanently blocking any PR that does not touch that path. A workflow that
+# DOES run but whose job is skipped via `if:` still posts a check (conclusion
+# "skipped"), which satisfies a required check. So it always triggers, detects
+# changed paths in the `changes` job, and gates the real jobs on its output.
+#
+# That alone is not sufficient: a skipped job counts as SUCCESS for a required
+# check, so a FAILURE of the `changes` job would skip the test jobs and still
+# satisfy a required check placed on them, merging with no test run. The check
+# to require is the `gate` job at the bottom, which runs with `if: always()`
+# and fails unless the results are genuinely acceptable. The other workflows
+# in this directory (frontend-test, migrations-e2e) follow the same pattern and
+# refer back to this header.
 #
 # `shared/` is in the trigger path as well as `workers/`: the Worker imports
 # from `shared/domain` (e.g. `isPlatformAdminUser`, the store-walk audit

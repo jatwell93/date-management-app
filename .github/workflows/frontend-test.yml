@@ -1,13 +1,13 @@
 name: Frontend Test & Coverage
 
-# No `paths:` filter on purpose — see the explanation in backend-test.yml.
+# No `paths:` filter on purpose — see the explanation in workers-test.yml.
 # Always trigger, detect changes in the `changes` job, gate the real jobs on it,
 # so these checks always report and are safe to mark as required.
 on:
   pull_request:
   push:
     branches:
-      # Kept in sync with backend-test.yml. `master` is listed defensively: the
+      # Kept in sync with workers-test.yml. `master` is listed defensively: the
       # ruleset targets ~DEFAULT_BRANCH, so if the default branch were ever
       # renamed, pushes to it must still run this workflow — otherwise the
       # required "Frontend CI Gate" check would never report for those pushes.
@@ -37,7 +37,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.sha }}
         run: |
-          # Deliberately NOT `set -e` -- see the explanation in backend-test.yml.
+          # Deliberately NOT `set -e` -- see the explanation in workers-test.yml.
           # Every failure path must fall back to RUNNING the tests, and the
           # `gate` job is the backstop if this job fails outright.
           set -u
@@ -101,7 +101,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      # Keep npm major in sync with the lockfile generator (see workers-test.yml).
       - name: Pin npm to match lockfile generator
         run: npm i -g npm@11
 
@@ -119,8 +119,8 @@ jobs:
         if: github.event_name != 'pull_request'
         run: npm test
 
-  # Coverage thresholds run separately and are NOT required, mirroring the
-  # backend split so correctness is never blocked on a coverage ratchet.
+  # Coverage thresholds run separately and are NOT required, so correctness
+  # is never blocked on a coverage ratchet.
   coverage:
     name: Frontend Coverage
     needs: changes
@@ -167,7 +167,7 @@ jobs:
           name: frontend-coverage-report
           path: frontend/coverage/
 
-  # THE required status check -- see the explanation in backend-test.yml.
+  # THE required status check -- see the explanation in workers-test.yml.
   # Require "Frontend CI Gate", not the individual jobs. `coverage` excluded.
   gate:
     name: Frontend CI Gate
