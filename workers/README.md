@@ -2,26 +2,27 @@
 
 ## Overview
 
-This directory contains the production deployment code for the Date Management API using Cloudflare Workers. The implementation wraps existing Express routes with a Workers-compatible adapter, enabling serverless deployment while reusing 100% of the backend codebase.
+This directory is the Date Management API: a Cloudflare Worker backed by Neon Postgres (through Hyperdrive). It is the only API. The earlier Express/Prisma/SQLite backend is retired; its last revision is the tag `express-sqlite-last` (see `docs/express-retirement-recovery.md`).
 
 ## Architecture
 
 ```
 workers/
 ├── src/
-│   ├── index.ts                    # Main Workers entry point
-│   ├── express-adapter.ts          # Express-to-Workers compatibility layer
-│   ├── health.ts                   # Health check endpoint
-│   ├── types/
-│   │   └── env.d.ts               # Workers environment bindings
-│   └── middleware/
-│       ├── cors.middleware.ts      # CORS handling
-│       ├── rate-limit.middleware.ts # Rate limiting
-│       └── error-handler.middleware.ts # Error handling & logging
-├── wrangler.toml                   # Workers configuration
-├── package.json                    # Dependencies
-└── tsconfig.json                   # TypeScript configuration
+│   ├── index-minimal.ts      # Entry point: routing, auth, rate limiting, Sentry, security headers
+│   ├── minimal-api-routes.ts # Route table
+│   ├── database.ts           # All SQL; every tenant method takes organizationId first
+│   ├── clerk/                # Clerk token verification, bootstrap, webhook
+│   ├── stripe/               # Billing handlers and Stripe webhook
+│   ├── scheduled/            # Hourly cron dispatcher and jobs
+│   ├── notifications/        # Email queue and trial emails
+│   ├── utils/                # Rate limit, security headers, body limits, env validation
+│   └── health.ts             # /health endpoint
+├── wrangler.toml             # Bindings, vars, queues, cron triggers
+└── package.json
 ```
+
+Shared domain logic lives in `shared/domain/`. Schema changes are numbered migrations in `database/migrations/`, applied by the runner in `src/database/migrations/` (see `docs/migrations.md`). Operator tools that read or seed the database (`npm run diagnose:webhook`, `npm run seed:master-catalogue`) live in the repo root `src/operations/`.
 
 ## Local Development
 
@@ -99,8 +100,14 @@ anyone deploys the development environment.
 ### Test Commands
 
 ```bash
-# Deterministic local suite (excludes external preview deployment smoke test)
+# Unit and handler tests (vitest, no database)
 npm test
+
+# Real-SQL tests against the authoritative migrations in pglite
+npm run test:db          # also available from the repo root
+
+# Type-check including test files (CI runs this)
+npm run typecheck
 
 # Explicit preview deployment smoke test against WORKERS_PREVIEW_URL
 npm run test:preview
@@ -120,15 +127,15 @@ curl http://localhost:8787/health?deep=true
 
 ### Environment Variables
 
-Set in `wrangler.toml` under `[env.production.vars]` or `[env.development.vars]`:
+Set in `wrangler.toml` under `[env.production.vars]` or `[env.development.vars]`. That file is the source of truth for values; the list below says what each one does.
 
-- `NODE_ENV`: Environment name (`production`, `staging`, `development`)
-- `STORAGE_PROVIDER`: Storage backend (`r2` for production, `local` for dev)
-- `MAX_FILE_SIZE`: Maximum upload size in bytes (default: `10485760` = 10MB)
-- `CSV_BATCH_SIZE`: Batch size for CSV processing (default: `100`)
-- `RATE_LIMIT_WINDOW`: Rate limit window in milliseconds (default: `60000` = 1 minute)
-- `RATE_LIMIT_MAX_REQUESTS`: Max requests per window (unauthenticated) (default: `10`)
-- `RATE_LIMIT_MAX_AUTHENTICATED`: Max requests per window (authenticated) (default: `100`)
+- `NODE_ENV`: Environment name
+- `STORAGE_PROVIDER`: Upload storage (`r2` for production, `local` for dev)
+- `MAX_FILE_SIZE`, `ENTERPRISE_MAX_FILE_SIZE`: Maximum upload size in bytes
+- `CSV_BATCH_SIZE`: Batch size for CSV processing
+- `RATE_LIMIT_WINDOW`: Rate limit window in milliseconds
+- `RATE_LIMIT_MAX_REQUESTS`: Max requests per window (unauthenticated)
+- `RATE_LIMIT_MAX_AUTHENTICATED`: Max requests per window (authenticated)
 
 ### Secrets
 
@@ -185,85 +192,22 @@ curl https://date-management-api.your-subdomain.workers.dev/health
 npm run tail:prod
 ```
 
-## Express Route Adapter
+## Request pipeline
 
-The Express adapter (`express-adapter.ts`) converts between Workers and Express request/response models:
+`index-minimal.ts` handles every request. Order matters; read the file before changing it.
 
-### Workers Request → Express Request
+- **Security headers** are applied to every response, including ones Sentry synthesizes for an unhandled throw (`utils/security-headers.ts`).
+- **Rate limiting** uses `utils/minimal-rate-limit.ts`, with separate limits for authenticated and unauthenticated requests. Responses carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a 429 adds `Retry-After`. Counters are keyed per client IP, in separate authenticated and unauthenticated buckets, and stored in the `RATE_LIMITER` KV namespace (in-memory fallback).
+- **Auth** is `authenticateApiRequest`: verify the Clerk token, then read `organization_id` and `role` from the `users` row and check the organization's subscription entitlement. The client never supplies `organizationId`.
+- **Errors** go to Sentry when `WORKERS_SENTRY_DSN` is set. Response bodies are sanitized.
 
-- Parses JSON, form data, and multipart uploads
-- Extracts query parameters and route params
-- Provides Express-style `req.get()` method
-- Maps Cloudflare headers (e.g., `CF-Connecting-IP` → `req.ip`)
+### Scheduled jobs and queues
 
-### Express Response → Workers Response
-
-- Provides `res.status()`, `res.json()`, `res.send()`
-- Builds Workers Response with correct headers
-- Supports middleware chains
-
-### Example Usage
-
-```typescript
-import { adaptExpressHandler } from './express-adapter';
-
-const handler = adaptExpressHandler(async (req, res) => {
-  const data = await productService.getAllProducts();
-  res.json(data);
-});
-```
-
-## Middleware
-
-### CORS
-
-Production CORS restricts to the static allowlist plus `FRONTEND_URL`; non-production allows dynamic preview origins where tests cover that behavior:
-
-```typescript
-// Configured in cors.middleware.ts
-const allowedOrigins = ['https://date-management-status.pages.dev', process.env.FRONTEND_URL];
-```
-
-Set `FRONTEND_URL` before production deploy. Do not rely on dynamic preview origins in production.
-
-### Rate Limiting
-
-Per-IP rate limiting with separate limits for authenticated and unauthenticated requests:
-
-- **Unauthenticated**: 10 requests/minute (default)
-- **Authenticated**: 100 requests/minute (default)
-
-Rate limit headers returned:
-
-- `X-RateLimit-Limit`: Total allowed requests
-- `X-RateLimit-Remaining`: Remaining requests in window
-- `X-RateLimit-Reset`: Timestamp when limit resets
-- `Retry-After`: Seconds until limit resets (only on 429 responses)
-
-### Error Handling
-
-Centralized error handling with:
-
-- Structured JSON logging
-- Sentry integration (optional)
-- Sanitization of sensitive data
-- Different error messages for development vs production
+An hourly cron (`0 * * * *`) runs `scheduled/dispatcher.ts`, which runs the jobs in `scheduled/jobs/`. The catalogue import and notification email queues are declared in `wrangler.toml`; create them in Cloudflare before deploying.
 
 ## Testing
 
-### Unit Tests
-
-```bash
-npm test
-```
-
-### Integration Tests
-
-Testing with Miniflare (local Workers runtime):
-
-```bash
-# TODO: Add Miniflare tests
-```
+Unit and handler tests run with `npm test`. SQL behaviour, including tenant isolation, is tested against a real Postgres (pglite) with `npm run test:db`. Prefer a real-SQL test for anything that touches `database.ts`.
 
 ## Performance
 
@@ -320,9 +264,9 @@ npm install
 
 #### 4. Rate limit not working
 
-**Cause**: In-memory rate limiter resets on worker restart
+**Cause**: `RATE_LIMITER` KV binding missing, so the limiter falls back to per-isolate memory
 
-**Fix**: Use KV namespace or Durable Objects for persistent rate limiting
+**Fix**: Check the `RATE_LIMITER` binding in `wrangler.toml`
 
 ### Debugging
 
@@ -345,30 +289,10 @@ Check Workers dashboard:
 - **No persistent memory**: Use KV, Durable Objects, or external DB for state
 - **Request size limit**: 100MB for Workers with Streams support
 
-### Express Compatibility
-
-**Supported:**
-
-- ✅ Route handlers (`router.get`, `router.post`, etc.)
-- ✅ Middleware chains
-- ✅ `req.body`, `req.params`, `req.query`
-- ✅ `res.status()`, `res.json()`, `res.send()`
-- ✅ Authentication middleware
-
-**Not Supported:**
-
-- ❌ File uploads via `multer` (use direct R2 presigned URLs instead)
-- ❌ Session middleware (use JWT tokens)
-- ❌ `res.redirect()` (implement custom redirect logic)
-- ❌ Streaming responses (Workers has different streaming API)
-
 ## Next Steps
 
-1. **Import Backend Routes**: Integrate all 10 Express routes from `backend/src/routes/`
-2. **Prisma Integration**: Configure Prisma client for Neon in Workers
-3. **Sentry Setup**: Configure error monitoring
-4. **Load Testing**: Test with 1000+ concurrent requests
-5. **Custom Domain**: Configure production domain in Cloudflare dashboard
+1. **Load Testing**: Test with 1000+ concurrent requests (`npm run test:load` from the repo root)
+2. **Custom Domain**: Configure production domain in Cloudflare dashboard
 
 ## Resources
 
