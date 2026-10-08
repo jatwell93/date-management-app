@@ -31,8 +31,8 @@ This document describes the security measures implemented in the Date Management
 The Date Management Application implements **defense-in-depth** security architecture with multiple layers of protection:
 
 - **Input Layer**: Validation, sanitization, and injection prevention
-- **Authentication Layer**: PIN-based login with JWT tokens and refresh token lifecycle
-- **Rate Limiting Layer**: Request throttling to prevent brute-force attacks
+- **Authentication Layer**: Clerk-issued session tokens, verified in the Worker on every request
+- **Rate Limiting Layer**: Per-IP request throttling in the Worker
 - **Network Layer**: CORS whitelisting, TLS enforcement, request size limits
 - **Database Layer**: Parameterized queries, TLS connections, role-based access control
 - **Error Handling Layer**: Generic error messages without internal details
@@ -45,42 +45,25 @@ The Date Management Application implements **defense-in-depth** security archite
 ## Defense-in-Depth Strategy
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Frontend (React)                                             │
-│ - Input validation before submission                          │
-│ - Secure token storage (httpOnly cookies for refresh tokens) │
-└────────────────┬────────────────────────────────────────────┘
-                 │ HTTPS/TLS
-┌────────────────▼────────────────────────────────────────────┐
-│ Edge Layer (Cloudflare Workers)                              │
-│ - JWT validation at edge                                      │
-│ - Early request rejection                                     │
-│ - Global rate limiting                                        │
-└────────────────┬────────────────────────────────────────────┘
-                 │ HTTPS/TLS
-┌────────────────▼────────────────────────────────────────────┐
-│ API Gateway Layer (Express Backend)                          │
-│ - CORS validation                                             │
-│ - Request size limits                                         │
-│ - Rate limiting (per-endpoint)                               │
-│ - Input validation middleware                                │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────────────────────┐
-│ Application Layer (Services, Controllers)                    │
-│ - Business logic validation                                   │
-│ - Authorization checks                                        │
-│ - Parameterized database queries                             │
-│ - Secure error handling                                       │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────────────────────┐
-│ Data Layer (Prisma ORM + PostgreSQL/SQLite)                  │
-│ - TLS for remote connections                                  │
-│ - SQL injection prevention (parameterized queries)           │
-│ - Role-based access control (RBAC)                           │
-│ - Data encryption at rest (provider-managed)                 │
-└─────────────────────────────────────────────────────────────┘
+Frontend (React, Cloudflare Pages)
+  - Input validation before submission
+  - Page CSP and headers from frontend/public/_headers
+        |  HTTPS/TLS
+        v
+Worker API (Cloudflare Workers, workers/src/index-minimal.ts)
+  - Security headers on every response
+  - Rate limiting (per IP, authenticated vs unauthenticated)
+  - Clerk token verification, then organization resolved from the users row
+  - Organization entitlement gate
+  - JSON body size cap, upload size limits
+  - Input validation in handlers
+        |  Hyperdrive / TLS
+        v
+Data layer (Neon Postgres)
+  - Parameterized queries (tagged-template SQL in workers/src/database.ts)
+  - organization_id filter on every tenant query
+  - TLS for connections
+  - Encryption at rest (provider-managed)
 ```
 
 ---
@@ -97,164 +80,66 @@ Cell A1 = "=cmd|' /C calc'!A1"  ← Opens calculator when spreadsheet opens
 
 ### Solution: Escape Leading Special Characters
 
-All user input that will be exported to CSV format is sanitized by escaping leading special characters:
+A value whose first character can start a spreadsheet formula is prefixed with a single quote, which spreadsheets render as text. The rule lives in `shared/domain/csv-injection.ts` so every path applies the same one:
 
 ```typescript
 // Characters that trigger formulas in spreadsheet applications
-const FORMULA_CHARS = ['=', '+', '-', '@', '\t', '\r'];
-
-// Before exporting to CSV, escape these characters
-const sanitized = FORMULA_CHARS.includes(value[0]) ? `'${value}` : value;
+export const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r'] as const;
 ```
 
 **What This Does**:
 
-- If a cell value starts with `=`, `+`, `-`, `@`, tab, or carriage return, we prepend a single quote (`'`)
-- Spreadsheet applications treat quoted cells as text, not formulas
-- The data is preserved exactly as entered by the user
+- If a cell value starts with `=`, `+`, `-`, `@`, tab, or carriage return, a single quote (`'`) is prepended
+- Spreadsheet applications treat the cell as text, not a formula
+- The data is otherwise preserved as entered
 
 ### Implementation Details
 
-**Scope**: All CSV exports via `GET /reports/*` endpoints
+**Scope**: The control is applied at **ingestion**, because a stored payload can be weaponized by any later export, not only the one that wrote it:
 
-- Monthly expiry reports
-- Markdown reports
-- Usage reports
-- Daily usage data
+- Catalogue and expiry CSV uploads (`workers/src/upload/catalogue-parser.ts`, `expiry-parser.ts`)
+- CSV exports use `toCsvField` from the same module
 
-**Testing**:
-
-- Unit tests verify escaping of all leading special characters
-- Edge cases: empty cells, already-quoted cells, multiple special characters
-- Example test cases:
-  ```typescript
-  expect(sanitize('=SUM(A1:A10)')).toBe("'=SUM(A1:A10)");
-  expect(sanitize('+1+1')).toBe("'+1+1");
-  expect(sanitize('Normal text')).toBe('Normal text');
-  expect(sanitize('')).toBe('');
-  ```
+**Testing**: unit tests in `shared/domain` and the upload parser tests cover the leading characters, empty cells and already-quoted cells.
 
 ### For Developers
 
-When exporting user data to CSV:
+When writing CSV output or accepting CSV input, import the shared helpers instead of writing a new escape:
 
 ```typescript
-import { sanitizeCsvValue } from '../utils/csv-sanitizer';
-
-const rows = products.map((p) => ({
-  name: sanitizeCsvValue(p.name), // ← Always sanitize
-  barcode: sanitizeCsvValue(p.barcode),
-  expiry: p.expiry_date.toISOString(), // ← Date is safe
-}));
+import { toCsvField } from '../../shared/domain/csv-injection';
 ```
 
 ---
 
 ## Authentication & Token Management
 
-### PIN-Based Login
+### Clerk Sessions
 
-Users authenticate with a 4-digit PIN:
+Users sign in through Clerk. The app has no PIN login, no password store and no refresh-token table of its own. The old routes (`/api/auth/login`, `/api/auth/register`, `PUT /api/users/:id/reset-pin`) were removed, and `workers/src/retired-routes.test.ts` pins that they stay gone.
 
-```typescript
-const user = await authService.login({ pin: '5624' });
-// Returns: { accessToken, refreshToken, user }
-```
+On each request the Worker (`authenticateClerkRequest`, `workers/src/clerk/bootstrap-handler.ts`):
 
-**PIN Storage**:
+1. Reads the `Authorization: Bearer <token>` header; a missing or malformed header is a 401.
+2. Verifies the token with Clerk's `verifyToken`, using `CLERK_SECRET_KEY` and the allowed authorized parties (`azp`) derived from the configured frontend origins.
+3. Takes the Clerk user id (`sub`) from the verified token.
 
-- Pins are hashed using bcrypt (10 salt rounds)
-- Database stores only the hash: `$2b$10$...`
-- Raw PIN never stored or logged
-- PIN cannot be recovered from hash
+The Worker then reads `organization_id` and `role` from its own `users` row for that Clerk user. A token with no matching row is refused with 401. The organization is never taken from the request.
 
-### Access Token (Short-Lived)
+### Session Lifetime and Revocation
 
-JWT token valid for **1 hour**:
+Token lifetime, refresh and revocation (sign-out, session revoke) are managed by Clerk. Revoke a user's access in the Clerk dashboard; the Worker verifies each token and does not cache a session.
 
-```
-{
-  "sub": "user-id-123",
-  "role": "Manager",
-  "iat": 1707497400,
-  "exp": 1707501000    ← Expires in 1 hour
-}
-```
+### Webhooks
 
-**When to Use**:
-
-- Include in `Authorization: Bearer <token>` header for API requests
-- Automatically sent by frontend in httpOnly cookie (when configured)
-- Short expiry minimizes risk if token is compromised
-
-### Refresh Token (Long-Lived)
-
-JWT token valid for **7 days**:
-
-```
-{
-  "sub": "user-id-123",
-  "type": "refresh",
-  "iat": 1707497400,
-  "exp": 1708102200   ← Expires in 7 days
-}
-```
-
-**When to Use**:
-
-- Only sent during login (`POST /auth/login`)
-- Store securely (httpOnly, Secure, SameSite cookies recommended)
-- Only used to request new access tokens
-
-**Token Refresh Flow**:
-
-```
-1. User logs in → Get access + refresh tokens
-2. Access token expires (1 hour)
-3. Frontend uses refresh token → POST /auth/refresh
-4. Backend verifies refresh token is not revoked/expired
-5. Backend issues new access token
-6. User continues without re-entering PIN
-7. (Optional) Frontend rotates refresh token on rotation
-```
-
-### Token Revocation (Logout)
-
-Refresh tokens are tracked in database:
-
-```
-RefreshToken table:
-├── id
-├── userId
-├── token (unique)
-├── expiresAt
-├── revokedAt  ← Set to NOW() on logout
-├── createdAt
-└── updatedAt
-```
-
-**Logout Process**:
-
-```typescript
-await authService.revokeRefreshToken(refreshToken);
-// Sets revokedAt = NOW()
-// Token cannot be used even if not expired
-```
-
-**Token Cleanup**:
-
-```typescript
-// Scheduled daily (or on-demand)
-await authService.cleanupExpiredTokens();
-// Deletes rows where expiresAt < NOW()
-```
+Clerk and Stripe call the Worker on `/api/webhooks/clerk` and `/api/webhooks/stripe`. Both verify the provider's signature (Svix for Clerk, Stripe's scheme for Stripe) with a signing secret, and claim each event id in a ledger table before processing, so a replayed delivery has no second effect.
 
 ### Security Properties
 
-✅ **Prevents Token Exhaustion**: Expiry dates ensure tokens eventually become invalid  
-✅ **Supports Logout**: Revocation tracking allows immediate token invalidation  
-✅ **Minimizes Damage**: Expired access tokens limit window of exposure  
-✅ **Enables Token Rotation**: Refresh tokens can be rotated without user friction
+✅ **No credential store**: the app holds no passwords or PINs
+✅ **Immediate revocation**: Clerk session revocation takes effect on the next request
+✅ **Server-side tenant context**: the organization comes from the database row, not the token payload or request
+✅ **Replay-safe webhooks**: signature verified, event claimed once
 
 ---
 
@@ -264,72 +149,53 @@ await authService.cleanupExpiredTokens();
 
 Rate limiting prevents:
 
-- **Brute-force attacks**: Login attempts with multiple PINs
-- **Denial of Service (DoS)**: Flooding endpoints with requests
-- **API abuse**: Scraping, data harvesting, resource exhaustion
+- **Brute-force attacks**: repeated guesses against any endpoint
+- **Denial of Service (DoS)**: flooding endpoints with requests
+- **API abuse**: scraping, data harvesting, resource exhaustion
 
 ### Implementation
 
-**Three Tiers of Rate Limiting**:
+`workers/src/utils/minimal-rate-limit.ts`, called from `index-minimal.ts`. Counters are keyed per client IP (`CF-Connecting-IP`), in separate authenticated and unauthenticated buckets, and stored in the `RATE_LIMITER` KV namespace, with an in-memory fallback if the binding is missing.
 
-| Tier         | Endpoints                | Limit        | Window     | Purpose                      |
-| ------------ | ------------------------ | ------------ | ---------- | ---------------------------- |
-| **Strict**   | `POST /auth/login`       | 5 requests   | 15 minutes | Prevent PIN brute-force      |
-| **Strict**   | `POST /users` (register) | 5 requests   | 15 minutes | Prevent account spam         |
-| **Upload**   | `POST /upload`           | 10 requests  | 1 hour     | Prevent CSV processing abuse |
-| **Standard** | All other endpoints      | 100 requests | 15 minutes | General DoS prevention       |
+| Bucket        | Production limit | Window |
+| ------------- | ---------------- | ------ |
+| Authenticated | 30 requests      | 1 min  |
+| Anonymous     | 5 requests       | 1 min  |
+
+These are the values in `workers/wrangler.toml` at the time of writing; that file is the source of truth. Upload size and per-tier usage limits are separate controls (see Request & Payload Security).
 
 ### Configuration
 
-Set in `.env.example`:
+Set in `workers/wrangler.toml` under `[env.production.vars]`:
 
-```bash
-# Rate Limiting
-RATE_LIMIT_WINDOW=60000              # Time window in milliseconds (1 minute)
-RATE_LIMIT_MAX_REQUESTS=10           # Default for unauthenticated
-RATE_LIMIT_MAX_AUTHENTICATED=100     # For authenticated users
+```toml
+RATE_LIMIT_WINDOW = "60000"              # window in milliseconds
+RATE_LIMIT_MAX_REQUESTS = "5"            # unauthenticated
+RATE_LIMIT_MAX_AUTHENTICATED = "30"      # authenticated
 ```
 
 ### When Rate Limit is Hit
 
-**Response**:
-
-```
-HTTP 429 Too Many Requests
-
-{
-  "error": "Too many requests, please try again later.",
-  "retryAfter": "12m"
-}
-```
+**Response**: `HTTP 429 Too Many Requests`
 
 **Headers**:
 
 ```
-Retry-After: 720     ← Seconds until user can retry
-RateLimit-Limit: 5
-RateLimit-Remaining: 0
-RateLimit-Reset: <unix-timestamp>
+Retry-After: <seconds until the window resets>
+X-RateLimit-Limit: <limit>
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: <ISO timestamp>
 ```
 
 **Behavior**:
 
-- Requests are rejected immediately at middleware level
-- No database queries executed
-- Minimal server resources consumed
-- IP-based tracking (can integrate with geolocation)
+- Requests are rejected before any handler or database work runs
+- Minimal resources consumed
+- IP-based tracking
 
 ### For Developers
 
-**Applying Rate Limiting**:
-
-```typescript
-import { createRateLimiter } from '../middleware/rateLimiter';
-
-const strictLimiter = createRateLimiter('strict'); // 5/15min
-
-router.post('/auth/login', strictLimiter, authController.login);
-```
+Do not add a second limiter inside a handler. Change the limits or the bucket logic in `utils/minimal-rate-limit.ts` and cover the change in `utils/minimal-rate-limit.test.ts`.
 
 ---
 
@@ -337,81 +203,38 @@ router.post('/auth/login', strictLimiter, authController.login);
 
 ### Problem: Cross-Site Request Forgery (CSRF)
 
-Without CORS protection, malicious websites could make requests on behalf of logged-in users:
+Without CORS protection, malicious websites could make requests on behalf of logged-in users.
 
-```html
-<!-- Attacker's website -->
-<img src="https://app.example.com/api/users/123?action=delete" />
-<!-- User's browser automatically includes auth cookies -->
-```
+The API authenticates with a bearer token in the `Authorization` header, not an ambient cookie, so a forged cross-site request does not carry credentials. CORS is still restricted as a second control.
 
-### Solution: CORS Whitelist
+### Solution: CORS Allow-list
 
-The backend explicitly allows only trusted frontend origins:
+`getCorsHeaders` (`workers/src/utils/worker-response.ts`):
 
 ```typescript
-const cors = require('cors');
-
-app.use(
-  cors({
-    origin: ['https://app.example.com', 'https://staging.example.com'],
-    credentials: true, // Include cookies
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  }),
-);
+const allowAll = env.NODE_ENV !== 'production' || !env.FRONTEND_URL;
+const allowedOrigin = allowAll ? requestOrigin || '*' : env.FRONTEND_URL || 'http://localhost:3000';
 ```
+
+- **Production with `FRONTEND_URL` set**: only that origin is allowed, with `Access-Control-Allow-Credentials: true`.
+- **Non-production, or `FRONTEND_URL` unset**: any origin is reflected. **Set `FRONTEND_URL` before a production deploy.**
+- Allowed methods: `GET, POST, PUT, PATCH, DELETE, OPTIONS`. Allowed headers: `Content-Type, Authorization`.
 
 ### Configuration
 
-**Development** (`.env.example`):
-
-```bash
-CORS_ORIGINS=http://localhost:3000,http://localhost:3001
-```
-
-**Production** (`.env`):
-
-```bash
-CORS_ORIGINS=https://app.example.com,https://staging.example.com
-```
-
-**Never use**:
-
-```bash
-CORS_ORIGINS=*  # ← SECURITY RISK! Allows all origins
-```
+Set `FRONTEND_URL` as a Worker variable or secret for each environment. Never rely on the permissive non-production behavior in production.
 
 ### How CORS Works
 
-**Step 1: Preflight Check** (browser sends automatically):
+**Step 1: Preflight** (browser sends automatically): `OPTIONS` with `Origin` and `Access-Control-Request-Method`. The Worker answers 204 with the CORS headers (`handleOptions`).
 
-```
-OPTIONS /api/users HTTP/1.1
-Origin: https://app.example.com
-Access-Control-Request-Method: DELETE
-```
-
-**Step 2: Server Validates**:
-
-```
-If origin NOT in whitelist → Return 403
-If origin IS in whitelist → Return 200 with headers
-```
-
-**Step 3: Actual Request**:
-
-```
-DELETE /api/users/123 HTTP/1.1
-Origin: https://app.example.com
-Authorization: Bearer <token>
-```
+**Step 2: Actual request**: the browser sends the request with `Origin` and `Authorization`, and only exposes the response if `Access-Control-Allow-Origin` matches.
 
 ### Results
 
-✅ Requests from whitelisted origins: **Allowed**  
-❌ Requests from other origins: **Blocked by browser**  
-✅ Even if attacker tries: **Browser enforces CORS**
+✅ Requests from the configured frontend origin: **Allowed**
+❌ Browser requests from other origins in production: **Blocked by the browser**
+⚠️ CORS does not stop non-browser clients; authentication does
 
 ---
 
@@ -419,18 +242,11 @@ Authorization: Bearer <token>
 
 ### TLS/SSL Encryption
 
-**Development** (SQLite):
+The Worker reaches Neon Postgres through Hyperdrive. Connection strings carry `sslmode=require`:
 
 ```bash
-DATABASE_URL=file:./database.sqlite
-# Local file, no network encryption needed
-```
-
-**Production** (Neon PostgreSQL):
-
-```bash
-DATABASE_URL=postgresql://user:password@host/db?sslmode=require
-#                                                  ↑ TLS required
+postgresql://user:password@host/db?sslmode=require
+#                                  ↑ TLS required
 ```
 
 **What `sslmode=require` Does**:
@@ -438,53 +254,39 @@ DATABASE_URL=postgresql://user:password@host/db?sslmode=require
 - 🔒 Encrypts all database traffic with TLS
 - 🔒 Prevents password transmission in plain text
 - 🔒 Prevents data interception over network
-- 🔒 Verifies server certificate authenticity
 
-**For Developers**:
-
-```typescript
-// backend/src/database.ts
-const connectionUrl = process.env.DATABASE_URL;
-
-if (process.env.NODE_ENV === 'production' && !connectionUrl.includes('sslmode=require')) {
-  throw new Error('Production DATABASE_URL must include sslmode=require');
-}
-```
+Local development runs `npm run dev:local` against your own Neon branch (see `workers/README.md`), so local traffic is encrypted too. There is no local SQLite database.
 
 ### Parameterized Queries (SQL Injection Prevention)
 
 **Vulnerable** ❌:
 
 ```typescript
-const user = await db.$queryRaw(`SELECT * FROM users WHERE pin = '${userInput}'`);
+const rows = await db.sql.query(`SELECT * FROM products WHERE barcode = '${userInput}'`);
 // If userInput = "' OR '1'='1" → Injection!
 ```
 
 **Safe** ✅:
 
 ```typescript
-const user = await prisma.user.findUnique({
-  where: { pin: bcryptHash(userInput) },
-});
-// Parameter is escaped automatically
-// User input cannot break SQL structure
+const rows =
+  await db.sql`SELECT * FROM products WHERE organization_id = ${organizationId} AND barcode = ${userInput}`;
+// Values become bound parameters; user input cannot change the SQL structure
 ```
+
+Use the tagged-template form for every value. Never build SQL by concatenating or interpolating strings.
 
 ### Role-Based Access Control
 
-Users have roles that restrict operations:
+Roles are `admin`, `manager` and `team_member` (`shared/domain/roles.ts`). `users.role` is constrained to those values (migration 0018). Clerk membership roles are mapped onto them by the same normalizer at bootstrap and in the Clerk webhook.
 
 ```typescript
-const ROLES = {
-  MANAGER: 'Manager', // Create/edit/delete users
-  TEAM_MEMBER: 'Team Member', // View and update inventory
-};
-
-// Controller checks role before operation
-if (req.user.role !== 'Manager') {
-  return res.status(403).json({ error: 'Manager role required' });
+if (auth.role !== 'admin') {
+  return errorResponse('Admin role required', 403, env, requestOrigin);
 }
 ```
+
+Role changes are recorded in `org_audit_log` (migration 0013).
 
 ---
 
@@ -492,48 +294,26 @@ if (req.user.role !== 'Manager') {
 
 ### Request Size Limits
 
-**Configuration**:
+**JSON bodies**: capped at 1 MiB by default (`workers/src/utils/body-limit.ts`, override with `MAX_JSON_BODY_BYTES`). A Worker isolate shares 128 MB of memory with the other requests it serves, so the cap is a tenant-fairness control as well as an abuse control.
 
-```typescript
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb' }));
+**File uploads**: set in `workers/wrangler.toml`:
+
+```toml
+MAX_FILE_SIZE = "26214400"             # 25 MB
+ENTERPRISE_MAX_FILE_SIZE = "104857600" # 100 MB
 ```
 
-**File Upload Limits**:
-
-```bash
-MAX_FILE_SIZE=10485760        # 10 MB
-MAX_UPLOAD_SIZE_BYTES=10485760
-DIRECT_UPLOAD_THRESHOLD_BYTES=2097152  # 2 MB for direct uploads
-```
+Uploads are also subject to the per-tier storage quota.
 
 **Why Limits Matter**:
 
-- Prevents memory exhaustion attacks
-- Prevents disk space DoS
+- Prevents memory exhaustion
 - Limits processing time for large files
-- Protects against zip bombs
+- Keeps one tenant from starving others
 
-### Content-Type Validation
+### Content Validation
 
-File uploads are validated against expected types:
-
-```typescript
-// Multer configuration
-multer({
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB
-  },
-  fileFilter: (req, file, cb) => {
-    const allowed = ['text/csv', 'application/vnd.ms-excel', '...'];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new ValidationError('Invalid file type'));
-    }
-  },
-});
-```
+Uploaded CSV/XLSX content is parsed and validated row by row (`workers/src/upload/`). Every cell passes through the CSV-injection escape described above. XLSX parsing carries an accepted dependency risk; see "Accepted Dependency Risks".
 
 ---
 
@@ -541,24 +321,9 @@ multer({
 
 ### Principle: Generic Error Messages
 
-**Development**:
+Handlers return `{ "error": "<message>" }` with an HTTP status through `errorResponse`. Messages for client faults (validation, conflict) are specific. Do not put database error text, SQL, stack traces or third-party service details in a response message.
 
-```json
-{
-  "error": "Unexpected error during database operation",
-  "details": "UNIQUE constraint failed: users.email",  ← Shows constraint
-  "statusCode": 400
-}
-```
-
-**Production**:
-
-```json
-{
-  "error": "An error occurred. Please try again or contact support.",
-  "statusCode": 500
-}
-```
+Unexpected exceptions are captured in Sentry, and the response carries no internal detail.
 
 ### Why Generic Messages?
 
@@ -569,32 +334,21 @@ multer({
 
 ### Error Categories
 
-| Type                     | Handled As | Message              | Example                                           |
-| ------------------------ | ---------- | -------------------- | ------------------------------------------------- |
-| **Validation Error**     | 400        | Field-specific error | "field: 'email', message: 'Invalid email format'" |
-| **Authentication Error** | 401        | Generic message      | "Invalid PIN"                                     |
-| **Authorization Error**  | 403        | Generic message      | "Access denied"                                   |
-| **Not Found**            | 404        | Generic message      | "Resource not found"                              |
-| **Conflict**             | 409        | Specific message     | "User already exists"                             |
-| **Server Error**         | 500        | Generic message      | "An error occurred"                               |
+| Type                     | Status | Message                 | Example                                    |
+| ------------------------ | ------ | ----------------------- | ------------------------------------------ |
+| **Validation Error**     | 400    | Field-specific error    | "Invalid email format"                     |
+| **Authentication Error** | 401    | Generic message         | "Missing or invalid Authorization header"  |
+| **Authorization Error**  | 403    | Generic message         | "Admin role required"                      |
+| **Not Found**            | 404    | Generic message         | "Product not found"                        |
+| **Conflict**             | 409    | Specific message        | "Store area with this name already exists" |
+| **Rate limited**         | 429    | Generic + `Retry-After` | "Too many requests"                        |
+| **Server Error**         | 500    | Generic message         | "An error occurred"                        |
+
+Unique violations (SQLSTATE 23505) are classified in `workers/src/db-errors.ts` and become 409s, not 500s.
 
 ### Stack Traces
 
-**Development**:
-
-```
-✅ Full stack trace in error response
-✅ Helps developers debug quickly
-✅ Node process logs show full details
-```
-
-**Production**:
-
-```
-❌ Stack traces removed from response
-✅ Stack traces logged to Sentry (internal only)
-✅ User sees generic "An error occurred" message
-```
+Stack traces are logged to Sentry (internal only) and never sent to the client.
 
 ---
 
@@ -687,46 +441,28 @@ DATABASE_URL=postgresql://user:password@host/db
 
 ## Edge Compute Security (Workers)
 
-### JWT Validation at Edge
+The Worker is the API itself, so its checks are the API's checks. There is no separate backend behind it.
 
-Cloudflare Workers validate tokens before requests reach backend:
+### Token Validation
 
-```typescript
-// workers/src/middleware/auth.ts
-export async function validateJWT(request) {
-  const authHeader = request.headers.get('Authorization');
-
-  if (!authHeader?.startsWith('Bearer ')) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  const token = authHeader.slice(7);
-
-  try {
-    const verified = await jose.jwtVerify(token, new TextEncoder().encode(JWT_SECRET));
-    return { success: true, userId: verified.payload.sub };
-  } catch (error) {
-    return new Response('Invalid token', { status: 401 });
-  }
-}
-```
+Clerk tokens are verified in `authenticateClerkRequest` (see Authentication above), before any handler or database work.
 
 ### Benefits
 
-- **Early Rejection**: Invalid tokens rejected before hitting backend
-- **Reduced Backend Load**: Fewer invalid requests processed
-- **Global Protection**: Validation happens at edge (Cloudflare's global network)
-- **Low Latency**: Edge locations geographically close to users
+- **Early Rejection**: invalid tokens are refused before any database query
+- **Global Protection**: validation runs on Cloudflare's network
+- **Low Latency**: edge locations close to users
 
-### Public Endpoints (No Auth Required)
+### Public Endpoints (No Bearer Token)
 
-```typescript
-const PUBLIC_ENDPOINTS = ['/auth/login', '/auth/register', '/health'];
+- `GET /health` and `GET /api/health`
+- `POST /api/webhooks/clerk` and `POST /api/webhooks/stripe`: no bearer token, but each verifies the provider's signature (the Stripe receiver answers 503 until its signing secret is set)
 
-if (PUBLIC_ENDPOINTS.includes(url.pathname)) {
-  return next(); // Skip JWT validation
-}
-```
+Every other `/api/*` route runs `authenticateApiRequest`.
+
+### Security Headers
+
+`workers/src/utils/security-headers.ts` sets `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer` and others on every response. The page CSP for the frontend lives in `frontend/public/_headers`, because Cloudflare Pages serves the frontend.
 
 ---
 
@@ -737,7 +473,6 @@ if (PUBLIC_ENDPOINTS.includes(url.pathname)) {
 The repository uses deterministic npm lockfiles for each package boundary:
 
 - Root: `package-lock.json`
-- Backend: `backend/package-lock.json`
 - Frontend: `frontend/package-lock.json`
 - Workers: `workers/package-lock.json`
 
@@ -776,36 +511,38 @@ Use install scripts sparingly. For lockfile-only dependency changes, prefer:
 npm install <package>@<version> --package-lock-only --ignore-scripts
 ```
 
-Do not set global `ignore-scripts=true` for this repo without a separate migration plan. The backend currently depends on native packages such as SQLite and bcrypt that require install-time build hooks in normal development installs.
+Do not set global `ignore-scripts=true` for this repo without a separate migration plan. Check which dependencies need install-time build hooks before proposing it.
 
 ### Dependabot
 
-Dependabot is configured for the root, backend, frontend, workers, and GitHub Actions package ecosystems. Review dependency PRs by package boundary and avoid mixing unrelated runtime and tooling updates unless the advisory requires coordinated remediation.
+Dependabot is configured for the root, frontend, workers, and GitHub Actions package ecosystems. Review dependency PRs by package boundary and avoid mixing unrelated runtime and tooling updates unless the advisory requires coordinated remediation.
 
 ### Dependabot Remediation Log
 
+> Entries below are dated records. Rows marked "Backend" refer to the Express backend (`backend/`), retired in October 2026 (tag `express-sqlite-last`); they are kept as history and are not current dependencies.
+
 **2026-06-27** — Cleared the runtime, edge, and build-tool advisories that had a clean (non-major) patched path, working per package boundary with lockfile-only updates (`--package-lock-only --ignore-scripts`) so no install scripts ran:
 
-| Boundary | Change | Advisories cleared |
-| -------- | ------ | ------------------ |
-| Backend | `multer ^2.0.2 → ^2.2.0` (direct, runtime); `form-data → 4.0.6`, `@opentelemetry/*`, `@sentry/*`, `@babel/core` via audit fix; bumped existing overrides `tar 7.5.15 → 7.5.17` and `ws 8.20.1 → 8.21.0` | multer (high), form-data (high), tar, ws, OpenTelemetry/Sentry (moderate) |
-| Root | `wrangler 4.94.0 → 4.105.0` (clears bundled `undici`/`ws`/`esbuild`/`miniflare`); `js-yaml → 4.3.0` via audit fix | undici (high), ws (high), esbuild (low), js-yaml (moderate) → **0 remaining** |
-| Workers | `esbuild ^0.27.7 → ^0.28.1` (direct); `wrangler`/`vite`/`undici`/`ws`/`miniflare`/`vitest-pool-workers` via audit fix | undici (high), vite (high), ws (high), esbuild (low) → **0 remaining** |
+| Boundary | Change                                                                                                                                                                                                  | Advisories cleared                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Backend  | `multer ^2.0.2 → ^2.2.0` (direct, runtime); `form-data → 4.0.6`, `@opentelemetry/*`, `@sentry/*`, `@babel/core` via audit fix; bumped existing overrides `tar 7.5.15 → 7.5.17` and `ws 8.20.1 → 8.21.0` | multer (high), form-data (high), tar, ws, OpenTelemetry/Sentry (moderate)     |
+| Root     | `wrangler 4.94.0 → 4.105.0` (clears bundled `undici`/`ws`/`esbuild`/`miniflare`); `js-yaml → 4.3.0` via audit fix                                                                                       | undici (high), ws (high), esbuild (low), js-yaml (moderate) → **0 remaining** |
+| Workers  | `esbuild ^0.27.7 → ^0.28.1` (direct); `wrangler`/`vite`/`undici`/`ws`/`miniflare`/`vitest-pool-workers` via audit fix                                                                                   | undici (high), vite (high), ws (high), esbuild (low) → **0 remaining**        |
 
 After each change, `npm audit` confirmed the targeted advisories cleared and `npm run security:npm-supply-chain` confirmed the dependency-source policy still passes.
 
 **2026-06-27** — Migrated the frontend off Create React App (`react-scripts`/CRACO) to Vite (follow-up #290). This removed the entire CRA build-tool advisory tree wholesale rather than force-patching transitive dependencies:
 
-| Boundary | Change | Advisories cleared |
-| -------- | ------ | ------------------ |
+| Boundary | Change                                                                                                                                                                                                                                                | Advisories cleared                                                                                                                                             |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend | Replaced `react-scripts` + `@craco/craco` with `vite` + `@vitejs/plugin-react`; PWA service worker preserved via `vite-plugin-pwa` (`injectManifest`, reusing the existing `service-worker.ts`); Tailwind now processed through PostCSS at build time | `shell-quote` (**critical**), `webpack-dev-server`, `postcss`, `nth-check`, `css-select`, `svgo` and the rest of the CRA/webpack build-tool tree → **removed** |
 
 The test runner migration is staged: this change introduces a temporary standalone Jest (decoupled from CRA) so the existing suites stay green; the `jest → vitest` port is tracked in #291. As a result the frontend now reports the same dev/test-only Jest toolchain advisories as the backend (see Accepted Dependency Risks below), which #291 resolves.
 
 **2026-06-27** — Ported the frontend test suite from Jest to Vitest (the frontend portion of #291). This removes the standalone Jest scaffolding added during the Vite migration and its dev/test-only advisories:
 
-| Boundary | Change | Advisories cleared |
-| -------- | ------ | ------------------ |
+| Boundary | Change                                                                                                                                                                                                                         | Advisories cleared                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend | Replaced `jest` / `babel-jest` / `jest-environment-jsdom` / `jest-fetch-mock` with `vitest` + `jsdom` + `vitest-fetch-mock`; 54 suites / 470 tests ported (`jest.*` → `vi.*`), aligning the frontend with the workers boundary | `@jest/*`, `babel-jest`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, dev/test `js-yaml` → **removed** from the frontend |
 
 After the port, `npm audit` in `/frontend` reports only the pre-existing `quagga` and `xlsx` accepted risks below; the Jest toolchain advisories are gone. The backend Jest 30 upgrade (the remaining part of #291) is unaffected by this change.
@@ -814,15 +551,15 @@ After the port, `npm audit` in `/frontend` reports only the pre-existing `quagga
 
 Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear the backend's dev/test toolchain advisories. `npm audit` moves from 20 → 19 (one moderate cleared), but the remainder persist because they are now dominated by a newly-published advisory with **no upstream fix**:
 
-| Boundary | Change | Advisory outcome |
-| -------- | ------ | ---------------- |
-| Backend | `jest` `29 → 30`, drop unused `jest-environment-jsdom` | Net **−1 moderate**. The residual moderate advisories trace to `js-yaml <= 4.1.1` (GHSA-h67p-54hq-rp68, quadratic-complexity DoS, no fixed release) pulled in via `@istanbuljs/load-nyc-config` → `babel-plugin-istanbul` → `@jest/transform`. Jest depends on `babel-plugin-istanbul` unconditionally (independent of our `coverageProvider: 'v8'` setting), so this chain is present at **every** Jest version. The only way to shed it is to leave Jest — the path the frontend already took with Vitest (v8 coverage, no `babel-plugin-istanbul`). |
+| Boundary | Change                                                 | Advisory outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Backend  | `jest` `29 → 30`, drop unused `jest-environment-jsdom` | Net **−1 moderate**. The residual moderate advisories trace to `js-yaml <= 4.1.1` (GHSA-h67p-54hq-rp68, quadratic-complexity DoS, no fixed release) pulled in via `@istanbuljs/load-nyc-config` → `babel-plugin-istanbul` → `@jest/transform`. Jest depends on `babel-plugin-istanbul` unconditionally (independent of our `coverageProvider: 'v8'` setting), so this chain is present at **every** Jest version. The only way to shed it is to leave Jest — the path the frontend already took with Vitest (v8 coverage, no `babel-plugin-istanbul`). |
 
 **2026-06-28** — Migrated the backend test suite from Jest to **Vitest v4** (the change #291 actually required to clear the toolchain advisories, per the row above). Replaced `jest` / `ts-jest` / `@types/jest` with `vitest` + `@vitest/coverage-v8` (v8 coverage, no `babel-plugin-istanbul`) plus `unplugin-swc` / `@swc/core` (SWC emits the `design:paramtypes` decorator metadata `tsyringe` needs; the intuitive `esbuild: false` is inert under Vitest 4 — `oxc: false` is required). All 154 test files were ported (`jest.*` → `vi.*`); the two DB-targeted Jest configs became `vitest.config.ts` (SQLite) and `vitest.config.neon.ts` (PostgreSQL). The full suite passes (1,658 passed / 9 skipped) and the coverage thresholds (75/70/75/75) hold.
 
-| Boundary | Change | Advisory outcome |
-| -------- | ------ | ---------------- |
-| Backend | Replaced Jest with Vitest (v8 coverage); dropped `jest` / `ts-jest` / `@types/jest` (247 transitive packages removed) | `@jest/*`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, and the dev/test `js-yaml <= 4.1.1` they pulled in are **gone**. `npm audit` for `/backend` drops from 19 → 1; the only remaining advisory is the pre-existing `xlsx` runtime risk (below). This is the change that closes the backend Jest-toolchain accepted-risk row. |
+| Boundary | Change                                                                                                                | Advisory outcome                                                                                                                                                                                                                                                                                                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend  | Replaced Jest with Vitest (v8 coverage); dropped `jest` / `ts-jest` / `@types/jest` (247 transitive packages removed) | `@jest/*`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, and the dev/test `js-yaml <= 4.1.1` they pulled in are **gone**. `npm audit` for `/backend` drops from 19 → 1; the only remaining advisory is the pre-existing `xlsx` runtime risk (below). This is the change that closes the backend Jest-toolchain accepted-risk row. |
 
 **2026-07-19** — Triaged the backlog of 32 open Dependabot PRs by package boundary (no advisories were outstanding beyond the accepted risks below; this was routine version hygiene, not remediation). All bumps were validated as npm-registry-sourced, so the supply-chain source policy was never at risk — the only concern was breakage from major version jumps.
 
@@ -833,21 +570,21 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
   - Runtime majors requiring code changes + focused tests: `rate-limiter-flexible` 8→11 #286 (security control), `stripe` 13→22 #283, `@prisma/client` + `prisma` 5→7 #183/#153 (must move as a pair), `web-vitals` 2→5 #287 (`getCLS`→`onCLS`/`onINP`).
   - Tooling majors requiring coordinated migration: `eslint` 8→10 group #279/#170/#288/#178 (flat-config migration across boundaries) and `typescript` → 6 group #159/#198/#166/#152.
 
-| Boundary | Change | Outcome |
-| -------- | ------ | ------- |
+| Boundary                                      | Change                                                                                                                               | Outcome                                                                                                                                                                                                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | root / backend / frontend / workers / actions | Closed 2 stale PRs; approved ~11 dev/type/tooling bumps for auto-merge; deferred 15 major-version PRs with tracked remediation notes | `npm run security:npm-supply-chain` passes; `npm audit` unchanged — only the documented `xlsx` (backend/frontend) and `quagga` (frontend) accepted risks remain, root/workers clean. Open Dependabot count reduced 32 → 15 (the deferred majors), each with a documented next step. |
 
 **2026-07-20** — Executed the deferred major-version upgrades from the 2026-07-19 triage as a risk-ordered set of per-PR branches (OpenSpec change `upgrade-deferred-dependency-majors`). This was capability/version hygiene, not advisory remediation — **no new advisories were introduced and none of the accepted risks changed**; `npm run security:npm-supply-chain` passes and `npm audit` reports only the documented `xlsx`/`quagga` risks (root/workers clean). Two upgrades also **shrank the supply-chain surface** by removing dead dependencies (`rate-limiter-flexible`, `@prisma/adapter-planetscale`).
 
-| Boundary | Change | Outcome |
-| -------- | ------ | ------- |
-| Frontend | `web-vitals 2→5` (#287): `getCLS/getFID/…` → `onCLS/onINP/…`, FID→INP in `reportWebVitals.ts` | Landed; `vitest`/`tsc`/`vite build` green |
-| Backend | `rate-limiter-flexible` 8→11 (#286) — **removed** as a dead dep (declared, imported nowhere; live limiting is `express-rate-limit`) | Supply-chain surface reduced; tier behaviour unchanged |
-| root + backend + workers + frontend | `typescript → 6.0.3` (#159/#198/#166/#152) as one coordinated set | All boundaries typecheck/build green |
-| Backend + frontend | `eslint → 9` + flat-config migration; `eslint-plugin-react-hooks 4→7` (#178) | Migration delivered; all boundaries lint clean |
-| Frontend + workers | `@types/node → 26.1.1` (#285/#276), unblocked by the TS 6 upgrade | typecheck/build/`test:db` green |
-| Backend | `stripe 13→22` (#283): adopted API `2026-06-24.dahlia`, migrated the "basil" `current_period_end` move to subscription items | Suite green; caught+fixed a v22 empty-key construction throw masked by Doppler |
-| root + backend | `@prisma/client` + `prisma` `5→6.19.3` (#373); removed dead `@prisma/adapter-planetscale@7.8.0` | Suite green; `test:db` 70/70 |
+| Boundary                            | Change                                                                                                                              | Outcome                                                                        |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Frontend                            | `web-vitals 2→5` (#287): `getCLS/getFID/…` → `onCLS/onINP/…`, FID→INP in `reportWebVitals.ts`                                       | Landed; `vitest`/`tsc`/`vite build` green                                      |
+| Backend                             | `rate-limiter-flexible` 8→11 (#286) — **removed** as a dead dep (declared, imported nowhere; live limiting is `express-rate-limit`) | Supply-chain surface reduced; tier behaviour unchanged                         |
+| root + backend + workers + frontend | `typescript → 6.0.3` (#159/#198/#166/#152) as one coordinated set                                                                   | All boundaries typecheck/build green                                           |
+| Backend + frontend                  | `eslint → 9` + flat-config migration; `eslint-plugin-react-hooks 4→7` (#178)                                                        | Migration delivered; all boundaries lint clean                                 |
+| Frontend + workers                  | `@types/node → 26.1.1` (#285/#276), unblocked by the TS 6 upgrade                                                                   | typecheck/build/`test:db` green                                                |
+| Backend                             | `stripe 13→22` (#283): adopted API `2026-06-24.dahlia`, migrated the "basil" `current_period_end` move to subscription items        | Suite green; caught+fixed a v22 empty-key construction throw masked by Doppler |
+| root + backend                      | `@prisma/client` + `prisma` `5→6.19.3` (#373); removed dead `@prisma/adapter-planetscale@7.8.0`                                     | Suite green; `test:db` 70/70                                                   |
 
 **Still deferred (left open with recorded reasons):**
 
@@ -856,10 +593,10 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
 
 ### Accepted Dependency Risks
 
-| Package area | Current status | Mitigation |
-| ------------ | -------------- | ---------- |
-| `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
-| `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
+| Package area         | Current status                                                                                                               | Mitigation                                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xlsx` in frontend   | npm audit reports known high severity advisories and no fixed npm release.                                                   | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
+| `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation.                                                                   |
 
 ### Developer Workflow
 
@@ -868,7 +605,6 @@ Before committing dependency changes:
 ```bash
 npm run security:npm-supply-chain
 npm audit --audit-level=low
-npm audit --audit-level=low --prefix backend
 npm audit --audit-level=low --prefix frontend
 npm audit --audit-level=low --prefix workers
 ```
@@ -889,71 +625,58 @@ npm run secrets-scan
 
 ### 2. Validate All User Input
 
-```typescript
-import { createValidator } from '../middleware/validateRequest';
-
-const loginSchema = z.object({
-  pin: z.string().length(4, 'PIN must be 4 digits'),
-});
-
-router.post('/login', validateRequest(loginSchema), controller.login);
-```
-
-### 3. Use Dependency Injection for Services
+Validate in the handler before any database call, and reject what you do not expect:
 
 ```typescript
-// ✅ Good - Dependencies injected
-export class UserService {
-  constructor(
-    private prisma = prismaClient,
-    private emailService = emailService,
-  ) {}
-}
-
-// ❌ Avoid - Hard-coded dependencies
-export class UserService {
-  private prisma = require('./prisma'); // ← Hard to test
+const body: unknown = await request.json(); // enforceJsonBodyLimit caps the size
+if (!isJsonObject(body) || typeof body.name !== 'string' || body.name.trim() === '') {
+  return errorResponse('name is required', 400, env, requestOrigin);
 }
 ```
 
-### 4. Sanitize CSV Exports
+### 3. Pass Collaborators Explicitly
+
+Handlers and jobs take a `Database` (and `Env`) as arguments instead of reaching for module state. That is what lets tests substitute pglite or a fake:
 
 ```typescript
-import { sanitizeCsvValue } from '../utils/csv-sanitizer';
+// ✅ Good - collaborators are parameters
+export async function listProducts(request: Request, env: Env, db: Database) {}
 
-const rows = data.map((item) => ({
-  name: sanitizeCsvValue(item.name), // ← Always sanitize
-}));
+// ❌ Avoid - hidden module-level client
+const db = createWorkersDatabase(globalEnv);
 ```
 
-### 5. Use Custom Error Classes
+### 4. Sanitize CSV Input and Output
 
 ```typescript
-// ✅ Good - Specific error
-throw new AuthenticationError('Invalid PIN');
+import { toCsvField } from '../../shared/domain/csv-injection';
 
-// ❌ Avoid - Generic Error
-throw new Error('Invalid PIN');
+const line = [toCsvField(item.name), toCsvField(item.barcode)].join(',');
 ```
 
-### 6. Apply Rate Limiting to Sensitive Endpoints
+### 5. Return Typed, Specific Errors
 
 ```typescript
-const loginLimiter = createRateLimiter('strict'); // 5/15min
+// ✅ Good - specific status and message
+return errorResponse('Store area with this name already exists', 409, env, requestOrigin);
 
-router.post('/auth/login', loginLimiter, controller.login);
+// ❌ Avoid - leaking internals
+return errorResponse(String(error), 500, env, requestOrigin);
 ```
+
+### 6. Rate Limiting
+
+Rate limiting is applied once, in `index-minimal.ts`. Do not add per-handler limiters; tune `utils/minimal-rate-limit.ts` instead.
 
 ### 7. Check Authorization
 
 ```typescript
-// ✅ Good - Check role
-if (req.user.role !== 'Manager') {
-  return res.status(403).json({ error: 'Manager role required' });
-}
+// ✅ Good - check role, scope by organization
+if (auth.role !== 'admin') return errorResponse('Admin role required', 403, env, requestOrigin);
+await db.updateProduct(auth.organizationId, id, fields);
 
-// ❌ Bad - No check
-const updatedUser = await userService.update(req.body);
+// ❌ Bad - no organization
+await db.updateProduct(id, fields);
 ```
 
 ### 8. Run Security Scans Before Committing
@@ -1021,7 +744,7 @@ Include:
 
 **Monthly**:
 
-- `npm audit --audit-level=low` in the root, backend, frontend, and workers packages
+- `npm audit --audit-level=low` in the root, frontend, and workers packages
 - `npm run security:npm-supply-chain` to check dependency sources
 - Review error logs for suspicious patterns
 - Verify rate limiter effectiveness
@@ -1067,18 +790,18 @@ Sentry alerts on:
 ## References & Resources
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [Express.js Security Best Practices](https://expressjs.com/en/advanced/best-practice-security.html)
+- [Cloudflare Workers security model](https://developers.cloudflare.com/workers/reference/security-model/)
 - [Node.js Security Checklist](https://blog.risingstack.com/node-js-security-checklist/)
 - [NPM Security Best Practices](https://github.com/lirantal/npm-security-best-practices)
 - [git-secrets Documentation](https://github.com/awslabs/git-secrets)
 - [CORS by MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
-- [JWT Best Practices](https://tools.ietf.org/html/rfc8949)
+- [Clerk documentation](https://clerk.com/docs)
 
 ---
 
 ## Questions or Issues?
 
-- 📚 See [backend/README.md](../backend/README.md) for developer setup
-- 🔒 See [backend/SECURITY.md](../backend/SECURITY.md) for internal security notes
+- 📚 See [workers/README.md](../workers/README.md) for developer setup
+- 🔒 See [cross-tenant-isolation-assurance.md](./cross-tenant-isolation-assurance.md) for tenant isolation
 - 🐛 Report bugs via [security reporting](#security-reporting)
 - 💬 Ask in team Slack or project discussions

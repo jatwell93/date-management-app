@@ -23,113 +23,59 @@ This document provides compliance teams and security auditors with detailed info
 Our application implements **strict tenant isolation** at every layer:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Application                          │
-├─────────────────────────────────────────────────────────────┤
-│  Authentication (Clerk JWT) → Extracts organizationId claim   │
-├─────────────────────────────────────────────────────────────┤
-│  Middleware → Validates organizationId in every request     │
-├─────────────────────────────────────────────────────────────┤
-│  Services → Queries always include WHERE organizationId = ?   │
-├─────────────────────────────────────────────────────────────┤
-│  Database → Unique constraints on (organizationId, field)   │
-└─────────────────────────────────────────────────────────────┘
+Application (Cloudflare Worker)
+  1. Authentication  : Clerk token verified on every request
+  2. Tenant context  : organization_id read from the users row (not from the client)
+  3. Entitlement gate: organization subscription state checked
+  4. Data access     : every query filters organization_id (workers/src/database.ts)
+  5. Database        : NOT NULL organization_id with a foreign key; composite unique keys
 ```
 
 ### Tenant Context Flow
 
-1. **Login**: Clerk authenticates user, includes `org_id` in JWT claim
-2. **Request**: Middleware extracts `organizationId` from JWT
-3. **Validation**: 403 Forbidden if organizationId missing or invalid
-4. **Processing**: Services use `organizationId` for all database queries
-5. **Response**: Only data matching the organizationId is returned
+1. **Login**: Clerk authenticates the user and issues a session token.
+2. **Request**: `authenticateApiRequest` verifies the token and extracts the Clerk user id.
+3. **Resolution**: the Worker looks up the `users` row for that Clerk user and reads `organization_id` and `role` from it. A user with no row gets 401; an organization that fails the entitlement gate is refused.
+4. **Processing**: handlers pass `auth.organizationId` to `database.ts`, where every tenant query filters on it.
+5. **Response**: only data matching the organization is returned.
 
 ---
 
 ## Isolation Mechanisms
 
-### 1. JWT-Based Organization Context
+### 1. Server-Side Organization Context
 
-Every API request includes an `organizationId` in the JWT payload:
+The organization is never taken from the request. After the Clerk token is verified, the Worker reads `organization_id` from the caller's `users` row (`workers/src/index-minimal.ts`, `resolveAuthenticatedUser`):
 
 ```typescript
-// Auth token payload structure
-interface TokenPayload {
-  userId: number;
-  organizationId: string; // ← Tenant isolation enforced here
-  tierLevel: TierLevel;
-  iat: number;
-  exp: number;
+const auth = await authenticateApiRequest(request, env, db);
+if (auth instanceof Response) return auth; // 401 / entitlement refusal
+// auth.organizationId comes from users.organization_id
+```
+
+### 2. Query-Level Isolation
+
+`organizationId` is the first, required parameter of every tenant-data method in `workers/src/database.ts`, so a call site that omits it fails to compile. Every query on a tenant table filters on it, and joins to another tenant table correlate on it too:
+
+```typescript
+async findProductById(organizationId: string, id: number) {
+  // ... WHERE id = ${id} AND organization_id = ${organizationId}
 }
 ```
 
-**Enforcement** (`backend/src/middleware/auth.middleware.ts:245`):
-
-```typescript
-if (!decodedToken.organizationId || !decodedToken.tierLevel) {
-  return res.status(403).json({ message: 'Invalid token: missing tenant context' });
-}
-```
-
-### 2. Service-Level Query Isolation
-
-All database queries include `WHERE organizationId` filters:
-
-```typescript
-// Product service example
-async getAllProducts(): Promise<Product[]> {
-  return await this.prisma.product.findMany({
-    where: { organizationId: this.organizationId },  // ← Tenant filter
-  });
-}
-
-// Product retrieval by ID - includes ownership check
-async getProductById(id: number): Promise<Product | null> {
-  const product = await this.prisma.product.findUnique({ where: { id } });
-
-  // Verify ownership
-  if (product && product.organizationId !== this.organizationId) {
-    return null;  // Product exists but belongs to different tenant
-  }
-  return product;
-}
-```
+Reads, updates and deletes all carry the predicate. A request for another tenant's id returns nothing and changes nothing, because the row is simply not matched.
 
 ### 3. Database Schema Isolation
 
-All tenant-scoped tables include `organizationId` with foreign key constraints:
-
-```prisma
-model Product {
-  id             Int          @id @default(autoincrement())
-  sku            String
-  name           String
-  organizationId String       // ← Required tenant field
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, sku])  // ← Per-tenant uniqueness
-  @@index([organizationId, createdAt])
-}
-```
-
-Tables with tenant isolation:
-
-- `Product` (organizationId required)
-- `InventoryItem` (organizationId required)
-- `StoreArea` (organizationId required)
-- `User` (organizationId required)
-- `Upload` (organizationId required)
-- `AuditLog` (organizationId required)
-- `ItemTransaction` (organizationId required)
-- `ExpiredItemTransaction` (organizationId required)
+Every tenant-scoped table has `organization_id` as `NOT NULL` with a validated foreign key to `organizations(id)`. A test enforces this for the whole schema, and requires any table without it to be listed with a reason (see Security Testing). Examples are `products`, `inventory_items`, `store_areas`, `users`, `uploads`, `audit_log`, `item_transactions` and `expired_item_transactions`.
 
 ### 4. Unique Constraints Per Tenant
 
-SKU uniqueness is enforced per organization, not globally:
+SKU and barcode uniqueness is enforced per organization, not globally (`database/migrations/0000_baseline.up.sql`):
 
-```prisma
-@@unique([organizationId, sku])  // Same SKU allowed in different orgs
-@@unique([organizationId, barcode]) // Same barcode allowed in different orgs
+```sql
+CREATE UNIQUE INDEX "products_organization_id_sku_key" ON "products"("organization_id", "sku");
+CREATE UNIQUE INDEX "products_organization_id_barcode_key" ON "products"("organization_id", "barcode");
 ```
 
 **Result**:
@@ -140,34 +86,14 @@ SKU uniqueness is enforced per organization, not globally:
 
 ### 5. Cascade Delete Protection
 
-When an organization is deleted, all related data is automatically removed:
-
-```prisma
-@relation(fields: [organizationId], references: [id], onDelete: Cascade)
-```
-
-This prevents orphaned data and ensures complete tenant removal.
+Tenant tables reference `organizations(id)` with `ON DELETE CASCADE`, so deleting an organization removes its related data and leaves no orphaned rows.
 
 ### 6. Route-Level Parameter Validation
 
-Routes explicitly reject client-provided organizationId:
+Handlers do not read `organizationId` from the request body or query string. They pass `auth.organizationId`, which comes from the `users` row:
 
 ```typescript
-// POST /products - organizationId comes from JWT, not body
-router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
-  const organizationId = req.organizationId!; // ← From JWT, never from body
-
-  // Ignore any organizationId in request body
-  const { barcode, sku, name, costPrice } = req.body;
-
-  await productService.createProduct({
-    barcode,
-    sku,
-    name,
-    costPrice,
-    organizationId, // ← Enforced from auth context
-  });
-});
+const product = await db.findProductById(auth.organizationId, id);
 ```
 
 ---
@@ -190,7 +116,7 @@ WHERE column_name = 'organization_id'
 ORDER BY table_name;
 ```
 
-Expected results: All 8 tenant-scoped tables listed with `is_nullable = NO`.
+Expected results: every tenant-scoped table is listed with `is_nullable = NO`. Tables without `organization_id` are the ones named in `UNSCOPED_TABLES` in `workers/src/database.tenant-scope-invariant.pglite.node.test.ts`, each with its reason.
 
 ### Cross-Tenant Access Prevention
 
@@ -201,7 +127,7 @@ The following query patterns are used throughout the application:
 ```sql
 -- Products can only be read by their owning organization
 SELECT * FROM products
-WHERE organization_id = 'org-uuid-from-jwt';
+WHERE organization_id = 'org-uuid-from-users-row';
 ```
 
 **Write Protection**:
@@ -211,7 +137,7 @@ WHERE organization_id = 'org-uuid-from-jwt';
 UPDATE products
 SET name = 'New Name'
 WHERE id = 123
-  AND organization_id = 'org-uuid-from-jwt';
+  AND organization_id = 'org-uuid-from-users-row';
 ```
 
 **Delete Protection**:
@@ -220,104 +146,35 @@ WHERE id = 123
 -- Deletes only affect products in the user's organization
 DELETE FROM products
 WHERE id = 123
-  AND organization_id = 'org-uuid-from-jwt';
+  AND organization_id = 'org-uuid-from-users-row';
 ```
 
 ### Audit Logging
 
-All data access is logged with organization context:
+Two tables record changes with organization context:
 
-```sql
--- Audit log entry includes organizationId
-INSERT INTO audit_logs (
-  organization_id,  -- ← Tenant context logged
-  action,
-  user_id,
-  change_description,
-  ip_address,
-  created_at
-) VALUES (
-  'org-uuid',
-  'product_updated',
-  123,
-  'Updated product ASPIRIN-500',
-  '192.168.1.1',
-  NOW()
-);
-```
+- `audit_log`: written in the same statement as inventory item create, update and delete (`organization_id`, `user_id`, `inventory_item_id`, `action`, `change_description`, `created_at`).
+- `org_audit_log` (migration 0013): role grants and removals, with actor and target organization and the client IP.
+
+Reads are not logged, and `audit_log` does not store old and new values. Do not cite broader coverage without checking `workers/src/database.ts` first.
 
 ---
 
 ## Security Testing
 
-### Penetration Test Results
+### Real-SQL Tests (pglite)
 
-Our security test suite (`backend/src/tests/security/cross-tenant-penetration.test.ts`) validates:
+The Worker's isolation tests run the actual migrations and queries in pglite (`npm run test:db`). Each one seeds rows for a second organization that would be returned or changed if scoping regressed, and asserts on identity rather than count.
 
-| Test                                    | Result  | Coverage                     |
-| --------------------------------------- | ------- | ---------------------------- |
-| SQL injection via organizationId        | ✅ PASS | All query parameters         |
-| IDOR (Insecure Direct Object Reference) | ✅ PASS | All CRUD operations          |
-| OrganizationId parameter tampering      | ✅ PASS | Query params, body, headers  |
-| Mass assignment attack                  | ✅ PASS | All POST/PUT endpoints       |
-| JWT token tampering                     | ✅ PASS | Signature verification       |
-| Cross-tenant write attempts             | ✅ PASS | All update/delete operations |
-| Null/undefined orgId handling           | ✅ PASS | Edge cases                   |
+| Test file (`workers/src/`)                             | What it covers                                                                                                                                           |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `database.tenant-isolation.pglite.node.test.ts`        | Product, inventory and store-area read paths never return another organization's rows                                                                    |
+| `database.tenant-isolation-writes.pglite.node.test.ts` | Updates and deletes cannot touch another organization's rows; cross-organization references on write are refused                                         |
+| `database.tenant-scope-invariant.pglite.node.test.ts`  | Every table in `public` has a NOT NULL, foreign-keyed `organization_id`, or is listed as unscoped with a reason; mutation cases prove the check can fail |
 
-### Automated Testing
+A new isolation test is only evidence once you have removed the `organization_id` predicate it guards and watched it fail.
 
-**Cross-Tenant Isolation Tests** (`backend/src/tests/integration/multi-tenant-cross-tenant-isolation.test.ts`):
-
-```typescript
-describe('Cross-tenant product isolation', () => {
-  it('should prevent Org A user from reading Org B products', async () => {
-    // Create products in both orgs
-    await createProduct(orgA, 'PRODUCT-A');
-    await createProduct(orgB, 'PRODUCT-B');
-
-    // Org A user queries products
-    const products = await productService(orgA).getAllProducts();
-
-    // Should only see Org A products
-    expect(products).toHaveLength(1);
-    expect(products[0].sku).toBe('PRODUCT-A');
-  });
-
-  it('should prevent cross-tenant updates', async () => {
-    // Create product in Org B
-    const productB = await createProduct(orgB, 'PRODUCT-B');
-
-    // Attempt to update via Org A service
-    const result = await productService(orgA).updateProduct(productB.id, {
-      name: 'Hacked',
-    });
-
-    // Should return null (product not found for this org)
-    expect(result).toBeNull();
-
-    // Verify product unchanged
-    const unchanged = await productService(orgB).getProductById(productB.id);
-    expect(unchanged?.name).toBe('PRODUCT-B');
-  });
-});
-```
-
-### Load Testing
-
-Concurrent multi-tenant operations maintain isolation:
-
-```typescript
-// Test: 100 organizations creating products simultaneously
-const orgs = await createOrganizations(100);
-await Promise.all(orgs.map((org) => productService(org).createProduct({ sku: 'TEST' })));
-
-// Verify: Each org has exactly 1 product
-for (const org of orgs) {
-  const products = await productService(org).getAllProducts();
-  expect(products).toHaveLength(1);
-  expect(products[0].organizationId).toBe(org.id);
-}
-```
+**Not covered by an automated suite today:** SQL injection through `organizationId` (the value is a bound parameter, not interpolated), and concurrent multi-organization load. Token verification is covered in `clerk/request-authentication.test.ts`. The earlier Express-era penetration suite was retired with the backend (tag `express-sqlite-last`); do not quote its results as current.
 
 ---
 
@@ -353,7 +210,7 @@ SELECT * FROM products WHERE organization_id = 'org-uuid'
 UNION ALL
 SELECT * FROM inventory_items WHERE organization_id = 'org-uuid'
 UNION ALL
-SELECT * FROM audit_logs WHERE organization_id = 'org-uuid';
+SELECT * FROM audit_log WHERE organization_id = 'org-uuid';
 ```
 
 ---
@@ -362,17 +219,7 @@ SELECT * FROM audit_logs WHERE organization_id = 'org-uuid';
 
 ### Cross-Tenant Leak Detection
 
-**Monitoring**: Sentry alerts for potential isolation failures:
-
-```typescript
-// Suspicious: Query returned data for multiple organizations
-if (products.some((p) => p.organizationId !== req.organizationId)) {
-  Sentry.captureException(new Error('Cross-tenant data leak detected'), {
-    level: 'fatal',
-    tags: { component: 'tenant_isolation', severity: 'critical' },
-  });
-}
-```
+**Monitoring**: There is no runtime cross-tenant detector. Isolation is enforced by query scoping and verified by the tests above. Unexpected errors reach Sentry; use `audit_log` and `org_audit_log` to investigate a suspected leak.
 
 **Response Procedure**:
 
@@ -392,8 +239,8 @@ SELECT
   user_id,
   COUNT(DISTINCT organization_id) as org_count,
   COUNT(*) as access_count
-FROM audit_logs
-WHERE created_at > datetime('now', '-1 hour')
+FROM audit_log
+WHERE created_at > NOW() - INTERVAL '1 hour'
 GROUP BY user_id
 HAVING org_count > 1;
 ```
@@ -406,28 +253,27 @@ HAVING org_count > 1;
 
 **Q: How do you ensure customer data isolation?**
 
-A: We implement strict multi-tenant isolation at three layers:
+A: We implement multi-tenant isolation at three layers:
 
-1. Authentication: JWT tokens include organizationId claim, verified on every request
-2. Application: All database queries include WHERE organizationId filters
-3. Database: Schema uses composite unique keys (organizationId + resource) to prevent cross-tenant collisions
+1. Authentication: Clerk tokens are verified on every request, and the organization is resolved server-side from the user's record
+2. Application: All database queries filter on `organization_id`, with `organizationId` a required parameter of every tenant data method
+3. Database: `organization_id` is NOT NULL with a foreign key on tenant tables, and unique keys are composite (`organization_id` + resource) to prevent cross-tenant collisions
 
 **Q: Can one customer access another customer's data?**
 
-A: No. Our penetration testing confirms no cross-tenant access is possible. Each request is scoped to the authenticated user's organization. Database queries filter by organizationId, and service methods validate resource ownership before returning data.
+A: Each request is scoped to the authenticated user's organization. Database queries filter by `organization_id`, and the real-SQL isolation tests assert that another organization's rows are neither returned nor changed.
 
 **Q: What happens if a user tries to tamper with the organizationId parameter?**
 
-A: The organizationId is extracted from the signed JWT token, not user input. Any attempt to modify the token invalidates the signature, causing authentication failure (401). The API never accepts organizationId from query parameters or request bodies.
+A: The organization is read from the user's database record after the Clerk token is verified. The API does not accept `organizationId` from query parameters or request bodies. A tampered token fails verification (401).
 
 **Q: How do you test tenant isolation?**
 
 A: Our test suite includes:
 
-- Cross-tenant penetration tests (8 scenarios)
-- Automated integration tests for all CRUD operations
-- Concurrent load tests simulating 100+ organizations
-- SQL injection tests on organizationId parameters
+- Real-SQL isolation tests for reads, writes and deletes (pglite)
+- A schema invariant test that every tenant table carries a constrained `organization_id`
+- Clerk token verification tests
 
 **Q: Is data encrypted per tenant?**
 
@@ -435,7 +281,7 @@ A: All data is encrypted at rest using database-level encryption. While we don't
 
 **Q: How do you handle data deletion for GDPR?**
 
-A: Organization deletion cascades to all related data within 2 seconds due to foreign key constraints with `onDelete: Cascade`. Complete data removal can be verified via:
+A: Organization deletion cascades to all related data through `ON DELETE CASCADE` foreign keys. Complete data removal can be verified via:
 
 ```sql
 SELECT COUNT(*) FROM products WHERE organization_id = 'org-to-delete';
@@ -448,14 +294,12 @@ SELECT COUNT(*) FROM products WHERE organization_id = 'org-to-delete';
 
 For compliance audits, verify:
 
-- [ ] All 8 tenant-scoped tables have `organizationId` column (NOT NULL)
-- [ ] All queries in service layer include `WHERE organizationId` filter
-- [ ] Unique constraints are composite: `(organizationId, sku)`, `(organizationId, barcode)`
-- [ ] JWT middleware extracts and validates organizationId
-- [ ] Routes reject organizationId from request body/query params
-- [ ] Audit logs include organizationId for all operations
-- [ ] Cross-tenant penetration tests pass (run `npm test`)
-- [ ] Multi-tenant load tests pass (9 concurrent organizations)
+- [ ] Every tenant-scoped table has `organization_id` NOT NULL with a foreign key (`npm run test:db`, tenant-scope-invariant)
+- [ ] Every tenant query in `workers/src/database.ts` filters `organization_id`
+- [ ] Unique constraints are composite: `(organization_id, sku)`, `(organization_id, barcode)`
+- [ ] `authenticateApiRequest` resolves the organization from the `users` row
+- [ ] Handlers reject `organizationId` from request body/query params
+- [ ] Isolation tests pass (`npm run test:db`)
 
 ---
 
@@ -464,8 +308,8 @@ For compliance audits, verify:
 - [Multi-Tenant Guide](./multi-tenant-guide.md) - Developer documentation
 - [Security Documentation](./security.md) - General security practices
 - [SaaS Operational Runbook](./SAAS_OPERATIONAL_RUNBOOK.md) - Admin procedures
-- [Backend Tests](../backend/src/tests/integration/multi-tenant-*.test.ts) - Test implementations
+- [Isolation tests](../workers/src/database.tenant-isolation.pglite.node.test.ts) - Test implementations
 
 ---
 
-_Last updated: March 2026_
+_Last updated: October 2026_

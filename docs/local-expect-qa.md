@@ -4,38 +4,16 @@ Use this workflow when browser QA needs authenticated pages, admin/team-member r
 
 ## Goal
 
-Primary QA uses real Clerk sessions. Backend auth bypass is only a fallback for non-auth UI checks and must not be used to validate Clerk sign-in, roles, organization membership, or bootstrap behavior.
+Primary QA uses real Clerk sessions against the Worker. The Worker has no auth bypass, so sign-in, roles, organization membership, and bootstrap behavior are always checked with a real Clerk session.
 
 ## Start the Local Stack
 
-Synchronize the database used by the Express Prisma client before starting the backend. From the
-repository root:
-
-```powershell
-$env:DATABASE_URL='file:./database.sqlite'
-doppler run --project date-management --config dev --preserve-env=DATABASE_URL -- npx prisma db push --schema backend/prisma/schema.prisma
-```
-
-The Prisma datasource resolves its relative SQLite URL from `backend/prisma/schema.prisma`, so the
-local Express app uses `backend/prisma/database.sqlite`. The custom migration runner uses
-`backend/database.sqlite`; running `npm run migrate --prefix backend` does not synchronize the
-database used by local Express QA.
-
-Run the Worker as the local dev API on `localhost:8787` (see `workers/README.md`
-— it needs `workers/.dev.vars` with `NEON_CONNECTION_STRING`, `JWT_SECRET`, and
+Run the Worker as the local dev API on `localhost:8787` (see `workers/README.md`;
+it needs `workers/.dev.vars` with `NEON_CONNECTION_STRING`, `JWT_SECRET`, and
 `CLERK_SECRET_KEY` pointing at your own Neon branch):
 
 ```powershell
 npm run dev:local --prefix workers
-```
-
-The Prisma/SQLite preamble and Express start-up below only apply if you are
-deliberately running the old Express backend on port 3001 instead of the
-Worker.
-
-```powershell
-$env:DATABASE_URL='file:./database.sqlite'
-doppler run --project date-management --config dev --preserve-env=DATABASE_URL -- npm run dev --prefix backend
 ```
 
 Run the frontend on `localhost:3002` with the Expect diagnostics panel enabled:
@@ -97,7 +75,7 @@ The key fields to check are:
 - `expect-qa-token`
 - `expect-qa-api-base-url`
 
-For the admin user, confirm product catalog upload navigation is visible. For the team member user, confirm it is hidden. If frontend and backend roles differ, treat it as a real Clerk/bootstrap issue.
+For the admin user, confirm product catalog upload navigation is visible. For the team member user, confirm it is hidden. If the frontend and API roles differ, treat it as a real Clerk/bootstrap issue.
 
 ## Browser QA Checklist
 
@@ -154,7 +132,7 @@ REACT_APP_STRIPE_PRICE_PREMIUM_MONTHLY=price_...
 REACT_APP_STRIPE_PRICE_PREMIUM_ANNUAL=price_...
 ```
 
-Map backend price variables:
+Map Worker price variables:
 
 ```env
 STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID=price_...
@@ -163,7 +141,7 @@ STRIPE_PREMIUM_MONTHLY_PRICE_ID=price_...
 STRIPE_PREMIUM_ANNUAL_PRICE_ID=price_...
 ```
 
-Set backend Stripe secrets from the Stripe Dashboard or Stripe CLI:
+Set Worker Stripe secrets (in `workers/.dev.vars` for local runs) from the Stripe Dashboard or Stripe CLI:
 
 ```env
 STRIPE_SECRET_KEY=sk_test_...
@@ -180,17 +158,3 @@ Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET` (not the Dashboard endpoi
 signature verification with 400). Use `127.0.0.1`, not `localhost`: `wrangler dev` listens on IPv4 only and
 the Stripe CLI may resolve `localhost` to `[::1]`. Don't add `--all-thin` — it forwards only thin (v2)
 events, not the snapshot events (`checkout.session.completed`, `customer.subscription.*`) the Worker handles.
-
-## Backend Auth Bypass
-
-Backend `TEST_AUTH_BYPASS=true` is acceptable for backend integration tests or browser checks that only need API data and do not claim auth correctness.
-
-Do not use bypass mode to approve:
-
-- Clerk sign-in
-- Admin versus team member role behavior
-- Organization membership
-- Bootstrap timing
-- Token claim parsing
-
-Those checks require the real Clerk session workflow above.

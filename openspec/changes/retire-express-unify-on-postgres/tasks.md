@@ -3874,6 +3874,13 @@ equivalent, a relocated home, or an explicit retirement decision.
       disappears at Phase 4. **Two are dated records and must not be edited retroactively**:
       `rollback-drill-2026-03-07.md` and `phase-3-csv-upload-timeout-analysis.md`. The three Phase 1
       runbooks and `docs/evidence/` are pre-recorded keeps (2.5 §M).
+      **Progress 2026-10-09 (docs PR 3 of 4):** heavy rewrites done against current code:
+      `architecture.md`, `rollback-procedure.md` (Worker rollback; the VPS procedure is retired),
+      `local-expect-qa.md`, `cross-tenant-isolation-assurance.md` (Express-era penetration results
+      removed rather than quoted as current), `security.md` (Clerk auth, Worker rate limit/CORS/headers;
+      the dated Dependabot log is kept with a note), `troubleshooting.md`, `developer-guide.md`,
+      `database-migrations.md`. Remaining for 5.3a: the incidental sweep (~25 files), retiring
+      `dual-environment-guide.md` and `testing-both-environments.md`.
 - [ ] 5.4 `npx openspec validate retire-express-unify-on-postgres --strict`.
 - [ ] 5.5 Archive this change once merged and live.
 
