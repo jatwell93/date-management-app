@@ -5,8 +5,6 @@
     "coverage/**",
     "**/coverage/**",
     "frontend/build/**",
-    "backend/dist/**",
-    "backend/coverage/**",
     ".env",
     ".env.*",
     ".env.example",

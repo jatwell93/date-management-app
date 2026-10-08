@@ -3753,7 +3753,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       the steps); a deleted file is recoverable byte-for-byte from the tag; and deleting `backend/` in
       one commit then `git revert`ing it leaves a tree identical to the tag. If 4.1 is based on a
       later `main` commit, the tag stays valid as long as nothing since removed `backend/`.
-- [ ] 4.1 **Only once the rehoming checklist (2.5) is fully satisfied and the Phase 1 runner has proven a
+- [x] 4.1 **Only once the rehoming checklist (2.5) is fully satisfied and the Phase 1 runner has proven a
       real reversible schema change and its down path (1.6)**, remove `backend/` in one controlled retirement: the Express
       server, Prisma client, `better-sqlite3`, the Prisma **base** (SQLite) schema, the runtime
       `src/migrations/` SQLite migration runner (`migrate.ts`, `migration.service.ts`, `migration.model.ts`,
@@ -3797,7 +3797,13 @@ equivalent, a relocated home, or an explicit retirement decision.
       the exposure is unchanged by the deletion — but confirm whether they hold production or
       customer data. If they do, that is a history-rewrite/rotation decision in its own issue, not
       part of this change.
-- [ ] 4.2 Prune dependencies and scripts from the workspace: remove `express`, `@prisma/*`,
+      **DONE on `feature/task-4-1-retire-express`.** Commits: Prisma cross-comparison tests and
+      helpers removed and the `../backend` tsconfig excludes dropped; `OfflineSyncService` (and its
+      three consumers unwired) and `email-templates/` deleted; the audit verifier run at the tag
+      (0 failures) then retired; `backend/` deleted (474 tracked paths, `run-tests.js` included) with
+      the `eslint.config.js` and `eslint.ignores.js` entries. Untracked local files in `backend/`
+      (`.env*`, `backups/`, logs, `node_modules`) were left to the owner.
+- [x] 4.2 Prune dependencies and scripts from the workspace: remove `express`, `@prisma/*`,
       `better-sqlite3`, and the backend Vitest project from `package.json` files (root, `backend/`, and any
       workspace-level). Remove the now-dead npm scripts (`migrate:prod`, `dev:backend`, `seed:*`, the
       superseded migration scripts from 1.1, etc.). Retire `.github/workflows/backend-test.yml` — its
@@ -3819,6 +3825,18 @@ equivalent, a relocated home, or an explicit retirement decision.
       not deleted — its script is a 2.4 "reimplement on the Worker" row. Root `test` currently
       errors by design telling the caller to pick frontend or backend; that message needs updating.
       Root `eslint.ignores.js` needs its `backend/` paths removed.
+
+      **DONE on the same branch.** `@prisma/client`, `prisma` and the `test:backend*` scripts
+      removed from the root `package.json` and lockfile (`express`, `better-sqlite3` and the backend
+      Vitest project left with `backend/package.json`); `seed:master-catalogue` needed no repoint
+      (already `src/operations`); `backend-test.yml` deleted with its rationale moved into
+      `workers-test.yml`; the `/backend` Dependabot entry and the full-history checkout in
+      `database-conformance.yml` dropped. Required checks `Backend CI Gate` and `Verify audit
+      manifests` were removed from the `main` ruleset by the owner. The workflow-comment sweep,
+      `CLAUDE.md`, `AGENTS.md` commands, the PR template checklist and `ubs.config.json` were
+      corrected here; the wider docs rewrite stays in 5.3a. A fresh checkout with no `backend/`
+      passes root and Workers `npm ci`, `test:migrations`, `test:operations`, lint and the Workers
+      typecheck.
 
 > **Integration checkpoint — dedicated retirement PR.** Phase 4 is a separate, controlled deletion PR
 > based on the latest `main`. Retain the full backend suite as its final regression gate, in addition to
