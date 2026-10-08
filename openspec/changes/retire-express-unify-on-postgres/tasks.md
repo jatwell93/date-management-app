@@ -3768,6 +3768,13 @@ equivalent, a relocated home, or an explicit retirement decision.
       `PRISMA_ONLY_KNOWN_INDEXES`, `MIGRATION_ONLY_PARTIAL_INDEXES`); run
       `npm run test:audit-manifest` once from the 4.0 tag, then retire the verifier with the audit
       directory. The tracked SQLite files and upload blobs hold no customer data (Finding 23 checked).
+      **Verifier run and retirement (2026-10-08).** From a detached worktree at
+      `express-sqlite-last`, `npm run test:audit-manifest` passed: 0 failures, 0 warnings across 4
+      manifests (177 sections, 1996 rows, 221 cited paths; 24 unit tests, 23 passed, 1 skipped because
+      a placebo fixture file is long gone). `scripts/verify-audit-manifest.js`,
+      `scripts/check-audit-columns.js`, their tests, `openspec-audit.yml` and the two npm scripts are
+      deleted. The audit directory stays inside this change and is archived with it (5.5); its
+      `backend/` citations are a record of the tagged revision, not live paths.
       **Hazards found by the 2026-10-08 refresh of 2.5 (see its "Status refresh" section).**
       `scripts/verify-audit-manifest.js` indexes `backend/src/tests` and runs in `openspec-audit.yml`;
       `src/database/migrations/baseline.fingerprint.test.ts` reads

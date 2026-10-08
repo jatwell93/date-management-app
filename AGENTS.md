@@ -91,7 +91,6 @@ npm run test:backend:diff        # backend changes
 npm run test:frontend:diff       # frontend changes
 npm run test:db                  # worker DB changes (pglite real-SQL)
 (cd workers && npm run typecheck)  # CI type-checks workers including test files; plain tsc --noEmit does not
-npm run test:audit-manifest      # when you touch the 2.2 test-audit manifests
 npm run test:operations          # when you touch src/operations
 
 # Fuller coverage run when warranted
