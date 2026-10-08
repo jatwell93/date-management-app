@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides compliance teams and security auditors with detailed information about our multi-tenant data isolation architecture. It explains how we ensure customer data remains strictly segregated and cannot be accessed across organization boundaries.
+This document gives security reviewers detailed information about our multi-tenant data isolation architecture. It describes technical controls only; it does not claim any compliance certification (see Compliance Status). It explains how we ensure customer data remains strictly segregated and cannot be accessed across organization boundaries.
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@ This document provides compliance teams and security auditors with detailed info
 4. [Security Testing](#security-testing)
 5. [Audit & Compliance](#audit--compliance)
 6. [Incident Response](#incident-response)
-7. [Certification Language](#certification-language)
+7. [Questionnaire Answers](#questionnaire-answers)
 
 ---
 
@@ -182,36 +182,23 @@ A new isolation test is only evidence once you have removed the `organization_id
 
 ### Audit Trail Coverage
 
-All data access operations are logged:
+See "Audit Logging" under Database Schema for what `audit_log` and `org_audit_log` record. Reads are not logged.
 
-| Operation | Logged Fields                                                       |
-| --------- | ------------------------------------------------------------------- |
-| CREATE    | organizationId, userId, action, newValues, timestamp, IP            |
-| READ      | organizationId, userId, action, resourceId, timestamp, IP           |
-| UPDATE    | organizationId, userId, action, oldValues, newValues, timestamp, IP |
-| DELETE    | organizationId, userId, action, oldValues, timestamp, IP            |
+### Compliance Status
 
-### Compliance Certifications
+**No compliance certification or attestation is claimed.** SOC 2, GDPR, HIPAA, PCI DSS and encryption-at-rest statements have not been verified for this system and are not made here. Confirm each one, with evidence, before launch and before answering a customer questionnaire. The technical controls in this document (query scoping, schema constraints, tests) are inputs to that work, not a substitute for it.
 
-Our architecture supports compliance with:
+### Per-Organization Data
 
-- **SOC 2 Type II**: Logical separation of customer data
-- **GDPR Article 32**: Security of processing, data isolation
-- **HIPAA**: Technical safeguards for data segmentation
-- **PCI DSS**: Isolation of payment-related data
-
-### Data Residency
-
-Organization data can be queried by organization ID for data residency requirements:
+Every tenant table can be queried by organization id, for example to count an organization's rows before an export or deletion:
 
 ```sql
--- All data for a specific organization (for export/deletion)
-SELECT * FROM products WHERE organization_id = 'org-uuid'
-UNION ALL
-SELECT * FROM inventory_items WHERE organization_id = 'org-uuid'
-UNION ALL
-SELECT * FROM audit_log WHERE organization_id = 'org-uuid';
+SELECT COUNT(*) FROM products WHERE organization_id = 'org-uuid';
+SELECT COUNT(*) FROM inventory_items WHERE organization_id = 'org-uuid';
+SELECT COUNT(*) FROM audit_log WHERE organization_id = 'org-uuid';
 ```
+
+This is a technical capability, not a data-residency guarantee. Where the data is stored is determined by the Neon project region.
 
 ---
 
@@ -247,9 +234,11 @@ HAVING org_count > 1;
 
 ---
 
-## Certification Language
+## Questionnaire Answers
 
 ### For Security Questionnaires
+
+These answers cover tenant isolation only. Do not extend them to encryption, certifications or regulatory compliance until those are confirmed.
 
 **Q: How do you ensure customer data isolation?**
 
@@ -275,11 +264,7 @@ A: Our test suite includes:
 - A schema invariant test that every tenant table carries a constrained `organization_id`
 - Clerk token verification tests
 
-**Q: Is data encrypted per tenant?**
-
-A: All data is encrypted at rest using database-level encryption. While we don't use per-tenant encryption keys, tenant isolation is enforced through strict access controls and query scoping.
-
-**Q: How do you handle data deletion for GDPR?**
+**Q: How is an organization's data deleted?**
 
 A: Organization deletion cascades to all related data through `ON DELETE CASCADE` foreign keys. Complete data removal can be verified via:
 
@@ -292,7 +277,7 @@ SELECT COUNT(*) FROM products WHERE organization_id = 'org-to-delete';
 
 ## Verification Checklist
 
-For compliance audits, verify:
+For a security review, verify:
 
 - [ ] Every tenant-scoped table has `organization_id` NOT NULL with a foreign key (`npm run test:db`, tenant-scope-invariant)
 - [ ] Every tenant query in `workers/src/database.ts` filters `organization_id`

@@ -63,7 +63,6 @@ Data layer (Neon Postgres)
   - Parameterized queries (tagged-template SQL in workers/src/database.ts)
   - organization_id filter on every tenant query
   - TLS for connections
-  - Encryption at rest (provider-managed)
 ```
 
 ---
