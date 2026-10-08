@@ -10,15 +10,12 @@
   "license": "Apache-2.0",
   "keywords": [],
   "scripts": {
-    "test": "echo \"Error: specify frontend or backend (npm run test:backend or npm run test:frontend)\" && exit 1",
+    "test": "echo \"Error: no root test suite. Run test:db, test:frontend:diff, test:migrations or test:operations\" && exit 1",
     "build:frontend": "npm run build --prefix frontend",
     "build:workers": "npm run build --prefix workers",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:backend": "npm run test --prefix backend",
-    "test:backend:coverage": "npm run test:coverage --prefix backend",
-    "test:backend:diff": "npm run test:diff --prefix backend",
     "test:db": "npm run test:db --prefix workers",
     "test:migrations": "npm run compile && node --test --test-concurrency=1 build/src/database/migrations/runner.test.js build/src/database/migrations/adopt.test.js build/src/database/migrations/baseline.fingerprint.test.js build/src/database/migrations/commands.test.js build/src/database/migrations/log.test.js build/src/database/migrations/pglite-client.test.js",
     "test:migrations:e2e": "npm run compile && node --test --test-concurrency=1 \"build/src/database/migrations/e2e.test.js\"",
@@ -79,8 +76,6 @@
     "wrangler": "4.144.0"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "pg": "8.22.0",
-    "prisma": "^6.19.3"
+    "pg": "8.22.0"
   }
 }
