@@ -458,7 +458,8 @@ jobs:
           '
 
       # The four checkout price IDs, from the same Doppler keys the Worker
-      # reads (`workers/src/stripe/billing-handlers.ts` STRIPE_PRICE_CATALOG).
+      # reads (`workers/src/stripe/billing-handlers.ts` `allowedPriceIds()`:
+      # the four STRIPE_{STARTER,PROFESSIONAL}_{MONTHLY,ANNUAL}_PRICE_ID keys).
       #
       # Bound as secrets rather than written into `[env.production.vars]` for
       # two reasons: they differ between the Stripe test and live accounts, so

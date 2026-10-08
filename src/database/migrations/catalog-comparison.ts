@@ -74,30 +74,6 @@ export function computeStructuralKeys(catalog: NormalizedCatalog): CatalogStruct
 }
 
 // ---------------------------------------------------------------------------
-// Comparison profiles
-// ---------------------------------------------------------------------------
-
-/**
- * Configuration controlling how two catalogs are compared.
- */
-export interface ComparisonConfig {
-  /** Include CHECK constraints in the mismatch check. */
-  includeCheckConstraints: boolean;
-  /** Include UNIQUE constraints in the mismatch check. */
-  includeUniqueConstraints: boolean;
-}
-
-/**
- * Adoption comparison profile: used by the adoption command against an
- * existing production database. Strict: all migration-owned indexes and
- * CHECK/UNIQUE constraints are required.
- */
-export const ADOPTION_COMPARISON: ComparisonConfig = {
-  includeCheckConstraints: true,
-  includeUniqueConstraints: true,
-};
-
-// ---------------------------------------------------------------------------
 // Exact adoption column exceptions
 // ---------------------------------------------------------------------------
 
@@ -188,14 +164,13 @@ export interface CatalogDiff {
  * `expected` is the migration-replayed catalog (what the migrations produce).
  * `actual` is the existing database's catalog (what's in production).
  *
- * The `config` parameter controls which exception rules and filters apply:
- * `adoptionColumnExceptions` provides exact table/column/expected/actual
- * tuples for accepted column differences.
+ * The comparison is strict: every index and every CHECK and UNIQUE constraint
+ * is required. `adoptionColumnExceptions` provides exact
+ * table/column/expected/actual tuples for accepted column differences.
  */
 export function compareCatalogs(
   expected: CatalogStructuralKeys,
   actual: CatalogStructuralKeys,
-  config: ComparisonConfig,
   adoptionColumnExceptions: readonly AdoptionColumnException[] = [],
 ): CatalogDiff {
   // Tables
@@ -210,17 +185,14 @@ export function compareCatalogs(
   const colsOnlyInExpectedRaw = [...expectedColKeys].filter((k) => !actualColKeys.has(k));
   const colsOnlyInActualRaw = [...actualColKeys].filter((k) => !expectedColKeys.has(k));
 
-  const colsOnlyInExpectedFiltered = colsOnlyInExpectedRaw;
-  const colsOnlyInActualFiltered = colsOnlyInActualRaw;
-
   const columnsOnlyInExpected: string[] = [];
   const columnsOnlyInActual: string[] = [];
   const columnsWithKnownDifferences: string[] = [];
 
-  for (const expKey of colsOnlyInExpectedFiltered) {
+  for (const expKey of colsOnlyInExpectedRaw) {
     const parts = expKey.split('|');
     const tableCol = `${parts[0]}|${parts[1]}`;
-    const matchingActual = colsOnlyInActualFiltered.find((a) => {
+    const matchingActual = colsOnlyInActualRaw.find((a) => {
       const aParts = a.split('|');
       return `${aParts[0]}|${aParts[1]}` === tableCol;
     });
@@ -240,10 +212,10 @@ export function compareCatalogs(
     }
   }
 
-  for (const actKey of colsOnlyInActualFiltered) {
+  for (const actKey of colsOnlyInActualRaw) {
     const parts = actKey.split('|');
     const tableCol = `${parts[0]}|${parts[1]}`;
-    const matchingExpected = colsOnlyInExpectedFiltered.find((e) => {
+    const matchingExpected = colsOnlyInExpectedRaw.find((e) => {
       const eParts = e.split('|');
       return `${eParts[0]}|${eParts[1]}` === tableCol;
     });
@@ -264,20 +236,24 @@ export function compareCatalogs(
   const conOnlyInActual = setDifference(actual.constraints, expected.constraints).sort();
 
   // CHECK constraints
-  const checkOnlyInExpected = config.includeCheckConstraints
-    ? setDifference(expected.checkConstraints, actual.checkConstraints).sort()
-    : [];
-  const checkOnlyInActual = config.includeCheckConstraints
-    ? setDifference(actual.checkConstraints, expected.checkConstraints).sort()
-    : [];
+  const checkOnlyInExpected = setDifference(
+    expected.checkConstraints,
+    actual.checkConstraints,
+  ).sort();
+  const checkOnlyInActual = setDifference(
+    actual.checkConstraints,
+    expected.checkConstraints,
+  ).sort();
 
   // UNIQUE constraints
-  const uniqueOnlyInExpected = config.includeUniqueConstraints
-    ? setDifference(expected.uniqueConstraints, actual.uniqueConstraints).sort()
-    : [];
-  const uniqueOnlyInActual = config.includeUniqueConstraints
-    ? setDifference(actual.uniqueConstraints, expected.uniqueConstraints).sort()
-    : [];
+  const uniqueOnlyInExpected = setDifference(
+    expected.uniqueConstraints,
+    actual.uniqueConstraints,
+  ).sort();
+  const uniqueOnlyInActual = setDifference(
+    actual.uniqueConstraints,
+    expected.uniqueConstraints,
+  ).sort();
 
   // Functions and triggers
   const functionsOnlyInExpected = setDifference(expected.functions, actual.functions).sort();

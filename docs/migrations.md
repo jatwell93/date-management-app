@@ -122,7 +122,7 @@ direct URL; PgBouncer plus the extended protocol produces false negatives.)
 - **`migrate:verify`** — three fail-closed checks (`src/database/migrations/verify.ts:1-20`):
   every expected table exists; `tier_feature_flags` is exactly 54 rows all matching the declared
   set; and the live catalog structurally matches the checked-in fingerprint under the strict
-  `ADOPTION_COMPARISON` profile, so any column/index/constraint/function/trigger drift fails.
+  catalog comparison, so any column/index/constraint/function/trigger drift fails.
 
 `preflight`, `seed` and `verify` signal failure by setting `process.exitCode` **without throwing**,
 and each emits an explicit failure event — a failing gate cannot log success.

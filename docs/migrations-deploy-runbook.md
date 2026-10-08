@@ -1149,7 +1149,7 @@ one-time).
 > `migration-adopt-dry-run-role-check.txt` for the exact refusal report.
 
 **Do NOT silently allowlist the missing 0001 objects.** The adoption
-comparison profile (`ADOPTION_COMPARISON`) is strict by design — a
+catalog comparison (`compareCatalogs`) is strict by design — a
 missing column or partial index is a real schema drift that must be
 reconciled, not hidden behind an exception tuple. Allowlisting would
 leave production with a schema that does not match the migration

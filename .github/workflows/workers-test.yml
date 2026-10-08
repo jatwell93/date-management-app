@@ -24,8 +24,8 @@ name: Workers Test
 # satisfy a required check placed on them, merging with no test run. The check
 # to require is the `gate` job at the bottom, which runs with `if: always()`
 # and fails unless the results are genuinely acceptable. The other workflows
-# in this directory (frontend-test, migrations-e2e) follow the same pattern and
-# refer back to this header.
+# in this directory (frontend-test, migrations-e2e, database-conformance)
+# follow the same pattern and refer back to this header.
 #
 # `shared/` is in the trigger path as well as `workers/`: the Worker imports
 # from `shared/domain` (e.g. `isPlatformAdminUser`, the store-walk audit

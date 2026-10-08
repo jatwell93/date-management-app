@@ -12,7 +12,7 @@
  * column, index, constraint (including CHECK and UNIQUE), function, and
  * trigger against the expected catalog (the checked-in fingerprint, which is
  * itself verified by the baseline fingerprint test against a pglite replay of
- * 0000→latest). The comparison uses the strict ADOPTION_COMPARISON profile:
+ * 0000→latest). The comparison is strict:
  * all migration-owned indexes and CHECK/UNIQUE constraints are required, and
  * column exceptions must be exact table/column/expected/actual tuples.
  *
@@ -34,7 +34,6 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-  ADOPTION_COMPARISON,
   compareCatalogs,
   computeStructuralKeys,
   formatCatalogDiff,
@@ -335,8 +334,7 @@ function buildReport(
  * Perform an adoption check against an existing database.
  *
  * In dry-run mode: introspects the catalog inside a ROLLBACK-only transaction,
- * compares against the expected fingerprint using the strict ADOPTION_COMPARISON
- * profile, and returns a report. No writes — no ledger creation, no stamping.
+ * compares strictly against the expected fingerprint, and returns a report. No writes — no ledger creation, no stamping.
  *
  * In apply mode: validates the adoption confirmation, then opens a single
  * REPEATABLE READ transaction that introspects the catalog, verifies it
@@ -398,12 +396,7 @@ export async function performAdoption(
       // Introspect the catalog inside the transaction (consistent snapshot).
       const expectedKeys = await loadExpectedCatalog(options.fingerprintPath);
       const actualKeys = await introspectActualCatalog(client);
-      const diff = compareCatalogs(
-        expectedKeys,
-        actualKeys,
-        ADOPTION_COMPARISON,
-        options.columnExceptions ?? [],
-      );
+      const diff = compareCatalogs(expectedKeys, actualKeys, options.columnExceptions ?? []);
 
       const wouldStamp = history.map(({ id }) => id);
 

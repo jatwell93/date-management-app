@@ -642,7 +642,7 @@ test('e2e: guarded down migration refuses bigint storage limits before an explic
 
     // Verify must fail — the fingerprint expects bigint, and the explicit
     // lossy preparation also differs from the declared reference data.
-    // The ADOPTION_COMPARISON profile is strict (no broad column exceptions),
+    // The catalog comparison is strict (no broad column exceptions),
     // so this difference is a mismatch. The ONLY diff should be limit_value.
     const report = await verifyMigration(client, FINGERPRINT_PATH);
     assert.equal(report.verified, false, 'Expected verify to FAIL after down migration');

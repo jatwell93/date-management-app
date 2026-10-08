@@ -11,7 +11,7 @@
  *      every row matches the declared value (reuses the seed's source of
  *      truth so seed and verify cannot drift);
  *   3. structurally compares the live catalog against the checked-in
- *      `catalog-fingerprint.json` using the strict ADOPTION_COMPARISON profile
+ *      `catalog-fingerprint.json` with the strict comparison
  *      (the same comparison adoption uses), so any column/index/constraint/
  *      function/trigger drift fails verification.
  *
@@ -21,7 +21,6 @@
 import { readFile } from 'node:fs/promises';
 
 import {
-  ADOPTION_COMPARISON,
   compareCatalogs,
   computeStructuralKeys,
   formatCatalogDiff,
@@ -133,7 +132,7 @@ export async function verifyMigration(
   // 3. Catalog structural comparison against the fingerprint (strict profile).
   const expectedKeys = await loadExpectedCatalog(fingerprintPath);
   const actualKeys = await introspectActual(client);
-  const diff = compareCatalogs(expectedKeys, actualKeys, ADOPTION_COMPARISON);
+  const diff = compareCatalogs(expectedKeys, actualKeys);
   const catalogOk = diff.matches;
   const catalogDiff = catalogOk ? null : diff;
 
