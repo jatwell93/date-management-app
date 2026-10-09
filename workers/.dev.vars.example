@@ -7,8 +7,9 @@
 NEON_CONNECTION_STRING=postgres://<user>:<password>@<your-branch-host>-pooler.<region>.aws.neon.tech/<db>?sslmode=require
 
 # REQUIRED. Any random local value. Clerk handles sign-in; this secret signs the
-# short-lived presigned-upload tokens. While it is unset, every API route after
-# bootstrap and upload initiation answers 500 "JWT_SECRET is required".
+# short-lived presigned-upload tokens. While it is unset, every /api and /upload
+# route except bootstrap, the health probes and the webhooks answers 500
+# "JWT_SECRET is required".
 JWT_SECRET=<any-random-local-string>
 
 # Secret key for the SAME Clerk instance as the frontend's

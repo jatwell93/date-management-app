@@ -66,7 +66,7 @@ export const REQUIRED_CONFIG: readonly RequiredConfigCheck[] = [
   {
     name: 'JWT_SECRET',
     impact:
-      'signing of presigned-upload tokens, and every API route after bootstrap and upload initiation (500 "JWT_SECRET is required")',
+      'signing of presigned-upload tokens; every /api and /upload route except bootstrap, the health probes and the signature-verified webhooks answers 500 "JWT_SECRET is required"',
     isSatisfied: (env) => Boolean(env.JWT_SECRET?.trim()),
   },
 ];
