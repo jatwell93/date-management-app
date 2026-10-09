@@ -162,7 +162,7 @@ jobs:
 
       - name: Archive Coverage Report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: frontend-coverage-report
           path: frontend/coverage/
