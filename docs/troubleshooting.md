@@ -546,12 +546,13 @@ npm run tail:prod --prefix workers
 **Solution:**
 
 ```bash
-# 1. Ensure .env.test is configured correctly
-cp .env.example .env.test
+# 1. Worker tests need no secrets: CI runs without any .dev.vars
+#    (workers/.dev.vars.example is for `wrangler dev` only)
 
 # 2. Run with same settings as CI
 npm ci  # Instead of npm install (respects lock file)
-npm test
+npm run test:db                  # real-SQL suite (pglite)
+(cd workers && npm test)         # Worker unit and handler tests
 
 # 3. Check CI logs for actual error
 # GitHub Actions → Workflows → Failed job → Logs

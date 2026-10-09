@@ -46,7 +46,7 @@ This checklist ensures all critical systems are verified before deploying to pro
   - Requirement: Zero hardcoded credentials found
 
 - [x] **Environment variables documented**
-  - File: Check `.env.example` exists in each package
+  - Files: `workers/.dev.vars.example` (Worker, the source of truth) and `frontend/.env.example`; the root `.env.example` only points to them
   - Requirement: All required env vars listed with descriptions
 
 - [x] **Presigned URL rate limiting implemented**

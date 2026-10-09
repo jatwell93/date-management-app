@@ -43,3 +43,18 @@ FRONTEND_URL=http://localhost:3002
 
 # Comma-separated Clerk user ids granted platform-admin locally.
 # PLATFORM_ADMIN_USER_IDS=<user_...,user_...>
+
+# Sentry error monitoring. Leave unset to run without it.
+# WORKERS_SENTRY_DSN=<https://...@...ingest.sentry.io/...>
+
+# Enforcement switches. Both default to "false" (measure only) from wrangler.toml
+# [env.development.vars]; set "true" here to test the refusals locally.
+# USAGE_LIMITS_ENFORCE=true
+# SUBSCRIPTION_GATE_ENFORCE=true
+
+# Set "true" to make the hourly scheduled tick a no-op (the production kill switch).
+# SCHEDULED_JOBS_DISABLED=true
+
+# Local dev uses STORAGE_PROVIDER=local (wrangler.toml), so no R2 credentials are needed.
+# Only set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME
+# if you switch STORAGE_PROVIDER to "r2".
