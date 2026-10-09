@@ -22,7 +22,7 @@ Neon provides PostgreSQL database branching, enabling safe schema migrations wit
 > **Applying migrations to production is documented separately.** This guide covers Neon branching
 > and local workflows; the authoritative production migration path — the runner, the ordered
 > `migrate:*` commands, and the deploy workflow — is [`docs/migrations.md`](./migrations.md). The
-> `prisma migrate dev` steps below apply to feature branches and local development, not to
+> migration steps below apply to feature branches and local development, not to
 > production.
 
 ### Benefits
@@ -192,16 +192,18 @@ psql $DATABASE_URL -c "SELECT 1"
 
 ### Step 3: Make Schema Changes
 
-Using Prisma migrations:
+Write a numbered SQL migration (see [`migrations.md`](./migrations.md) and
+[`database-migrations.md`](./database-migrations.md)):
 
 ```bash
-# Generate migration from schema changes
-npx prisma migrate dev --name add_subscription_fields
+# 1. Add database/migrations/NNNN_add_subscription_fields.up.sql and .down.sql
+# 2. Add the manifest entry, regenerate the catalog fingerprint, run the tests
+npm run compile && node scripts/regenerate-catalog-fingerprint.js
+npm run test:migrations
 
-# This creates:
-# prisma/migrations/20260309120000_add_subscription_fields/migration.sql
-
-# Migration is applied to feature branch database
+# 3. Apply it to the feature branch with the migrate:* commands
+#    (DATABASE_URL_UNPOOLED and the MIGRATION_* guards pointing at the branch)
+npm run migrate:apply
 ```
 
 **Or manually with SQL:**
@@ -330,19 +332,20 @@ DATABASE_URL=$main_db_url npm run health-check
 
 ### Step 5: Update Downstream Services
 
-If using multiple databases:
+The Worker reads its connection through Hyperdrive and the `NEON_CONNECTION_STRING` secret.
+If you create a new Neon branch that production should use, update the Worker secret and redeploy:
 
 ```bash
-# Update backend connection string
-echo "DATABASE_URL=$main_db_url" > backend/.env.production
-
 # Update Workers connection string
-wrangler secret put DATABASE_URL --env production --path $main_db_url
+cd workers
+wrangler secret put NEON_CONNECTION_STRING --env production
 
-# Restart services
-npm run deploy:workers
-npm run restart:backend
+# Redeploy
+npm run deploy:prod
 ```
+
+Production changes normally go through the deploy workflow; see
+[`migrations-deploy-runbook.md`](./migrations-deploy-runbook.md).
 
 ---
 
@@ -468,13 +471,13 @@ npm run dev
 
 ```bash
 # 1. Check migration status
-npx prisma migrate status --preview-features
+npm run migrate:status
 
 # 2. If stuck, reset feature branch to parent state
 neon branches reset feature-x main --project-id demo-prod
 
 # 3. Reapply migrations carefully
-npx prisma migrate deploy
+npm run migrate:apply
 
 # 4. If still failing, delete branch and start over
 neon branches delete feature-x --project-id demo-prod

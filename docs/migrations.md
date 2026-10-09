@@ -4,21 +4,21 @@
 schema.** Every factual claim below cites the repo path that implements it; if the code and this
 document disagree, the code is right and this document is a bug.
 
-Scope note: `docs/database-migrations.md` describes the legacy Prisma/SQLite path used by the
-Express backend (`backend/`), which is retained only as the rollback backend until it is deleted.
-`npx prisma db push` and `prisma migrate deploy` are **not** how production schema changes are
-applied.
+Scope note: `docs/database-migrations.md` is the developer-facing companion to this document (Neon
+branches, writing a migration, recovery). The Express/Prisma/SQLite backend is retired (last
+revision: tag `express-sqlite-last`); `npx prisma db push` and `prisma migrate deploy` were never
+how production schema changes are applied.
 
 ---
 
 ## 1. What owns migrations
 
-| Concern | Location |
-| --- | --- |
-| Runner + CLIs | `src/database/migrations/` |
-| Authoritative history (SQL + manifest) | `database/migrations/` |
-| Ledger table | `schema_migrations` (created by `ensureLedger`, `src/database/migrations/runner.ts:402`) |
-| Catalog fingerprints | `database/migrations/catalog-fingerprint.json` (+ `catalog-fingerprint.0009.json` for adoption at a historical point) |
+| Concern                                | Location                                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Runner + CLIs                          | `src/database/migrations/`                                                                                            |
+| Authoritative history (SQL + manifest) | `database/migrations/`                                                                                                |
+| Ledger table                           | `schema_migrations` (created by `ensureLedger`, `src/database/migrations/runner.ts:402`)                              |
+| Catalog fingerprints                   | `database/migrations/catalog-fingerprint.json` (+ `catalog-fingerprint.0009.json` for adoption at a historical point) |
 
 The history is a set of `NNNN_name.up.sql` / `NNNN_name.down.sql` pairs plus
 `database/migrations/manifest.json`, which is the declaration of intent for each migration.
@@ -63,14 +63,14 @@ re-stamp (`recordMigration`, `runner.ts:467-500`) so the original attempt stays 
 The authoritative command list is the `migrate:*` scripts in the **root** `package.json`. Each
 compiles first (`npm run compile`) and runs the built CLI from `build/`.
 
-| Command | Entry point | Mutating? |
-| --- | --- | --- |
-| `npm run migrate:status` | `src/database/migrations/status-cli.ts` | no |
-| `npm run migrate:preflight` | `src/database/migrations/preflight-cli.ts` | no |
-| `npm run migrate:apply` | `src/database/migrations/cli.ts` | **yes** |
-| `npm run migrate:seed` | `src/database/migrations/seed-cli.ts` | **yes** |
-| `npm run migrate:verify` | `src/database/migrations/verify-cli.ts` | no |
-| `npm run migrate:adopt -- --dry-run` \| `-- --apply` | `src/database/migrations/adopt-cli.ts` | dry-run no, apply **yes** |
+| Command                                              | Entry point                                | Mutating?                 |
+| ---------------------------------------------------- | ------------------------------------------ | ------------------------- |
+| `npm run migrate:status`                             | `src/database/migrations/status-cli.ts`    | no                        |
+| `npm run migrate:preflight`                          | `src/database/migrations/preflight-cli.ts` | no                        |
+| `npm run migrate:apply`                              | `src/database/migrations/cli.ts`           | **yes**                   |
+| `npm run migrate:seed`                               | `src/database/migrations/seed-cli.ts`      | **yes**                   |
+| `npm run migrate:verify`                             | `src/database/migrations/verify-cli.ts`    | no                        |
+| `npm run migrate:adopt -- --dry-run` \| `-- --apply` | `src/database/migrations/adopt-cli.ts`     | dry-run no, apply **yes** |
 
 `migrate:adopt` is the **one-time** command that stamps an existing database into the ledger
 without executing its history. It is not part of a routine deploy.
@@ -83,24 +83,24 @@ exactly what `.github/workflows/migration-prep.yml:125-235` runs.
 Required by every command (each CLI's own header comment is the source, e.g.
 `src/database/migrations/status-cli.ts:1-19`):
 
-| Variable | Meaning |
-| --- | --- |
-| `DATABASE_URL_UNPOOLED` | direct (non-pooled) PostgreSQL connection string |
-| `MIGRATION_ALLOWED_HOST` | allowlisted hostname; a mismatch aborts |
-| `MIGRATION_ALLOWED_DATABASE` | allowlisted database name |
-| `MIGRATION_ENVIRONMENT` | `development` \| `test` \| `staging` \| `production` |
-| `MIGRATION_TARGET_KIND` | `primary` \| `development` \| `restore-drill` |
-| `MIGRATION_ROLE` | dedicated DDL role; must equal `current_user` |
-| `MIGRATION_CONFIRM_PRODUCTION` | `APPLY <host>/<database>` — production only |
+| Variable                       | Meaning                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| `DATABASE_URL_UNPOOLED`        | direct (non-pooled) PostgreSQL connection string     |
+| `MIGRATION_ALLOWED_HOST`       | allowlisted hostname; a mismatch aborts              |
+| `MIGRATION_ALLOWED_DATABASE`   | allowlisted database name                            |
+| `MIGRATION_ENVIRONMENT`        | `development` \| `test` \| `staging` \| `production` |
+| `MIGRATION_TARGET_KIND`        | `primary` \| `development` \| `restore-drill`        |
+| `MIGRATION_ROLE`               | dedicated DDL role; must equal `current_user`        |
+| `MIGRATION_CONFIRM_PRODUCTION` | `APPLY <host>/<database>` — production only          |
 
 Additional, per command:
 
-| Variable | Required by |
-| --- | --- |
-| `MIGRATION_DEPLOYMENT_SHA` | `migrate:apply` (`src/database/migrations/cli.ts:32`) and `migrate:adopt` |
-| `MIGRATION_SEED_CONFIRMATION` | `migrate:seed` on production — `SEED <host>/<database>` (`src/database/migrations/seed-cli.ts:52`) |
-| `MIGRATION_ADOPT_CONFIRMATION` | `migrate:adopt --apply` — `ADOPT <host>/<database> AT <migration-id>` |
-| `MIGRATION_ADOPTION_POINT` | optional; adopt at a historical migration ID (for example `0009`) |
+| Variable                       | Required by                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `MIGRATION_DEPLOYMENT_SHA`     | `migrate:apply` (`src/database/migrations/cli.ts:32`) and `migrate:adopt`                          |
+| `MIGRATION_SEED_CONFIRMATION`  | `migrate:seed` on production — `SEED <host>/<database>` (`src/database/migrations/seed-cli.ts:52`) |
+| `MIGRATION_ADOPT_CONFIRMATION` | `migrate:adopt --apply` — `ADOPT <host>/<database> AT <migration-id>`                              |
+| `MIGRATION_ADOPTION_POINT`     | optional; adopt at a historical migration ID (for example `0009`)                                  |
 
 The pooled endpoint is rejected by `validateMigrationTarget` — migrations run through the direct
 connection only. (Related operational gotcha: `scripts/verify-runtime-role.js` also requires the
@@ -118,7 +118,7 @@ direct URL; PgBouncer plus the extended protocol produces false negatives.)
   (`src/database/migrations/cli.ts:39`).
 - **`migrate:seed`** — idempotently upserts the authoritative 54-row `tier_feature_flags`
   reference set (`src/database/migrations/seed.ts:38`) and verifies the result. This is the single
-  source of truth for tier flags; both `backend/scripts/` seeders are superseded by it.
+  source of truth for tier flags; the retired `backend/scripts/` seeders are superseded by it.
 - **`migrate:verify`** — three fail-closed checks (`src/database/migrations/verify.ts:1-20`):
   every expected table exists; `tier_feature_flags` is exactly 54 rows all matching the declared
   set; and the live catalog structurally matches the checked-in fingerprint under the strict
@@ -131,21 +131,21 @@ and each emits an explicit failure event — a failing gate cannot log success.
 
 ## 3. Safety model
 
-| Guard | Implementation |
-| --- | --- |
-| Pooled-host rejection, host/database allowlist, environment, production confirmation | `validateMigrationTarget` (`src/database/migrations/runner.ts`) |
-| Target-kind declaration; mutating commands refuse non-`primary` targets | `assertTargetKind` (`src/database/migrations/target.ts:39`) |
-| Connected role must equal `MIGRATION_ROLE` | `verifyMigrationRole` (`src/database/migrations/target.ts:67`) |
-| Single writer | `pg_try_advisory_lock` (`src/database/migrations/runner.ts:552`) |
-| Bounded blocking | `SET lock_timeout = '10s'` (`src/database/migrations/runner.ts:397`) |
-| Manifest shape, enum domains, backfill/contract consistency | `assertEntrySemantics` (`src/database/migrations/runner.ts:281-317`) |
-| Expand always ships before its contract | `assertContractTargets` (`src/database/migrations/runner.ts:324-338`) |
-| History filenames cannot escape the directory | `assertSafeHistoryFile` (`src/database/migrations/runner.ts:226`) |
+| Guard                                                                                | Implementation                                                        |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Pooled-host rejection, host/database allowlist, environment, production confirmation | `validateMigrationTarget` (`src/database/migrations/runner.ts`)       |
+| Target-kind declaration; mutating commands refuse non-`primary` targets              | `assertTargetKind` (`src/database/migrations/target.ts:39`)           |
+| Connected role must equal `MIGRATION_ROLE`                                           | `verifyMigrationRole` (`src/database/migrations/target.ts:67`)        |
+| Single writer                                                                        | `pg_try_advisory_lock` (`src/database/migrations/runner.ts:552`)      |
+| Bounded blocking                                                                     | `SET lock_timeout = '10s'` (`src/database/migrations/runner.ts:397`)  |
+| Manifest shape, enum domains, backfill/contract consistency                          | `assertEntrySemantics` (`src/database/migrations/runner.ts:281-317`)  |
+| Expand always ships before its contract                                              | `assertContractTargets` (`src/database/migrations/runner.ts:324-338`) |
+| History filenames cannot escape the directory                                        | `assertSafeHistoryFile` (`src/database/migrations/runner.ts:226`)     |
 
 Two of these deserve expanding:
 
 **Role separation.** DDL privileges belong to a dedicated migration role (`neondb_owner` in
-production), which is *not* the restricted runtime role the Worker connects as (`app_runtime`). A
+production), which is _not_ the restricted runtime role the Worker connects as (`app_runtime`). A
 leaked or reused application credential therefore cannot mutate the schema. The check is a live
 `SELECT current_user`, not a configuration assertion.
 
@@ -175,7 +175,7 @@ SDK is loaded into the migration path.
 ## 4. How migrations reach production
 
 `.github/workflows/migration-prep.yml` is a **reusable** workflow (`on.workflow_call`) called by
-`.github/workflows/workers-deploy.yml`. It runs migrations *before* the Worker deploys.
+`.github/workflows/workers-deploy.yml`. It runs migrations _before_ the Worker deploys.
 
 Inputs (`migration-prep.yml:36-72`): `environment`, `deployment_sha`, `mode`, `neon_project_id`,
 `neon_branch`, `pitr_max_age_hours`, `pitr_min_retention_hours`. Secrets: `DOPPLER_TOKEN`
@@ -192,17 +192,17 @@ Every step uploads its captured output as a build artifact (`migration-status-<s
 
 Callers (`workers-deploy.yml:41-79`):
 
-| Job | Trigger | Environment / mode |
-| --- | --- | --- |
-| `migration-prep-preview` | pull request (non-fork, non-dependabot) | `preview` / `validate` |
-| `migration-prep-production` | push to `main` **only** when repo variable `PRODUCTION_AUTO_DEPLOY_ENABLED == 'true'`, **or** any `workflow_dispatch` from `main` | `production` / `full` |
+| Job                         | Trigger                                                                                                                           | Environment / mode     |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `migration-prep-preview`    | pull request (non-fork, non-dependabot)                                                                                           | `preview` / `validate` |
+| `migration-prep-production` | push to `main` **only** when repo variable `PRODUCTION_AUTO_DEPLOY_ENABLED == 'true'`, **or** any `workflow_dispatch` from `main` | `production` / `full`  |
 
 `PRODUCTION_AUTO_DEPLOY_ENABLED` defaults to unset, so pushing to `main` does not deploy.
 **Manual `workflow_dispatch` from `main` is the supported production path** and is never gated by
 that variable — it is also the break-glass/rollback route.
 
 > `NEON_API_KEY` must be **declared** under `on.workflow_call.secrets` in `migration-prep.yml`
-> *and* threaded explicitly from `workers-deploy.yml`. A reusable workflow only surfaces
+> _and_ threaded explicitly from `workers-deploy.yml`. A reusable workflow only surfaces
 > environment secrets it declares; omitting either half makes the PITR gate throw
 > `NEON_API_KEY is required`.
 
@@ -219,10 +219,10 @@ The step-by-step operator procedure, including confirmation strings and sign-off
 
 ## 5. Testing
 
-| Command | What it runs | Where |
-| --- | --- | --- |
-| `npm run test:migrations` | `runner`, `adopt`, `baseline.fingerprint`, `commands`, `log` suites under `node --test` against pglite | local + CI |
-| `npm run test:migrations:e2e` | `e2e.test.js` against a real PostgreSQL engine | CI only, `.github/workflows/migrations-e2e.yml` |
+| Command                       | What it runs                                                                                           | Where                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `npm run test:migrations`     | `runner`, `adopt`, `baseline.fingerprint`, `commands`, `log` suites under `node --test` against pglite | local + CI                                      |
+| `npm run test:migrations:e2e` | `e2e.test.js` against a real PostgreSQL engine                                                         | CI only, `.github/workflows/migrations-e2e.yml` |
 
 Both compile first. The two lists are **explicit file lists in the root `package.json`** —
 `test:migrations` does not glob, and deliberately excludes `e2e.test.ts`. A new test file is not
@@ -248,10 +248,10 @@ workflow instead.
 
 The operating figures:
 
-| | |
-| --- | --- |
-| **Operating RPO** | **6 hours** — the Neon PITR retention window (`history_retention_seconds = 21600`, free tier) |
-| Planned-migration recovery floor | ~3 s — *not* the operating RPO |
+|                                  |                                                                                               |
+| -------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Operating RPO**                | **6 hours** — the Neon PITR retention window (`history_retention_seconds = 21600`, free tier) |
+| Planned-migration recovery floor | ~3 s — _not_ the operating RPO                                                                |
 
 The 3-second figure recorded in the 1.9 sign-off is the floor for a **planned** migration only,
 because the drill takes its recovery point immediately before restoring. An unplanned incident has
@@ -272,4 +272,4 @@ repeat drills replace the existing snapshot rather than adding one.
 - `docs/migrations-deploy-runbook.md` — operator procedure, confirmations, sign-offs
 - `docs/neon-backup-restore.md` — measured recovery policy and restore procedures
 - `docs/migrations-e2e-runbook.md` — the real-PostgreSQL proof
-- `docs/database-migrations.md` — legacy Prisma/SQLite path (Express backend only, retained until deletion)
+- `docs/database-migrations.md` — developer companion: Neon branches, writing a migration, recovery

@@ -64,13 +64,13 @@ This runbook covers common operational procedures for the SaaS multi-tenant appl
 
 ```bash
 # Run the tier flag seeding script
-npm run seed:tier-flags
+npm run migrate:seed
 ```
 
 **Verification**:
 
 ```bash
-curl http://localhost:3001/health | jq .
+curl https://<api-host>/health | jq .
 ```
 
 ---
@@ -80,19 +80,19 @@ curl http://localhost:3001/health | jq .
 **Symptoms**:
 
 - `/health` returns 503 with `database: 'unhealthy'`
-- `/database-health` shows `connected: false`
+- `/health?deep=true` shows the database check failing
 
 **Resolution**:
 
-1. Check database file exists and is accessible
-2. Verify database permissions
-3. Restart application to re-establish connection
-4. Check disk space for database file
+1. Check the Neon project and branch are active (compute may be suspended; the first request wakes it)
+2. Check the `NEON_CONNECTION_STRING` secret and the Hyperdrive binding in `workers/wrangler.toml`
+3. Check runtime role grants (`scripts/verify-runtime-role.js`, direct URL only)
+4. Check Sentry and `npm run tail:prod --prefix workers` for connection errors
 
 **Verification**:
 
 ```bash
-curl http://localhost:3001/database-health | jq .
+curl "https://<api-host>/health?deep=true" | jq .
 ```
 
 ---
@@ -267,7 +267,7 @@ wrangler tail --env production --format json | \
 | ------------------------- | ----------------------------------- | ------------------------------------- |
 | Slow DB query             | Query time >200ms in Neon           | Add index (see performance.md)        |
 | Connection pool exhausted | High pool utilization               | Increase Hyperdrive pool size         |
-| N+1 query problem         | Multiple queries for single request | Use Prisma `include` for batch        |
+| N+1 query problem         | Multiple queries for single request | Fetch with one JOIN, not per row      |
 | Large payload             | Response size >1MB                  | Compress with gzip (already enabled)  |
 | Cold start                | First request slow                  | Normal for Workers, <300ms acceptable |
 
@@ -380,7 +380,7 @@ Before pushing to production:
 
 ### Sentry Configuration
 
-- **DSN**: Set via `SENTRY_DSN` environment variable
+- **DSN**: Set via the `WORKERS_SENTRY_DSN` Worker secret
 - **Frontend DSN**: Set via `SENTRY_FRONTEND_DSN` for client-side errors
 - **Alerts**: Configured for:
   - Uncaught exceptions
@@ -454,12 +454,12 @@ JWT_SECRET="your-jwt-secret"
 STRIPE_SECRET_KEY="sk_live_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 
-# Email (SendGrid)
-SENDGRID_API_KEY="SG.xxx"
-SENDGRID_FROM_EMAIL="noreply@yourdomain.com"
+# Email (Resend)
+RESEND_API_KEY="re_xxx"
+RESEND_FROM_EMAIL="noreply@yourdomain.com"
 
 # Monitoring
-SENTRY_DSN="https://xxx@sentry.io/yyy"
+WORKERS_SENTRY_DSN="https://xxx@sentry.io/yyy"
 
 # Application
 FRONTEND_URL="https://yourdomain.com"
@@ -473,8 +473,8 @@ NODE_ENV="production"
 | Issue Type            | Contact        | Response Time |
 | --------------------- | -------------- | ------------- |
 | Critical Outage       | DevOps Team    | 15 minutes    |
-| Payment/Stripe Issues | Backend Team   | 1 hour        |
-| Auth/Clerk Issues     | Backend Team   | 1 hour        |
+| Payment/Stripe Issues | Engineering    | 1 hour        |
+| Auth/Clerk Issues     | Engineering    | 1 hour        |
 | Database Issues       | Database Admin | 2 hours       |
 | Feature Questions     | Product Team   | 24 hours      |
 
@@ -483,14 +483,11 @@ NODE_ENV="production"
 ## Quick Reference Commands
 
 ```bash
-# Health check
-curl http://localhost:3001/health | jq .
-
-# Database metrics
-curl http://localhost:3001/database-metrics | jq .
+# Health check (add ?deep=true for R2 and database checks)
+curl https://<api-host>/health | jq .
 
 # Run tier flag seeding
-npm run seed:tier-flags
+npm run migrate:seed
 
 # Tenant-ID integrity (schema-enforced; asserted by the Worker conformance suite)
 npm run test:db

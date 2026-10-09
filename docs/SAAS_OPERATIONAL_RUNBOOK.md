@@ -179,8 +179,8 @@ any → canceled (on customer cancellation)
 
 1. Check webhook URL in Stripe dashboard
 2. Verify webhook secret: `STRIPE_WEBHOOK_SECRET` env var
-3. Check webhook logs: `grep "Webhook received" /var/log/app.log`
-4. Test with Stripe CLI: `stripe listen --forward-to localhost:3001/api/webhooks`
+3. Inspect deliveries and stuck claims: `npm run diagnose:webhook`, and `npm run tail:prod --prefix workers` for live logs
+4. Test with Stripe CLI: `stripe listen --forward-to 127.0.0.1:8787/api/webhooks/stripe`
 
 ## Emergency Procedures
 
@@ -242,7 +242,7 @@ WHERE organizationId = 'CUSTOMER_ORG_ID';
 
 ## Related Documents
 
-- [Stripe Configuration Guide](../backend/docs/stripe-setup.md)
-- [Database Schema](../backend/prisma/schema.prisma)
-- [API Documentation](../backend/docs/api/)
-- [Feature Gate Implementation](../backend/src/middleware/feature-gate.middleware.ts)
+- [Stripe Integration](./stripe-integration.md)
+- [Database Migrations](./migrations.md)
+- [Worker Routes](../workers/src/minimal-api-routes.ts)
+- [Usage Limits](../workers/src/utils/usage-limits.ts)

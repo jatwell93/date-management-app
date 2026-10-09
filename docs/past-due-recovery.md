@@ -1,3 +1,5 @@
+> **Current Worker behavior (read first).** The Worker has no scheduled dunning job. A subscription's access state is derived from stored dates at request time (`workers/src/subscription-status.ts`, 7-day `DUNNING_GRACE_DAYS`), and refusing creation for a lapsed subscription is off by default (`SUBSCRIPTION_GATE_ENFORCE`, measure only). Dunning emails are not sent by the Worker today. Parts of this guide describe the intended customer experience from the Express era; confirm each promise against the Worker before relying on it or publishing it to customers.
+
 # Past Due Recovery Guide
 
 ## Overview
@@ -65,7 +67,7 @@ Day 0   Payment attempt fails
 - `invoice.payment_failed` webhook received
 - Subscription status set to `past_due`
 - `pastDueSince` timestamp recorded (first failure only)
-- Dunning email queued via SendGrid
+- Dunning email: not sent by the Worker today (see the note at the top)
 
 **Your Actions**:
 
@@ -118,10 +120,8 @@ Day 8+    Auto-downgrade to Starter
 
 **System Actions**:
 
-- Dunning job runs daily at 01:00 UTC
-- Finds subscriptions with `past_due` > 7 days
-- Downgrades to Starter tier
-- Applies creation lock if usage exceeds Starter limits
+- No scheduled job runs. After `past_due_since` is more than 7 days old, the Worker treats the subscription as lapsed at request time
+- Creation is refused for a lapsed subscription only when `SUBSCRIPTION_GATE_ENFORCE=true`
 - Sends Sentry fatal alert
 - Logs audit event
 
@@ -290,7 +290,7 @@ VALUES ('YOUR_ORG_ID', 'grace_period_extended',
 
 ### Q: What if I pay on day 7?
 
-**A**: If payment succeeds before the dunning job runs on day 8, your subscription returns to `active` status immediately and no downgrade occurs.
+**A**: If payment succeeds before day 8, Stripe sends `customer.subscription.updated` with an active status, and the Worker clears `past_due_since` and returns the subscription to active.
 
 ### Q: Can I prevent auto-downgrade?
 
@@ -395,34 +395,25 @@ Authorization: Bearer TOKEN
 
 The following Stripe webhooks relate to past due:
 
-| Event                           | Handler                      | Action                           |
-| ------------------------------- | ---------------------------- | -------------------------------- |
-| `invoice.payment_failed`        | `handleInvoicePaymentFailed` | Sets past_due, sends email       |
-| `invoice.payment_succeeded`     | (Automatic)                  | Clears past_due, restores active |
-| `customer.subscription.updated` | `handleSubscriptionUpdated`  | Syncs status changes             |
+| Event                                        | Handler                    | Action                                                                                              |
+| -------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `customer.subscription.updated`              | `processSubscriptionEvent` | Syncs status; sets `past_due_since` on past_due and clears it when the subscription is active again |
+| `customer.subscription.created` / `.deleted` | `processSubscriptionEvent` | Create / cancel the subscription row                                                                |
 
-### Dunning Job
+The Worker acts only on the three `customer.subscription.*` events; see [`stripe-integration.md`](./stripe-integration.md). `invoice.payment_failed` and `invoice.payment_succeeded` are acknowledged without side effects, because the status change arrives as a subscription update.
 
-**Schedule**: Daily at 01:00 UTC
+### Lapse Check
 
-**Location**: `backend/src/jobs/dunning.job.ts`
+**Where**: `workers/src/subscription-status.ts`
 
-**Logic**:
+There is no dunning job. The lapse is derived from stored columns every time it is needed:
 
 ```typescript
-// Find subscriptions past due > 7 days
-const expiredPastDue = await prisma.subscriptionTier.findMany({
-  where: {
-    status: 'past_due',
-    pastDueSince: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-  },
-});
-
-// Auto-downgrade each
-for (const sub of expiredPastDue) {
-  await subscriptionService.downgradeExpiredPastDue(sub.organizationId);
-}
+// Lapsed when past_due_since is more than DUNNING_GRACE_DAYS (7) ago
+// Access state also considers trial_end_date and current_period_end / cancel_at_period_end
 ```
+
+The daily `stripe-reconciliation` job re-applies Stripe's view of each subscription, which repairs a missed webhook.
 
 ---
 

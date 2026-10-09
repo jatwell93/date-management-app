@@ -311,9 +311,7 @@ For heavy read workloads (analytics queries):
 ```typescript
 // Instead of hitting main database
 // Create read replica for analytics
-const analyticsDb = new PrismaClient({
-  datasourceUrl: ANALYTICS_DATABASE_URL, // Read-only replica
-});
+const analyticsSql = neon(ANALYTICS_DATABASE_URL); // Read-only replica endpoint
 
 // Metrics queries go to replica
 const dailyStats = await analyticsDb.analytics.groupBy({

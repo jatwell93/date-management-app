@@ -101,7 +101,7 @@ Processing webhook event: customer.subscription.created
 
 ### 1.8 Keep ngrok Running
 
-Every time you restart your backend or need a fresh ngrok session:
+Every time you restart the Worker or need a fresh ngrok session:
 
 ```bash
 ngrok http 8787  # Get new forwarding URL

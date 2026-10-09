@@ -26,7 +26,7 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
          │                    │                    │
          ▼                    ▼                    ▼
     ┌─────────┐         ┌──────────┐       ┌──────────┐
-    │ Backend │         │ Workers  │       │ Frontend │
+    │  Jobs   │         │ Workers  │       │ Frontend │
     └─────────┘         └──────────┘       └──────────┘
          │                    │                    │
          │ logs/errors        │ logs              │ errors
@@ -61,7 +61,7 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 
 ## 2. Key Metrics to Monitor
 
-### Backend Application
+### Worker API
 
 #### Response Times
 
@@ -75,7 +75,7 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 - **Metric**: 5xx errors per minute
 - **Target**: <5 errors/min in normal operation
 - **Alert Threshold**: >10 errors/min
-- **Tool**: Sentry, CloudWatch
+- **Tool**: Sentry, Cloudflare Workers analytics
 
 #### Database Queries
 
@@ -372,13 +372,6 @@ Notification: Slack via webhook
 
 ### Per-Service Dashboards
 
-#### Backend Dashboard
-
-- Request count by endpoint
-- Error rate by status code
-- CPU/Memory utilization
-- Database query performance
-
 #### Workers Dashboard
 
 - Requests per region
@@ -410,13 +403,6 @@ Notification: Slack via webhook
 
 **Central Location**: CloudWatch (for AWS) or Loki (self-hosted)
 
-**Backend Logs**:
-
-```
-Format: [timestamp] [level] [service] message
-Example: 2026-03-16T10:30:45Z ERROR csv-processor Parse error at row 1500
-```
-
 **Workers Logs**:
 
 ```
@@ -434,7 +420,7 @@ SELECT * FROM pg_log WHERE level = 'error'
 
 ### Log Retention
 
-- **Backend/Workers**: 30 days
+- **Workers**: 30 days
 - **Database queries**: 7 days (slow queries archived)
 - **Error tracking**: 90 days in Sentry
 - **Compliance logs**: 1 year (for audit trail)
@@ -540,7 +526,6 @@ Level 3 (Director/VP):
 **If Unresolved**:
 
 - Rollback last Workers deployment
-- Rollback last backend deployment
 - Scale up database compute
 
 ### Runbook: Database Connection Pool Exhausted

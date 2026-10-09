@@ -103,7 +103,7 @@ P4 Incident:
 2. **Slack Channel**: #incident-P1-[YYYY-MM-DD-HHmm]
 3. **Attendees**:
    - Primary On-Call (Incident Commander)
-   - Backend Engineer (on-call)
+   - Engineer (on-call)
    - Frontend Engineer (if relevant)
    - DevOps/Infrastructure (if relevant)
    - Manager (observer, handles external comms)
@@ -196,30 +196,21 @@ wrangler tail  # View real-time logs
 **Option A: Database Connection Issue**
 
 ```bash
-# SSH into VPS or check Neon
-ssh root@vps-ip
-
-# Verify Neon is up (check status page)
+# Check the Neon status page
 curl https://status.neon.tech
 
-# If Neon unavailable: Activate ROLLBACK procedure
-# See: docs/rollback-procedure.md
+# If Neon is unavailable: wait for recovery, or see docs/disaster-recovery.md
 
-# If Neon available, check connection string:
-echo $DATABASE_URL  # Verify connection string in .env
+# If Neon is available, check the Worker secret and Hyperdrive binding:
+cd workers
+wrangler secret list --env production
 
-# Test connection:
-npx ts-node -e "
-  const { Prisma } = require('@prisma/client');
-  (async () => {
-    const db = await Prisma.openConnection();
-    console.log('✓ Connected');
-  })()
-"
+# Check the deep health endpoint
+curl "https://<api-host>/health?deep=true"
 
-# If connection error: Update .env and redeploy
-wrangler secret put DATABASE_URL  # Update Worker secrets
-wrangler deploy
+# If the connection string is wrong: update the secret and redeploy
+wrangler secret put NEON_CONNECTION_STRING --env production
+npm run deploy:prod
 ```
 
 **Option B: Code Deployment Issue**
@@ -245,7 +236,7 @@ wrangler metrics
 
 # If hitting limits:
 # P1: Immediately scale (contact Cloudflare support)
-# Temporary: Route traffic to VPS via rollback procedure
+# Temporary: redeploy a known-good version (see docs/rollback-procedure.md)
 ```
 
 **Verification (5 minutes)**:
@@ -380,7 +371,7 @@ curl https://api.yourdomain.com/api/products
 ### Runbook 3: R2 Bucket Inaccessible / Files Missing
 
 **Symptom**: File downloads fail, uploads fail with 403 Forbidden  
-**Severity**: P1 (if no fallback), P2 (if VPS rollback available)  
+**Severity**: P1  
 **Start**: **\_** UTC  
 **Target Resolution**: 30 min (diagnosis) + 2 hours (recovery)
 
@@ -439,11 +430,10 @@ aws s3api create-bucket \
 
 ```bash
 # If Cloudflare R2 is down (check status page):
-# 1. Activate ROLLBACK procedure
-#    (Revert to VPS with local filesystem storage)
+# 1. Uploads and downloads depend on R2; there is no fallback storage
 # 2. Wait for R2 recovery OR recover from backup
 
-# Rollback: See docs/rollback-procedure.md
+# See docs/r2-recovery-procedure.md
 ```
 
 **Verification**:
@@ -688,7 +678,7 @@ curl https://api.yourdomain.com/health
 
 - Set query timeout: 30 seconds
 - Add circuit breaker pattern for external APIs
-- Use request timeouts in Express
+- Use request timeouts on outbound calls from the Worker
 
 **Data Corruption**:
 
@@ -759,7 +749,7 @@ curl https://api.yourdomain.com/health
 ## Action Items
 
 - [ ] Implement connection pool dashboard (Owner: DevOps, Due: March 10)
-- [ ] Review all async code for missing await (Owner: Backend Team, Due: March 8)
+- [ ] Review all async code for missing await (Owner: Engineering, Due: March 8)
 - [ ] Add performance testing to CI/CD (Owner: QA, Due: March 15)
 ```
 
@@ -814,7 +804,7 @@ P4 Minor Issue:
 
 - **[Operational Runbook](./operational-runbook.md)** - Day-to-day operational procedures
 - **[Master Disaster Recovery Plan](./disaster-recovery.md)** - All failure scenarios
-- **[Rollback Procedure](./rollback-procedure.md)** - Emergency revert to VPS
+- **[Rollback Procedure](./rollback-procedure.md)** - Emergency redeploy of a known-good Worker
 - **[Data Retention Policy](./data-retention-policy.md)** - Data handling in incidents
 
 ---

@@ -11,8 +11,8 @@ This checklist ensures all critical systems are verified before deploying to pro
 
 ## Phase 1: Code Quality & Build
 
-- [x] **All tests passing (backend)**
-  - Command: `cd backend && npm test`
+- [x] **All tests passing (Worker and database)**
+  - Command: `npm run test:db` and `cd workers && npm test`
   - Requirement: 100% of test suite passing
   - Note: Neon tests may require separate CI job due to harness stability
 
@@ -29,11 +29,10 @@ This checklist ensures all critical systems are verified before deploying to pro
   - Requirement: No errors, only style-related warnings acceptable with justification
 
 - [x] **TypeScript compilation successful (all packages)**
-  - Command: `npm run type-check`
+  - Command: `npm run compile` and `cd workers && npm run typecheck`
   - Requirement: Zero type errors across all packages
 
 - [x] **Production build successful**
-  - Backend: `cd backend && npm run build`
   - Frontend: `cd frontend && npm run build`
   - Workers: `cd workers && npm run build`
 
@@ -51,10 +50,9 @@ This checklist ensures all critical systems are verified before deploying to pro
   - Requirement: All required env vars listed with descriptions
 
 - [x] **Presigned URL rate limiting implemented**
-  - Verify: `backend/src/middleware/rateLimiter.ts` exports `presignedUrlLimiter`
-  - Verify: `backend/src/routes/upload.routes.ts` uses `presignedUrlLimiter` on `/initiate`
+  - Verify: `workers/src/utils/minimal-rate-limit.ts` applies to `/api/upload/*` (the check runs for every `/api/` route in `workers/src/index-minimal.ts`)
   - Test: Create multiple presigned URLs, verify rate limit kicks in
-  - Config: Check limiter threshold is 50 requests/hour per authenticated user
+  - Config: Check `RATE_LIMIT_MAX_AUTHENTICATED` and `RATE_LIMIT_WINDOW` in `workers/wrangler.toml`
 
 - [x] **organizationId validation audited**
   - Verify: All Workers handlers validate organizationId from JWT
@@ -77,8 +75,8 @@ This checklist ensures all critical systems are verified before deploying to pro
 ## Phase 3: Database & Data
 
 - [x] **Database migrations complete**
-  - Command: `cd backend && npx prisma migrate status`
-  - Requirement: "Database is in sync with migration history"
+  - Command: `npm run migrate:status` and `npm run migrate:verify`
+  - Requirement: no pending or inconsistent migrations; the schema matches the catalog fingerprint
   - Neon-specific: Run on production branch, not development
 
 - [x] **Database backups configured**
@@ -112,8 +110,7 @@ This checklist ensures all critical systems are verified before deploying to pro
   - Test: URL expires after configured duration
 
 - [x] **Retry logic for transient failures**
-  - Verify: All Workers handlers use `withNeonRetry()`
-  - Verify: Backend services use exponential backoff
+  - Verify: Queue consumers retry then dead-letter (see `*-dlq` in `workers/wrangler.toml`)
   - Test: Simulate connection failure, verify retry succeeds
 
 - [x] **CSV processing handles large files**
@@ -137,7 +134,7 @@ This checklist ensures all critical systems are verified before deploying to pro
   - Requirement: All critical errors reported
 
 - [x] **Logging configured**
-  - Verify: Winston/Pino configured in backend
+  - Verify: Sentry is configured (`WORKERS_SENTRY_DSN`)
   - Verify: CloudWatch logs configured for Workers
   - Test: Check logs for application events
 

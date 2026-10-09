@@ -1,5 +1,7 @@
 # Security Audit Report
 
+> **Dated record, not current assurance.** This is the March 2026 pre-launch review of the Express backend. The `backend/` file links below point to a package that was retired in October 2026 (last revision: tag `express-sqlite-last`), so they no longer resolve. The Worker's controls are described in [`security.md`](./security.md) and [`cross-tenant-isolation-assurance.md`](./cross-tenant-isolation-assurance.md).
+
 **Date**: March 16, 2026  
 **Scope**: Phase 20 - Pre-Launch Security Review  
 **Status**: APPROVED WITH RECS (see below)

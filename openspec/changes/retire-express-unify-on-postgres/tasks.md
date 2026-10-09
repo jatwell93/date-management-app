@@ -3861,7 +3861,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       layout, request pipeline, cron/queues and test commands; the Express adapter, stale defaults and
       "import backend routes" roadmap are gone. Root `README.md` (part of 5.3a) fixed in the same change;
       the `docs/` sweep remains.
-- [ ] 5.3a Update or explicitly retire all dual-environment/Express/SQLite guidance in root `README.md`,
+- [x] 5.3a Update or explicitly retire all dual-environment/Express/SQLite guidance in root `README.md`,
       `AGENTS.md`, `docs/` developer, environment, QA, troubleshooting, security, deployment, backup and
       operational runbooks. Rehome still-valid material from `backend/docs/` before deleting the directory.
       **2.5 §H measured the surface.** Of 49 files in `docs/`, 24 mention Express or SQLite and 25
@@ -3881,6 +3881,16 @@ equivalent, a relocated home, or an explicit retirement decision.
       the dated Dependabot log is kept with a note), `troubleshooting.md`, `developer-guide.md`,
       `database-migrations.md`. Remaining for 5.3a: the incidental sweep (~25 files), retiring
       `dual-environment-guide.md` and `testing-both-environments.md`.
+      **DONE 2026-10-09 (docs PR 4 of 4).** `dual-environment-guide.md` and `testing-both-environments.md`
+      deleted. Swept ~30 docs against current code: `TESTING`, `neon-workflow`, `production-deployment-checklist`,
+      `r2-recovery-procedure`, `operational-runbook`, `operational-runbook-billing` (rewritten),
+      `monitoring-and-alerting`, `incident-response-plan`, `environment-setup`, `cloudflare-setup`,
+      `stripe-integration` (rewritten: three events, claim ledger), `multi-tenant-guide`,
+      `webhook-troubleshooting`, `disaster-recovery`, `past-due-recovery`, and others. Dated records and
+      the Phase 1 runbooks are untouched or carry a banner (`security-audit`, `data-retention-policy`,
+      `migration-guide-single-tenant-to-multi-tenant`, `normalize_function_README`). Customer-facing
+      promises in `past-due-recovery.md` (dunning emails, auto-downgrade) do not match the Worker and
+      need a product decision; the doc says so at the top.
 - [ ] 5.4 `npx openspec validate retire-express-unify-on-postgres --strict`.
 - [ ] 5.5 Archive this change once merged and live.
 

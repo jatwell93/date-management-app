@@ -18,11 +18,11 @@ Quick reference for common Stripe webhook problems and how to resolve them.
 ### 1) Signature verification failed
 
 - Symptom: 400 from `/api/webhooks/stripe` with "signature verification failed".
-- Cause: Missing/incorrect `STRIPE_WEBHOOK_SECRET` or request body not raw.
+- Cause: Missing/incorrect `STRIPE_WEBHOOK_SECRET`, or the request body was altered. The Worker verifies the signature over the raw body.
 - Fix:
-  - Ensure `STRIPE_WEBHOOK_SECRET` in environment matches Stripe dashboard.
-  - Confirm route uses `express.raw()` (already configured in `index.ts`).
-  - Replay event via Stripe CLI once fixed: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
+  - Ensure `STRIPE_WEBHOOK_SECRET` (Wrangler secret) matches the Stripe dashboard endpoint, or the `whsec_...` printed by `stripe listen` when testing locally.
+  - A 503 "Stripe webhooks are not configured" means the secret is not set.
+  - Replay the event via Stripe CLI once fixed: `stripe listen --forward-to 127.0.0.1:8787/api/webhooks/stripe`.
     **Diagnostic**:
 
 ```bash
@@ -85,68 +85,58 @@ stripe prices update <price_id> -d "metadata[tier]=professional"
 
 Or rely on default behavior (defaults to 'starter' if not specified).
 
-### 6) Email sending failed (SendGrid)
+### 6) Email sending failed (Resend)
 
-- Symptom: Emails not delivered; logs show `SENDGRID_API_KEY not set`.
+- Symptom: Emails not delivered; the email queue consumer logs that Resend is not configured.
 - Fix:
-  - Set `SENDGRID_API_KEY` in environment and verify sender domain.
-  - Check SendGrid dashboard for suppressed recipients and template IDs.
-    **Fix**:
-- Set `SENDGRID_API_KEY` in environment and verify sender domain.
-- Check SendGrid dashboard for suppressed recipients and template IDs.
-- Verify template IDs in `backend/src/services/email.service.ts`:
-  - `trialEndingSoon`: d-916668c6137341c292fad8cf219cb0ee
-  - `paymentFailed`: d-731aef13fcd5415095708633599d37b6
-  - `downgradeWarning`: d-a4639fceab7747d798b1931b955163e2
+  - Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` on the Worker and verify the sender domain in Resend.
+  - Check the Resend dashboard for suppressed recipients.
+  - Check the `notification-emails` queue and its dead-letter queue in the Cloudflare dashboard.
+  - Message content is built in `workers/src/notifications/messages.ts`; there are no external template IDs.
 
 ### 7) DB unique constraint errors when marking processed
 
-- Symptom: Prisma P2002 on `processedWebhookEvent.create()`.
-- Cause: Concurrent attempts to mark same event processed.
+- Symptom: a second delivery of the same event id is acknowledged but does nothing.
+- Cause: Stripe delivers at least once, so concurrent redelivery is expected. The first delivery claims the event id in `processed_webhook_events`; a delivery that finds a live claim or a completed one is acknowledged without processing.
 - Fix:
-  - This is expected; handler swallows P2002 and treats event as already processed.
-  - Monitor idempotency skip rate to detect replay attacks.
-    **Fix**:
-- This is expected; handler swallows P2002 and treats event as already processed.
-- Monitor idempotency skip rate to detect replay attacks.
+  - This is expected. A claim older than 60 seconds that never completed is taken over by the next delivery.
+  - Monitor the skip rate to detect replay attacks, and use `npm run diagnose:webhook` to inspect a stuck claim.
 
 ### 8) Webhook Not Processing (No Events Received)
 
 - Where to look:
   - Sentry: handler failures and validation warnings
-  - Application monitoring: webhook latency, failure count, idempotency skip rate
-  - DB: `processed_webhook_event` growth (possible replay attack)
+  - `webhook_metrics`: outcomes per event type per day
+  - DB: `processed_webhook_events` growth (possible replay attack)
+  - `npm run diagnose:webhook` for health in the last 24 hours
 
 ---
 
 ## Webhook Handler Reference
 
-The system handles 8 webhook event types:
+The Worker acts on three Stripe event types and acknowledges the rest without side effects (see [`stripe-integration.md`](./stripe-integration.md)):
 
-| Event                                  | Handler                          | Purpose                                          |
-| -------------------------------------- | -------------------------------- | ------------------------------------------------ |
-| `customer.subscription.created`        | `handleSubscriptionCreated`      | Creates subscription record, sets usage limits   |
-| `customer.subscription.updated`        | `handleSubscriptionUpdated`      | Updates tier, applies creation lock on downgrade |
-| `customer.subscription.deleted`        | `handleSubscriptionDeleted`      | Cancels subscription, downgrades to Starter      |
-| `checkout.session.completed`           | `handleCheckoutSessionCompleted` | Marks trial as converted                         |
-| `invoice.payment_failed`               | `handleInvoicePaymentFailed`     | Sets past_due, queues dunning email              |
-| `customer.subscription.trial_will_end` | `handleTrialWillEnd`             | Sends trial reminder email                       |
-| `payment_intent.succeeded`             | `handlePaymentIntentSucceeded`   | Confirms trial conversion                        |
-| `payment_intent.payment_failed`        | `handlePaymentIntentFailed`      | Logs failure, sends alert                        |
+| Event                           | Handler                    | Purpose                                                  |
+| ------------------------------- | -------------------------- | -------------------------------------------------------- |
+| `customer.subscription.created` | `processSubscriptionEvent` | Creates the subscription record                          |
+| `customer.subscription.updated` | `processSubscriptionEvent` | Updates tier and status; sets or clears `past_due_since` |
+| `customer.subscription.deleted` | `processSubscriptionEvent` | Cancels the subscription                                 |
+| Any other event type            | (none)                     | Acknowledged and logged, so Stripe stops retrying        |
 
 ### Handler Behavior
 
-**Success (200)**: Event processed successfully or was a duplicate (idempotent).
+**Success (200)**: Event processed, was a duplicate (idempotent), or was an unhandled type.
 
 **Client Error (400)**:
 
-- Signature verification failed
-- Invalid payload
-- Missing required metadata
+- Missing `stripe-signature` header or signature verification failed
+- Invalid payload or no event id
+
+**Not configured (503)**: `STRIPE_WEBHOOK_SECRET` is not set.
 
 **Server Error (500)**:
 
-- Database errors (Stripe will retry)
+- Database errors (Stripe will retry; the claim is released first)
 - External service failures (Stripe will retry)
 
 ---
@@ -155,15 +145,20 @@ The system handles 8 webhook event types:
 
 ### Built-in Diagnostic Script
 
+Read-only. It needs the `DATABASE_URL_UNPOOLED` and `MIGRATION_*` environment described in [`migrations.md`](./migrations.md) section 2.
+
 ```bash
-# Check recent webhook health
+# Check recent webhook health (default window: 24 hours)
 npm run diagnose:webhook
 
 # Investigate specific event
 npm run diagnose:webhook -- --event-id evt_1234567890
 
-# Check specific organization
+# Check specific organization (compares with Stripe when STRIPE_SECRET_KEY is set)
 npm run diagnose:webhook -- --org <org_id>
+
+# Change the window, or get JSON
+npm run diagnose:webhook -- --hours 72 --json
 ```
 
 ### Manual Database Queries
@@ -174,22 +169,21 @@ npm run diagnose:webhook -- --org <org_id>
 -- Recent events by type
 SELECT event_type, COUNT(*) as count
 FROM processed_webhook_events
-WHERE processed_at > datetime('now', '-24 hours')
+WHERE processed_at > NOW() - INTERVAL '24 hours'
 GROUP BY event_type;
 ```
 
-**Check for missing events**:
+**Check for stuck claims**:
 
 ```sql
--- Find organizations without recent subscription events
-SELECT o.id, o.name, st.tier_level, st.status
-FROM organizations o
-JOIN subscription_tiers st ON o.id = st.organization_id
-LEFT JOIN processed_webhook_events pwe
-  ON pwe.event_type LIKE 'customer.subscription%'
-  AND pwe.processed_at > datetime('now', '-7 days')
-WHERE pwe.id IS NULL;
+-- Claimed but never completed
+SELECT id, event_type, processed_at
+FROM processed_webhook_events
+WHERE completed_at IS NULL
+ORDER BY processed_at;
 ```
+
+Use a read-only session. Do not edit ledger rows by hand.
 
 ---
 
@@ -199,28 +193,30 @@ WHERE pwe.id IS NULL;
 
 **Fails when**:
 
-- Stripe customer missing `organizationId` metadata
-- Organization doesn't exist in database
+- The subscription cannot be attributed to an organization (missing metadata)
+- The organization does not exist in the database
 
-**Log location**: `webhook.service.ts:290-380`
+Both are non-recoverable: the event is acknowledged and logged, because a redelivery carries the same body.
+
+**Log location**: `workers/src/stripe/subscription-events.ts` (`processSubscriptionEvent`)
 
 **Recovery**:
 
 1. Check metadata: `npm run diagnose:webhook -- --org <org_id>`
-2. If org missing, create organization manually
+2. Fix the missing metadata or organization
 3. Replay event: `stripe events resend <evt_id>`
 
 ---
 
-### invoice.payment_failed
+### Payment failure (`past_due`)
 
 **Timeline**:
 
-- Day 0: Event received, status → `past_due`, dunning email sent
+- Day 0: `customer.subscription.updated` with status `past_due`; `past_due_since` is set
 - Days 1-7: Grace period (access continues)
-- Day 8: Dunning job auto-downgrades to Starter
+- After day 7: the Worker treats the subscription as lapsed at request time. There is no dunning job. Creation is refused only when `SUBSCRIPTION_GATE_ENFORCE=true`.
 
-**Check dunning status**:
+**Check status**:
 
 ```sql
 SELECT status, past_due_since
@@ -236,7 +232,7 @@ WHERE organization_id = '<org_id>';
 
 ```bash
 # Forward webhooks to local dev server
-stripe listen --forward-to localhost:3001/api/webhooks/stripe
+stripe listen --forward-to 127.0.0.1:8787/api/webhooks/stripe
 
 # Trigger test events
 stripe trigger customer.subscription.created

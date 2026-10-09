@@ -18,8 +18,8 @@ Signup → org starter (trial=true, trialEnd=+14d) → email welcome_trial
 
 ## Signup Flow
 
-1. User creates account via Clerk → `/api/onboarding/create-org`.
-2. Backend creates `Organization` row with `isTrial=true`, `trialEndDate` (UTC).
+1. User creates account via Clerk, and the frontend calls `POST /api/organization/bootstrap`.
+2. The Worker creates the `Organization` row with `isTrial=true`, `trialEndDate` (UTC).
 3. Stripe Checkout session optional – card may be added later.
 4. Trial banner displayed on each page (`TrialBanner` component).
 

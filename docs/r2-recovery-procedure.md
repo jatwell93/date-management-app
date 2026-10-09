@@ -5,7 +5,7 @@
 This procedure documents how to recover files from Cloudflare R2 to local filesystem in case of emergency or disaster. Use this when:
 
 - R2 bucket becomes inaccessible from Workers
-- Need to restore R2 files to local storage for VPS rollback
+- Need a local copy of R2 files, for example to re-upload to a new bucket or investigate
 - Emergency data recovery required
 - Disaster recovery drill or testing
 
@@ -188,35 +188,27 @@ cat ./uploads/r2-recovery-manifest.json
 
 ### Phase 4: Integration with Application (5 minutes)
 
-**4.1 Configure application to use recovered files**
+**4.1 Use the recovered files**
 
-If rolling back to VPS/Express with local filesystem:
-
-```bash
-# Ensure Express app uses local filesystem storage
-# In backend .env or config:
-
-NODE_ENV=production
-STORAGE_PROVIDER=local  # Switch from 'r2' to 'local'
-UPLOAD_DIR=./uploads/r2-recovery  # Point to recovered files
-```
-
-**4.2 Restart application with recovered files**
+There is no fallback server. Recovered files are used to repair R2 or to investigate:
 
 ```bash
-# On VPS
-ssh root@your-vps-ip
-
-# Update .env with UPLOAD_DIR pointing to recovered files
-nano /home/date-management-app/.env
-
-# Restart Express server
-pm2 restart app
-
-# Verify application loads files
-curl http://localhost:3000/api/products
-# Should return products with file references to recovered CSVs
+# Re-upload recovered files to a replacement bucket
+aws s3 sync ./uploads/r2-recovery s3://<replacement-bucket> \
+  --endpoint-url https://<account-id>.r2.cloudflarestorage.com \
+  --profile r2
 ```
+
+Update the `CSV_UPLOADS` binding in `workers/wrangler.toml` (and redeploy) if the bucket name changes.
+
+**4.2 Verify the Worker reads the files**
+
+```bash
+curl https://<api-host>/health?deep=true
+# R2 check should pass; then open an upload in the app and confirm it loads
+```
+
+For local investigation only, `STORAGE_PROVIDER=local` in `workers/.dev.vars` makes `npm run dev:local` read and write the local filesystem.
 
 ---
 
@@ -274,7 +266,7 @@ aws s3 sync s3://csv-uploads-prod ./uploads/r2-recovery \
 
 ## Automated Recovery Script
 
-**Create `backend/scripts/recover-r2-to-local.sh`**
+**Create `scripts/recover-r2-to-local.sh`** (not committed; keep it local)
 
 ```bash
 #!/bin/bash
@@ -328,8 +320,8 @@ echo "Output location: $OUTPUT_DIR" | tee -a $LOG_FILE
 **Execute recovery:**
 
 ```bash
-chmod +x backend/scripts/recover-r2-to-local.sh
-bash backend/scripts/recover-r2-to-local.sh
+chmod +x scripts/recover-r2-to-local.sh
+bash scripts/recover-r2-to-local.sh
 ```
 
 ---
@@ -385,7 +377,7 @@ bash backend/scripts/recover-r2-to-local.sh
 
 ## Related Procedures
 
-- **[Rollback Procedure](./rollback-procedure.md)** - Revert to VPS (often used with R2 recovery)
+- **[Rollback Procedure](./rollback-procedure.md)** - Redeploy a known-good Worker
 - **[Neon Backup & Restore](./neon-backup-restore.md)** - Recover database
 - **[Master Disaster Recovery Plan](./disaster-recovery.md)** - Complete failure scenarios
 

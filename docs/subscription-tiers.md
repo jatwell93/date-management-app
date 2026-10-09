@@ -26,7 +26,7 @@ status: draft
 ## Upgrade / Downgrade Process
 
 1. **Self-service** via **Settings → Billing** (frontend) – calls `/api/billing/change-tier`.
-2. Backend creates/upgrades the Stripe subscription item accordingly.
+2. The Worker creates/upgrades the Stripe subscription item accordingly.
 3. Webhook `customer.subscription.updated` syncs DB → `SubscriptionTier` & `OrganizationUsage`.
 4. On **downgrade**, background job checks usage vs. new limits and queues warnings.
 5. If still over-limit after 7 days, account enters **Read-Only Mode** until usage compliant or tier upgraded again.

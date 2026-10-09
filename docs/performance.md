@@ -349,9 +349,9 @@ node analyze-load-test.js
 
 **Upload Result Enhancements:**
 
-- Backend column summary tracking: `columnsUsed`, `columnsIgnored`
+- API-side column summary tracking: `columnsUsed`, `columnsIgnored`
 - User-friendly validation messages
-- Enhanced `CSVParseResult` interface in backend
+- Enhanced `CSVParseResult` interface in the Worker upload parser
 
 **Benefits:**
 
@@ -369,7 +369,7 @@ node analyze-load-test.js
 
 **Optimization Opportunities:**
 
-1. **Batch Inserts:** Use Prisma `createMany()` for bulk operations
+1. **Batch Inserts:** Use a multi-row `INSERT ... VALUES` (or `unnest`) for bulk operations
 2. **Background Processing:** Move long CSV parsing to queue for >10K rows
 3. **Progressive Response:** Stream parsing results back to client
 

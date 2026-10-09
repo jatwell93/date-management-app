@@ -600,7 +600,7 @@ const userMessages = {
 };
 ```
 
-### Server-Side (Backend)
+### Server-Side (Worker)
 
 ```typescript
 // Log with context
