@@ -34,11 +34,11 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@clerk/backend": "^3.8.4",
+    "@clerk/backend": "^3.23.0",
     "@cloudflare/workers-types": "^4.20260627.1",
-    "@neondatabase/serverless": "^1.1.0",
+    "@neondatabase/serverless": "^1.2.0",
     "@sentry/cloudflare": "^10.62.0",
-    "jose": "^6.2.3"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
