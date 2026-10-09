@@ -1,7 +1,7 @@
 # subscription-billing-security Specification
 
 ## Purpose
-TBD - created by archiving change harden-security-review-findings. Update Purpose after archive.
+Protect billing and ingestion limits: only allowlisted Stripe prices are accepted and product uploads are capped.
 ## Requirements
 ### Requirement: Stripe Price Allowlist
 The system SHALL implement backend-configured price allowlist enforcement for Stripe checkout.

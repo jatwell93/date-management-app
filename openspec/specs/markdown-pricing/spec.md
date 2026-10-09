@@ -1,7 +1,7 @@
 # markdown-pricing Specification
 
 ## Purpose
-TBD - created by archiving change add-user-configurable-markdown-matrix. Update Purpose after archive.
+Let each organization configure its own markdown percentages and basis, and price expiring stock by the item's supplier credit scope.
 ## Requirements
 ### Requirement: Each organization configures its own 3-band markdown matrix
 

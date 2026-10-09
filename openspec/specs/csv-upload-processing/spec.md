@@ -1,7 +1,7 @@
 # csv-upload-processing Specification
 
 ## Purpose
-TBD - created by archiving change harden-security-review-findings. Update Purpose after archive.
+Constrain who may upload CSV data and which debug surfaces the Worker exposes, so product ingestion stays restricted to authorized roles.
 
 ## Requirements
 

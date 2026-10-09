@@ -1,7 +1,7 @@
 # organization-security-controls Specification
 
 ## Purpose
-TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+Provide audit logging of organization role and invite changes, and rate limiting on invite and role endpoints.
 
 ## Requirements
 

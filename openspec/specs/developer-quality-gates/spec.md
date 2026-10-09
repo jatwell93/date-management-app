@@ -1,7 +1,7 @@
 # developer-quality-gates Specification
 
 ## Purpose
-TBD - created by archiving change tidy-eslint-noise. Update Purpose after archive.
+Keep local and CI quality gates, starting with lint output, actionable so contributors act on real findings instead of noise.
 
 ## Requirements
 

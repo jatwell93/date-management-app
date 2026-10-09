@@ -1,7 +1,7 @@
 # launch-ui-readiness Specification
 
 ## Purpose
-TBD - created by archiving change UI-fixes. Update Purpose after archive.
+Ensure launch-critical UI flows, such as scan expiry pricing, stay accurate and recoverable for store staff.
 ## Requirements
 ### Requirement: Scan expiry pricing remains recoverable and accurate
 The scan workflow SHALL consume the current product API contract and SHALL present expiry markdown pricing without crashing when product cost data is absent or invalid.

@@ -1,7 +1,7 @@
 # dual-backend-parity Specification
 
 ## Purpose
-TBD - created by archiving change prevent-dual-backend-drift. Update Purpose after archive.
+Keep domain constants, schema, and migration history single-sourced and verifiable. Written to prevent drift between the Express and Worker backends; now guards the Worker on Postgres as the only backend and records how Express was retired.
 
 ## Requirements
 

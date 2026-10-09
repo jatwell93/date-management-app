@@ -1,7 +1,7 @@
 # subscription-settings-api Specification
 
 ## Purpose
-TBD - created by archiving change fix-subscription-settings-404. Update Purpose after archive.
+Define the subscription settings API reads and the usage timestamps they return, so the current-subscription endpoint responds correctly.
 
 ## Requirements
 
