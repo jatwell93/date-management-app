@@ -299,39 +299,17 @@ bucket_name = "csv-uploads-prod"
 
 ### Using the Test Script
 
-Run the R2 connection test from the backend directory:
+Check R2 connectivity with the deep health endpoint (it exercises R2 and the database):
 
 ```bash
-cd backend
-npx ts-node scripts/test-r2-connection.ts
+# Local Worker
+curl "http://localhost:8787/health?deep=true"
+
+# Deployed Worker
+curl "https://<api-host>/health?deep=true"
 ```
 
-Expected output:
-
-```
-╔════════════════════════════════════════════════════════════╗
-║          Cloudflare R2 Connection Test Suite               ║
-╚════════════════════════════════════════════════════════════╝
-
-Configuration:
-  Account ID: a1b2c3d4...
-  Bucket: csv-uploads-prod
-  Access Key: ABCD1234...
-
-🔄 Test 1: Initializing R2StorageProvider...
-✅ Provider initialized
-
-🔄 Test 2: Uploading test file...
-✅ Uploaded: test/r2-connection-test-1706745600000.txt
-
-... (additional tests)
-
-╔════════════════════════════════════════════════════════════╗
-║ Total: 9 passed, 0 failed                                  ║
-╚════════════════════════════════════════════════════════════╝
-
-🎉 All tests passed! R2 is configured correctly.
-```
+The response lists each dependency with its status; `r2` should report healthy.
 
 ### Manual Testing with AWS CLI
 
@@ -549,21 +527,7 @@ id = "a1b2c3d4e5f6789012345678abcdef90"  # Same ID for both environments
 
 ### Step 4: Use Hyperdrive in Workers Code
 
-Hyperdrive is automatically available via the `env.HYPERDRIVE` binding:
-
-```typescript
-import { createDatabaseClient } from '../../backend/src/database/database-factory';
-
-export function createWorkersDatabase(env: Env) {
-  return createDatabaseClient({
-    environment: 'production',
-    hyperdriveConnectionString: env.HYPERDRIVE.connectionString,
-    enableLogging: env.NODE_ENV === 'development',
-  });
-}
-```
-
-The database factory handles the Hyperdrive connection automatically.
+Hyperdrive is available via the `env.HYPERDRIVE` binding. `workers/src/utils/db-connection.ts` picks the connection string from the binding (or `NEON_CONNECTION_STRING` locally) and `workers/src/database.ts` runs all SQL through it. You do not construct a client yourself in handlers.
 
 ### Step 5: Test Hyperdrive Connection
 
@@ -655,8 +619,7 @@ For most applications, the free tier is sufficient for development and early pro
 
 ## Related Documentation
 
-- [Storage Patterns](../backend/docs/storage-patterns.md) - Storage abstraction layer
-- [Deployment Guide](../backend/docs/deployment.md) - Production deployment
-- [Environment Variables](../backend/.env.example) - Configuration reference
+- [Workers Deployment](./workers-deployment.md) - Production deployment
+- [Environment Setup](./environment-setup.md) - Configuration reference
 - [Neon Database Branching](./database-migrations.md) - Database workflow
 - [Hyperdrive Documentation](https://developers.cloudflare.com/hyperdrive/) - Official Cloudflare docs

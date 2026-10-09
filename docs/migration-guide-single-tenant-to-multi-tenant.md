@@ -5,6 +5,8 @@ week: 7
 status: draft
 ---
 
+> **Historical.** This guide was written for upgrading a pre-2026-02 single-tenant Express/SQLite deployment. That backend is retired (last revision: tag `express-sqlite-last`), the `kubectl` and `prisma migrate deploy` steps below no longer apply, and production is already multi-tenant. Current schema changes go through [`migrations.md`](./migrations.md). Kept as a record of the original upgrade design.
+
 # Overview
 
 This guide walks operators through upgrading an existing single-tenant Date-Management deployment (< 2026-02) to the new **multi-tenant schema**.

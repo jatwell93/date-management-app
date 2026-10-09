@@ -1,5 +1,7 @@
 # Data Retention Policy
 
+> **Draft policy, not verified.** The compliance statements (GDPR, CCPA) are unconfirmed, and the job examples below (`audit-log-cleanup`, `gdpr-deletion`, under a `backend/jobs/` path) describe jobs that do not exist in the Worker. Review it with the data-handling checklist in issue #596 before launch.
+
 ## Overview
 
 This policy defines how long data is retained in the system, when it's deleted, and compliance responsibilities for GDPR, CCPA, and other regulations.

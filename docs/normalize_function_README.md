@@ -1,5 +1,7 @@
 # Numeric String Normalization and Cost Value Extraction
 
+> **Historical.** `extractCostValueEnhanced` lived in the retired Express backend (`backend/src/utils/normalize.function`, last revision: tag `express-sqlite-last`) and no longer exists in this repository. Cost parsing for imports is now `parseProductImportCost` in `shared/domain/product-import-cost.ts`. The examples below describe the original function's behavior.
+
 This module provides functions for normalizing numeric strings with various currency symbols and formats, and for extracting numeric values from those strings.
 
 ## Functions

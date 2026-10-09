@@ -5,9 +5,9 @@ Use this file as the entry point for durable project documentation. Completed im
 ## New Developers
 
 1. [../README.md](../README.md) - project overview and workspace commands
-2. [../backend/README.md](../backend/README.md) - backend setup, scripts, database, storage, and deployment notes
+2. [../workers/README.md](../workers/README.md) - Worker API setup, configuration, and deployment
 3. [developer-guide.md](developer-guide.md) - daily workflow, debugging, and contribution flow
-4. [TESTING.md](TESTING.md) - root-level backend/frontend test commands
+4. [TESTING.md](TESTING.md) - root-level Worker, database and frontend test commands
 5. [local-expect-qa.md](local-expect-qa.md) - local Expect QA setup
 
 ## Architecture And Data
@@ -17,12 +17,12 @@ Use this file as the entry point for durable project documentation. Completed im
 3. [cross-tenant-isolation-assurance.md](cross-tenant-isolation-assurance.md) - isolation assurance and evidence
 4. [database-migrations.md](database-migrations.md) - migration workflow
 5. [neon-workflow.md](neon-workflow.md) - Neon branching and database workflow
-6. [../backend/docs/database-patterns.md](../backend/docs/database-patterns.md) - backend data-access patterns
+6. [migrations.md](migrations.md) - the authoritative migration path
 
 ## Uploads And Storage
 
 1. [csv-upload-format.md](csv-upload-format.md) - supported CSV/XLSX fields and behavior
-2. [../backend/docs/storage-patterns.md](../backend/docs/storage-patterns.md) - local/R2 storage abstraction
+2. [environment-setup.md](environment-setup.md) - storage provider and Worker configuration
 3. [cloudflare-setup.md](cloudflare-setup.md) - Cloudflare R2, Workers, and Hyperdrive setup
 4. [r2-recovery-procedure.md](r2-recovery-procedure.md) - R2 recovery procedure
 

@@ -1,95 +1,88 @@
-# Stripe Integration — Webhooks & Billing (Phase 10)
+# Stripe Integration — Webhooks & Billing
 
-## Summary ✅
+## Summary
 
-This document describes the Stripe webhook integration implemented in Phase 10.
-It covers the six webhook handlers, required metadata, idempotency, email flows, monitoring, testing and deployment checklist.
+This document describes the Stripe integration in the Worker (`workers/src/stripe/`). It covers the events handled, required metadata, idempotency, email flows, monitoring, testing and operational notes.
 
-## Handlers implemented
+The receiver is `POST /api/webhooks/stripe` (`workers/src/stripe/webhook-handler.ts`). The earlier Express handlers (`backend/src/services/webhook.service.ts`) are retired; the last revision is the tag `express-sqlite-last`.
 
-- `customer.subscription.created` — create `SubscriptionTier`, update `OrganizationUsage`, log audit event.
-- `customer.subscription.updated` — sync subscription state, detect downgrades and queue downgrade warning email.
-- `customer.subscription.deleted` — cancel subscription, downgrade to `starter`, queue warning if usage > starter limits.
-- `checkout.session.completed` — mark trial as converted (clear `trialEndDate`, set active).
-- `invoice.payment_failed` — set subscription `past_due`, log dunning audit, queue dunning email.
-- `customer.subscription.trial_will_end` — compute days remaining and queue trial reminder email.
+## Events handled
 
-## Key integration details
+Only three events change state. They carry the authoritative subscription object, and between them they write every column the Worker reads to decide entitlement (`tier_level`, `status`, `trial_end_date`, `current_period_end`, `cancel_at_period_end`, `past_due_since`):
 
-- Metadata source of truth: Stripe `customer.metadata.organizationId` (DECISION 17.5.5).
-- Idempotency: DB-backed `ProcessedWebhookEvent` prevents replay processing.
-- Transactions: All DB changes for a single webhook are wrapped in `prisma.$transaction()` to ensure atomicity.
-- Email: SendGrid used via `EmailService` (trial reminders, dunning, downgrade warning).
-- Soft lock: on downgrade-over-limit we queue a downgrade warning and (future) set `readOnlyMode`.
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+Every other event type is acknowledged and logged without side effects, so Stripe stops retrying. The omissions are deliberate:
+
+- `checkout.session.completed`: in subscription mode Stripe always follows it with `customer.subscription.created` carrying the same state, so handling both would race on one row.
+- `invoice.payment_failed`: Stripe moves the subscription to `past_due` and sends `customer.subscription.updated`. `past_due_since` is derived from that status, and it clears when the customer pays.
+- `customer.subscription.trial_will_end`: it changes no state. Trial reminder emails come from the scheduled `trial-emails` job.
+- `payment_intent.*`: no entitlement depends on them.
 
 ## Environment variables
 
-- STRIPE_SECRET_KEY — optional for SDK (required in production for signature verification)
-- STRIPE_WEBHOOK_SECRET — required for verifying incoming webhook signatures
-- SENDGRID_API_KEY — required to send emails via SendGrid
-- SENTRY_DSN — (optional) send errors/alerts to Sentry
+Set on the Worker (`wrangler secret put ... --env production`, or `workers/.dev.vars` locally; see `workers/.dev.vars.example`):
+
+- `STRIPE_WEBHOOK_SECRET` — required to verify webhook signatures. Without it the receiver answers 503 and writes nothing.
+- `STRIPE_SECRET_KEY` — used by checkout, the portal and the reconciliation job. Use test-mode keys outside production.
+- `STRIPE_*_PRICE_ID` — one per paid tier and interval; each must match the frontend's `REACT_APP_STRIPE_PRICE_*`.
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL` — send notification emails.
+- `WORKERS_SENTRY_DSN` — optional; send errors to Sentry.
+
+## Key integration details
+
+- Metadata source of truth: the subscription is attributed to an organization through Stripe metadata. An event that cannot be attributed is acknowledged and logged, because a redelivery would carry the same body.
+- Idempotency: each event id is claimed in `processed_webhook_events` before processing and marked complete afterwards. A replay of a completed event returns 200 without side effects. A failed delivery releases its claim so Stripe's retry is processed.
+- Reconciliation: the scheduled `stripe-reconciliation` job (daily) re-applies Stripe's view of every linked subscription through the same code path as a webhook delivery, and logs drift. A local row missing from Stripe is warned about, never deleted.
+- Email: `trial-emails` enqueues trial reminders (10, 5 and 2 days) and a trial-ended notice onto `NOTIFICATION_EMAIL_QUEUE`; the consumer sends them with Resend.
 
 ## Monitoring & Alerts
 
-- Sentry captures handler failures and validation warnings (context: eventId, eventType, organizationId, subscriptionId/invoiceId).
-- ApplicationMonitoringService records webhook metrics:
-  - Latency per event type
-  - Failure count by event type
-  - Idempotency skip count (replays)
-- Alerts configured via ApplicationMonitoringService and forwarded to Sentry (webhook failures, idempotency anomalies).
-
-## Testing
-
-- Unit tests: full mocking for handlers and idempotency (see `backend/src/tests/unit/webhook.service.test.ts`).
-- Integration tests: Prisma + SQLite for DB behavior, idempotency and concurrency (`backend/src/tests/integration`).
-- Edge cases: missing metadata, deleted customers, out-of-order events, concurrent processing covered.
+- Sentry captures handler failures (context: event id, event type, organization, subscription).
+- `webhook_metrics` counts outcomes per event type per UTC day. A failed delivery releases its claim, so the ledger alone does not show failures; the metrics do.
+- Inspect a delivery or a stuck claim with `npm run diagnose:webhook` (read-only; see [`webhook-troubleshooting.md`](./webhook-troubleshooting.md)).
 
 ## Subscription Lifecycle
 
 ```
-Checkout → subscription.created → trial_will_end → (trial converts) checkout.session.completed → subscription.updated (active)
-Upgrade  → subscription.updated (tier up) → invoice.paid
-Downgrade→ subscription.updated (tier down) → invoice.paid → 7-day grace → over-limit? downgrade warning email
-Cancel   → subscription.deleted → usage locked, read-only mode until period end
+Checkout → subscription.created (trialing) → subscription.updated (active when the trial converts)
+Upgrade  → subscription.updated (tier up)
+Downgrade→ subscription.updated (tier down)
+Payment failed → subscription.updated (status past_due; past_due_since set)
+Cancel   → subscription.deleted (or cancel_at_period_end via subscription.updated)
 ```
 
 ## Local Testing & CLI Tips
 
 ```bash
-# Trigger Stripe test event delivery to local server (requires Stripe CLI)
-stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed \
-  --forward-to http://localhost:3000/api/webhooks/stripe
+# Forward Stripe test events to the local Worker (requires Stripe CLI).
+# Use 127.0.0.1, not localhost: wrangler dev listens on IPv4 only.
+stripe listen --forward-to 127.0.0.1:8787/api/webhooks/stripe
 
-# Replay the last event
+# Use the printed whsec_... as STRIPE_WEBHOOK_SECRET in workers/.dev.vars
+
+# Replay an event
 stripe events resend evt_123
-
-# Generate fake checkout session
-node scripts/stripe/create-test-checkout.js --tier professional --org fake-org-uuid
 ```
 
-## Testing Matrix
+See [`local-expect-qa.md`](./local-expect-qa.md) for creating test prices and mapping them to environment variables.
 
-| Scenario                               | Expected DB change                                           | Email queued      | Test file                      |
-| -------------------------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------ |
-| Trial signup → conversion              | `SubscriptionTier=starter→professional`, `trialEndDate=null` | trial_welcome     | `webhook.service.test.ts`      |
-| Upgrade professional→premium           | Tier row updated                                             | none              | `subscription-upgrade.test.ts` |
-| Downgrade premium→starter (over limit) | Tier updated, `readOnlyMode=pending`                         | downgrade_warning | `downgrade-over-limit.test.ts` |
-| Payment failed (past_due)              | `status=past_due`                                            | dunning_email     | `payment-failed.test.ts`       |
-| Cancel subscription                    | `status=canceled`, tier=starter                              | cancel_confirm    | `subscription-cancel.test.ts`  |
+## Testing
+
+- Handler and signature tests: `workers/src/stripe/*.test.ts`.
+- Real-SQL tests for the claim ledger, persistence and billing handlers: `workers/src/stripe/*.pglite.node.test.ts` and `webhook-handler.node.test.ts` (`npm run test:db`).
+- Reconciliation: `workers/src/scheduled/jobs/stripe-reconciliation.test.ts` and `.pglite.node.test.ts`.
 
 ## Operational notes
 
-- Webhook route: `POST /api/webhooks/stripe` — uses `express.raw()` for signature verification.
-- Duplicate events: returned 200 OK (idempotency skip); replays counted in metrics.
-- Retry behavior: return 500 for transient/server errors so Stripe will retry.
+- Webhook route: `POST /api/webhooks/stripe`. The signature is verified over the raw request body.
+- Duplicate events: returned 200 OK (idempotency skip).
+- Retry behavior: 5xx for transient/server errors so Stripe retries; 200 for non-recoverable data issues so it stops.
 
 ## Acceptance criteria
 
-- All 6 handlers implemented and covered by tests
-- No duplicate processing (DB idempotency)
-- Emails queued for trial reminders, dunning, downgrade warnings
+- The three subscription events are applied through one code path, shared with reconciliation
+- No duplicate processing (database claim ledger)
 - Monitoring and Sentry alerts in place for failures and anomalies
-
----
-
-For implementation details and examples, see `backend/src/services/webhook.service.ts` and the tests under `backend/src/tests/*/webhook*`.

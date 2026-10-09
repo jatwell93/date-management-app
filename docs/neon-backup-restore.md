@@ -35,12 +35,12 @@ Neon automatically creates point-in-time snapshots:
 
 Read from `GET /projects/{id}` on 2026-08-07:
 
-| Field                       | Value   | Meaning                                        |
-| --------------------------- | ------- | ---------------------------------------------- |
-| `history_retention_seconds` | `21600` | **6 hours** of point-in-time recovery reach     |
-| `platform_id`               | `aws`   | Cloud platform — **not** the billing plan       |
-| `pg_version`                | `17`    | PostgreSQL major version                        |
-| `branch_logical_size_limit` | `512`   | MB per branch                                   |
+| Field                       | Value   | Meaning                                     |
+| --------------------------- | ------- | ------------------------------------------- |
+| `history_retention_seconds` | `21600` | **6 hours** of point-in-time recovery reach |
+| `platform_id`               | `aws`   | Cloud platform — **not** the billing plan   |
+| `pg_version`                | `17`    | PostgreSQL major version                    |
+| `branch_logical_size_limit` | `512`   | MB per branch                               |
 
 Neon's project payload does not expose a plan/tier name, so the retention
 window itself is the authoritative signal — do not infer the plan from
@@ -57,7 +57,7 @@ migration or responding to an incident needs to hold:
    migration runner treats destructive down-migrations as a last resort and
    requires a `recovery_strategy` on every migration (task 1.8).
 2. **A pre-migration recovery point is only useful within its window.** The
-   drill in `docs/migrations-deploy-runbook.md` Step 1 creates a *named*
+   drill in `docs/migrations-deploy-runbook.md` Step 1 creates a _named_
    snapshot immediately before production DDL for exactly this reason — the
    rollback window opens when the snapshot is taken, not when the problem is
    found.
@@ -276,7 +276,7 @@ SELECT * FROM information_schema.check_constraints WHERE constraint_schema = 'pu
 -- Verify no NULL values in critical fields
 SELECT count(*) FROM products WHERE id IS NULL;
 SELECT count(*) FROM organizations WHERE id IS NULL;
-SELECT count(*) FROM _prisma_migrations WHERE id IS NULL;
+SELECT count(*) FROM schema_migrations WHERE id IS NULL;
 
 -- Check audit trail (timestamps make sense)
 SELECT
@@ -334,7 +334,7 @@ LIMIT 10;
 
 ### 4.2 Automatic Backup Verification Script
 
-**Create `backend/scripts/verify-neon-backups.ts`**
+**Create `scripts/verify-neon-backups.ts`** (not committed; keep it local or add it under `scripts/` with tests)
 
 ```typescript
 import { Pool } from 'pg';
@@ -392,7 +392,7 @@ verifyBackups();
 **Run verification:**
 
 ```bash
-npx ts-node backend/scripts/verify-neon-backups.ts
+npx ts-node scripts/verify-neon-backups.ts
 ```
 
 ### 4.3 Scheduled Backup Verification (Cron)
@@ -490,7 +490,7 @@ postgresql://[user]:[password]@[host]/[database]?sslmode=require
 
 ## Related Procedures
 
-- **[Rollback Procedure](./rollback-procedure.md)** - Return to VPS if Neon fails
+- **[Rollback Procedure](./rollback-procedure.md)** - Redeploy a known-good Worker
 - **[R2 Data Recovery](./r2-recovery-procedure.md)** - Recover CSVs if R2 inaccessible
 - **[Master Disaster Recovery Plan](./disaster-recovery.md)** - Complete failure scenarios
 

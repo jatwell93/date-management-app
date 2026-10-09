@@ -58,11 +58,11 @@ Reference: [docs/neon-backup-restore.md](neon-backup-restore.md)
 
 ### Recovery Steps
 
-1. Initiate rollback to VPS Express deployment.
-2. Update DNS/API routing to VPS endpoint.
+1. Check the Cloudflare status page and Workers analytics to confirm the scope.
+2. If the cause is a bad deploy, redeploy a known-good SHA (see [rollback-procedure.md](rollback-procedure.md)). There is no fallback server.
 3. Verify API health, auth flow, and core endpoints.
 4. Keep status page updated every 15 minutes.
-5. Maintain degraded/rollback mode until Workers are stable.
+5. If the outage is Cloudflare-wide, wait for recovery and keep the status page current.
 
 Reference: [docs/rollback-procedure.md](rollback-procedure.md)
 
@@ -125,7 +125,7 @@ Reference: [docs/status-page-setup.md](status-page-setup.md)
 
 ## Validation Drills
 
-- Quarterly rollback drill (Workers -> VPS)
+- Quarterly Worker rollback drill (redeploy a known-good SHA)
 - Quarterly Neon restore drill (backup -> verified branch)
 - Semi-annual R2 recovery drill (object restore + checksum validation)
 - Annual security compromise tabletop exercise

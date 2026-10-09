@@ -1,21 +1,31 @@
-### 1. **Testing Backend**
+### 1. **Testing the Worker API and Database**
 
 Run these from the **root** folder:
 
-- **Run all backend tests with coverage**:
+- **Run the real-SQL suite (pglite, against the authoritative migrations)**:
   ```bash
-  npm run test:backend:coverage
+  npm run test:db
   ```
-- **Run only changed backend tests (vs `main`)**:
+- **Run the migration runner tests**:
   ```bash
-  npm run test:backend:diff
+  npm run test:migrations
   ```
-- **Running manually in backend directory**:
+- **Run the operator-tool tests**:
   ```bash
-  cd backend
-  npm run test:coverage   # Full suite
-  npm run test:diff       # Changed files only
+  npm run test:operations
   ```
+- **Type-check the Worker, including test files (CI runs this)**:
+  ```bash
+  (cd workers && npm run typecheck)
+  ```
+- **Running manually in the workers directory**:
+  ```bash
+  cd workers
+  npm test                # Unit and handler tests (vitest)
+  npm run test:coverage   # With coverage
+  ```
+
+There is no root `npm test`; it errors by design. Do not run `npm run test:prod` or `npm run test:both`: they target the production database.
 
 ### 2. **Testing Frontend**
 
@@ -40,9 +50,9 @@ Run these from the **root** folder:
 
 These commands are optimized for checking _only_ the code you are currently working on.
 
-- **Backend Changes**:
+- **Worker and database changes**:
   ```bash
-  npm run test:backend:diff
+  npm run test:db
   ```
 - **Frontend Changes**:
   ```bash
@@ -56,10 +66,11 @@ These commands are optimized for checking _only_ the code you are currently work
 
 ### Summary Table
 
-| Scope            | Action                | Command (from Root)              |
-| :--------------- | :-------------------- | :------------------------------- |
-| **Backend**      | Full Suite + Coverage | `npm run test:backend:coverage`  |
-| **Backend**      | **Changes Only**      | `npm run test:backend:diff`      |
-| **Frontend**     | Full Suite + Coverage | `npm run test:frontend:coverage` |
-| **Frontend**     | **Changes Only**      | `npm run test:frontend:diff`     |
-| **Code Quality** | Scan Changed Files    | `ubs $(git diff --name-only)`    |
+| Scope            | Action                | Command (from Root)                 |
+| :--------------- | :-------------------- | :---------------------------------- |
+| **Worker / DB**  | Real-SQL suite        | `npm run test:db`                   |
+| **Worker**       | Type-check with tests | `(cd workers && npm run typecheck)` |
+| **Migrations**   | Runner tests          | `npm run test:migrations`           |
+| **Frontend**     | Full Suite + Coverage | `npm run test:frontend:coverage`    |
+| **Frontend**     | **Changes Only**      | `npm run test:frontend:diff`        |
+| **Code Quality** | Scan Changed Files    | `ubs $(git diff --name-only)`       |
