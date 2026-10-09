@@ -23,7 +23,7 @@
  *
  * The suite below is skipped with a name that says where it went, rather than
  * deleted outright: many audit-manifest rows in
- * `openspec/changes/retire-express-unify-on-postgres/audit/` cite this path as
+ * `openspec/changes/archive/2026-10-09-retire-express-unify-on-postgres/audit/` cite this path as
  * searched-and-empty evidence, and those citations must keep resolving. The
  * skip is "relocated", not "not yet written".
  *

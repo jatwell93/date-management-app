@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-store-walk-bay-tracking. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Store areas form a two-level department-to-bay hierarchy
 
 The system SHALL let an organization organize its store areas as a two-level hierarchy: a
@@ -78,8 +80,8 @@ The system SHALL provide a floor-progress view for the active cycle that lists b
 department, each showing whether it has been checked in the active cycle, and for checked bays the
 checking user and time. Bays checked only in a prior cycle SHALL be distinguishable from bays never
 checked. The view SHALL report coverage as the proportion of bays checked in the active cycle, per
-department and for the whole store. Both server backends SHALL derive this state from the same shared
-logic and produce identical results.
+department and for the whole store. The Worker SHALL derive this state from the shared
+logic.
 
 #### Scenario: Where-are-we-up-to without deduction
 
@@ -113,4 +115,3 @@ managers can verify checks are genuinely performed. These reports SHALL be org-s
 - **GIVEN** a user whose bay checks occur faster than is physically plausible or record zero items across many bays that normally hold near-expiry stock
 - **WHEN** the audit report is viewed
 - **THEN** those checks are flagged for review
-

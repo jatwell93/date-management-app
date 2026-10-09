@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: First-login organization admin bootstrap
 
 The system SHALL provide a deterministic, idempotent first-login bootstrap flow that ensures an
@@ -11,7 +13,7 @@ admin exists for that organization. Bootstrap SHALL occur after successful Clerk
 and SHALL be transactional and retry-safe. When an active admin already exists, the user's role
 SHALL be mapped from their Clerk membership role rather than re-assigning admin.
 
-The bootstrap flow sequence SHALL be: (1) user authenticates with Clerk, (2) backend verifies
+The bootstrap flow sequence SHALL be: (1) user authenticates with Clerk, (2) the Worker verifies
 organization context from the Clerk organization ID, (3) if the organization does not exist it
 SHALL be created with the Clerk organization ID, (4) if no active admin exists the current user
 SHALL be assigned `admin` transactionally, otherwise the role SHALL be mapped from Clerk
@@ -50,4 +52,3 @@ Clerk webhooks have not yet provisioned it.
 - **WHEN** the bootstrap service runs
 - **THEN** a trial subscription record is idempotently created
 - **AND** subsequent protected route calls do not return `403` for missing subscription state
-

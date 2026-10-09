@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change tidy-eslint-noise. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Actionable lint output
 
 Root and package lint commands SHALL report diagnostics for application source, tests, and maintained project scripts without including local AI/tooling reference artifacts that are not part of runtime or CI quality gates.
@@ -15,7 +17,6 @@ Root and package lint commands SHALL report diagnostics for application source, 
 
 #### Scenario: Package lint warnings are intentionally handled
 
-- **WHEN** a developer runs frontend or backend package lint
+- **WHEN** a developer runs frontend or workers package lint
 - **THEN** fixable warnings are removed
 - **AND** any remaining warning suppression is local to the line or file that requires it with a reason.
-

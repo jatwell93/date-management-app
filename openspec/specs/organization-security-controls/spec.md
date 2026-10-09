@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Organization audit logging
 
 The system SHALL record audit events for all organization role and invite state changes. The
@@ -35,8 +37,7 @@ SHALL be wrapped so that an audit failure never blocks the primary operation.
 The system SHALL apply rate limiting to invite creation, invite acceptance, and role change
 endpoints. The primary rate-limiting layer SHALL be Cloudflare WAF Rate Limiting Rules at the
 edge: invite creation at 10 requests per 60 seconds per IP, invite acceptance at 5 requests per
-60 seconds per IP, and role changes at 20 requests per 3600 seconds per IP. An optional in-memory
-backend middleware MAY provide defense-in-depth by counting per authenticated userId. Rate-limit
+60 seconds per IP, and role changes at 20 requests per 3600 seconds per IP. Rate-limit
 denials SHALL return HTTP 429.
 
 #### Scenario: Cloudflare WAF blocks excessive invite creation
@@ -50,4 +51,3 @@ denials SHALL return HTTP 429.
 - **GIVEN** the rate limiting runbook
 - **WHEN** an operator needs to configure or verify WAF rules
 - **THEN** the documentation in `docs/plans/2026-04-17-cloudflare-waf-rate-limits.md` provides the rule definitions and verification checklist
-

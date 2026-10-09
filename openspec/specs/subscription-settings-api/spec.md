@@ -2,10 +2,12 @@
 
 ## Purpose
 TBD - created by archiving change fix-subscription-settings-404. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Subscription settings API reads
 
-The API MUST expose authenticated read endpoints for the subscription settings page in both production Worker and Express-compatible route surfaces.
+The API MUST expose authenticated read endpoints for the subscription settings page on the production Worker.
 
 #### Scenario: Current subscription is requested
 
@@ -38,4 +40,3 @@ The system SHALL properly handle timestamps for organization usage records.
 - WHEN the request includes timestamp data
 - THEN the Worker properly handles the timestamp
 - AND creates the usage record without errors
-

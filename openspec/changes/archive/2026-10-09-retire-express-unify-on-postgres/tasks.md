@@ -3892,7 +3892,7 @@ equivalent, a relocated home, or an explicit retirement decision.
       promises in `past-due-recovery.md` (dunning emails, auto-downgrade) do not match the Worker and
       need a product decision; the doc says so at the top.
 - [x] 5.4 `npx openspec validate retire-express-unify-on-postgres --strict`. DONE: ten stale specs now carry deltas (`csv-upload-processing`, `cloudflare-workers-api`, `organization-rbac-admin-manager-team-member`, `subscription-settings-api`, `dependency-currency`, `brand-supplier-mapping`, `store-walk-tracking`, `clerk-org-first-login-bootstrap`, `developer-quality-gates`, `organization-security-controls`) beside `dual-backend-parity`. Validates `--strict`; a dry-run archive in a scratch copy applied every delta. The capability keeps the name `dual-backend-parity`: a delta cannot rename a capability, and the name is historical.
-- [ ] 5.5 Archive this change once merged and live.
+- [x] 5.5 Archive this change once merged and live. DONE 2026-10-09: production confirmed healthy, then archived with `openspec archive`; main specs updated (+9 added, ~12 modified, -5 removed).
 
 ## GSTACK REVIEW REPORT
 
