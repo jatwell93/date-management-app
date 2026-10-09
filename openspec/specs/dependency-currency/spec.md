@@ -2,14 +2,16 @@
 
 ## Purpose
 TBD - created by archiving change upgrade-deferred-dependency-majors. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Dependency upgrades preserve the npm supply-chain policy and accepted-risk baseline
 
 Every dependency upgrade SHALL keep all package manifests and lockfiles compliant with the npm
 supply-chain source policy and SHALL NOT introduce any new advisory beyond the documented accepted
 risks. All dependencies SHALL resolve from `registry.npmjs.org` over HTTPS with no git, remote-tarball,
 `file:`, `link:`, wildcard (`*`), or `latest` sources. After any upgrade, `npm audit` SHALL surface
-only the accepted `xlsx` (backend and frontend) and `quagga` (frontend) risks, with the root and
+only the accepted `xlsx` and `quagga` (frontend) risks, with the root and
 workers boundaries reporting no vulnerabilities.
 
 #### Scenario: Supply-chain policy holds after a major bump
@@ -52,7 +54,7 @@ rather than defaulted.
 
 A major upgrade of a build or lint toolchain dependency SHALL keep every affected boundary's CI gate
 green. An ESLint major upgrade SHALL land as a single coordinated change that keeps the lint gate
-passing across root, backend, frontend, and workers despite their mixed flat/legacy configuration. A
+passing across root, frontend, and workers despite their mixed flat/legacy configuration. A
 TypeScript major upgrade SHALL keep each boundary's typecheck and build passing, including the workers
 `bundle-size` gate within its 256 KiB gzip limit.
 
@@ -67,18 +69,3 @@ TypeScript major upgrade SHALL keep each boundary's typecheck and build passing,
 - **GIVEN** a boundary upgraded to the new TypeScript major
 - **WHEN** its `type-check`/`build` (and, for workers, `bundle-size`) runs
 - **THEN** the typecheck and build succeed and the workers bundle stays under the gzip limit
-
-### Requirement: Prisma major upgrade preserves dual-backend parity
-
-Upgrading Prisma across a major version SHALL keep the triplicated schema — Prisma base schema, Neon
-SQL migrations, runtime SQLite migrations, and the pglite test harness — in agreement, and SHALL keep
-both the SQLite and Postgres/Neon backends passing their migrations and tests. The generated client
-SHALL be regenerated as part of the upgrade.
-
-#### Scenario: Both backends migrate and test green after the Prisma upgrade
-
-- **GIVEN** `@prisma/client` and `prisma` upgraded together to the new major and the client regenerated
-- **WHEN** migrations are applied to the SQLite dev database and the Neon test database, and the backend
-  suite plus `npm run test:db` and the dual-backend conformance tests run
-- **THEN** all migrations apply cleanly and every suite passes on both backends
-

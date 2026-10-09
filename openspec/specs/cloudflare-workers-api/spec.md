@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change extract-worker-clerk-catalogue-import. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Minimal Worker Clerk and Catalogue Extraction Preservation
 
 The minimal Cloudflare Worker API entrypoint SHALL preserve existing Clerk bootstrap, Clerk webhook, upload completion, and catalogue import behavior while their implementation is moved into focused Worker modules.
@@ -201,12 +203,11 @@ The system SHALL provide consistent error handling and reporting for all Workers
 
 ### Requirement: Workers role-aware authorization
 
-The Cloudflare Workers API SHALL enforce the same canonical organization role permissions as the
-backend Express API. Workers SHALL extract the role from the verified JWT payload, normalize
-legacy Clerk role strings via the shared `normalizeRole` helper, and enforce role-based
-authorization on organization, membership, and upload endpoints. Upload initiation and processing
-SHALL be limited to `admin` (and `manager` if enabled); `team_member` SHALL receive HTTP 403.
-Authorization denials SHALL return generic 403 Forbidden without role details.
+The Cloudflare Workers API SHALL enforce the canonical organization role permissions defined in the
+shared roles module (`shared/domain/roles.ts`). Workers SHALL extract the role from the verified
+identity, normalize legacy Clerk role strings via the shared `normalizeRole` helper, and enforce
+role-based authorization on organization, membership, and upload endpoints. Upload initiation and
+processing SHALL be limited to `admin` (and `manager` if enabled); `team_member` SHALL receive HTTP 403. Authorization denials SHALL return generic 403 Forbidden without role details.
 
 #### Scenario: Workers rejects team_member upload
 
@@ -232,4 +233,3 @@ Authorization denials SHALL return generic 403 Forbidden without role details.
 - **GIVEN** an authenticated Workers request from any role
 - **WHEN** the user calls a GET endpoint that is not role-gated
 - **THEN** the request proceeds without role authorization blocking
-

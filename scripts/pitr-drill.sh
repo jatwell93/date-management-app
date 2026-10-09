@@ -8,7 +8,7 @@
 # records RPO/RTO, and tears the branch down.
 #
 # This is the operator half of the two-layer PITR gate described in
-# openspec/changes/retire-express-unify-on-postgres/design.md. The other half —
+# openspec/changes/archive/2026-10-09-retire-express-unify-on-postgres/design.md. The other half —
 # "a restore point EXISTS" — is scripts/check-neon-pitr.js, which runs
 # automatically as the `pitr-check` step of .github/workflows/migration-prep.yml.
 # This script proves the heavier property: that the restore WORKS and the

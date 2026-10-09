@@ -19,7 +19,7 @@
  * assertion was verified to fail when the corresponding branch is removed.
  *
  * Skipped rather than deleted because ~98 rows in
- * `openspec/changes/retire-express-unify-on-postgres/audit/` cite this path as
+ * `openspec/changes/archive/2026-10-09-retire-express-unify-on-postgres/audit/` cite this path as
  * searched-and-empty evidence, and those citations must keep resolving. The skip
  * says "relocated", not "not yet written".
  */

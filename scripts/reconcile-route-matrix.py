@@ -18,7 +18,13 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MATRIX = os.path.join(
-    ROOT, 'openspec', 'changes', 'retire-express-unify-on-postgres', 'audit', '2.1-route-matrix.md'
+    ROOT,
+    'openspec',
+    'changes',
+    'archive',
+    '2026-10-09-retire-express-unify-on-postgres',
+    'audit',
+    '2.1-route-matrix.md',
 )
 IDX = os.path.join(ROOT, 'workers', 'src', 'index-minimal.ts')
 UPLOAD_ROUTER = os.path.join(ROOT, 'workers', 'src', 'upload', 'upload-router.ts')

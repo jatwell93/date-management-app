@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Canonical organization role model
 
 The system SHALL use a single canonical organization role model with roles `admin`, `team_member`,
@@ -16,7 +18,7 @@ ownership transfer, member/invite/upload management; `manager` (when enabled) ha
 upload management but no organization delete actions; `team_member` is read-only for operational
 data and SHALL NOT access user management, invite management, settings, or upload initiation.
 
-A shared role constants module SHALL be exported from `backend/src/constants/roles.ts` and
+A shared role constants module SHALL be exported from `shared/domain/roles.ts` and
 re-exported for Workers and frontend use, so all packages reference one permission matrix.
 
 #### Scenario: Legacy roles are normalized to canonical values
@@ -65,4 +67,3 @@ management, invite, user management, and upload routes. Authorization denials SH
 - **WHEN** the `requireOrgRole` middleware processes the request
 - **THEN** the role is normalized before comparison
 - **AND** a `Manager` legacy value is treated as `manager`
-

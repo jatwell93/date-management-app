@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-brand-supplier-mapping. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A curated master catalogue maps products to brand and supplier
 
 The system SHALL maintain a provider-curated master catalogue, keyed by barcode, that records each
@@ -38,7 +40,7 @@ with the catalogue's brand and a suggested supplier; an unmatched item SHALL sur
 #### Scenario: An active shared-SKU entry wins independently of row order
 
 - **GIVEN** active and retired catalogue entries share the same wholesaler SKU
-- **WHEN** an uploaded product is enriched in either backend
+- **WHEN** an uploaded product is enriched by the Worker
 - **THEN** the active catalogue entry matches regardless of database row order
 
 #### Scenario: An unmatched item lands in needs-brand
@@ -192,7 +194,7 @@ review only when the authenticated numeric local user ID is present in comma-sep
 `PLATFORM_ADMIN_USER_IDS`. Missing or malformed configuration SHALL deny access. Accepting or
 rejecting a pending correction SHALL only change that correction's status. Accepted and rejected
 corrections SHALL be terminal; a later attempt to change their decision SHALL be rejected as a
-conflict. Both backend implementations SHALL return the same correction representation, including
+conflict. The Worker SHALL return the correction representation, including
 the submitting organization's ID and display name.
 
 #### Scenario: Missing platform allowlist denies central review
@@ -318,8 +320,8 @@ returning the latest seed run and at most 20 newest-first prior runs, each with 
 version, time seeded, source workbook file name, and diff counts (inserted, updated, unchanged,
 retired, reinstated, errors). Authorization SHALL reuse the numeric `PLATFORM_ADMIN_USER_IDS`
 allowlist that gates central correction review; missing, blank, non-numeric, or otherwise malformed
-configuration SHALL deny access. The read SHALL be global and SHALL NOT be org-scoped, and both
-backend implementations SHALL return the same representation with ISO date strings and numeric
+configuration SHALL deny access. The read SHALL be global and SHALL NOT be org-scoped, and the
+Worker SHALL return a representation with ISO date strings and numeric
 counts. Both organization-bootstrap responses SHALL expose `isPlatformAdmin`, derived from the
 bootstrapped numeric database user ID through the same fail-closed allowlist logic. This capability
 is for navigation and route presentation only; each platform endpoint SHALL authorize independently.
@@ -363,4 +365,3 @@ status, consistent with the central-review contract.
 - **WHEN** the administrator accepts them in a batch
 - **THEN** each selected correction's status becomes accepted
 - **AND** no catalogue, brand, product, supplier, or other organization record is modified
-
