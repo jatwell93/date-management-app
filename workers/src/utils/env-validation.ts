@@ -65,7 +65,8 @@ export const REQUIRED_CONFIG: readonly RequiredConfigCheck[] = [
   },
   {
     name: 'JWT_SECRET',
-    impact: 'all authenticated API routes (already enforced per-request)',
+    impact:
+      'signing of presigned-upload tokens, and every API route after bootstrap and upload initiation (500 "JWT_SECRET is required")',
     isSatisfied: (env) => Boolean(env.JWT_SECRET?.trim()),
   },
 ];

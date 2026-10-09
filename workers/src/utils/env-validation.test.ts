@@ -96,7 +96,7 @@ describe('describeConfigProblems', () => {
     const lines = describeConfigProblems(env as unknown as Env);
 
     expect(lines.some((l) => l.includes('MISSING REQUIRED JWT_SECRET'))).toBe(true);
-    expect(lines.some((l) => l.includes('authenticated API routes'))).toBe(true);
+    expect(lines.some((l) => l.includes('presigned-upload tokens'))).toBe(true);
   });
 
   it('says nothing about a healthy configuration', () => {
