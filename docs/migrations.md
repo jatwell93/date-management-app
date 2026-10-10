@@ -22,7 +22,7 @@ how production schema changes are applied.
 
 The history is a set of `NNNN_name.up.sql` / `NNNN_name.down.sql` pairs plus
 `database/migrations/manifest.json`, which is the declaration of intent for each migration.
-`0000_baseline` through `0019_inventory_items_active_triple_unique` are installed today.
+`0000_baseline` through `0020_users_one_active_admin_per_org` are installed today.
 
 A migration must be **replayable over its own result**. The documented forward-fix recovery path
 unstamps every migration above the one being fixed and re-applies them against the existing schema,

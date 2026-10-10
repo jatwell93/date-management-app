@@ -337,39 +337,13 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
       )
     : String(existingOrg[0].id);
 
-  // **This check-then-act race is accepted, not overlooked** (#474, task 3.1.h).
-  // Two first sign-ins against one organization with no active admin, inside the
-  // same few milliseconds, both read zero rows here and both assign 'admin'.
-  //
-  // It is not closed, and the two obvious closures were rejected on their merits:
-  //
-  //   * Folding the check into the INSERT as a conditional single statement —
-  //     the data-modifying-CTE shape used four times for the audit trail — does
-  //     **not** fix it. That pattern buys atomicity, not isolation. Two
-  //     bootstraps insert different clerk_user_ids, contend on no common row,
-  //     and each evaluates the admin subquery against a snapshot taken before
-  //     the other's insert. The window shrinks to one round-trip and the defect
-  //     survives.
-  //   * A partial unique index (role = 'admin' AND deleted_at IS NULL) does
-  //     close it, and also makes a *second* admin impossible everywhere —
-  //     including via POST /api/users and PUT /api/users/:id, which deliberately
-  //     mint one (`isValidRole` admits 'admin'). That is the larger change.
-  //
-  // The mechanism that would work without a transaction is a compare-and-swap on
-  // a one-shot organizations column, since a single-row UPDATE re-checks its own
-  // qualifier against the updated version. It costs a migration and it removes a
-  // live fallback: today an organization whose only admin is soft-deleted grants
-  // admin to the next person to bootstrap.
-  //
-  // What the race yields is one extra admin **inside the caller's own
-  // organization** — a state that organization can already reach on purpose — and
-  // it is pre-existing in Express too (`org-bootstrap.service.ts:100` reads the
-  // admin outside the `$transaction` opened at `:116`). Bounded, no cross-tenant
-  // reach, unchanged at the cutover.
-  //
-  // **Do not add a concurrency test for this.** pglite serialises these tests on
-  // one connection, so such a test passes because the harness cannot fail it, and
-  // it would codify the accepted defect as intended behaviour.
+  // **One active admin per organization (migration 0020, #474).** The read below
+  // is a fast path, not the guard: two first sign-ins can both see no admin, and
+  // before 0020 both were assigned `admin`. The partial unique index
+  // `users_one_active_admin_per_org` is what holds the line now. `upsertClerkUser`
+  // stores `manager` for the loser (whether it saw the admin up front or lost the
+  // race at the index) instead of failing the sign-in, and `isFirstAdmin` reports
+  // what was actually stored.
   const activeAdmin = await sql`
     SELECT id
     FROM users
@@ -382,13 +356,14 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   const isFirstAdmin = activeAdmin.length === 0;
   const assignedRole = isFirstAdmin ? 'admin' : normalizeBootstrapRole(authResult.organizationRole);
 
-  await upsertClerkUser(sql, {
+  const stored = await upsertClerkUser(sql, {
     clerkUserId: authResult.clerkUserId,
     organizationId,
     role: assignedRole,
     email,
     username,
   });
+  const wonAdminSlot = isFirstAdmin && !stored.adminSlotTaken;
 
   await ensureTrialSubscription(sql, organizationId);
 
@@ -408,7 +383,8 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
     organizationId,
     userId: Number(bootstrappedUser[0].id),
     role: normalizeBootstrapRole(String(bootstrappedUser[0].role)),
-    isFirstAdmin,
+    isFirstAdmin: wonAdminSlot,
+    adminSlotTaken: stored.adminSlotTaken,
     isNewOrg,
     clerkMembershipRole: authResult.organizationRole ?? null,
     ipAddress: getClientIp(request),
@@ -421,7 +397,7 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
       role: normalizeBootstrapRole(String(bootstrappedUser[0].role)),
       isNewOrg,
       isNewUser: true,
-      isFirstAdmin,
+      isFirstAdmin: wonAdminSlot,
       isPlatformAdmin: isPlatformAdminUser(
         Number(bootstrappedUser[0].id),
         env.PLATFORM_ADMIN_USER_IDS,
@@ -457,6 +433,7 @@ async function recordBootstrapRoleAssignment(
     userId: number;
     role: BootstrapRoleValue;
     isFirstAdmin: boolean;
+    adminSlotTaken: boolean;
     isNewOrg: boolean;
     clerkMembershipRole: string | null;
     ipAddress: string;
@@ -475,6 +452,7 @@ async function recordBootstrapRoleAssignment(
       metadata: {
         trigger: ORG_AUDIT_TRIGGERS.BOOTSTRAP,
         isFirstAdmin: details.isFirstAdmin,
+        ...(details.adminSlotTaken ? { adminSlotTaken: true, requestedRole: 'admin' } : {}),
         isNewOrg: details.isNewOrg,
         clerkMembershipRole: details.clerkMembershipRole,
       },

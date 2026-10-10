@@ -303,9 +303,12 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
       );
     });
 
+    // `org:admin` and `owner` normalize to admin, but the organization already has
+    // one and the unique index (migration 0020) allows only one: the joiner is
+    // stored as manager instead of failing the sign-in (#474).
     it.each([
-      ['org:admin', 'admin'],
-      ['owner', 'admin'],
+      ['org:admin', 'manager'],
+      ['owner', 'manager'],
       ['org:manager', 'manager'],
       ['org:member', 'team_member'],
       ['org:something-new', 'team_member'],
@@ -539,6 +542,32 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
         trigger: 'bootstrap',
         isFirstAdmin: true,
         isNewOrg: true,
+      });
+    });
+
+    it('stores manager and says so when a later member arrives as org:admin', async () => {
+      await seedOrg('org-2', 'clerk-org-2', 'globex');
+      await seedUser('org-2', 'clerk-admin', 'admin', 'boss@globex.test');
+
+      const response = await handleOrganizationBootstrap(
+        bootstrapRequest({
+          sub: 'clerk-second',
+          email: 'second@globex.test',
+          username: 'second',
+          org_id: 'clerk-org-2',
+          org_role: 'org:admin',
+        }),
+        ENV,
+      );
+      expect(response.status).toBe(201);
+      expect(((await response.json()) as BootstrapPayload).role).toBe('manager');
+
+      const rows = await readAudit();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].new_role).toBe('manager');
+      expect(JSON.parse(String(rows[0].metadata))).toMatchObject({
+        trigger: 'bootstrap',
+        clerkMembershipRole: 'org:admin',
       });
     });
 
