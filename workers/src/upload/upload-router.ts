@@ -1,7 +1,7 @@
 import type { Database } from '../database';
 import type { Env } from '../types/env';
 import { errorResponse } from '../utils/worker-response';
-import { enforceJsonBodyLimit } from '../utils/body-limit';
+import { capUndeclaredBody, enforceJsonBodyLimit } from '../utils/body-limit';
 
 export type WorkerUploadHandlers = {
   handleUploadInitiate: (
@@ -123,15 +123,22 @@ export async function handleWorkerUploadRoute({
   // `/direct/` and `/presigned/` are deliberately excluded below: a large body
   // is their entire purpose.
   const jsonBodiedUploadRoutes = [`${uploadRouteBase}/initiate`, `${uploadRouteBase}/complete`];
+  let jsonRequest = request;
   if (method === 'POST' && jsonBodiedUploadRoutes.includes(pathname)) {
     const oversized = enforceJsonBodyLimit(request, env, requestOrigin);
     if (oversized) {
       return oversized;
     }
+    // Chunked bodies declare no length; read them up to the cap (#532).
+    const capped = await capUndeclaredBody(request, env, requestOrigin);
+    if (capped instanceof Response) {
+      return capped;
+    }
+    jsonRequest = capped;
   }
 
   if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-    return handlers.handleUploadInitiate(request, env, uploadRouteBase, getDb());
+    return handlers.handleUploadInitiate(jsonRequest, env, uploadRouteBase, getDb());
   }
 
   for (const route of KEYED_UPLOAD_ROUTES) {
@@ -145,7 +152,7 @@ export async function handleWorkerUploadRoute({
   }
 
   if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-    return handlers.handleUploadComplete(request, env, getDb());
+    return handlers.handleUploadComplete(jsonRequest, env, getDb());
   }
 
   return null;

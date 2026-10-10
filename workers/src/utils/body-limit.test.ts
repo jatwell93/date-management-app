@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../types/env';
 import {
   DEFAULT_MAX_JSON_BODY_BYTES,
+  capUndeclaredBody,
   enforceJsonBodyLimit,
   resolveMaxJsonBodyBytes,
 } from './body-limit';
@@ -67,11 +68,8 @@ describe('enforceJsonBodyLimit', () => {
     }
   });
 
-  it('allows a request with no Content-Length', () => {
-    // Documented limitation, not an oversight: a chunked request declares no
-    // length, and the alternative -- streaming every body through a counter --
-    // is the cost this cap exists to avoid. Cloudflare enforces its own hard
-    // ceiling upstream.
+  it('leaves a request with no Content-Length to capUndeclaredBody', () => {
+    // The header check cannot judge an undeclared length; capUndeclaredBody does.
     expect(enforceJsonBodyLimit(post(undefined), env)).toBeNull();
   });
 
@@ -88,5 +86,100 @@ describe('enforceJsonBodyLimit', () => {
     await expect(response?.json()).resolves.toMatchObject({
       error: expect.stringContaining('100'),
     });
+  });
+});
+
+describe('capUndeclaredBody (#532)', () => {
+  const tiny = { MAX_JSON_BODY_BYTES: '100' } as unknown as Env;
+
+  const streamed = (chunks: string[], extraHeaders: Record<string, string> = {}) => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        controller.close();
+      },
+    });
+    return new Request('https://api.example.com/api/products', {
+      method: 'POST',
+      headers: extraHeaders,
+      body,
+      duplex: 'half',
+    } as RequestInit);
+  };
+
+  it('returns a readable, equivalent request for a chunked body within the cap', async () => {
+    const result = await capUndeclaredBody(streamed(['{"a":', '1}'], { 'X-Keep': 'yes' }), tiny);
+
+    expect(result).toBeInstanceOf(Request);
+    const rebuilt = result as Request;
+    expect(rebuilt.method).toBe('POST');
+    expect(rebuilt.headers.get('X-Keep')).toBe('yes');
+    await expect(rebuilt.json()).resolves.toEqual({ a: 1 });
+  });
+
+  it('accepts a chunked body exactly at the cap', async () => {
+    const result = await capUndeclaredBody(streamed(['x'.repeat(60), 'y'.repeat(40)]), tiny);
+
+    expect(result).toBeInstanceOf(Request);
+    expect(await (result as Request).text()).toHaveLength(100);
+  });
+
+  it('refuses a chunked body one byte over the cap with 413', async () => {
+    const result = await capUndeclaredBody(streamed(['x'.repeat(60), 'y'.repeat(41)]), tiny);
+
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(413);
+    await expect((result as Response).json()).resolves.toMatchObject({
+      error: expect.stringContaining('100'),
+    });
+  });
+
+  it('stops reading once the cap is passed', async () => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(60));
+      },
+    });
+    const request = new Request('https://api.example.com/api/products', {
+      method: 'POST',
+      body,
+      duplex: 'half',
+    } as RequestInit);
+
+    const result = await capUndeclaredBody(request, tiny);
+
+    expect((result as Response).status).toBe(413);
+    // An endless stream would hang here if the reader kept going.
+    expect(pulled).toBeLessThan(10);
+  });
+
+  it('treats a non-numeric Content-Length as undeclared', async () => {
+    const result = await capUndeclaredBody(
+      streamed(['x'.repeat(200)], { 'Content-Length': 'abc' }),
+      tiny,
+    );
+
+    expect((result as Response).status).toBe(413);
+  });
+
+  it('returns a request with a numeric Content-Length unchanged', async () => {
+    const request = new Request('https://api.example.com/api/products', {
+      method: 'POST',
+      headers: { 'Content-Length': '5' },
+      body: 'hello',
+    });
+
+    expect(await capUndeclaredBody(request, tiny)).toBe(request);
+  });
+
+  it('returns body-less methods and body-less requests unchanged', async () => {
+    const get = new Request('https://api.example.com/api/products');
+    const bodiless = new Request('https://api.example.com/api/products', { method: 'POST' });
+
+    expect(await capUndeclaredBody(get, tiny)).toBe(get);
+    expect(await capUndeclaredBody(bodiless, tiny)).toBe(bodiless);
   });
 });

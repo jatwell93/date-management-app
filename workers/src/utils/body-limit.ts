@@ -51,33 +51,16 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *
  * Returns a 413 `Response` to return immediately, or `null` to proceed.
  *
- * **This checks `Content-Length` only, which leaves a real and reachable gap.**
- * A chunked request sends no `Content-Length`, so `curl -H 'Transfer-Encoding:
- * chunked'` walks straight past this check.
+ * **This checks the declared `Content-Length` only.** A chunked request sends
+ * none, so `curl -H 'Transfer-Encoding: chunked'` walks straight past it. That
+ * case is closed by `capUndeclaredBody` below, which every call site runs
+ * after this check (#532). Cloudflare's own body ceiling does not help: it is
+ * 100 MB on Free and Pro against a 128 MB isolate, and `request.json()` holds
+ * the raw string and the parsed structure at once (roughly 2-3x the body).
  *
- * An earlier version of this comment justified that by claiming Cloudflare's
- * own body ceiling sits "well below the isolate's memory limit". **That is
- * false**, and the correction matters because it was the only rationale given
- * for the gap: the request-body ceiling is 100 MB on Free and Pro (200 MB
- * Business, 500 MB Enterprise) against a 128 MB isolate, and `request.json()`
- * holds the raw string and the parsed structure at the same time -- roughly
- * 2-3x the body. A chunked body comfortably inside Cloudflare's ceiling can
- * still exhaust the isolate (error 1102) and take out the other requests
- * sharing it, which is precisely the tenant-fairness failure this cap exists to
- * prevent. The same comment also mischaracterized the alternative: a
- * pass-through counting `TransformStream` streams with backpressure and does
- * not buffer the body, so "the cost the cap exists to avoid" does not apply to
- * it.
- *
- * The gap is left open **in this change only**, deliberately and on narrower
- * grounds: closing it means piping `request.body` through a counter and
- * rebuilding the `Request`, and an over-limit stream then surfaces as a stream
- * error inside whichever handler is reading it -- a 500 from the outer catch
- * rather than this clean 413 -- which changes the failure mode of every POST on
- * the Worker. That is its own change with its own tests, tracked as **#532**.
- * The header check still removes every accidental large payload and every
- * non-adversarial client at zero cost, which is strictly better than the
- * nothing that was here before.
+ * The two are separate functions because a stream error would surface inside
+ * whichever handler reads the body, as a 500 from the outer catch. Reading the
+ * undeclared body up front instead lets the cap answer with the same clean 413.
  *
  * **Where this is actually applied**, stated precisely because an earlier
  * version of the call-site comment claimed a blanket "before any handler
@@ -100,7 +83,7 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *     `STANDARD_MAX_FILE_SIZE` / `getTierFileSizeLimit` -- larger, and correct
  *     for their purpose. `handleUploadDirect` does buffer `request.formData()`
  *     before its size check, so a pre-read cap would still be an improvement
- *     there; it needs the tier resolved first, so it rides with **#532**.
+ *     there; it needs the tier resolved first, so it is still open.
  *   * The signed webhook paths, because refusing a Stripe or Clerk delivery
  *     unread turns a provider retry loop into a silent data gap.
  *
@@ -143,4 +126,63 @@ export function enforceJsonBodyLimit(
     env,
     requestOrigin,
   );
+}
+
+/**
+ * Cap a body that declares no usable `Content-Length` (chunked transfer) (#532).
+ *
+ * Reads at most `MAX_JSON_BODY_BYTES` into memory, which is the same amount the
+ * handler would have buffered for a legitimate request, then returns a rebuilt
+ * `Request` carrying those bytes. Over the cap it cancels the stream and
+ * returns the 413 `Response`, so the over-limit case needs no handler to know
+ * about it. A request that declares a numeric `Content-Length` is returned
+ * unchanged: `enforceJsonBodyLimit` already judged it, and the runtime enforces
+ * the declared length.
+ *
+ * Callers must use the returned `Request` for every later body read, because
+ * the original stream is consumed.
+ */
+export async function capUndeclaredBody(
+  request: Request,
+  env: Env,
+  requestOrigin?: string,
+): Promise<Request | Response> {
+  if (BODYLESS_METHODS.has(request.method) || !request.body) {
+    return request;
+  }
+
+  const declared = request.headers.get('Content-Length');
+  if (declared && Number.isFinite(Number(declared))) {
+    return request;
+  }
+
+  const max = resolveMaxJsonBodyBytes(env);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let seen = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    seen += value.byteLength;
+    if (seen > max) {
+      await reader.cancel().catch(() => undefined);
+      return errorResponse(
+        `Request body exceeds the maximum size of ${max} bytes`,
+        413,
+        env,
+        requestOrigin,
+      );
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(seen);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Request(request, { body: bytes });
 }

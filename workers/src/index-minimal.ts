@@ -30,7 +30,7 @@ import {
 } from './utils/worker-response';
 import { buildCsv } from '../../shared/domain/csv-injection';
 import { applySecurityHeaders } from './utils/security-headers';
-import { enforceJsonBodyLimit } from './utils/body-limit';
+import { capUndeclaredBody, enforceJsonBodyLimit } from './utils/body-limit';
 import { logConfigOnce } from './utils/env-validation';
 import {
   applyRateLimitHeaders,
@@ -621,12 +621,17 @@ const sentryWrappedHandlers = Sentry.withSentry(
           if (oversizedBodyResponse) {
             return finalizeApiResponse(oversizedBodyResponse);
           }
+          // Chunked bodies declare no length; read them up to the cap (#532).
+          const cappedRequest = await capUndeclaredBody(request, env, requestOrigin);
+          if (cappedRequest instanceof Response) {
+            return finalizeApiResponse(cappedRequest);
+          }
 
           // Initialize database connection for remaining API endpoints
           db = getDb();
 
           const apiRouteResponse = resolveMinimalApiRoute(MINIMAL_API_ROUTES, {
-            request,
+            request: cappedRequest,
             pathname,
             method,
             db,
