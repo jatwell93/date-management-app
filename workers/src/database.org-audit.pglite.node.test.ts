@@ -650,7 +650,27 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
         targetUsername: 'target',
         newRole: 'admin',
         metadata: { trigger: 'admin-update' },
+        // ISO 8601 with T and Z: parseable by Safari and unambiguous about the zone.
+        createdAt: '2026-02-01T00:00:00.000Z',
       });
+    });
+
+    it('applies from/to as UTC bounds whatever the session timezone', async () => {
+      await seedReader();
+      await seedEntry(ORG, { createdAt: '2026-02-01T10:00:00.000Z' });
+      await sql`SET TIME ZONE 'Australia/Sydney'`;
+      try {
+        // 10:00Z is 21:00 in Sydney: a naive ::timestamp cast of the bound would
+        // still agree here, but a timestamptz->local shift would not.
+        const hit = (await (
+          await getLog('?from=2026-02-01T10:00:00.000Z&to=2026-02-01T10:00:00.001Z')
+        ).json()) as LogBody;
+        const miss = (await (await getLog('?to=2026-02-01T10:00:00.000Z')).json()) as LogBody;
+        expect(hit.total).toBe(1);
+        expect(miss.total).toBe(0);
+      } finally {
+        await sql`SET TIME ZONE 'UTC'`;
+      }
     });
 
     it("never returns another organization's rows, nor resolves a name across tenants", async () => {

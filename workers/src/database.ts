@@ -3851,7 +3851,9 @@ export function createWorkersDatabase(env: Env): Database {
                  l.new_role AS "newRole",
                  l.ip_address AS "ipAddress",
                  l.metadata,
-                 l.created_at::text AS "createdAt"
+                 -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+                 -- column is naive UTC, so state the zone explicitly.
+                 to_char(l.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt"
           FROM org_audit_log l
           LEFT JOIN users actor
             ON actor.id = l.actor_user_id AND actor.organization_id = l.organization_id
@@ -3859,8 +3861,8 @@ export function createWorkersDatabase(env: Env): Database {
             ON target.id = l.target_user_id AND target.organization_id = l.organization_id
           WHERE l.organization_id = ${organizationId}
             AND (${eventType}::text IS NULL OR l.event_type = ${eventType})
-            AND (${from}::timestamp IS NULL OR l.created_at >= ${from}::timestamp)
-            AND (${to}::timestamp IS NULL OR l.created_at < ${to}::timestamp)
+            AND (${from}::timestamptz IS NULL OR l.created_at >= (${from}::timestamptz AT TIME ZONE 'UTC'))
+            AND (${to}::timestamptz IS NULL OR l.created_at < (${to}::timestamptz AT TIME ZONE 'UTC'))
           ORDER BY l.created_at DESC, l.id DESC
           LIMIT ${filters.limit} OFFSET ${filters.offset}
         `,
@@ -3869,8 +3871,8 @@ export function createWorkersDatabase(env: Env): Database {
           FROM org_audit_log l
           WHERE l.organization_id = ${organizationId}
             AND (${eventType}::text IS NULL OR l.event_type = ${eventType})
-            AND (${from}::timestamp IS NULL OR l.created_at >= ${from}::timestamp)
-            AND (${to}::timestamp IS NULL OR l.created_at < ${to}::timestamp)
+            AND (${from}::timestamptz IS NULL OR l.created_at >= (${from}::timestamptz AT TIME ZONE 'UTC'))
+            AND (${to}::timestamptz IS NULL OR l.created_at < (${to}::timestamptz AT TIME ZONE 'UTC'))
         `,
       ]);
       return {

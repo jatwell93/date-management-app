@@ -3592,7 +3592,12 @@ async function handleGetOrgAuditLog(request: Request, db: Database, env: Env): P
   const limitRaw = params.get('limit');
   const offsetRaw = params.get('offset');
   const limit = limitRaw === null ? 50 : parsePositiveInt(limitRaw);
-  const offset = offsetRaw === null ? 0 : /^[0-9]+$/.test(offsetRaw) ? Number(offsetRaw) : null;
+  let offset: number | null = null;
+  if (offsetRaw === null) {
+    offset = 0;
+  } else if (/^[0-9]+$/.test(offsetRaw)) {
+    offset = Number(offsetRaw);
+  }
   if (limit === null || limit > 200 || offset === null || !Number.isSafeInteger(offset)) {
     return errorResponse('limit must be 1-200 and offset a non-negative integer', 400, env);
   }
