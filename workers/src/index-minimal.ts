@@ -30,7 +30,7 @@ import {
 } from './utils/worker-response';
 import { buildCsv } from '../../shared/domain/csv-injection';
 import { applySecurityHeaders } from './utils/security-headers';
-import { capUndeclaredBody, enforceJsonBodyLimit } from './utils/body-limit';
+import { capUndeclaredBody, capWebhookBody, enforceJsonBodyLimit } from './utils/body-limit';
 import { logConfigOnce } from './utils/env-validation';
 import {
   applyRateLimitHeaders,
@@ -516,7 +516,12 @@ const sentryWrappedHandlers = Sentry.withSentry(
           method === 'POST' ? PUBLIC_WEBHOOK_HANDLERS.get(pathname) : undefined;
 
         if (webhookHandler) {
-          const webhookResponse = await webhookHandler(request, env, requestOrigin);
+          // Generous cap, not the JSON one: see `DEFAULT_MAX_WEBHOOK_BODY_BYTES`.
+          const cappedWebhook = await capWebhookBody(request, env, requestOrigin);
+          if (cappedWebhook instanceof Response) {
+            return maybeCompressJsonResponse(request, cappedWebhook);
+          }
+          const webhookResponse = await webhookHandler(cappedWebhook, env, requestOrigin);
           return maybeCompressJsonResponse(request, webhookResponse);
         }
 
@@ -602,7 +607,7 @@ const sentryWrappedHandlers = Sentry.withSentry(
           // `POST /api/organization/bootstrap` goes through
           // `resolveBootstrapApiRoute` and buffers with `request.text()`, so it
           // calls `enforceJsonBodyLimit` itself; the signed webhook paths are
-          // excluded on purpose (see below).
+          // capped separately, by `capWebhookBody` (see below).
           //
           // **Placed here, after the upload router has declined the request,
           // rather than up beside the rate-limit check.** Uploads are served at
@@ -614,9 +619,10 @@ const sentryWrappedHandlers = Sentry.withSentry(
           // router only matches paths -- it reads no body -- so nothing has been
           // buffered yet.
           //
-          // The signed webhook paths dispatch above this whole branch and are
-          // likewise unaffected: refusing a Stripe or Clerk delivery unread
-          // would turn a provider retry loop into a silent data gap.
+          // The signed webhook paths dispatch above this whole branch and have
+          // their own, larger cap (`capWebhookBody`): refusing a genuine Stripe
+          // or Clerk delivery unread would turn a provider retry loop into a
+          // silent data gap, so that cap sits far above any real event.
           const oversizedBodyResponse = enforceJsonBodyLimit(request, env, requestOrigin);
           if (oversizedBodyResponse) {
             return finalizeApiResponse(oversizedBodyResponse);

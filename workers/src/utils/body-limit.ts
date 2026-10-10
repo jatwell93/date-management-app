@@ -34,16 +34,39 @@ export const DEFAULT_MAX_JSON_BODY_BYTES = 1024 * 1024;
  */
 const BODYLESS_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-export function resolveMaxJsonBodyBytes(env: Env): number {
-  const raw = env.MAX_JSON_BODY_BYTES;
+/**
+ * Maximum accepted signed-webhook body, in bytes (#532 follow-up).
+ *
+ * Deliberately a separate, larger number than the JSON cap: refusing a genuine
+ * Stripe or Clerk delivery unread turns the provider's retry loop into a silent
+ * data gap, so this must clear any real event with a wide margin. Real events
+ * are tens of KB (a large Stripe invoice might reach a few hundred KB); 2 MiB is
+ * ten times that. It is not larger because these routes are unauthenticated and
+ * buffer the body before verifying the signature, so any caller can make the
+ * Worker hold up to this many bytes per request, and 5 MiB would let roughly
+ * ten concurrent junk requests approach the 128 MB isolate.
+ *
+ * Overridable via `MAX_WEBHOOK_BODY_BYTES`.
+ */
+export const DEFAULT_MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
+
+export function resolveMaxWebhookBodyBytes(env: Env): number {
+  return parsePositiveBytes(env.MAX_WEBHOOK_BODY_BYTES, DEFAULT_MAX_WEBHOOK_BODY_BYTES);
+}
+
+function parsePositiveBytes(raw: string | undefined, fallback: number): number {
   if (!raw) {
-    return DEFAULT_MAX_JSON_BODY_BYTES;
+    return fallback;
   }
   const parsed = Number(raw);
   // A malformed override falls back rather than throwing or yielding NaN: a
   // typo in a deployment variable should not uncap the limit, which is what
   // `parsed > cap` would silently do with NaN.
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_MAX_JSON_BODY_BYTES;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+export function resolveMaxJsonBodyBytes(env: Env): number {
+  return parsePositiveBytes(env.MAX_JSON_BODY_BYTES, DEFAULT_MAX_JSON_BODY_BYTES);
 }
 
 /**
@@ -84,8 +107,9 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *     for their purpose. `handleUploadDirect` does buffer `request.formData()`
  *     before its size check, so a pre-read cap would still be an improvement
  *     there; it needs the tier resolved first, so it is still open.
- *   * The signed webhook paths, because refusing a Stripe or Clerk delivery
- *     unread turns a provider retry loop into a silent data gap.
+ *   * The signed webhook paths use this cap's larger sibling, `capWebhookBody`
+ *     (`MAX_WEBHOOK_BODY_BYTES`), because refusing a genuine Stripe or Clerk
+ *     delivery unread turns a provider retry loop into a silent data gap.
  *
  * **Any new handler that buffers a body must either sit behind the entry-point
  * check or call this itself.** The guarantee is per-route, not global. Two
@@ -105,27 +129,12 @@ export function enforceJsonBodyLimit(
     return null;
   }
 
-  const declared = request.headers.get('Content-Length');
-  if (!declared) {
-    return null;
-  }
-
-  const size = Number(declared);
-  if (!Number.isFinite(size)) {
-    return null;
-  }
-
   const max = resolveMaxJsonBodyBytes(env);
-  if (size <= max) {
+  if (!declaredExceedsCap(request, max)) {
     return null;
   }
 
-  return errorResponse(
-    `Request body exceeds the maximum size of ${max} bytes`,
-    413,
-    env,
-    requestOrigin,
-  );
+  return tooLarge(max, env, requestOrigin);
 }
 
 /**
@@ -147,16 +156,66 @@ export async function capUndeclaredBody(
   env: Env,
   requestOrigin?: string,
 ): Promise<Request | Response> {
+  return readBodyWithinCap(request, env, resolveMaxJsonBodyBytes(env), requestOrigin);
+}
+
+/**
+ * Cap a signed webhook delivery, declared length or not (#532 follow-up).
+ *
+ * Same contract as `enforceJsonBodyLimit` + `capUndeclaredBody` rolled into one
+ * call, against the larger `MAX_WEBHOOK_BODY_BYTES`. Returns a 413 `Response`
+ * or the `Request` to hand to the webhook handler.
+ */
+export async function capWebhookBody(
+  request: Request,
+  env: Env,
+  requestOrigin?: string,
+): Promise<Request | Response> {
+  const max = resolveMaxWebhookBodyBytes(env);
+  if (declaredExceedsCap(request, max)) {
+    return tooLarge(max, env, requestOrigin);
+  }
+  return readBodyWithinCap(request, env, max, requestOrigin);
+}
+
+/** The numeric `Content-Length`, or null when absent or not a number. */
+function declaredLength(request: Request): number | null {
+  const declared = request.headers.get('Content-Length');
+  if (!declared) {
+    return null;
+  }
+  const size = Number(declared);
+  return Number.isFinite(size) ? size : null;
+}
+
+function declaredExceedsCap(request: Request, max: number): boolean {
+  const size = declaredLength(request);
+  return size !== null && size > max;
+}
+
+function tooLarge(max: number, env: Env, requestOrigin?: string): Response {
+  return errorResponse(
+    `Request body exceeds the maximum size of ${max} bytes`,
+    413,
+    env,
+    requestOrigin,
+  );
+}
+
+async function readBodyWithinCap(
+  request: Request,
+  env: Env,
+  max: number,
+  requestOrigin?: string,
+): Promise<Request | Response> {
   if (BODYLESS_METHODS.has(request.method) || !request.body) {
     return request;
   }
 
-  const declared = request.headers.get('Content-Length');
-  if (declared && Number.isFinite(Number(declared))) {
+  if (declaredLength(request) !== null) {
     return request;
   }
 
-  const max = resolveMaxJsonBodyBytes(env);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let seen = 0;
@@ -168,12 +227,7 @@ export async function capUndeclaredBody(
     seen += value.byteLength;
     if (seen > max) {
       await reader.cancel().catch(() => undefined);
-      return errorResponse(
-        `Request body exceeds the maximum size of ${max} bytes`,
-        413,
-        env,
-        requestOrigin,
-      );
+      return tooLarge(max, env, requestOrigin);
     }
     chunks.push(value);
   }
