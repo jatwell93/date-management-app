@@ -99,7 +99,7 @@ You retain full **read access** to everything:
 
 - ✅ View all products and inventory
 - ✅ Generate reports
-- ✅ Export data
+- ✅ Export products over your tier limit via the API (there is no in-app export yet)
 - ✅ View historical data
 
 ### What is blocked?
