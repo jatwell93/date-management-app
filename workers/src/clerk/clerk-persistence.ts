@@ -1,5 +1,6 @@
 import type { Database } from '../database';
-import { normalizeRole, type RoleValue } from '../constants/roles';
+import { normalizeRole, ROLES, type RoleValue } from '../constants/roles';
+import { isAdminSlotViolation } from '../db-errors';
 import {
   ORG_AUDIT_EVENT_TYPES,
   ORG_AUDIT_TRIGGERS,
@@ -215,16 +216,83 @@ export async function findOrCreateOrganization(
   throw new Error('Unable to create organization for Clerk webhook event');
 }
 
+interface ClerkUserWrite {
+  clerkUserId: string;
+  organizationId: string;
+  role: string;
+  email?: string | null;
+  username?: string | null;
+}
+
+/**
+ * Decide the role a Clerk-driven grant may actually store (#474, migration 0020).
+ *
+ * An organization holds at most one active admin, but Clerk allows several
+ * `org:admin` members. Bootstrap and the membership webhook must not fail on that:
+ * a rejected delivery is retried by Svix forever and leaves a Clerk member with no
+ * row here (the lockout `database.ts` createOrganizationUser warns about). So when
+ * another active admin already holds the slot, the grant is stored as `manager`
+ * and the audit row says so. The same person re-sent by Clerk resolves the same
+ * way, so the downgrade is stable rather than flapping.
+ *
+ * This read is only the fast path. Two grants racing can both pass it; the unique
+ * index then rejects the loser, and `withAdminSlotFallback` retries it as manager.
+ */
+export async function resolveAdminSlotRole(
+  sql: SqlClient,
+  options: { organizationId: string; clerkUserId: string; role: string },
+): Promise<{ role: string; adminSlotTaken: boolean }> {
+  const { organizationId, clerkUserId, role } = options;
+  if (role !== ROLES.ADMIN) {
+    return { role, adminSlotTaken: false };
+  }
+  const holder = await sql`
+    SELECT id
+    FROM users
+    WHERE organization_id = ${organizationId}
+      AND role = ${ROLES.ADMIN}
+      AND deleted_at IS NULL
+      AND clerk_user_id IS DISTINCT FROM ${clerkUserId}
+    LIMIT 1
+  `;
+  return holder.length > 0
+    ? { role: ROLES.MANAGER, adminSlotTaken: true }
+    : { role, adminSlotTaken: false };
+}
+
+/**
+ * Run `write` with the resolved role; if a concurrent grant took the admin slot
+ * between the read and the write, rerun it once as manager.
+ */
+export async function withAdminSlotFallback<T>(
+  sql: SqlClient,
+  options: { organizationId: string; clerkUserId: string; role: string },
+  write: (role: string, adminSlotTaken: boolean) => Promise<T>,
+): Promise<{ result: T; role: string; adminSlotTaken: boolean }> {
+  const resolved = await resolveAdminSlotRole(sql, options);
+  try {
+    const result = await write(resolved.role, resolved.adminSlotTaken);
+    return { result, ...resolved };
+  } catch (error) {
+    if (resolved.role !== ROLES.ADMIN || !isAdminSlotViolation(error)) {
+      throw error;
+    }
+  }
+  const result = await write(ROLES.MANAGER, true);
+  return { result, role: ROLES.MANAGER, adminSlotTaken: true };
+}
+
 export async function upsertClerkUser(
   sql: SqlClient,
-  options: {
-    clerkUserId: string;
-    organizationId: string;
-    role: string;
-    email?: string | null;
-    username?: string | null;
-  },
-): Promise<void> {
+  options: ClerkUserWrite,
+): Promise<{ role: string; adminSlotTaken: boolean }> {
+  const { role, adminSlotTaken } = await withAdminSlotFallback(sql, options, (resolvedRole) =>
+    writeClerkUser(sql, { ...options, role: resolvedRole }),
+  );
+  return { role, adminSlotTaken };
+}
+
+async function writeClerkUser(sql: SqlClient, options: ClerkUserWrite): Promise<void> {
   const { clerkUserId, organizationId, role, email = null, username = null } = options;
 
   try {
@@ -258,7 +326,9 @@ export async function upsertClerkUser(
     return;
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code !== '23505' || !email) {
+    // The admin-slot index is also 23505, but re-linking by email cannot help it:
+    // it must reach `withAdminSlotFallback`.
+    if (code !== '23505' || !email || isAdminSlotViolation(error)) {
       throw error;
     }
   }
@@ -398,15 +468,25 @@ export async function processClerkWebhookEvent(
       // can in principle both record the same predecessor. Acceptable here:
       // Clerk is the source of truth for the resulting role, deliveries are
       // retried, and the alternative is an always-NULL column.
-      const auditMetadata = JSON.stringify({
-        trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
-        clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
-      });
+      //
+      // **One active admin per organization (migration 0020, #474).** Clerk allows
+      // several `org:admin` members; this table does not. When the slot is held by
+      // someone else the grant is stored as `manager` rather than failing the
+      // delivery, and `metadata.adminSlotTaken` records what Clerk asked for.
+      const auditMetadataFor = (adminSlotTaken: boolean): string =>
+        JSON.stringify({
+          trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
+          clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
+          ...(adminSlotTaken ? { adminSlotTaken: true, requestedRole: role } : {}),
+        });
       const username = identifier
         ? sanitizeSlug(identifier.split('@')[0], `user-${Date.now().toString(36)}`)
         : null;
 
-      const auditedMembershipWrite = async (): Promise<Record<string, unknown>[]> => sql`
+      const auditedMembershipWrite = async (
+        storedRole: string,
+        adminSlotTaken: boolean,
+      ): Promise<Record<string, unknown>[]> => sql`
         WITH prev AS (
           SELECT id, role
           FROM users
@@ -426,7 +506,7 @@ export async function processClerkWebhookEvent(
             ${clerkUserId},
             ${identifier},
             ${username},
-            ${role},
+            ${storedRole},
             NOW(),
             NOW()
           )
@@ -463,7 +543,7 @@ export async function processClerkWebhookEvent(
                  changed.previous_role,
                  changed.role,
                  NULL,
-                 ${auditMetadata},
+                 ${auditMetadataFor(adminSlotTaken)},
                  NOW()
           FROM changed
           WHERE changed.previous_role IS DISTINCT FROM changed.role
@@ -473,7 +553,11 @@ export async function processClerkWebhookEvent(
       `;
 
       try {
-        await auditedMembershipWrite();
+        await withAdminSlotFallback(
+          sql,
+          { organizationId, clerkUserId, role },
+          auditedMembershipWrite,
+        );
       } catch (error) {
         // `users_email_key` is UNIQUE in production, so an identifier already
         // held by a row with a *different* clerk_user_id collides on the email
@@ -500,7 +584,7 @@ export async function processClerkWebhookEvent(
           FROM users
           WHERE organization_id = ${organizationId}
             AND LOWER(email) = LOWER(${identifier})`;
-        await upsertClerkUser(sql, {
+        const relink = await upsertClerkUser(sql, {
           clerkUserId,
           organizationId,
           role,
@@ -514,7 +598,7 @@ export async function processClerkWebhookEvent(
         const relinked = await sql`
           SELECT id FROM users WHERE clerk_user_id = ${clerkUserId}`;
         const previousRole = before[0] ? String(before[0].role) : null;
-        if (previousRole !== role) {
+        if (previousRole !== relink.role) {
           await insertOrgAuditLog(sql, {
             organizationId,
             eventType: ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED,
@@ -522,11 +606,12 @@ export async function processClerkWebhookEvent(
             targetUserId: relinked[0] ? Number(relinked[0].id) : null,
             targetOrganizationId: organizationId,
             oldRole: previousRole,
-            newRole: role,
+            newRole: relink.role,
             metadata: {
               trigger: ORG_AUDIT_TRIGGERS.CLERK_WEBHOOK,
               clerkOrganizationRole: typeof data.role === 'string' ? data.role : null,
               relinkedByEmail: true,
+              ...(relink.adminSlotTaken ? { adminSlotTaken: true, requestedRole: role } : {}),
             },
           });
         }

@@ -47,6 +47,7 @@ vi.mock('./clerk/bootstrap-handler', () => ({
   handleOrganizationBootstrap: vi.fn(),
 }));
 
+import { isAdminSlotViolation } from './db-errors';
 import { createWorkersDatabase } from './database';
 import { MINIMAL_API_ROUTES } from './index-minimal';
 import {
@@ -147,6 +148,66 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
     expect(JSON.parse(String(rows[0].metadata))).toEqual({
       trigger: ORG_AUDIT_TRIGGERS.ADMIN_UPDATE,
     });
+  });
+
+  it('refuses to promote a second user to admin and leaves the role and trail untouched', async () => {
+    const db = makeDb();
+    await db.updateUserRole(ORG, targetUserId, 'admin', ACTOR);
+    const other = await sql`
+      INSERT INTO users (organization_id, username, email, role, updated_at)
+      VALUES (${ORG}, 'other', 'other@a.test', 'manager', NOW())
+      RETURNING id`;
+    const otherId = Number(other[0].id);
+
+    const attempt = db.updateUserRole(ORG, otherId, 'admin', ACTOR);
+
+    await expect(attempt).rejects.toSatisfy(isAdminSlotViolation);
+    expect((await sql`SELECT role FROM users WHERE id = ${otherId}`)[0].role).toBe('manager');
+    expect(await readAudit()).toHaveLength(1);
+  });
+
+  it('lets the admin slot move once the current admin is demoted', async () => {
+    const db = makeDb();
+    const other = await sql`
+      INSERT INTO users (organization_id, username, email, role, updated_at)
+      VALUES (${ORG}, 'other', 'other@a.test', 'manager', NOW())
+      RETURNING id`;
+    const otherId = Number(other[0].id);
+    await db.updateUserRole(ORG, targetUserId, 'admin', ACTOR);
+
+    await db.updateUserRole(ORG, targetUserId, 'manager', ACTOR);
+    await db.updateUserRole(ORG, otherId, 'admin', ACTOR);
+
+    const admins =
+      await sql`SELECT id FROM users WHERE organization_id = ${ORG} AND role = 'admin'`;
+    expect(admins.map((row) => Number(row.id))).toEqual([otherId]);
+  });
+
+  it('does not let a soft-deleted admin hold the slot', async () => {
+    const db = makeDb();
+    await db.updateUserRole(ORG, targetUserId, 'admin', ACTOR);
+    await sql`UPDATE users SET deleted_at = NOW() WHERE id = ${targetUserId}`;
+    const other = await sql`
+      INSERT INTO users (organization_id, username, email, role, updated_at)
+      VALUES (${ORG}, 'other', 'other@a.test', 'manager', NOW())
+      RETURNING id`;
+
+    const result = await db.updateUserRole(ORG, Number(other[0].id), 'admin', ACTOR);
+
+    expect(result).toMatchObject({ role: 'admin' });
+  });
+
+  it('keeps one admin per organization, not one admin in total', async () => {
+    const db = makeDb();
+    await db.updateUserRole(ORG, targetUserId, 'admin', ACTOR);
+    const foreign = await sql`
+      INSERT INTO users (organization_id, username, email, role, updated_at)
+      VALUES (${OTHER_ORG}, 'foreign', 'foreign@b.test', 'team_member', NOW())
+      RETURNING id`;
+
+    const result = await db.updateUserRole(OTHER_ORG, Number(foreign[0].id), 'admin', ACTOR);
+
+    expect(result).toMatchObject({ role: 'admin' });
   });
 
   it('records the pre-update role even when a later change overwrites it', async () => {
@@ -266,30 +327,17 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
       return Number(rows[0].id);
     };
 
-    it('records who created a brand-new admin', async () => {
-      const actorId = await seedActingAdmin();
+    it('refuses a second admin with 409 and writes neither the user nor an audit row', async () => {
+      await seedActingAdmin();
 
       const response = await postUser('admin', 'clerk-acting-admin');
-      expect(response.status).toBe(201);
-      const created = (await response.json()) as { id: number; role: string };
-      expect(created.role).toBe('admin');
 
-      const rows = await readAudit();
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        organization_id: ORG,
-        event_type: ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED,
-        actor_user_id: actorId,
-        target_user_id: created.id,
-        // No prior role exists — this user did not hold anything before. NULL
-        // here is what distinguishes a grant-on-create from a promotion.
-        old_role: null,
-        new_role: 'admin',
-        ip_address: '203.0.113.44',
-      });
-      expect(JSON.parse(String(rows[0].metadata))).toEqual({
-        trigger: ORG_AUDIT_TRIGGERS.ADMIN_CREATE,
-      });
+      // One active admin per organization (migration 0020, #474). The acting admin
+      // already holds the slot, so creating an admin is always refused.
+      expect(response.status).toBe(409);
+      expect(await response.text()).toContain('already has an admin');
+      expect(await sql`SELECT id FROM users WHERE username = 'new-admin'`).toHaveLength(0);
+      expect(await readAudit()).toHaveLength(0);
     });
 
     it('records a non-admin creation too, distinguishably', async () => {
@@ -310,7 +358,7 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
       await sql`ALTER TABLE org_audit_log RENAME TO org_audit_log_hidden`;
       let response: Response;
       try {
-        response = await postUser('admin', 'clerk-acting-admin');
+        response = await postUser('team_member', 'clerk-acting-admin');
       } finally {
         await sql`ALTER TABLE org_audit_log_hidden RENAME TO org_audit_log`;
       }
@@ -324,7 +372,7 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
 
       // Mutation check: moving the audit INSERT out of the CTE leaves a created
       // admin behind with no record of who created them.
-      const created = await sql`SELECT id FROM users WHERE username = 'new-admin'`;
+      const created = await sql`SELECT id FROM users WHERE username = 'new-team_member'`;
       expect(created).toHaveLength(0);
     });
 

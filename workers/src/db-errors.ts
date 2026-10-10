@@ -64,3 +64,31 @@ export function isUniqueViolation(error: unknown): boolean {
   if (hasCode(error, UNIQUE_VIOLATION)) return true;
   return hasCode((error as { cause?: unknown }).cause, UNIQUE_VIOLATION);
 }
+
+/**
+ * The partial unique index from migration 0020: at most one active admin per
+ * organization. It is what closes the check-then-act race in bootstrap (#474).
+ */
+export const ADMIN_SLOT_INDEX = 'users_one_active_admin_per_org';
+
+export const ADMIN_SLOT_TAKEN_MESSAGE =
+  'This organization already has an admin. Change the current admin to another role first.';
+
+/**
+ * A unique violation raised by `ADMIN_SLOT_INDEX` specifically. Callers need to tell
+ * it apart from the username and email violations, which mean something else.
+ * Matches on the `constraint` field the driver reports, and falls back to the message
+ * (which always names the index) for wrappers that drop it.
+ */
+export function isAdminSlotViolation(error: unknown): boolean {
+  if (!isUniqueViolation(error)) return false;
+  const candidates = [error, (error as { cause?: unknown }).cause];
+  return candidates.some((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const { constraint, message } = candidate as { constraint?: unknown; message?: unknown };
+    return (
+      constraint === ADMIN_SLOT_INDEX ||
+      (typeof message === 'string' && message.includes(ADMIN_SLOT_INDEX))
+    );
+  });
+}

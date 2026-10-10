@@ -3656,6 +3656,14 @@
     },
     {
       "table": "users",
+      "name": "users_one_active_admin_per_org",
+      "definition": "CREATE UNIQUE INDEX users_one_active_admin_per_org ON public.users USING btree (organization_id) WHERE ((role = 'admin'::text) AND (deleted_at IS NULL))",
+      "unique": true,
+      "primary": false,
+      "predicate": "((role = 'admin'::text) AND (deleted_at IS NULL))"
+    },
+    {
+      "table": "users",
       "name": "users_organization_id_idx",
       "definition": "CREATE INDEX users_organization_id_idx ON public.users USING btree (organization_id)",
       "unique": false,

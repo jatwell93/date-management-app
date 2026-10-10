@@ -460,6 +460,29 @@
         "planned": false,
         "id": "none"
       }
+    },
+    {
+      "id": "0020",
+      "forward": "0020_users_one_active_admin_per_org.up.sql",
+      "transaction": "required",
+      "compatibility": "expand",
+      "dataLoss": "none",
+      "recovery": {
+        "strategy": "rollback-sql",
+        "file": "0020_users_one_active_admin_per_org.down.sql",
+        "execution": "manual-only",
+        "dataLoss": "destructive",
+        "completeness": "complete"
+      },
+      "backfill": {
+        "required": false,
+        "plan": "none",
+        "resumable": false
+      },
+      "contract": {
+        "planned": false,
+        "id": "none"
+      }
     }
   ]
 }

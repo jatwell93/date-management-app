@@ -116,6 +116,8 @@ import {
   DUPLICATE_INVENTORY_ITEM_MESSAGE,
   DUPLICATE_STORE_AREA_MESSAGE,
   DuplicateStoreAreaError,
+  ADMIN_SLOT_TAKEN_MESSAGE,
+  isAdminSlotViolation,
   isDuplicateInventoryItem,
   isUniqueViolation,
 } from './db-errors';
@@ -3636,6 +3638,9 @@ async function handleCreateLegacyUser(request: Request, db: Database, env: Env):
     }
     return jsonResponse(created, 201, env);
   } catch (error) {
+    if (isAdminSlotViolation(error)) {
+      return errorResponse(ADMIN_SLOT_TAKEN_MESSAGE, 409, env);
+    }
     if (isUniqueViolation(error)) {
       return errorResponse('User with this username already exists', 409, env);
     }
@@ -3694,6 +3699,9 @@ async function handleUpdateUser(
       ipAddress: getClientIp(request),
     });
   } catch (error) {
+    if (isAdminSlotViolation(error)) {
+      return errorResponse(ADMIN_SLOT_TAKEN_MESSAGE, 409, env);
+    }
     if (isMissingSchemaError(error)) {
       console.error(
         'handleUpdateUser: org_audit_log missing — apply Neon migration 0013_org_audit_log. Refusing the role change rather than performing it unaudited.',
