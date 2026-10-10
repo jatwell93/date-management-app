@@ -322,7 +322,7 @@ VALUES ('YOUR_ORG_ID', 'grace_period_extended',
 
 ### Q: Can I export data while past due?
 
-**A**: Yes. You can export your data at any point - during grace period, after downgrade, or anytime. Your data is always accessible.
+**A**: Your data stays accessible during the grace period and after downgrade. There is no in-app export yet: `GET /api/products/export-excess` returns the products over your tier limit, and support can provide a full copy.
 
 ### Q: What if my bank is blocking the charge?
 
