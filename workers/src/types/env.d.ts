@@ -22,6 +22,7 @@ export interface Env {
   QUERY_MAX_RESULTS?: string; // default: 100
   QUERY_TIMEOUT_MS?: string; // default: 10000
   MAX_JSON_BODY_BYTES?: string; // default: "1048576" (1 MiB); see utils/body-limit.ts
+  MAX_WEBHOOK_BODY_BYTES?: string; // default: "2097152" (2 MiB); signed webhook paths
   FRONTEND_URL?: string; // Frontend URL for CORS + Clerk authorizedParties
   CATALOGUE_QUEUE_ENABLED?: string;
   USAGE_LIMITS_ENFORCE?: string; // "true" to refuse over-cap writes; default off (measure only)

@@ -233,19 +233,45 @@ describe('JSON body cap, through the entry point', () => {
       expect(response.status).not.toBe(413);
     });
 
-    it('does not cap a chunked webhook delivery', async () => {
-      const response = await fetchWorker(chunkedRequest('/api/webhooks/stripe', 2 * 1024 * 1024));
+    it.each(['/api/webhooks/stripe', '/webhooks/clerk'])(
+      'applies the larger webhook cap to a chunked body on %s',
+      async (path) => {
+        // 1.5 MiB is over the 1 MiB JSON cap but a plausible-sized delivery:
+        // refusing it would be a silent data gap.
+        const within = await fetchWorker(chunkedRequest(path, 1.5 * 1024 * 1024));
+        expect(within.status).not.toBe(413);
+
+        const over = await fetchWorker(chunkedRequest(path, 3 * 1024 * 1024));
+        expect(over.status).toBe(413);
+      },
+    );
+  });
+
+  describe('signed webhook deliveries', () => {
+    // Webhooks dispatch above the JSON cap and have their own, larger one
+    // (`MAX_WEBHOOK_BODY_BYTES`, 2 MiB): refusing a genuine delivery unread
+    // turns a provider retry loop into a silent data gap, but an unbounded body
+    // is buffered before the signature is checked.
+    const declaredRequest = (path: string, length: number) =>
+      new Request(`https://api.example.com${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': String(length) },
+        body: JSON.stringify({ padded: 'x' }),
+      });
+
+    it('does not refuse a delivery above the JSON cap but within the webhook cap', async () => {
+      const response = await fetchWorker(
+        declaredRequest('/api/webhooks/stripe', 1.5 * 1024 * 1024),
+      );
 
       expect(response.status).not.toBe(413);
     });
-  });
 
-  it('does not refuse a webhook delivery', async () => {
-    // Refusing a Stripe or Clerk delivery unread turns a provider retry loop
-    // into a silent data gap. Webhooks dispatch above the API branch entirely.
-    const response = await fetchWorker(bigJsonRequest('/api/webhooks/stripe'));
+    it('refuses a declared length above the webhook cap with 413', async () => {
+      const response = await fetchWorker(declaredRequest('/api/webhooks/clerk', 5 * 1024 * 1024));
 
-    expect(response.status).not.toBe(413);
+      expect(response.status).toBe(413);
+    });
   });
 
   it('allows an ordinary small body through to normal handling', async () => {

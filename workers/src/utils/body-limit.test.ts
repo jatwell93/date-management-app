@@ -9,7 +9,10 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../types/env';
 import {
   DEFAULT_MAX_JSON_BODY_BYTES,
+  DEFAULT_MAX_WEBHOOK_BODY_BYTES,
   capUndeclaredBody,
+  capWebhookBody,
+  resolveMaxWebhookBodyBytes,
   enforceJsonBodyLimit,
   resolveMaxJsonBodyBytes,
 } from './body-limit';
@@ -181,5 +184,52 @@ describe('capUndeclaredBody (#532)', () => {
 
     expect(await capUndeclaredBody(get, tiny)).toBe(get);
     expect(await capUndeclaredBody(bodiless, tiny)).toBe(bodiless);
+  });
+});
+
+describe('capWebhookBody (#532 follow-up)', () => {
+  const small = { MAX_WEBHOOK_BODY_BYTES: '100' } as unknown as Env;
+
+  it('defaults to 2 MiB and falls back on a malformed override', () => {
+    expect(DEFAULT_MAX_WEBHOOK_BODY_BYTES).toBe(2 * 1024 * 1024);
+    expect(resolveMaxWebhookBodyBytes(env)).toBe(DEFAULT_MAX_WEBHOOK_BODY_BYTES);
+    for (const bad of ['nope', '', '0', '-1']) {
+      expect(resolveMaxWebhookBodyBytes({ MAX_WEBHOOK_BODY_BYTES: bad } as unknown as Env)).toBe(
+        DEFAULT_MAX_WEBHOOK_BODY_BYTES,
+      );
+    }
+  });
+
+  it('is independent of the JSON cap', () => {
+    const jsonOnly = { MAX_JSON_BODY_BYTES: '10' } as unknown as Env;
+    expect(resolveMaxWebhookBodyBytes(jsonOnly)).toBe(DEFAULT_MAX_WEBHOOK_BODY_BYTES);
+  });
+
+  it('refuses a declared length over the cap and passes one within it', async () => {
+    const over = await capWebhookBody(post('101'), small);
+    expect((over as Response).status).toBe(413);
+
+    const at = post('100');
+    expect(await capWebhookBody(at, small)).toBe(at);
+  });
+
+  it('refuses an undeclared body over the cap and rebuilds one within it', async () => {
+    const stream = (text: string) =>
+      new Request('https://api.example.com/api/webhooks/stripe', {
+        method: 'POST',
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(text));
+            controller.close();
+          },
+        }),
+        duplex: 'half',
+      } as RequestInit);
+
+    const over = await capWebhookBody(stream('x'.repeat(101)), small);
+    expect((over as Response).status).toBe(413);
+
+    const within = await capWebhookBody(stream('x'.repeat(100)), small);
+    expect(await (within as Request).text()).toHaveLength(100);
   });
 });
