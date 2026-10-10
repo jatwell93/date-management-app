@@ -554,6 +554,203 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
     });
   });
 
+  describe('reading the trail (GET /api/organization/audit-log)', () => {
+    const ENV = {} as Env;
+
+    const getLog = async (query = '', actorClerkId = 'clerk-reader'): Promise<Response> => {
+      const route = MINIMAL_API_ROUTES.find(
+        ([method, pattern]) => method === 'GET' && pattern === '/api/organization/audit-log',
+      );
+      if (!route) throw new Error('GET /api/organization/audit-log is not registered');
+      const handler = route[2] as (
+        request: Request,
+        db: ReturnType<typeof makeDb>,
+        env: Env,
+      ) => Promise<Response>;
+      clerkHolder.current = { clerkUserId: actorClerkId };
+      return handler(
+        new Request(`https://api.test/api/organization/audit-log${query}`),
+        makeDb(),
+        ENV,
+      );
+    };
+
+    const seedReader = async (role = 'admin'): Promise<number> => {
+      const rows = await sql`
+        INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
+        VALUES (${ORG}, 'clerk-reader', 'reader', 'reader@a.test', ${role}, NOW())
+        RETURNING id`;
+      await sql`
+        INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
+        VALUES (${ORG}, 'professional', 'active', NOW())`;
+      return Number(rows[0].id);
+    };
+
+    const seedEntry = async (
+      organizationId: string,
+      fields: {
+        actor?: number | null;
+        target?: number | null;
+        oldRole?: string | null;
+        newRole?: string;
+        eventType?: string;
+        metadata?: string | null;
+        createdAt?: string;
+      } = {},
+    ): Promise<number> => {
+      const rows = await sql`
+        INSERT INTO org_audit_log (organization_id, event_type, actor_user_id, target_user_id,
+                                   old_role, new_role, ip_address, metadata, created_at)
+        VALUES (${organizationId}, ${fields.eventType ?? 'role_assigned'}, ${fields.actor ?? null},
+                ${fields.target ?? null}, ${fields.oldRole ?? null}, ${fields.newRole ?? 'manager'},
+                '203.0.113.7', ${fields.metadata ?? '{"trigger":"admin-update"}'},
+                ${fields.createdAt ?? new Date().toISOString()})
+        RETURNING id`;
+      return Number(rows[0].id);
+    };
+
+    type LogBody = {
+      entries: {
+        id: number;
+        actorUsername: string | null;
+        targetUsername: string | null;
+        newRole: string | null;
+        metadata: Record<string, unknown> | null;
+      }[];
+      total: number;
+      limit: number;
+      offset: number;
+    };
+
+    it("returns the organization's entries newest first, with names and parsed metadata", async () => {
+      const readerId = await seedReader();
+      const older = await seedEntry(ORG, {
+        actor: readerId,
+        target: targetUserId,
+        oldRole: 'team_member',
+        newRole: 'manager',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      const newer = await seedEntry(ORG, {
+        actor: readerId,
+        target: targetUserId,
+        oldRole: 'manager',
+        newRole: 'admin',
+        createdAt: '2026-02-01T00:00:00.000Z',
+      });
+
+      const response = await getLog();
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as LogBody;
+      expect(body.entries.map((e) => e.id)).toEqual([newer, older]);
+      expect(body).toMatchObject({ total: 2, limit: 50, offset: 0 });
+      expect(body.entries[0]).toMatchObject({
+        actorUsername: 'reader',
+        targetUsername: 'target',
+        newRole: 'admin',
+        metadata: { trigger: 'admin-update' },
+      });
+    });
+
+    it("never returns another organization's rows, nor resolves a name across tenants", async () => {
+      const readerId = await seedReader();
+      const foreign = await sql`
+        INSERT INTO users (organization_id, username, email, role, updated_at)
+        VALUES (${OTHER_ORG}, 'foreign-person', 'f@b.test', 'admin', NOW())
+        RETURNING id`;
+      const foreignUserId = Number(foreign[0].id);
+      await seedEntry(OTHER_ORG, { actor: foreignUserId, target: foreignUserId, newRole: 'admin' });
+      // Same-org row whose ids happen to point at a user in the other tenant: the
+      // row is ours to show, the name is not.
+      const own = await seedEntry(ORG, { actor: foreignUserId, target: readerId });
+
+      const body = (await (await getLog()).json()) as LogBody;
+
+      // Mutation check: dropping `l.organization_id = ...` from the WHERE returns
+      // the foreign row; dropping the join's organization predicate leaks
+      // 'foreign-person' into actorUsername.
+      expect(body.entries.map((e) => e.id)).toEqual([own]);
+      expect(body.total).toBe(1);
+      expect(body.entries[0].actorUsername).toBeNull();
+      expect(body.entries[0].targetUsername).toBe('reader');
+    });
+
+    it('still names a soft-deleted user', async () => {
+      const readerId = await seedReader();
+      await seedEntry(ORG, { actor: readerId, target: targetUserId });
+      await sql`UPDATE users SET deleted_at = NOW() WHERE id = ${targetUserId}`;
+
+      const body = (await (await getLog()).json()) as LogBody;
+
+      expect(body.entries[0].targetUsername).toBe('target');
+    });
+
+    it.each(['manager', 'team_member'])('refuses a %s with 403', async (role) => {
+      await seedReader(role);
+      await seedEntry(ORG);
+
+      const response = await getLog();
+
+      expect(response.status).toBe(403);
+      expect(await response.text()).not.toContain('role_assigned');
+    });
+
+    it('filters by event type and by date range, and counts the filtered set', async () => {
+      await seedReader();
+      await seedEntry(ORG, { createdAt: '2026-01-10T00:00:00.000Z' });
+      const mid = await seedEntry(ORG, { createdAt: '2026-02-10T00:00:00.000Z' });
+      await seedEntry(ORG, { createdAt: '2026-03-10T00:00:00.000Z' });
+      await seedEntry(ORG, { eventType: 'role_removed', createdAt: '2026-02-11T00:00:00.000Z' });
+
+      const ranged = (await (
+        await getLog('?from=2026-02-01&to=2026-03-01&eventType=role_assigned')
+      ).json()) as LogBody;
+      expect(ranged.entries.map((e) => e.id)).toEqual([mid]);
+      expect(ranged.total).toBe(1);
+
+      const removed = (await (await getLog('?eventType=role_removed')).json()) as LogBody;
+      expect(removed.total).toBe(1);
+    });
+
+    it('pages with limit and offset while total stays the full count', async () => {
+      await seedReader();
+      for (let i = 0; i < 5; i++) {
+        await seedEntry(ORG, { createdAt: `2026-01-0${i + 1}T00:00:00.000Z` });
+      }
+
+      const page = (await (await getLog('?limit=2&offset=2')).json()) as LogBody;
+
+      expect(page.entries).toHaveLength(2);
+      expect(page).toMatchObject({ total: 5, limit: 2, offset: 2 });
+    });
+
+    it.each([
+      ['an unknown eventType', '?eventType=nope'],
+      ['an unparseable from', '?from=yesterday-ish'],
+      ['an unparseable to', '?to=garbage'],
+      ['a zero limit', '?limit=0'],
+      ['an over-large limit', '?limit=201'],
+      ['a negative offset', '?offset=-1'],
+      ['a fractional offset', '?offset=1.5'],
+    ])('answers 400 for %s rather than an empty page', async (_label, query) => {
+      await seedReader();
+      await seedEntry(ORG);
+
+      expect((await getLog(query)).status).toBe(400);
+    });
+
+    it('returns null metadata for a row that does not parse, not a 500', async () => {
+      await seedReader();
+      await seedEntry(ORG, { metadata: '{not json' });
+
+      const response = await getLog();
+
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as LogBody).entries[0].metadata).toBeNull();
+    });
+  });
+
   it('pins the event types that actually have a writer', async () => {
     await makeDb().updateUserRole(ORG, targetUserId, 'admin', ACTOR);
     const emitted = new Set((await readAudit()).map((row) => row.event_type));
