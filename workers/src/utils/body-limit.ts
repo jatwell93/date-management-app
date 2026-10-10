@@ -129,27 +129,12 @@ export function enforceJsonBodyLimit(
     return null;
   }
 
-  const declared = request.headers.get('Content-Length');
-  if (!declared) {
-    return null;
-  }
-
-  const size = Number(declared);
-  if (!Number.isFinite(size)) {
-    return null;
-  }
-
   const max = resolveMaxJsonBodyBytes(env);
-  if (size <= max) {
+  if (!declaredExceedsCap(request, max)) {
     return null;
   }
 
-  return errorResponse(
-    `Request body exceeds the maximum size of ${max} bytes`,
-    413,
-    env,
-    requestOrigin,
-  );
+  return tooLarge(max, env, requestOrigin);
 }
 
 /**
@@ -187,11 +172,25 @@ export async function capWebhookBody(
   requestOrigin?: string,
 ): Promise<Request | Response> {
   const max = resolveMaxWebhookBodyBytes(env);
-  const declared = Number(request.headers.get('Content-Length'));
-  if (request.headers.get('Content-Length') && Number.isFinite(declared) && declared > max) {
+  if (declaredExceedsCap(request, max)) {
     return tooLarge(max, env, requestOrigin);
   }
   return readBodyWithinCap(request, env, max, requestOrigin);
+}
+
+/** The numeric `Content-Length`, or null when absent or not a number. */
+function declaredLength(request: Request): number | null {
+  const declared = request.headers.get('Content-Length');
+  if (!declared) {
+    return null;
+  }
+  const size = Number(declared);
+  return Number.isFinite(size) ? size : null;
+}
+
+function declaredExceedsCap(request: Request, max: number): boolean {
+  const size = declaredLength(request);
+  return size !== null && size > max;
 }
 
 function tooLarge(max: number, env: Env, requestOrigin?: string): Response {
@@ -213,8 +212,7 @@ async function readBodyWithinCap(
     return request;
   }
 
-  const declared = request.headers.get('Content-Length');
-  if (declared && Number.isFinite(Number(declared))) {
+  if (declaredLength(request) !== null) {
     return request;
   }
 
