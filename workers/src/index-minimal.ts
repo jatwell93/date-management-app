@@ -110,6 +110,7 @@ import {
   type ProductWriteInput,
   type ValidatedProductWrite,
 } from '../../shared/domain/product-validation';
+import { ORG_AUDIT_EVENT_TYPES } from '../../shared/domain/org-audit';
 import { OPEN_CLAIM_STATUSES, SETTLED_CLAIM_STATUSES } from '../../shared/domain/credit-claim';
 import type { ClaimLineInput, ClaimOutcome } from './credit-claim-database';
 import {
@@ -395,6 +396,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/subscription/cancel', handleCancelSubscriptionRoute],
   ['POST', '/api/subscription/create-portal-session', handlePortalSessionRoute],
   ['GET', '/api/organization/usage', handleGetOrganizationUsage],
+  ['GET', '/api/organization/audit-log', handleGetOrgAuditLog],
   ['POST', '/api/organization/seed-demo-data', handleSeedDemoData],
   ['GET', RE_STORAGE_QUOTA_USER, handleGetStorageQuota, 'path'],
   ['GET', '/api/markdown-config', handleGetMarkdownConfig],
@@ -3546,6 +3548,71 @@ async function handleListUsers(request: Request, db: Database, env: Env): Promis
 
   const users = await db.listUsers(auth.organizationId);
   return jsonResponse(users, 200, env);
+}
+
+/**
+ * GET /api/organization/audit-log — the organization's role-grant trail (#515).
+ *
+ * Admin-only and scoped to the caller's organization in the query itself
+ * (`listOrgAuditLog`). Filters: `eventType`, `from` / `to` (ISO date or timestamp;
+ * `to` is exclusive), `limit` (1-200, default 50) and `offset`. An unknown
+ * `eventType` or an unparseable date is a 400, not an empty page: an empty page
+ * would read as "nothing was granted", which is the wrong thing for an audit trail
+ * to say about a typo.
+ */
+async function handleGetOrgAuditLog(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  // Not `canManageUsers`: that admits managers, and the trail records who was
+  // granted admin, including by managers. It is read by admins only.
+  if (normalizeRole(auth.role) !== ROLES.ADMIN) {
+    return errorResponse('Only admins can read the audit log', 403, env);
+  }
+
+  const params = new URL(request.url).searchParams;
+
+  const allowedEventTypes: string[] = Object.values(ORG_AUDIT_EVENT_TYPES);
+  const eventType = params.get('eventType') ?? undefined;
+  if (eventType !== undefined && !allowedEventTypes.includes(eventType)) {
+    return errorResponse(`Invalid eventType. Allowed: ${allowedEventTypes.join(', ')}`, 400, env);
+  }
+
+  const dates: Record<'from' | 'to', string | undefined> = { from: undefined, to: undefined };
+  for (const key of ['from', 'to'] as const) {
+    const raw = params.get(key);
+    if (raw === null) continue;
+    const parsed = new Date(raw);
+    // `Date` accepts years Postgres rejects (0000, negative, beyond 9999), which
+    // would surface as a 500 from the query, so bound the year to 1-9999 here.
+    const year = parsed.getUTCFullYear();
+    if (Number.isNaN(parsed.getTime()) || year < 1 || year > 9999) {
+      return errorResponse(`Invalid ${key}: expected an ISO date or timestamp`, 400, env);
+    }
+    dates[key] = parsed.toISOString();
+  }
+
+  const limitRaw = params.get('limit');
+  const offsetRaw = params.get('offset');
+  const limit = limitRaw === null ? 50 : parsePositiveInt(limitRaw);
+  let offset: number | null = null;
+  if (offsetRaw === null) {
+    offset = 0;
+  } else if (/^[0-9]+$/.test(offsetRaw)) {
+    offset = Number(offsetRaw);
+  }
+  if (limit === null || limit > 200 || offset === null || !Number.isSafeInteger(offset)) {
+    return errorResponse('limit must be 1-200 and offset a non-negative integer', 400, env);
+  }
+
+  const { entries, total } = await db.listOrgAuditLog(auth.organizationId, {
+    eventType,
+    from: dates.from,
+    to: dates.to,
+    limit,
+    offset,
+  });
+  return jsonResponse({ entries, total, limit, offset }, 200, env);
 }
 
 /**

@@ -388,6 +388,10 @@ export interface Database {
 
   // Users CRUD
   listUsers(organizationId: string): Promise<UserListItem[]>;
+  listOrgAuditLog(
+    organizationId: string,
+    filters: OrgAuditLogFilters,
+  ): Promise<{ entries: OrgAuditLogEntry[]; total: number }>;
   createOrganizationUser(
     organizationId: string,
     data: { username: string | null; role: string; seatCap: number; actor: RoleChangeActor },
@@ -849,6 +853,44 @@ export interface RecentInventoryItem {
   locationName: string | null;
   status: string | null;
   createdAt: string;
+}
+
+export interface OrgAuditLogFilters {
+  eventType?: string;
+  /** Inclusive lower bound on `created_at` (ISO timestamp). */
+  from?: string;
+  /** Exclusive upper bound on `created_at` (ISO timestamp). */
+  to?: string;
+  limit: number;
+  offset: number;
+}
+
+/** One `org_audit_log` row with the actor and target resolved to usernames. */
+export interface OrgAuditLogEntry {
+  id: number;
+  eventType: string;
+  actorUserId: number | null;
+  actorUsername: string | null;
+  targetUserId: number | null;
+  targetUsername: string | null;
+  oldRole: string | null;
+  newRole: string | null;
+  ipAddress: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** `metadata` is stored as TEXT; a row that does not parse yields null, not a 500. */
+function parseAuditMetadata(raw: unknown): Record<string, unknown> | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface UserListItem {
@@ -3779,6 +3821,76 @@ export function createWorkersDatabase(env: Env): Database {
           AND deleted_at IS NULL
         ORDER BY created_at ASC
       `) as UserListItem[];
+    },
+
+    /**
+     * Read the organization's role-grant trail, newest first (#515).
+     *
+     * Every table in the statement is constrained to `organizationId`, including
+     * the username joins: `actor_user_id` / `target_user_id` carry no foreign key,
+     * so an unscoped join could resolve a name from another tenant. Soft-deleted
+     * users still resolve, because the trail must keep naming who did what after
+     * they leave.
+     */
+    async listOrgAuditLog(
+      organizationId: string,
+      filters: OrgAuditLogFilters,
+    ): Promise<{ entries: OrgAuditLogEntry[]; total: number }> {
+      const eventType = filters.eventType ?? null;
+      const from = filters.from ?? null;
+      const to = filters.to ?? null;
+      const [rows, counted] = await Promise.all([
+        sql`
+          SELECT l.id,
+                 l.event_type AS "eventType",
+                 l.actor_user_id AS "actorUserId",
+                 actor.username AS "actorUsername",
+                 l.target_user_id AS "targetUserId",
+                 target.username AS "targetUsername",
+                 l.old_role AS "oldRole",
+                 l.new_role AS "newRole",
+                 l.ip_address AS "ipAddress",
+                 l.metadata,
+                 -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+                 -- column is naive UTC, so state the zone explicitly.
+                 to_char(l.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt"
+          FROM org_audit_log l
+          LEFT JOIN users actor
+            ON actor.id = l.actor_user_id AND actor.organization_id = l.organization_id
+          LEFT JOIN users target
+            ON target.id = l.target_user_id AND target.organization_id = l.organization_id
+          WHERE l.organization_id = ${organizationId}
+            AND (${eventType}::text IS NULL OR l.event_type = ${eventType})
+            AND (${from}::timestamptz IS NULL OR l.created_at >= (${from}::timestamptz AT TIME ZONE 'UTC'))
+            AND (${to}::timestamptz IS NULL OR l.created_at < (${to}::timestamptz AT TIME ZONE 'UTC'))
+          ORDER BY l.created_at DESC, l.id DESC
+          LIMIT ${filters.limit} OFFSET ${filters.offset}
+        `,
+        sql`
+          SELECT COUNT(*)::int AS total
+          FROM org_audit_log l
+          WHERE l.organization_id = ${organizationId}
+            AND (${eventType}::text IS NULL OR l.event_type = ${eventType})
+            AND (${from}::timestamptz IS NULL OR l.created_at >= (${from}::timestamptz AT TIME ZONE 'UTC'))
+            AND (${to}::timestamptz IS NULL OR l.created_at < (${to}::timestamptz AT TIME ZONE 'UTC'))
+        `,
+      ]);
+      return {
+        total: Number(counted[0]?.total ?? 0),
+        entries: rows.map((row) => ({
+          id: Number(row.id),
+          eventType: String(row.eventType),
+          actorUserId: row.actorUserId == null ? null : Number(row.actorUserId),
+          actorUsername: (row.actorUsername as string | null) ?? null,
+          targetUserId: row.targetUserId == null ? null : Number(row.targetUserId),
+          targetUsername: (row.targetUsername as string | null) ?? null,
+          oldRole: (row.oldRole as string | null) ?? null,
+          newRole: (row.newRole as string | null) ?? null,
+          ipAddress: (row.ipAddress as string | null) ?? null,
+          metadata: parseAuditMetadata(row.metadata),
+          createdAt: String(row.createdAt),
+        })),
+      };
     },
 
     /**
