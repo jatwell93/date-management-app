@@ -1,7 +1,7 @@
 # organization-rbac-admin-manager-team-member Specification
 
 ## Purpose
-TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+Define the canonical organization roles (admin, manager, team member) and the central guard that authorizes actions by role.
 
 ## Requirements
 

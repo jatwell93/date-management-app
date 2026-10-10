@@ -1,7 +1,7 @@
 # store-walk-tracking Specification
 
 ## Purpose
-TBD - created by archiving change add-store-walk-bay-tracking. Update Purpose after archive.
+Track store walks as repeatable cycles over a department-to-bay hierarchy, record each bay check as an event, and report coverage and checking productivity.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # brand-supplier-mapping Specification
 
 ## Purpose
-TBD - created by archiving change add-brand-supplier-mapping. Update Purpose after archive.
+Map products to brands and brands to suppliers through a curated master catalogue, so expired items resolve to a supplier credit policy with minimal manual entry. Inferred links stay suggestions the user confirms.
 
 ## Requirements
 

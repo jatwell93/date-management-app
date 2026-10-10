@@ -1,7 +1,7 @@
 # cloudflare-workers-api Specification
 
 ## Purpose
-TBD - created by archiving change extract-worker-clerk-catalogue-import. Update Purpose after archive.
+Define the behavior the Cloudflare Worker API (Neon Postgres) must preserve at its entrypoint, including Clerk auth, catalogue import, bootstrap, and expired-items routes.
 
 ## Requirements
 

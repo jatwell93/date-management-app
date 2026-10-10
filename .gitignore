@@ -23,10 +23,6 @@ out/
 *.manifest.json
 *.pgdump.sql
 
-# Real pharmacy product export. Kept ignored even though backend/ was deleted,
-# because a local copy can remain at this path.
-backend/src/tests/fixtures/real-pharmacy-products.csv
-
 # Memvid local index
 # Derived index, rebuildable from memory.jsonl. See scripts/mem-rebuild.js.
 project-memory.mv2

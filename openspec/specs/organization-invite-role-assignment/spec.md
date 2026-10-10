@@ -1,7 +1,7 @@
 # organization-invite-role-assignment Specification
 
 ## Purpose
-TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+Define the invite lifecycle that adds users to an organization with an assigned role, and how invite tokens are stored.
 ## Requirements
 ### Requirement: Invite lifecycle with role assignment
 

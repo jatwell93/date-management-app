@@ -1,7 +1,7 @@
 # dependency-currency Specification
 
 ## Purpose
-TBD - created by archiving change upgrade-deferred-dependency-majors. Update Purpose after archive.
+Keep dependency and toolchain major upgrades safe: preserve the npm supply-chain policy, runtime behavior of security-sensitive packages, and CI gates.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # supplier-credit-claims Specification
 
 ## Purpose
-TBD - created by archiving change add-supplier-credit-claims. Update Purpose after archive.
+Let users claim supplier credit for expired write-offs: reusable supplier credit policies, claimable pools, server-sent claims with verified timestamps, follow-up reminders, outcome tracking, and recovery reporting.
 ## Requirements
 ### Requirement: Suppliers carry a reusable credit policy
 

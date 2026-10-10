@@ -1,7 +1,7 @@
 # clerk-org-first-login-bootstrap Specification
 
 ## Purpose
-TBD - created by archiving change add-clerk-organization-management-rbac. Update Purpose after archive.
+Create the organization and its first admin when a Clerk user signs in for the first time, so a new tenant becomes usable without operator setup.
 
 ## Requirements
 

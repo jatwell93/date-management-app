@@ -1,7 +1,7 @@
 # reporting-ui Specification
 
 ## Purpose
-TBD - created by archiving change fix-expiry-summary-counts. Update Purpose after archive.
+Specify the expiry and expired-items report UI, including summary counts, write-off submission, quantity validation, and print layout.
 ## Requirements
 ### Requirement: Expiry Summary Counts Display
 The system SHALL display accurate expiry summary counts in the reporting UI.
