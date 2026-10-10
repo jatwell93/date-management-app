@@ -188,6 +188,58 @@ describe('JSON body cap, through the entry point', () => {
     expect(response.status).toBe(413);
   });
 
+  describe('chunked bodies, which declare no Content-Length (#532)', () => {
+    // A streamed body sends no Content-Length, which is what walked past the
+    // header check. 2 MiB in 64 KiB chunks is over the 1 MiB default cap.
+    const chunkedRequest = (path: string, totalBytes: number) => {
+      const chunk = new Uint8Array(64 * 1024).fill(120);
+      let sent = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent >= totalBytes) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(chunk);
+          sent += chunk.byteLength;
+        },
+      });
+      return new Request(`https://api.example.com${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        duplex: 'half',
+      } as RequestInit);
+    };
+
+    it.each([
+      '/api/products',
+      '/api/organization/bootstrap',
+      '/api/upload/initiate',
+      '/upload/complete',
+    ])('refuses an oversized chunked body on %s with 413', async (path) => {
+      const request = chunkedRequest(path, 2 * 1024 * 1024);
+      expect(request.headers.get('Content-Length')).toBeNull();
+
+      const response = await fetchWorker(request);
+
+      expect(response.status).toBe(413);
+    });
+
+    it('lets a small chunked body through to normal handling', async () => {
+      const response = await fetchWorker(chunkedRequest('/api/products', 64 * 1024));
+
+      // Unauthenticated, so refused for auth reasons, not size.
+      expect(response.status).not.toBe(413);
+    });
+
+    it('does not cap a chunked webhook delivery', async () => {
+      const response = await fetchWorker(chunkedRequest('/api/webhooks/stripe', 2 * 1024 * 1024));
+
+      expect(response.status).not.toBe(413);
+    });
+  });
+
   it('does not refuse a webhook delivery', async () => {
     // Refusing a Stripe or Clerk delivery unread turns a provider retry loop
     // into a silent data gap. Webhooks dispatch above the API branch entirely.

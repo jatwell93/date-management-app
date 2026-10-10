@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
 import { getConnectionString } from '../utils/db-connection';
-import { enforceJsonBodyLimit } from '../utils/body-limit';
+import { capUndeclaredBody, enforceJsonBodyLimit } from '../utils/body-limit';
 import {
   deriveUsername,
   ensureTrialSubscription,
@@ -227,6 +227,11 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   if (oversizedBody) {
     return oversizedBody;
   }
+  // A chunked body declares no length, so read it up to the cap (#532).
+  const cappedRequest = await capUndeclaredBody(request, env, requestOrigin);
+  if (cappedRequest instanceof Response) {
+    return cappedRequest;
+  }
 
   const authResult = await authenticateClerkRequest(request, env, requestOrigin);
 
@@ -237,7 +242,7 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   let body: OrganizationBootstrapBody = {};
 
   try {
-    const rawBody = await request.text();
+    const rawBody = await cappedRequest.text();
     body = rawBody ? (JSON.parse(rawBody) as OrganizationBootstrapBody) : {};
   } catch {
     return errorResponse('Invalid request body', 400, env, requestOrigin);
