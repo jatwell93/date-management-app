@@ -342,6 +342,28 @@ describe('Workers credit-claim writes (real SQL)', () => {
       expect(result.message).toContain('no units to claim');
     });
 
+    it('refuses a line claiming more units than were written off', async () => {
+      const result = await db.buildCreditClaim(
+        ORG,
+        { supplierId, lines: [{ expiredItemTransactionId: writeOffIds[0], unitsClaimed: 7 }] },
+        42,
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe('VALIDATION');
+      expect(result.message).toContain('discarded only 6 units');
+      expect(await sql`SELECT id FROM credit_claims`).toHaveLength(0);
+    });
+
+    it('accepts a line claiming exactly the units written off', async () => {
+      const result = await db.buildCreditClaim(
+        ORG,
+        { supplierId, lines: [{ expiredItemTransactionId: writeOffIds[0], unitsClaimed: 6 }] },
+        42,
+      );
+      expect(result.ok).toBe(true);
+    });
+
     it('reports a missing supplier as not-found, distinctly from a validation refusal', async () => {
       const result = await db.buildCreditClaim(
         ORG,
@@ -360,6 +382,10 @@ describe('Workers credit-claim writes (real SQL)', () => {
      * half-applied. Without CTE atomicity this test finds an orphaned claim row.
      */
     it('rolls the whole build back when the line insert fails', async () => {
+      // The write-off must really hold 5000 units, or the new bound refuses the line
+      // before it reaches the insert this test is exercising.
+      await sql`
+        UPDATE expired_item_transactions SET units_discarded = 5000 WHERE id = ${writeOffIds[0]}`;
       await sql`
         ALTER TABLE credit_claim_lines
         ADD CONSTRAINT tmp_units_ceiling CHECK (units_claimed < 1000)`;

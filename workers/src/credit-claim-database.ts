@@ -134,9 +134,15 @@ function prepareClaimLine(
     return refuse(`Write-off ${id} is for a product not assigned to this supplier.`);
   }
 
-  const unitsClaimed = line.unitsClaimed ?? Number(writeOff.unitsDiscarded) ?? 0;
+  const unitsDiscarded = Number(writeOff.unitsDiscarded ?? 0);
+  const unitsClaimed = line.unitsClaimed ?? unitsDiscarded;
   if (unitsClaimed <= 0) {
     return refuse(`Write-off ${id} has no units to claim.`);
+  }
+  // A claim cannot recover more units than were written off: the figure is
+  // snapshotted into expectedCredit and emailed to the supplier (#522).
+  if (unitsClaimed > unitsDiscarded) {
+    return refuse(`Write-off ${id} discarded only ${unitsDiscarded} units.`);
   }
 
   const credit = expectedCredit(policy, unitsClaimed, Number(writeOff.costPrice));
