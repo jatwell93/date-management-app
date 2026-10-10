@@ -100,7 +100,6 @@ describe.each([
   ['/api/reports/expiry-overall', 'getOverallExpiryReport'],
   ['/api/reports/loss-by-department', 'getLossByDepartmentReport'],
   ['/api/reports/items-by-date', 'getItemsByDateReport'],
-  ['/api/reports/analytics', 'getDashboardAnalytics'],
 ])('GET %s', (path, method) => {
   it('returns what the database produced for the caller organization', async () => {
     const payload = [{ marker: path }];

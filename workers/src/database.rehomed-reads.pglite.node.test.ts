@@ -1,14 +1,12 @@
 /**
- * Real-data (pglite) coverage for the three read-only methods rehomed by task
- * 3.1.r: `findStoreAreaById` (`GET /api/store-areas/:id`), `getUsageReport`
- * (`GET /api/reports/usage`) and `getDashboardAnalytics`
- * (`GET /api/reports/analytics`).
+ * Real-data (pglite) coverage for the read-only methods rehomed by task 3.1.r:
+ * `findStoreAreaById` (`GET /api/store-areas/:id`) and `getUsageReport`
+ * (`GET /api/reports/usage`).
  *
- * **Why real SQL rather than a stubbed `sql` tag.** All three ARE queries: a
- * tenant-scoped `WHERE`, a `LEFT JOIN` with `COALESCE` grouping and four
- * `FILTER` counters, and six more `FILTER` counters over a date window. Against
- * a stub, each assertion would describe a string rather than the rows it
- * selects.
+ * **Why real SQL rather than a stubbed `sql` tag.** These ARE queries: a
+ * tenant-scoped `WHERE`, and a `LEFT JOIN` with `COALESCE` grouping and
+ * `FILTER` counters. Against a stub, each assertion would describe a string
+ * rather than the rows it selects.
  *
  * Two of these were ported from SQLite, whose `LIKE` is case-insensitive where
  * Postgres's is not. Rather than assume the difference is harmless, the tests
@@ -343,101 +341,6 @@ describe('Workers rehomed read queries (real SQL)', () => {
 
       expect(report).toHaveLength(1);
       expect(report[0].itemCount).toBe(2);
-    });
-  });
-
-  describe('getDashboardAnalytics', () => {
-    it('counts products, inventory, expired, markdown and the 30-day expiry window', async () => {
-      const area = await seedArea({ name: 'Shelf' });
-      const p1 = await seedProduct('SKU-1');
-      const p2 = await seedProduct('SKU-2');
-
-      await seedInventoryItem({ productId: p1, locationId: area, status: 'Normal', daysOut: 10 });
-      await seedInventoryItem({
-        productId: p1,
-        locationId: area,
-        status: 'Markdown 2',
-        daysOut: 20,
-      });
-      await seedInventoryItem({ productId: p2, locationId: area, status: 'Expired', daysOut: -5 });
-      // Outside the 30-day window, and so counted as active but not upcoming.
-      await seedInventoryItem({ productId: p2, locationId: area, status: 'Normal', daysOut: 200 });
-
-      expect(await makeDb().getDashboardAnalytics(ORG)).toEqual({
-        totalProducts: 2,
-        totalInventoryItems: 4,
-        // Express's definition: everything whose status is not the literal
-        // 'Expired', so the Markdown 2 row counts here AND under markdownItems.
-        activeItems: 3,
-        expiredItems: 1,
-        markdownItems: 1,
-        upcomingExpiry: 2,
-      });
-    });
-
-    it('excludes an item expiring exactly 31 days out and includes one at 30', async () => {
-      const p = await seedProduct('SKU-EDGE');
-      await seedInventoryItem({ productId: p, status: 'Normal', daysOut: 30 });
-      await seedInventoryItem({ productId: p, status: 'Normal', daysOut: 31 });
-
-      const analytics = await makeDb().getDashboardAnalytics(ORG);
-
-      expect(analytics.upcomingExpiry).toBe(1);
-      expect(analytics.totalInventoryItems).toBe(2);
-    });
-
-    it('does not count an expired item in the upcoming window even when its date is in range', async () => {
-      // A row already marked Expired whose date has not passed: the status
-      // predicate in the upcoming counter is the only thing excluding it.
-      const p = await seedProduct('SKU-STATUS');
-      await seedInventoryItem({ productId: p, status: 'Expired', daysOut: 5 });
-
-      const analytics = await makeDb().getDashboardAnalytics(ORG);
-
-      expect(analytics.upcomingExpiry).toBe(0);
-      expect(analytics.expiredItems).toBe(1);
-      expect(analytics.activeItems).toBe(0);
-    });
-
-    it('counts only the requested organization, for products and inventory alike', async () => {
-      const mine = await seedProduct('SKU-MINE');
-      const theirs = await seedProduct('SKU-THEIRS', OTHER_ORG);
-      await seedInventoryItem({ productId: mine, status: 'Normal', daysOut: 5 });
-      await seedInventoryItem({
-        organizationId: OTHER_ORG,
-        productId: theirs,
-        status: 'Expired',
-        daysOut: -1,
-      });
-      await seedInventoryItem({
-        organizationId: OTHER_ORG,
-        productId: theirs,
-        status: 'Markdown 1',
-        daysOut: 3,
-      });
-
-      // Two separate predicates carry this -- one in the products subquery, one
-      // on the outer inventory scan -- so the expectations below are written to
-      // move if either is removed.
-      expect(await makeDb().getDashboardAnalytics(ORG)).toEqual({
-        totalProducts: 1,
-        totalInventoryItems: 1,
-        activeItems: 1,
-        expiredItems: 0,
-        markdownItems: 0,
-        upcomingExpiry: 1,
-      });
-    });
-
-    it('returns zeros rather than nulls for an organization with no rows', async () => {
-      expect(await makeDb().getDashboardAnalytics(ORG)).toEqual({
-        totalProducts: 0,
-        totalInventoryItems: 0,
-        activeItems: 0,
-        expiredItems: 0,
-        markdownItems: 0,
-        upcomingExpiry: 0,
-      });
     });
   });
 });

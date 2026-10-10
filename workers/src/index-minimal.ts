@@ -360,7 +360,6 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
   ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
   ['GET', '/api/reports/usage', handleGetUsageReport],
-  ['GET', '/api/reports/analytics', handleGetAnalyticsReport],
   ['GET', '/api/expired-items', handleGetExpiredItems],
   ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
   ['GET', '/api/supplier-credits/suppliers', handleListSuppliers],
@@ -1536,37 +1535,6 @@ async function handleGetUsageReport(request: Request, db: Database, env: Env): P
   if (auth instanceof Response) return auth;
   const report = await db.getUsageReport(auth.organizationId);
   return jsonResponse(report, 200, env);
-}
-
-/**
- * GET /api/reports/analytics
- *
- * **Rehomed without Express's feature gate, deliberately.** Express wrapped
- * this route in `requireFeature('advanced_analytics')`
- * (`backend/src/routes/report.routes.ts:139`), which reads `tier_feature_flags`
- * and is enabled for `professional`, `premium` and `concierge` but not
- * `starter`. Porting that gate is not a port: the Worker has no feature-flag
- * mechanism at all, and the flag rows are keyed by a tier vocabulary
- * (`starter`/`professional`/`premium`/`concierge`) that does not match the one
- * this Worker normalizes to via `normalizeLaunchTier`. Building the gate would
- * mean inventing both the mechanism and a mapping across that boundary -- the
- * four-copies-of-a-table shape that produced #517 -- for a route with no
- * caller in either frontend.
- *
- * It is also the smaller half of what is already free: the live, ungated
- * `GET /api/dashboard` returns `totalProducts` and `totalInventoryItems` from
- * the same tables. The gate is filed as an issue instead, with the mapping
- * decision named as the open question.
- */
-async function handleGetAnalyticsReport(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
-  const auth = await authenticateApiRequest(request, env, db);
-  if (auth instanceof Response) return auth;
-  const analytics = await db.getDashboardAnalytics(auth.organizationId);
-  return jsonResponse(analytics, 200, env);
 }
 
 /**

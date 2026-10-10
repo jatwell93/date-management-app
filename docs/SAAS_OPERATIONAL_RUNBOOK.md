@@ -87,7 +87,6 @@ any → canceled (on customer cancellation)
 - **POST /inventory-items** → `checkUsageLimit('max_inventory_items')`
 - **POST /users** → `checkUsageLimit('max_users')`
 - \*_POST /uploads/_`→`checkUsageLimit('storage_bytes')`
-- **GET /api/reports/analytics** → `requireFeature('advanced_analytics')`
 
 ## Creation Lock Management
 
