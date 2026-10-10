@@ -212,10 +212,10 @@ If you previously canceled your subscription:
 
 ### Q: Can I export my data before the trial expires?
 
-**A**: Yes! You can export your products at any time:
+**A**: There is no in-app export yet.
 
-- Use **Settings → Export Data** for a full backup
-- Or use the API: `GET /api/products/export-excess`
+- If you are over the Starter tier limits, use the API: `GET /api/products/export-excess` returns only the products over the limit, not your full catalogue
+- For a full copy of your data, contact support
 
 ### Q: Will reminder emails go to spam?
 
