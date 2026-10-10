@@ -3583,7 +3583,10 @@ async function handleGetOrgAuditLog(request: Request, db: Database, env: Env): P
     const raw = params.get(key);
     if (raw === null) continue;
     const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) {
+    // `Date` accepts years Postgres rejects (0000, negative, beyond 9999), which
+    // would surface as a 500 from the query, so bound the year to 1-9999 here.
+    const year = parsed.getUTCFullYear();
+    if (Number.isNaN(parsed.getTime()) || year < 1 || year > 9999) {
       return errorResponse(`Invalid ${key}: expected an ISO date or timestamp`, 400, env);
     }
     dates[key] = parsed.toISOString();
