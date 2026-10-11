@@ -371,6 +371,86 @@ describe('POST /api/webhooks/stripe', () => {
       },
     );
 
+    it.each([
+      ['unpaid', 'professional'],
+      ['paused', 'professional'],
+      ['canceled', 'professional'],
+      ['active', 'professional'],
+    ])(
+      "does not let a new subscription's incomplete event replace a %s row",
+      async (rowStatus, tier) => {
+        // `incomplete` is only ever a first state. If it could replace a lapsed
+        // row, `deriveSubscriptionAccess` would see the price's tier on a
+        // subscription that has paid nothing; replacing a cancelled row would
+        // also discard its paid-through window.
+        await sql`
+          INSERT INTO subscription_tiers
+            (organization_id, tier_level, status, stripe_customer_id,
+             stripe_subscription_id, updated_at)
+          VALUES (${ORG}, ${tier}, ${rowStatus}, ${CUSTOMER}, 'sub_OLD', NOW())
+        `;
+
+        const response = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id: `evt_incomplete_over_${rowStatus}`,
+              type: 'customer.subscription.created',
+              subscriptionId: 'sub_NEW',
+              tier: 'premium',
+              status: 'incomplete',
+            }),
+          ),
+          ENV,
+        );
+
+        expect(response.status).toBe(200);
+        const row = await subscriptionRow();
+        expect(row.stripe_subscription_id).toBe('sub_OLD');
+        expect(row.status).toBe(rowStatus);
+        expect(row.tier_level).toBe(tier);
+      },
+    );
+
+    it('stores a first-time incomplete subscription as lapsed, then lets it become active', async () => {
+      const created = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_incomplete_new',
+            type: 'customer.subscription.created',
+            tier: 'starter',
+            status: 'incomplete',
+            metadataOrganizationId: ORG,
+          }),
+        ),
+        ENV,
+      );
+      expect(created.status).toBe(200);
+      const pending = await subscriptionRow();
+      expect(pending.status).toBe('incomplete');
+      // The price's tier is stored, but nothing has been paid yet.
+      expect(deriveSubscriptionAccess(pending)).toMatchObject({
+        effectiveTier: 'free',
+        lapsed: true,
+      });
+
+      const paid = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_incomplete_paid',
+            type: 'customer.subscription.updated',
+            tier: 'starter',
+            status: 'active',
+          }),
+        ),
+        ENV,
+      );
+      expect(paid.status).toBe(200);
+      expect(deriveSubscriptionAccess(await subscriptionRow())).toMatchObject({
+        effectiveTier: 'starter',
+        lapsed: false,
+      });
+    });
+
     it('restores paid access to an organization whose trial had already lapsed', async () => {
       // Express wrote a downgrade when a trial ended, so a late payment had to
       // undo it. Here the lapse is derived from `trial_end_date` and never

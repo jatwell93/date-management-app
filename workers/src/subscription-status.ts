@@ -150,11 +150,12 @@ export function deriveSubscriptionAccess(
     return lapsed('payment-failed');
   }
 
-  if (status === 'incomplete_expired') {
-    // The first payment was never completed within Stripe's 23 hours, so the
-    // subscription is terminal and nothing was ever paid. The sync stores the
-    // tier from the price, so without this branch the row would keep a paid tier
-    // through the unrecognized-status fallthrough below.
+  if (status === 'incomplete' || status === 'incomplete_expired') {
+    // The first payment is still pending (`incomplete`, up to 23 hours) or never
+    // completed (`incomplete_expired`), so nothing has been paid. The sync stores
+    // the tier from the price, so without this branch the row would keep a paid
+    // tier through the unrecognized-status fallthrough below. A payment that
+    // succeeds moves the subscription to `active` within seconds.
     return lapsed('payment-failed');
   }
 

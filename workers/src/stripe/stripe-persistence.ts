@@ -363,11 +363,13 @@ export async function upsertSubscriptionFromStripe(
   const periodEnd =
     sync.currentPeriodEndSeconds === null ? null : new Date(sync.currentPeriodEndSeconds * 1000);
   const isPastDue = sync.status === 'past_due';
-  // A subscription whose first payment has not completed (`incomplete`) or never
-  // did (`incomplete_expired`) must not claim a trial row: it would end the
-  // trial early on a failed attempt, and the sync stores the tier from the
-  // price, so the row would keep a paid tier it never paid for. The trial row
-  // stays as it was, and the payment that eventually succeeds claims it.
+  // `incomplete` and `incomplete_expired` are only ever a subscription's first
+  // states: Stripe never moves a subscription back to them. So such an event may
+  // create a row or advance a row that is itself still never-paid, and nothing
+  // else. Replacing a trial row would end the trial on a failed attempt;
+  // replacing a lapsed or cancelled row would discard a paid-through window; and
+  // a stale one arriving after the subscription went `active` would downgrade
+  // it. The payment that eventually succeeds claims the row as usual.
   const neverPaid = sync.status === 'incomplete' || sync.status === 'incomplete_expired';
 
   // `prior` reads the row as it was before this statement, so the same round trip can say
@@ -432,7 +434,13 @@ export async function upsertSubscriptionFromStripe(
                 'canceled', 'cancelled', 'incomplete_expired', 'unpaid', 'paused'
               )
             )
-        AND NOT (${neverPaid}::boolean AND subscription_tiers.status = 'trialing')
+        AND (
+              NOT ${neverPaid}::boolean
+           OR (
+                subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+            AND subscription_tiers.status IN ('incomplete', 'incomplete_expired')
+              )
+            )
     RETURNING organization_id,
               (${isPastDue}
                  AND NOT EXISTS (SELECT 1 FROM prior WHERE past_due_since IS NOT NULL)
