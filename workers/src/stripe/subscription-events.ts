@@ -209,7 +209,7 @@ export async function processSubscriptionEvent(
     // The organization is already committed to a different live subscription,
     // so this is a late delivery about one that has been superseded. Leaving
     // the row alone is correct; leaving it unsaid is not.
-    console.warn('[STRIPE_WEBHOOK] Sync skipped: organization holds a different subscription', {
+    console.warn('[STRIPE_WEBHOOK] Sync skipped: superseded, or first payment not completed', {
       eventId,
       eventType,
       organizationId,

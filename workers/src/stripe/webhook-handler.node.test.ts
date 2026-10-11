@@ -317,6 +317,60 @@ describe('POST /api/webhooks/stripe', () => {
       expect(row.past_due_since).toBeNull();
     });
 
+    it.each(['incomplete', 'incomplete_expired'])(
+      'leaves a running trial alone when the first payment is %s',
+      async (status) => {
+        // A failed first payment must not cut the trial short or hand the
+        // organization the price's tier: the trial row stays exactly as it was.
+        await sql`
+          INSERT INTO subscription_tiers
+            (organization_id, tier_level, status, trial_end_date, stripe_customer_id, updated_at)
+          VALUES (${ORG}, 'professional', 'trialing', NOW() + INTERVAL '1 day', ${CUSTOMER}, NOW())
+        `;
+        const before = await subscriptionRow();
+
+        const response = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id: `evt_first_payment_${status}`,
+              type: 'customer.subscription.created',
+              tier: 'starter',
+              status,
+            }),
+          ),
+          ENV,
+        );
+
+        expect(response.status).toBe(200);
+        const row = await subscriptionRow();
+        expect(row.status).toBe('trialing');
+        expect(row.stripe_subscription_id).toBeNull();
+        expect(row.tier_level).toBe(before.tier_level);
+        expect(new Date(row.trial_end_date).getTime()).toBe(
+          new Date(before.trial_end_date).getTime(),
+        );
+        expect(deriveSubscriptionAccess(row)).toMatchObject({ lapsed: false });
+
+        // The retry that works claims the same row and ends the trial.
+        const paid = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id: `evt_retry_paid_${status}`,
+              type: 'customer.subscription.updated',
+              tier: 'starter',
+              status: 'active',
+            }),
+          ),
+          ENV,
+        );
+        expect(paid.status).toBe(200);
+        const claimed = await subscriptionRow();
+        expect(claimed.status).toBe('active');
+        expect(claimed.stripe_subscription_id).toBe(SUBSCRIPTION);
+        expect(claimed.trial_end_date).toBeNull();
+      },
+    );
+
     it('restores paid access to an organization whose trial had already lapsed', async () => {
       // Express wrote a downgrade when a trial ended, so a late payment had to
       // undo it. Here the lapse is derived from `trial_end_date` and never

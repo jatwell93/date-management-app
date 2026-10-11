@@ -363,6 +363,12 @@ export async function upsertSubscriptionFromStripe(
   const periodEnd =
     sync.currentPeriodEndSeconds === null ? null : new Date(sync.currentPeriodEndSeconds * 1000);
   const isPastDue = sync.status === 'past_due';
+  // A subscription whose first payment has not completed (`incomplete`) or never
+  // did (`incomplete_expired`) must not claim a trial row: it would end the
+  // trial early on a failed attempt, and the sync stores the tier from the
+  // price, so the row would keep a paid tier it never paid for. The trial row
+  // stays as it was, and the payment that eventually succeeds claims it.
+  const neverPaid = sync.status === 'incomplete' || sync.status === 'incomplete_expired';
 
   // `prior` reads the row as it was before this statement, so the same round trip can say
   // whether this event is the one that put the organization into dunning. Serialized events
@@ -419,11 +425,14 @@ export async function upsertSubscriptionFromStripe(
             ELSE NULL
           END,
           updated_at = NOW()
-      WHERE subscription_tiers.stripe_subscription_id IS NULL
-         OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
-         OR subscription_tiers.status IN (
-              'canceled', 'cancelled', 'incomplete_expired', 'unpaid', 'paused'
+      WHERE (
+              subscription_tiers.stripe_subscription_id IS NULL
+           OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+           OR subscription_tiers.status IN (
+                'canceled', 'cancelled', 'incomplete_expired', 'unpaid', 'paused'
+              )
             )
+        AND NOT (${neverPaid}::boolean AND subscription_tiers.status = 'trialing')
     RETURNING organization_id,
               (${isPastDue}
                  AND NOT EXISTS (SELECT 1 FROM prior WHERE past_due_since IS NOT NULL)
