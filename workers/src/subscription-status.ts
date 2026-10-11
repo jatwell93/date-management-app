@@ -151,8 +151,10 @@ export function deriveSubscriptionAccess(
   }
 
   if (status === 'paused') {
-    // A trial that ended with no payment method on file, under Stripe's
-    // "pause" setting. The customer never paid, so there is nothing to keep.
+    // Stripe's `paused` covers two origins: a trial that ended with no payment
+    // method on file (trial end_behavior "pause"), and a merchant pause with
+    // `pause_collection.behavior: 'void'`. Nothing is billed in either case, so
+    // there is nothing to keep.
     return lapsed('subscription-paused');
   }
 

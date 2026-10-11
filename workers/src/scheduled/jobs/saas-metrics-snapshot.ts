@@ -203,16 +203,21 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
     const arpuCents = payingCustomers > 0 ? mrrCents / payingCustomers : null;
 
     // The deliberate exclusion from the candidates query, made visible:
-    // Stripe statuses the derivation does not recognize (e.g. 'unpaid', or a
-    // status a future writer introduces) cannot be judged "still paying", so
+    // Stripe statuses the derivation does not recognize (e.g. a status a future
+    // writer introduces, or 'incomplete') cannot be judged "still paying", so
     // they are kept out of the revenue number and counted here instead of
-    // dropped silently. Recognized non-paying states — trialing, and canceled
-    // rows outside their paid window — are excluded above, not counted here.
+    // dropped silently. Recognized non-paying states — trialing, unpaid, paused,
+    // and canceled rows outside their paid window — are excluded above, not
+    // counted here. Keep the NOT IN list below in step with the statuses
+    // `deriveSubscriptionAccess` recognizes.
     const unrecognizedRows = (await sql`
       SELECT COUNT(*)::int AS unrecognized
       FROM subscription_tiers
       WHERE stripe_subscription_id IS NOT NULL
-        AND status NOT IN ('active', 'past_due', 'trialing', 'canceled', 'cancelled', 'incomplete_expired')
+        AND status NOT IN (
+          'active', 'past_due', 'trialing', 'unpaid', 'paused',
+          'canceled', 'cancelled', 'incomplete_expired'
+        )
     `) as Array<{ unrecognized: number }>;
     const unrecognizedCustomers = unrecognizedRows[0]?.unrecognized ?? 0;
 

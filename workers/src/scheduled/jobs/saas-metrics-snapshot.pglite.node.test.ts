@@ -342,10 +342,10 @@ describe('saas-metrics-snapshot job (pglite)', () => {
   });
 
   it('counts an unrecognized Stripe status separately instead of failing it open into paying', async () => {
-    // 'unpaid' is a real Stripe status the derivation does not recognize. The
-    // request path fails it open; a revenue metric must not — so it is
+    // 'incomplete' is a real Stripe status the derivation does not recognize.
+    // The request path fails it open; a revenue metric must not — so it is
     // excluded from paying and surfaced in unrecognizedCustomers.
-    await seedTier('org_unpaid', { status: 'unpaid', tierLevel: 'starter' });
+    await seedTier('org_incomplete', { status: 'incomplete', tierLevel: 'starter' });
 
     const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
 
@@ -367,6 +367,25 @@ describe('saas-metrics-snapshot job (pglite)', () => {
       unrecognizedCustomers: 1,
     });
   });
+
+  it.each(['unpaid', 'paused'])(
+    'does not count a %s row as unrecognized or as paying',
+    async (status) => {
+      // Both are recognized lapses in `deriveSubscriptionAccess`, so they are a
+      // known non-paying state: out of revenue, and not log noise that could
+      // mask a genuinely unknown status.
+      await seedTier(`org_${status}`, { status, tierLevel: 'starter' });
+
+      const result = await saasMetricsSnapshotJob.run({ env: ENV, sql, asOf: AS_OF });
+
+      expect(result.summary).toMatchObject({
+        payingCustomers: 0,
+        mrrCents: 0,
+        unrecognizedCustomers: 0,
+      });
+      expect(warnSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not count a legitimately excluded canceled row as unrecognized', async () => {
     // Canceled outside the paid window is excluded by the candidates

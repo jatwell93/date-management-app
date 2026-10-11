@@ -948,8 +948,9 @@ export async function resolveAuthenticatedUser(
  * has expired. Returns a 403 to short-circuit on, or `null`.
  *
  * Other lapse states (`cancellation-window-elapsed`, `dunning-grace-elapsed`,
- * `payment-failed`, `subscription-paused`) are not refused here: they degrade the organization to the free tier, and the
- * free-tier caps (`USAGE_LIMITS_ENFORCE`) decide whether it can still create.
+ * `payment-failed`, `subscription-paused`) are not refused here: they degrade
+ * the organization to the free tier, and the free-tier caps
+ * (`USAGE_LIMITS_ENFORCE`) decide whether it can still create.
  * Decided 2026-10-07; see the policy comment at the refusal below.
  *
  * **Creation only, deliberately.** Reads and edits of existing data stay open in
