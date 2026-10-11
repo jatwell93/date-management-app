@@ -344,8 +344,11 @@ export async function resolveOrganizationIdForStripeEvent(
  * - the stored id is NULL — a trial row from `ensureTrialSubscription`, which
  *   the first real Stripe subscription is supposed to claim;
  * - the stored id is this same subscription — the ordinary update;
- * - the stored subscription is finished — the genuine resubscribe, where a
- *   cancelled subscription is replaced by a new one.
+ * - the stored subscription is finished or lapsed — the genuine resubscribe,
+ *   where a cancelled subscription is replaced by a new one. `unpaid` and
+ *   `paused` count: `deriveSubscriptionAccess` lapses both to the free tier at
+ *   once, so a row stuck in either would otherwise refuse the new subscription
+ *   a customer has just paid for and leave them on `free`.
  *
  * Stripe keeps the subscription id across a plan change (it updates the items),
  * so an upgrade or downgrade is the second case and is unaffected. Returning
@@ -418,7 +421,9 @@ export async function upsertSubscriptionFromStripe(
           updated_at = NOW()
       WHERE subscription_tiers.stripe_subscription_id IS NULL
          OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
-         OR subscription_tiers.status IN ('canceled', 'cancelled', 'incomplete_expired')
+         OR subscription_tiers.status IN (
+              'canceled', 'cancelled', 'incomplete_expired', 'unpaid', 'paused'
+            )
     RETURNING organization_id,
               (${isPastDue}
                  AND NOT EXISTS (SELECT 1 FROM prior WHERE past_due_since IS NOT NULL)

@@ -626,6 +626,37 @@ describe('POST /api/webhooks/stripe', () => {
       expect(row.tier_level).toBe('professional');
     });
 
+    it.each(['unpaid', 'paused'])(
+      'lets a new subscription take over a row whose subscription is %s',
+      async (status) => {
+        // `deriveSubscriptionAccess` lapses these two to free at once. If the
+        // row also refused a replacement, a customer who paid for a fresh
+        // subscription would stay on free: the write is skipped, not failed.
+        await sql`
+          INSERT INTO subscription_tiers
+            (organization_id, tier_level, status, stripe_customer_id,
+             stripe_subscription_id, updated_at)
+          VALUES (${ORG}, 'professional', ${status}, ${CUSTOMER}, 'sub_OLD', NOW())
+        `;
+
+        const resubscribe = await stripeRequest(
+          subscriptionEvent({
+            id: `evt_resubscribe_${status}`,
+            type: 'customer.subscription.created',
+            subscriptionId: 'sub_NEW',
+            tier: 'professional',
+          }),
+        );
+
+        expect((await handleStripeWebhook(resubscribe, ENV)).status).toBe(200);
+
+        const row = await subscriptionRow();
+        expect(row.stripe_subscription_id).toBe('sub_NEW');
+        expect(row.status).toBe('active');
+        expect(row.tier_level).toBe('professional');
+      },
+    );
+
     it('does not cancel a subscription that has already replaced the deleted one', async () => {
       // The race Sentry's bot review found on PR #526 (CRITICAL):
       //   1. sub_OLD is deleted; the event fails and the claim is released.
