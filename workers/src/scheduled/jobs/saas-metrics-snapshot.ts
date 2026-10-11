@@ -207,8 +207,8 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
     // writer introduces, or 'incomplete') cannot be judged "still paying", so
     // they are kept out of the revenue number and counted here instead of
     // dropped silently. Recognized non-paying states — trialing, unpaid, paused,
-    // and canceled rows outside their paid window — are excluded above, not
-    // counted here. Keep the NOT IN list below in step with the statuses
+    // incomplete_expired, and canceled rows outside their paid window — are
+    // excluded above, not counted here. Keep the NOT IN list below in step with the statuses
     // `deriveSubscriptionAccess` recognizes.
     const unrecognizedRows = (await sql`
       SELECT COUNT(*)::int AS unrecognized

@@ -150,11 +150,21 @@ export function deriveSubscriptionAccess(
     return lapsed('payment-failed');
   }
 
+  if (status === 'incomplete_expired') {
+    // The first payment was never completed within Stripe's 23 hours, so the
+    // subscription is terminal and nothing was ever paid. The sync stores the
+    // tier from the price, so without this branch the row would keep a paid tier
+    // through the unrecognized-status fallthrough below.
+    return lapsed('payment-failed');
+  }
+
   if (status === 'paused') {
-    // Stripe's `paused` covers two origins: a trial that ended with no payment
-    // method on file (trial end_behavior "pause"), and a merchant pause with
-    // `pause_collection.behavior: 'void'`. Nothing is billed in either case, so
-    // there is nothing to keep.
+    // Stripe sets `paused` when a trial ends with no payment method on file
+    // (trial end_behavior "pause"). The customer never paid, so there is
+    // nothing to keep. A merchant pause via `pause_collection` is a different
+    // thing: Stripe leaves that subscription's status as `active`, and the
+    // sync does not read `pause_collection`, so it is deliberately not a lapse
+    // here.
     return lapsed('subscription-paused');
   }
 

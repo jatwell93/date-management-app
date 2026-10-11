@@ -368,7 +368,7 @@ describe('saas-metrics-snapshot job (pglite)', () => {
     });
   });
 
-  it.each(['unpaid', 'paused'])(
+  it.each(['unpaid', 'paused', 'incomplete_expired'])(
     'does not count a %s row as unrecognized or as paying',
     async (status) => {
       // Both are recognized lapses in `deriveSubscriptionAccess`, so they are a

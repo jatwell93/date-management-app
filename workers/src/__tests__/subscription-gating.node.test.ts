@@ -217,7 +217,7 @@ describe('organization entitlement gate (real SQL)', () => {
     expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
   });
 
-  it.each(['unpaid', 'paused'])(
+  it.each(['unpaid', 'paused', 'incomplete_expired'])(
     'degrades a %s subscription to the free tier at once and still allows creation',
     async (status) => {
       // Stripe's `unpaid` follows exhausted retries and `paused` follows a trial

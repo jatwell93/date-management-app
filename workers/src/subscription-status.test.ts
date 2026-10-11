@@ -139,6 +139,10 @@ describe('deriveSubscriptionAccess', () => {
       expectLapsed(derive({ status: 'paused' }), 'subscription-paused');
     });
 
+    it('lapses an incomplete_expired subscription: the first payment never completed', () => {
+      expectLapsed(derive({ status: 'incomplete_expired' }), 'payment-failed');
+    });
+
     it('lapses regardless of case and padding, like the other statuses', () => {
       expectLapsed(derive({ status: ' Unpaid ' }), 'payment-failed');
       expectLapsed(derive({ status: 'PAUSED' }), 'subscription-paused');
@@ -153,7 +157,7 @@ describe('deriveSubscriptionAccess', () => {
     // Express denies on canceled and lets everything else through. A new status
     // value from a future writer must be visible rather than silently locking
     // customers out of creation.
-    expect(derive({ status: 'incomplete_expired', tier_level: 'starter' })).toEqual({
+    expect(derive({ status: 'incomplete', tier_level: 'starter' })).toEqual({
       effectiveTier: 'starter',
       lapsed: false,
       reason: null,
