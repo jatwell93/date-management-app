@@ -217,6 +217,20 @@ describe('organization entitlement gate (real SQL)', () => {
     expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
   });
 
+  it.each(['unpaid', 'paused'])(
+    'degrades a %s subscription to the free tier at once and still allows creation',
+    async (status) => {
+      // Stripe's `unpaid` follows exhausted retries and `paused` follows a trial
+      // with no payment method, so neither gets a grace window of its own. Both
+      // used to fall through the unrecognized-status branch and keep paid access.
+      await seedOrganization();
+      await seedSubscription({ status, tierLevel: 'professional' });
+
+      expect(await authenticate('POST')).toMatchObject({ organizationId: ORG });
+      expect(await getOrganizationLaunchTier(ORG, harness.db)).toBe('free');
+    },
+  );
+
   it('refuses creation for a creation-locked organization whose subscription is fine', async () => {
     // The stored flag and the derived lapse are independent triggers; this one
     // would be allowed by every date-based rule in the module.

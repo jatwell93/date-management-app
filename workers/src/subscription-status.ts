@@ -39,7 +39,11 @@ export type SubscriptionAccessRow = {
 };
 
 export type SubscriptionLapseReason =
-  'trial-expired' | 'cancellation-window-elapsed' | 'dunning-grace-elapsed';
+  | 'trial-expired'
+  | 'cancellation-window-elapsed'
+  | 'dunning-grace-elapsed'
+  | 'payment-failed'
+  | 'subscription-paused';
 
 /**
  * Something the caller should log but not act on. Neither value denies access —
@@ -137,6 +141,19 @@ export function deriveSubscriptionAccess(
     }
     const graceEnds = pastDueSince.getTime() + DUNNING_GRACE_DAYS * MILLISECONDS_PER_DAY;
     return now.getTime() > graceEnds ? lapsed('dunning-grace-elapsed') : active();
+  }
+
+  if (status === 'unpaid') {
+    // Stripe sets `unpaid` only after every payment retry has failed, so the
+    // dunning grace already ran inside Stripe. A second grace here would give a
+    // non-paying customer paid-tier access for free. No date is needed.
+    return lapsed('payment-failed');
+  }
+
+  if (status === 'paused') {
+    // A trial that ended with no payment method on file, under Stripe's
+    // "pause" setting. The customer never paid, so there is nothing to keep.
+    return lapsed('subscription-paused');
   }
 
   if (status === 'active') {

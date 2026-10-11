@@ -126,6 +126,29 @@ describe('deriveSubscriptionAccess', () => {
     });
   });
 
+  describe('Stripe statuses with no grace of their own', () => {
+    // Stripe only reaches `unpaid` after every retry has failed and only
+    // reaches `paused` when no payment method was on file, so a second grace
+    // here would hand out paid access for nothing. Both used to fall through
+    // to the unrecognized-status branch and keep full access (handover item 3).
+    it('lapses an unpaid subscription immediately', () => {
+      expectLapsed(derive({ status: 'unpaid' }), 'payment-failed');
+    });
+
+    it('lapses a paused subscription immediately', () => {
+      expectLapsed(derive({ status: 'paused' }), 'subscription-paused');
+    });
+
+    it('lapses regardless of case and padding, like the other statuses', () => {
+      expectLapsed(derive({ status: ' Unpaid ' }), 'payment-failed');
+      expectLapsed(derive({ status: 'PAUSED' }), 'subscription-paused');
+    });
+
+    it('lapses even when a stale past_due_since is still on the row', () => {
+      expectLapsed(derive({ status: 'unpaid', past_due_since: at(-1) }), 'payment-failed');
+    });
+  });
+
   it('fails open on a status it does not recognize, and says so', () => {
     // Express denies on canceled and lets everything else through. A new status
     // value from a future writer must be visible rather than silently locking
