@@ -344,8 +344,11 @@ export async function resolveOrganizationIdForStripeEvent(
  * - the stored id is NULL — a trial row from `ensureTrialSubscription`, which
  *   the first real Stripe subscription is supposed to claim;
  * - the stored id is this same subscription — the ordinary update;
- * - the stored subscription is finished — the genuine resubscribe, where a
- *   cancelled subscription is replaced by a new one.
+ * - the stored subscription is finished or lapsed — the genuine resubscribe,
+ *   where a cancelled subscription is replaced by a new one. `unpaid` and
+ *   `paused` count: `deriveSubscriptionAccess` lapses both to the free tier at
+ *   once, so a row stuck in either would otherwise refuse the new subscription
+ *   a customer has just paid for and leave them on `free`.
  *
  * Stripe keeps the subscription id across a plan change (it updates the items),
  * so an upgrade or downgrade is the second case and is unaffected. Returning
@@ -360,6 +363,14 @@ export async function upsertSubscriptionFromStripe(
   const periodEnd =
     sync.currentPeriodEndSeconds === null ? null : new Date(sync.currentPeriodEndSeconds * 1000);
   const isPastDue = sync.status === 'past_due';
+  // `incomplete` and `incomplete_expired` are only ever a subscription's first
+  // states: Stripe never moves a subscription back to them. So such an event may
+  // create a row or advance a row that is itself still never-paid, and nothing
+  // else. Replacing a trial row would end the trial on a failed attempt;
+  // replacing a lapsed or cancelled row would discard a paid-through window; and
+  // a stale one arriving after the subscription went `active` would downgrade
+  // it. The payment that eventually succeeds claims the row as usual.
+  const neverPaid = sync.status === 'incomplete' || sync.status === 'incomplete_expired';
 
   // `prior` reads the row as it was before this statement, so the same round trip can say
   // whether this event is the one that put the organization into dunning. Serialized events
@@ -416,9 +427,20 @@ export async function upsertSubscriptionFromStripe(
             ELSE NULL
           END,
           updated_at = NOW()
-      WHERE subscription_tiers.stripe_subscription_id IS NULL
-         OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
-         OR subscription_tiers.status IN ('canceled', 'cancelled', 'incomplete_expired')
+      WHERE (
+              subscription_tiers.stripe_subscription_id IS NULL
+           OR subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+           OR subscription_tiers.status IN (
+                'canceled', 'cancelled', 'incomplete_expired', 'unpaid', 'paused'
+              )
+            )
+        AND (
+              NOT ${neverPaid}::boolean
+           OR (
+                subscription_tiers.stripe_subscription_id = EXCLUDED.stripe_subscription_id
+            AND subscription_tiers.status IN ('incomplete', 'incomplete_expired')
+              )
+            )
     RETURNING organization_id,
               (${isPastDue}
                  AND NOT EXISTS (SELECT 1 FROM prior WHERE past_due_since IS NOT NULL)

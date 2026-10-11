@@ -947,9 +947,10 @@ export async function resolveAuthenticatedUser(
  * Refuses creation for an organization that is creation-locked or whose trial
  * has expired. Returns a 403 to short-circuit on, or `null`.
  *
- * Other lapse states (`cancellation-window-elapsed`, `dunning-grace-elapsed`) are
- * not refused here: they degrade the organization to the free tier, and the
- * free-tier caps (`USAGE_LIMITS_ENFORCE`) decide whether it can still create.
+ * Other lapse states (`cancellation-window-elapsed`, `dunning-grace-elapsed`,
+ * `payment-failed`, `subscription-paused`) are not refused here: they degrade
+ * the organization to the free tier, and the free-tier caps
+ * (`USAGE_LIMITS_ENFORCE`) decide whether it can still create.
  * Decided 2026-10-07; see the policy comment at the refusal below.
  *
  * **Creation only, deliberately.** Reads and edits of existing data stay open in
@@ -1034,7 +1035,8 @@ function checkOrganizationEntitlement(
   // anything. The lock is checked first because it names a different remedy.
   //
   // **Only an expired trial is refused outright.** A cancellation or a
-  // non-payment lapse (`cancellation-window-elapsed`, `dunning-grace-elapsed`)
+  // non-payment lapse (`cancellation-window-elapsed`, `dunning-grace-elapsed`,
+  // `payment-failed`, `subscription-paused`)
   // degrades the organization to the free tier instead, and the free-tier caps
   // (`USAGE_LIMITS_ENFORCE`) decide whether it can still create. That is what
   // Express did: the dunning job moved the organization to free and locked

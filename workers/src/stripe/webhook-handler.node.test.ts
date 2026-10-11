@@ -317,6 +317,140 @@ describe('POST /api/webhooks/stripe', () => {
       expect(row.past_due_since).toBeNull();
     });
 
+    it.each(['incomplete', 'incomplete_expired'])(
+      'leaves a running trial alone when the first payment is %s',
+      async (status) => {
+        // A failed first payment must not cut the trial short or hand the
+        // organization the price's tier: the trial row stays exactly as it was.
+        await sql`
+          INSERT INTO subscription_tiers
+            (organization_id, tier_level, status, trial_end_date, stripe_customer_id, updated_at)
+          VALUES (${ORG}, 'professional', 'trialing', NOW() + INTERVAL '1 day', ${CUSTOMER}, NOW())
+        `;
+        const before = await subscriptionRow();
+
+        const response = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id: `evt_first_payment_${status}`,
+              type: 'customer.subscription.created',
+              tier: 'starter',
+              status,
+            }),
+          ),
+          ENV,
+        );
+
+        expect(response.status).toBe(200);
+        const row = await subscriptionRow();
+        expect(row.status).toBe('trialing');
+        expect(row.stripe_subscription_id).toBeNull();
+        expect(row.tier_level).toBe(before.tier_level);
+        expect(new Date(row.trial_end_date).getTime()).toBe(
+          new Date(before.trial_end_date).getTime(),
+        );
+        expect(deriveSubscriptionAccess(row)).toMatchObject({ lapsed: false });
+
+        // The retry that works claims the same row and ends the trial.
+        const paid = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id: `evt_retry_paid_${status}`,
+              type: 'customer.subscription.updated',
+              tier: 'starter',
+              status: 'active',
+            }),
+          ),
+          ENV,
+        );
+        expect(paid.status).toBe(200);
+        const claimed = await subscriptionRow();
+        expect(claimed.status).toBe('active');
+        expect(claimed.stripe_subscription_id).toBe(SUBSCRIPTION);
+        expect(claimed.trial_end_date).toBeNull();
+      },
+    );
+
+    it.each([
+      ['unpaid', 'professional'],
+      ['paused', 'professional'],
+      ['canceled', 'professional'],
+      ['active', 'professional'],
+    ])(
+      "does not let a new subscription's incomplete event replace a %s row",
+      async (rowStatus, tier) => {
+        // `incomplete` is only ever a first state. If it could replace a lapsed
+        // row, `deriveSubscriptionAccess` would see the price's tier on a
+        // subscription that has paid nothing; replacing a cancelled row would
+        // also discard its paid-through window.
+        await sql`
+          INSERT INTO subscription_tiers
+            (organization_id, tier_level, status, stripe_customer_id,
+             stripe_subscription_id, updated_at)
+          VALUES (${ORG}, ${tier}, ${rowStatus}, ${CUSTOMER}, 'sub_OLD', NOW())
+        `;
+
+        const response = await handleStripeWebhook(
+          await stripeRequest(
+            subscriptionEvent({
+              id: `evt_incomplete_over_${rowStatus}`,
+              type: 'customer.subscription.created',
+              subscriptionId: 'sub_NEW',
+              tier: 'premium',
+              status: 'incomplete',
+            }),
+          ),
+          ENV,
+        );
+
+        expect(response.status).toBe(200);
+        const row = await subscriptionRow();
+        expect(row.stripe_subscription_id).toBe('sub_OLD');
+        expect(row.status).toBe(rowStatus);
+        expect(row.tier_level).toBe(tier);
+      },
+    );
+
+    it('stores a first-time incomplete subscription as lapsed, then lets it become active', async () => {
+      const created = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_incomplete_new',
+            type: 'customer.subscription.created',
+            tier: 'starter',
+            status: 'incomplete',
+            metadataOrganizationId: ORG,
+          }),
+        ),
+        ENV,
+      );
+      expect(created.status).toBe(200);
+      const pending = await subscriptionRow();
+      expect(pending.status).toBe('incomplete');
+      // The price's tier is stored, but nothing has been paid yet.
+      expect(deriveSubscriptionAccess(pending)).toMatchObject({
+        effectiveTier: 'free',
+        lapsed: true,
+      });
+
+      const paid = await handleStripeWebhook(
+        await stripeRequest(
+          subscriptionEvent({
+            id: 'evt_incomplete_paid',
+            type: 'customer.subscription.updated',
+            tier: 'starter',
+            status: 'active',
+          }),
+        ),
+        ENV,
+      );
+      expect(paid.status).toBe(200);
+      expect(deriveSubscriptionAccess(await subscriptionRow())).toMatchObject({
+        effectiveTier: 'starter',
+        lapsed: false,
+      });
+    });
+
     it('restores paid access to an organization whose trial had already lapsed', async () => {
       // Express wrote a downgrade when a trial ended, so a late payment had to
       // undo it. Here the lapse is derived from `trial_end_date` and never
@@ -625,6 +759,37 @@ describe('POST /api/webhooks/stripe', () => {
       expect(row.status).toBe('active');
       expect(row.tier_level).toBe('professional');
     });
+
+    it.each(['unpaid', 'paused'])(
+      'lets a new subscription take over a row whose subscription is %s',
+      async (status) => {
+        // `deriveSubscriptionAccess` lapses these two to free at once. If the
+        // row also refused a replacement, a customer who paid for a fresh
+        // subscription would stay on free: the write is skipped, not failed.
+        await sql`
+          INSERT INTO subscription_tiers
+            (organization_id, tier_level, status, stripe_customer_id,
+             stripe_subscription_id, updated_at)
+          VALUES (${ORG}, 'professional', ${status}, ${CUSTOMER}, 'sub_OLD', NOW())
+        `;
+
+        const resubscribe = await stripeRequest(
+          subscriptionEvent({
+            id: `evt_resubscribe_${status}`,
+            type: 'customer.subscription.created',
+            subscriptionId: 'sub_NEW',
+            tier: 'professional',
+          }),
+        );
+
+        expect((await handleStripeWebhook(resubscribe, ENV)).status).toBe(200);
+
+        const row = await subscriptionRow();
+        expect(row.stripe_subscription_id).toBe('sub_NEW');
+        expect(row.status).toBe('active');
+        expect(row.tier_level).toBe('professional');
+      },
+    );
 
     it('does not cancel a subscription that has already replaced the deleted one', async () => {
       // The race Sentry's bot review found on PR #526 (CRITICAL):

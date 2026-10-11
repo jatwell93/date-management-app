@@ -39,7 +39,11 @@ export type SubscriptionAccessRow = {
 };
 
 export type SubscriptionLapseReason =
-  'trial-expired' | 'cancellation-window-elapsed' | 'dunning-grace-elapsed';
+  | 'trial-expired'
+  | 'cancellation-window-elapsed'
+  | 'dunning-grace-elapsed'
+  | 'payment-failed'
+  | 'subscription-paused';
 
 /**
  * Something the caller should log but not act on. Neither value denies access —
@@ -137,6 +141,32 @@ export function deriveSubscriptionAccess(
     }
     const graceEnds = pastDueSince.getTime() + DUNNING_GRACE_DAYS * MILLISECONDS_PER_DAY;
     return now.getTime() > graceEnds ? lapsed('dunning-grace-elapsed') : active();
+  }
+
+  if (status === 'unpaid') {
+    // Stripe sets `unpaid` only after every payment retry has failed, so the
+    // dunning grace already ran inside Stripe. A second grace here would give a
+    // non-paying customer paid-tier access for free. No date is needed.
+    return lapsed('payment-failed');
+  }
+
+  if (status === 'incomplete' || status === 'incomplete_expired') {
+    // The first payment is still pending (`incomplete`, up to 23 hours) or never
+    // completed (`incomplete_expired`), so nothing has been paid. The sync stores
+    // the tier from the price, so without this branch the row would keep a paid
+    // tier through the unrecognized-status fallthrough below. A payment that
+    // succeeds moves the subscription to `active` within seconds.
+    return lapsed('payment-failed');
+  }
+
+  if (status === 'paused') {
+    // Stripe sets `paused` when a trial ends with no payment method on file
+    // (trial end_behavior "pause"). The customer never paid, so there is
+    // nothing to keep. A merchant pause via `pause_collection` is a different
+    // thing: Stripe leaves that subscription's status as `active`, and the
+    // sync does not read `pause_collection`, so it is deliberately not a lapse
+    // here.
+    return lapsed('subscription-paused');
   }
 
   if (status === 'active') {
