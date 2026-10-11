@@ -130,8 +130,6 @@ export interface Database {
 
   // Dashboard queries
   getDashboardStats(organizationId: string): Promise<DashboardStats>;
-  /** Counters behind GET /api/reports/analytics. */
-  getDashboardAnalytics(organizationId: string): Promise<DashboardAnalytics>;
   /** Audit activity grouped by role, behind GET /api/reports/usage. */
   getUsageReport(organizationId: string): Promise<UsageReportRow[]>;
   /** Idempotently seed demo store areas, products and inventory items. */
@@ -637,23 +635,6 @@ export interface DashboardStats {
   totalInventoryItems: number;
   expiringItems: number;
   expiredActionItems: number;
-}
-
-/**
- * The six counters behind `GET /api/reports/analytics`, ported from Express's
- * `ReportRepository.getDashboardAnalytics` (`backend/src/repositories/report.repository.ts:405`).
- *
- * Overlaps `DashboardStats` on its first two fields on purpose: Express served
- * two separate endpoints with two separate shapes, and the frontend reads
- * neither of these four extra counters today.
- */
-export interface DashboardAnalytics {
-  totalProducts: number;
-  totalInventoryItems: number;
-  activeItems: number;
-  expiredItems: number;
-  markdownItems: number;
-  upcomingExpiry: number;
 }
 
 /** One row of `GET /api/reports/usage`: audit activity grouped by user role. */
@@ -1672,56 +1653,6 @@ export function createWorkersDatabase(env: Env): Database {
         totalInventoryItems: inventory[0]?.count || 0,
         expiringItems: expiring[0]?.count || 0,
         expiredActionItems: expiredAction[0]?.count || 0,
-      };
-    },
-
-    async getDashboardAnalytics(organizationId: string): Promise<DashboardAnalytics> {
-      // Port of Express's `ReportRepository.getDashboardAnalytics`
-      // (`backend/src/repositories/report.repository.ts:405`), which issued six
-      // separate SQLite statements. Six statements see six snapshots, so its
-      // `activeItems + expiredItems` could disagree with its
-      // `totalInventoryItems` whenever a write landed mid-request. One statement
-      // is both a single round trip and a single snapshot.
-      //
-      // The status predicates are copied verbatim rather than rewritten against
-      // EXPIRED_WORKLIST_STATUSES: `activeItems` here means "not the literal
-      // string 'Expired'", so a 'Markdown 2' item counts as active AND as a
-      // markdown item. That double-count is Express's definition of these
-      // fields, and no caller reads them, so this is not the place to redefine
-      // them -- `getDashboardStats` above is where the non-overlapping,
-      // frontend-facing counts live.
-      //
-      // `LIKE 'Markdown%'` stays case-sensitive where SQLite's LIKE was not.
-      // The rows are written by code with exactly these spellings
-      // (`shared/domain/disposition.ts:11-16`), never typed by a human, so the
-      // two forms select the same rows; ILIKE would have widened the predicate
-      // rather than ported it.
-      const rows = await sql`
-        SELECT
-          (SELECT COUNT(*)::int FROM products WHERE organization_id = ${organizationId})
-            AS "totalProducts",
-          COUNT(*)::int AS "totalInventoryItems",
-          COUNT(*) FILTER (WHERE status <> ${EXPIRED_STATUS})::int AS "activeItems",
-          COUNT(*) FILTER (WHERE status = ${EXPIRED_STATUS})::int AS "expiredItems",
-          COUNT(*) FILTER (WHERE status LIKE 'Markdown%')::int AS "markdownItems",
-          COUNT(*) FILTER (
-            WHERE expiry_date IS NOT NULL
-              AND expiry_date >= CURRENT_DATE
-              AND expiry_date <= CURRENT_DATE + INTERVAL '30 days'
-              AND status <> ${EXPIRED_STATUS}
-          )::int AS "upcomingExpiry"
-        FROM inventory_items
-        WHERE organization_id = ${organizationId}
-      `;
-
-      const row = rows[0] as DashboardAnalytics | undefined;
-      return {
-        totalProducts: row?.totalProducts ?? 0,
-        totalInventoryItems: row?.totalInventoryItems ?? 0,
-        activeItems: row?.activeItems ?? 0,
-        expiredItems: row?.expiredItems ?? 0,
-        markdownItems: row?.markdownItems ?? 0,
-        upcomingExpiry: row?.upcomingExpiry ?? 0,
       };
     },
 

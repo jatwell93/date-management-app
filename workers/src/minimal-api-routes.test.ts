@@ -2237,12 +2237,11 @@ describe('minimal API route table', () => {
     } as unknown as Database;
   }
 
-  it('registers all four routes rehomed by 3.1.r', () => {
+  it('registers the routes rehomed by 3.1.r', () => {
     expect(getMinimalRoutes()).toEqual(
       expect.arrayContaining([
         expect.arrayContaining(['POST', '/api/organization/seed-demo-data']),
         expect.arrayContaining(['GET', '/api/reports/usage']),
-        expect.arrayContaining(['GET', '/api/reports/analytics']),
       ]),
     );
     // The store-area read is registered by regex, so it is asserted by
@@ -2319,22 +2318,19 @@ describe('minimal API route table', () => {
       expect(getUsageReport).toHaveBeenCalledWith('org_123');
     });
 
-    it('returns analytics to a starter-tier team member, because the feature gate is not ported', async () => {
-      // Express refused this to any tier without `advanced_analytics`
-      // (`backend/src/routes/report.routes.ts:139`). The Worker has no
-      // feature-gate mechanism, so this asserts the divergence deliberately
-      // rather than leaving it to be discovered: if a gate is added later, this
-      // test fails and names the decision.
+    it('does not serve GET /api/reports/analytics (removed, #539)', async () => {
+      // Express gated this on `advanced_analytics`; the Worker port had no gate
+      // and no caller, so the route was deleted rather than gated (#539). If it
+      // returns, it needs a tier gate first -- this test names that decision.
       mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
-      const getDashboardAnalytics = vi.fn().mockResolvedValue({ totalProducts: 1 });
 
       const response = await resolveMinimalGet(
         '/api/reports/analytics',
-        databaseWithRole('team_member', { getDashboardAnalytics }),
+        databaseWithRole('team_member'),
       );
 
-      expect(response?.status).toBe(200);
-      expect(getDashboardAnalytics).toHaveBeenCalledWith('org_123');
+      expect(response).toBeNull();
+      expect(getMinimalRoutes().map(([, path]) => path)).not.toContain('/api/reports/analytics');
     });
   });
 
