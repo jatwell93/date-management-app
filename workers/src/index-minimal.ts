@@ -30,7 +30,13 @@ import {
 } from './utils/worker-response';
 import { buildCsv } from '../../shared/domain/csv-injection';
 import { applySecurityHeaders } from './utils/security-headers';
-import { capUndeclaredBody, capWebhookBody, enforceJsonBodyLimit } from './utils/body-limit';
+import {
+  capBodyAtBytes,
+  capUndeclaredBody,
+  capWebhookBody,
+  enforceJsonBodyLimit,
+  MULTIPART_OVERHEAD_BYTES,
+} from './utils/body-limit';
 import { logConfigOnce } from './utils/env-validation';
 import {
   applyRateLimitHeaders,
@@ -4666,7 +4672,16 @@ export async function handleUploadPresigned(
     }
   }
 
-  const data = await request.arrayBuffer();
+  // The declared check above does not see a chunked body, which declares no
+  // length. Read it up to the limit rather than buffering whatever arrives.
+  const capped = await capBodyAtBytes(request, maxFileSize, () =>
+    errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env),
+  );
+  if (capped instanceof Response) {
+    return capped;
+  }
+
+  const data = await capped.arrayBuffer();
   if (data.byteLength === 0) {
     return errorResponse('Empty upload body', 400, env);
   }
@@ -4704,7 +4719,21 @@ export async function handleUploadDirect(
     return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
   }
 
-  const formData = await request.formData();
+  // The size limit is resolved before the body is read: `formData()` buffers
+  // the whole request, so the cap has to be known first. The multipart framing
+  // makes the body a little larger than the file, hence the allowance.
+  const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
+  const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
+  const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
+
+  const capped = await capBodyAtBytes(request, maxFileSize + MULTIPART_OVERHEAD_BYTES, () =>
+    errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env),
+  );
+  if (capped instanceof Response) {
+    return capped;
+  }
+
+  const formData = await capped.formData();
   const fileValue = formData.get('file') as unknown;
   const requestedImportType =
     new URL(request.url).searchParams.get('importType') || String(formData.get('importType') || '');
@@ -4714,9 +4743,6 @@ export async function handleUploadDirect(
   }
 
   // Re-validate file size and content type
-  const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
-  const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
-  const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
   if (fileValue.size > maxFileSize) {
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
