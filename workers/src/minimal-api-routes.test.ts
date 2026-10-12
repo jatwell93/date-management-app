@@ -2334,6 +2334,84 @@ describe('minimal API route table', () => {
     });
   });
 
+  describe('user management is admin-only (managers are refused)', () => {
+    // Managers exist in production since #474: a second Clerk org:admin is
+    // stored as `manager`. `applyUserRoleChange` never looks at the actor's
+    // role, so these gates are the only thing between a manager and a takeover:
+    // demote the sole admin, which frees the one admin slot, then promote
+    // oneself into it.
+    const dispatchUsers = (method: string, pathname: string, database: Database, body?: unknown) =>
+      resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request(`https://example.com${pathname}`, {
+          method,
+          ...(body === undefined
+            ? {}
+            : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }),
+        }),
+        pathname,
+        method,
+        db: database,
+        env,
+      });
+
+    const writes = () => ({
+      listUsers: vi.fn().mockResolvedValue([]),
+      updateUserRole: vi.fn(),
+      softDeleteUser: vi.fn(),
+      createUser: vi.fn(),
+    });
+
+    it.each([
+      ['GET', '/api/users', undefined],
+      ['POST', '/api/users', { role: 'team_member', username: 'x', pin: '1234' }],
+      ['PUT', '/api/users/9', { role: 'team_member' }],
+      ['DELETE', '/api/users/9', undefined],
+    ])('refuses a manager and a team member on %s %s', async (method, pathname, body) => {
+      for (const role of ['manager', 'team_member']) {
+        mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+        const methods = writes();
+
+        const response = await dispatchUsers(
+          method,
+          pathname,
+          databaseWithRole(role, methods),
+          body,
+        );
+
+        expect(response?.status, `${role} ${method} ${pathname}`).toBe(403);
+        for (const fn of Object.values(methods)) {
+          expect(fn).not.toHaveBeenCalled();
+        }
+      }
+    });
+
+    it('still lets an admin list users, change a role and delete a user', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const methods = writes();
+      methods.updateUserRole.mockResolvedValue({
+        id: 9,
+        email: 'a@b.test',
+        username: null,
+        role: 'manager',
+        clerkUserId: 'user_9',
+        createdAt: '2026-01-01 00:00:00',
+        previousRole: 'team_member',
+      });
+      methods.softDeleteUser.mockResolvedValue(true);
+      const database = databaseWithRole('admin', methods);
+
+      const list = await dispatchUsers('GET', '/api/users', database);
+      const update = await dispatchUsers('PUT', '/api/users/9', database, { role: 'manager' });
+      const remove = await dispatchUsers('DELETE', '/api/users/9', database);
+
+      expect(list?.status).toBe(200);
+      expect(update?.status).toBe(200);
+      expect(remove?.status).toBe(200);
+      expect(methods.updateUserRole).toHaveBeenCalledTimes(1);
+      expect(methods.softDeleteUser).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('POST /api/organization/seed-demo-data', () => {
     const seedRequest = () =>
       new Request('https://example.com/api/organization/seed-demo-data', {
