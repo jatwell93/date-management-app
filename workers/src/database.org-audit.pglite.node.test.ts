@@ -377,13 +377,14 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
     });
 
     /**
-     * An admin whose stored role is still the pre-#517 spelling.
+     * An admin whose stored role holds a non-canonical privileged spelling.
      *
-     * `canManageUsers` used to compare the raw column, so `'Manager'` — which
-     * the Clerk webhook wrote for `org:admin` — matched nothing and the user
-     * got "Only admins can create users". Migration 0014 rewrites these rows,
-     * but the gate normalizes too, so a database that has not run it yet (or a
-     * replica mid-rollout) still admits the person the row plainly describes.
+     * `canManageUsers` used to compare the raw column, so a spelling other than
+     * the lowercase `'admin'` matched nothing and the user got "Only admins can
+     * create users" (#517). Migration 0014 deliberately does not rewrite the
+     * privileged aliases (`Admin`, `ADMIN`, `owner`, `org:admin`), so a row can
+     * still hold one, and the gate normalizes so it resolves to the role it
+     * plainly means.
      *
      * Since migration 0018 a migrated database refuses the spelling outright
      * (`users_role_canonical`), so this case simulates one that has not run
@@ -392,12 +393,12 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
      * Mutation check: restoring the raw `role === 'admin'` comparison turns
      * this into a 403.
      */
-    it('admits an admin whose row still holds the pre-migration spelling', async () => {
+    it('admits an admin whose row still holds a non-canonical privileged spelling', async () => {
       await sql`ALTER TABLE users DROP CONSTRAINT users_role_canonical`;
       try {
         await sql`
           INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
-          VALUES (${ORG}, 'clerk-legacy-admin', 'legacy', 'legacy@a.test', 'Manager', NOW())`;
+          VALUES (${ORG}, 'clerk-legacy-admin', 'legacy', 'legacy@a.test', 'ADMIN', NOW())`;
         await sql`
           INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
           VALUES (${ORG}, 'professional', 'active', NOW())`;
@@ -408,6 +409,36 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
         expect(await readAudit()).toHaveLength(1);
       } finally {
         // The legacy row must go before the constraint can be validated again.
+        await sql`DELETE FROM users WHERE role NOT IN ('admin', 'manager', 'team_member')`;
+        await sql`
+          ALTER TABLE users ADD CONSTRAINT users_role_canonical
+          CHECK (role IN ('admin', 'manager', 'team_member'))`;
+      }
+    });
+
+    /**
+     * A manager is refused user management, whatever the spelling.
+     *
+     * Before this, `'Manager'` (what the old Clerk webhook wrote for `org:admin`,
+     * #517) was admitted because the gate let managers through. A manager can
+     * demote the sole admin and then take the freed slot, so the gate is now
+     * admin-only and a `'Manager'` row resolves to `manager` and is refused.
+     */
+    it('refuses a manager, including one whose row holds the legacy Manager spelling', async () => {
+      await sql`ALTER TABLE users DROP CONSTRAINT users_role_canonical`;
+      try {
+        await sql`
+          INSERT INTO users (organization_id, clerk_user_id, username, email, role, updated_at)
+          VALUES (${ORG}, 'clerk-legacy-manager', 'legacy', 'legacy@a.test', 'Manager', NOW())`;
+        await sql`
+          INSERT INTO subscription_tiers (organization_id, tier_level, status, updated_at)
+          VALUES (${ORG}, 'professional', 'active', NOW())`;
+
+        const response = await postUser('team_member', 'clerk-legacy-manager');
+
+        expect(response.status).toBe(403);
+        expect(await readAudit()).toHaveLength(0);
+      } finally {
         await sql`DELETE FROM users WHERE role NOT IN ('admin', 'manager', 'team_member')`;
         await sql`
           ALTER TABLE users ADD CONSTRAINT users_role_canonical
