@@ -4677,16 +4677,9 @@ export async function handleUploadPresigned(
   }
 
   const maxFileSize = uploadContext.maxFileSize;
-  const contentLengthHeader = request.headers.get('Content-Length');
-  if (contentLengthHeader) {
-    const contentLength = parseInt(contentLengthHeader, 10);
-    if (!Number.isNaN(contentLength) && contentLength > maxFileSize) {
-      return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
-    }
-  }
 
-  // The declared check above does not see a chunked body, which declares no
-  // length. Read it up to the limit rather than buffering whatever arrives.
+  // Refuses a declared Content-Length over the limit, and reads a chunked body
+  // (which declares none) only up to the limit rather than buffering it all.
   const capped = await capBodyAtBytes(request, maxFileSize, () =>
     errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env),
   );

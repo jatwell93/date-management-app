@@ -10,6 +10,7 @@ import type { Env } from '../types/env';
 import {
   DEFAULT_MAX_JSON_BODY_BYTES,
   DEFAULT_MAX_WEBHOOK_BODY_BYTES,
+  capBodyAtBytes,
   capUndeclaredBody,
   capWebhookBody,
   resolveMaxWebhookBodyBytes,
@@ -184,6 +185,32 @@ describe('capUndeclaredBody (#532)', () => {
 
     expect(await capUndeclaredBody(get, tiny)).toBe(get);
     expect(await capUndeclaredBody(bodiless, tiny)).toBe(bodiless);
+  });
+});
+
+describe('capBodyAtBytes', () => {
+  const refuse = () => new Response('refused', { status: 400 });
+
+  it('answers with the caller-supplied refusal, not the generic 413', async () => {
+    const over = await capBodyAtBytes(post('101'), 100, refuse);
+    expect((over as Response).status).toBe(400);
+
+    const stream = new Request('https://api.example.com/upload', {
+      method: 'PUT',
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(101));
+          controller.close();
+        },
+      }),
+      duplex: 'half',
+    } as RequestInit);
+    expect(((await capBodyAtBytes(stream, 100, refuse)) as Response).status).toBe(400);
+  });
+
+  it('passes a declared length at the cap through unchanged', async () => {
+    const at = post('100');
+    expect(await capBodyAtBytes(at, 100, refuse)).toBe(at);
   });
 });
 

@@ -364,6 +364,28 @@ describe('direct upload: the file part', () => {
     expect(put).not.toHaveBeenCalled();
   });
 
+  // The body cap allows MULTIPART_OVERHEAD_BYTES of framing, so a file a little
+  // over the limit gets past it and the parsed-file check must still refuse it.
+  it('refuses a file just over the limit that fits inside the framing allowance', async () => {
+    const put = vi.fn();
+    const form = new FormData();
+    form.set(
+      'file',
+      new File([new Uint8Array(25 * 1024 * 1024 + 1000)], 'big.csv', { type: 'text/csv' }),
+    );
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await direct(form, `uploads/user-${USER_ID}/1-big.csv`, database, {
+      CSV_UPLOADS: { put },
+    } as unknown as Env);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('File size exceeds'),
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+
   // `formData()` buffers the whole request, so the size check on the parsed file
   // came too late to bound memory. The body is capped before it is parsed.
   describe('the body is capped before it is buffered', () => {
@@ -541,6 +563,30 @@ describe('presigned upload: initiate then PUT', () => {
     const response = await put(key, token, new Uint8Array(26 * 1024 * 1024), env);
 
     expect(response.status).toBe(400);
+    expect(bucketPut).not.toHaveBeenCalled();
+  });
+
+  it('refuses a declared length over the limit without reading any of the body', async () => {
+    const { database } = databaseOnTier('free', 0);
+    const { key, token } = await initiatePresigned(database);
+    const bucketPut = vi.fn();
+    const env = { ...ENV, CSV_UPLOADS: { put: bucketPut } } as unknown as Env;
+    const body = countedBody(MIB, 100);
+
+    const response = await handleUploadPresigned(
+      new Request('https://example.com/upload', {
+        method: 'PUT',
+        body: body.stream,
+        headers: { 'Content-Length': String(100 * MIB) },
+        duplex: 'half',
+      } as unknown as RequestInit),
+      env,
+      key,
+      token,
+    );
+
+    expect(response.status).toBe(400);
+    expect(body.pulled()).toBe(0);
     expect(bucketPut).not.toHaveBeenCalled();
   });
 
