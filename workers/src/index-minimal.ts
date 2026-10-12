@@ -155,9 +155,11 @@ const MAX_PROCESSING_ATTEMPTS = 5;
 // ---- Shared validation helpers ---------------------------------------------
 
 /**
- * Canonical role allowlist. Production Clerk plan only supports 'admin' and
- * 'team_member'; 'manager' is dev-only and may be enabled in dev/staging
- * once the Clerk plan is upgraded. See MEMORY[6ae2c3e4].
+ * Role lists used in the "Invalid role. Allowed: ..." message only: validation
+ * itself uses the `ROLES_DEV` superset (`isValidRole`). `manager` is a real
+ * production role -- since #474 a second Clerk `org:admin` is stored as
+ * `manager` -- so `ROLES_PROD` is a stale, narrower list and the production
+ * message omits a role that is in fact accepted.
  */
 const ROLES_PROD = new Set<string>(['admin', 'team_member']);
 const ROLES_DEV = new Set<string>(['admin', 'manager', 'team_member']);
@@ -194,8 +196,7 @@ function isValidRole(role: string): boolean {
  * degrades to the role it plainly means instead of matching nothing at all.
  */
 function canManageUsers(role: string | undefined): boolean {
-  if (!role) return false;
-  return normalizeRole(role) === ROLES.ADMIN;
+  return hasOrgRole(role, ROLES.ADMIN);
 }
 
 /**
@@ -206,9 +207,7 @@ function canManageUsers(role: string | undefined): boolean {
  * who else holds a role.
  */
 function canEditOrgSettings(role: string | undefined): boolean {
-  if (!role) return false;
-  const normalized = normalizeRole(role);
-  return normalized === ROLES.ADMIN || normalized === ROLES.MANAGER;
+  return hasOrgRole(role, ROLES.ADMIN, ROLES.MANAGER);
 }
 
 /**
@@ -220,18 +219,18 @@ function canEditOrgSettings(role: string | undefined): boolean {
  * cannot drift apart on it; only the refusal is expressed here, because a
  * `Response` and an Express `res` share no shape.
  *
- * **`admin, manager` means admin-only in production, and that is the point to
- * understand before adding a call.** `ROLES_PROD` above admits `admin` and
- * `team_member` only -- `manager` is a dev-only role that production Clerk does
- * not issue. So this gate, with Express's own argument list, refuses every
- * non-admin in production. That is why the three live store-walk writes are not
- * all gated the same way: `POST /api/store-areas/check-cycles` and its
- * `/complete` sibling are supervisory acts and are gated, while
- * `POST /api/store-areas/bay-checks` is the floor task every team member
- * performs and is deliberately left to plain authentication. Express gated all
- * three, but Express has not served them since cutover and the Worker never
- * has, so the permissive behaviour is the production baseline and narrowing it
- * is a new restriction on live traffic rather than a restoration.
+ * **`admin, manager` refuses team members, and that is the point to understand
+ * before adding a call.** `manager` is a production role (since #474 a second
+ * Clerk `org:admin` is stored as `manager`), so this gate, with Express's own
+ * argument list, admits admins and managers and refuses every team member.
+ * That is why the three live store-walk writes are not all gated the same way:
+ * `POST /api/store-areas/check-cycles` and its `/complete` sibling are
+ * supervisory acts and are gated, while `POST /api/store-areas/bay-checks` is
+ * the floor task every team member performs and is deliberately left to plain
+ * authentication. Express gated all three, but Express has not served them
+ * since cutover and the Worker never has, so the permissive behaviour is the
+ * production baseline and narrowing it is a new restriction on live traffic
+ * rather than a restoration.
  */
 function requireOrgRole(
   role: string | undefined,
@@ -3559,9 +3558,9 @@ async function handleGetOrgAuditLog(request: Request, db: Database, env: Env): P
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
-  // Not `canManageUsers`: that admits managers, and the trail records who was
-  // granted admin, including by managers. It is read by admins only.
-  if (normalizeRole(auth.role) !== ROLES.ADMIN) {
+  // Admins only: the trail records who was granted admin, so a manager must not
+  // read it.
+  if (!canManageUsers(auth.role)) {
     return errorResponse('Only admins can read the audit log', 403, env);
   }
 
@@ -4107,7 +4106,7 @@ async function handleGetCurrentSubscription(
  * batch with a live caller, and it has been 404ing since cutover.
  *
  * Gated `admin, manager`, matching Express (`org-bootstrap.routes.ts:55-61`).
- * In production that is admin-only; see `requireOrgRole` above.
+ * Team members are refused; see `requireOrgRole` above.
  */
 async function handleSeedDemoData(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
