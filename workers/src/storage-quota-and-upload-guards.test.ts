@@ -220,6 +220,34 @@ describe('upload initiate: required fields', () => {
   });
 });
 
+/**
+ * A request body that yields `chunks` chunks of `chunkBytes` each, and counts
+ * how many the handler pulled. A handler that buffers the whole body pulls all
+ * of them; one that caps it stops early. `contentLength` declares a length (the
+ * runtime sends none for a chunked upload, which is the case a
+ * `Content-Length` check cannot see).
+ */
+function countedBody(chunkBytes: number, chunks: number) {
+  let pulled = 0;
+  // highWaterMark 0: nothing is pre-pulled, so `pulled` counts only real reads.
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (pulled >= chunks) {
+          controller.close();
+          return;
+        }
+        pulled += 1;
+        controller.enqueue(new Uint8Array(chunkBytes));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, pulled: () => pulled };
+}
+
+const MIB = 1024 * 1024;
+
 describe('direct upload: the file part', () => {
   const direct = (form: FormData, key: string, database: Database, env: Env = ENV) =>
     handleUploadDirect(
@@ -334,6 +362,76 @@ describe('direct upload: the file part', () => {
       error: 'Invalid file type. Only CSV files are allowed.',
     });
     expect(put).not.toHaveBeenCalled();
+  });
+
+  // The body cap allows MULTIPART_OVERHEAD_BYTES of framing, so a file a little
+  // over the limit gets past it and the parsed-file check must still refuse it.
+  it('refuses a file just over the limit that fits inside the framing allowance', async () => {
+    const put = vi.fn();
+    const form = new FormData();
+    form.set(
+      'file',
+      new File([new Uint8Array(25 * 1024 * 1024 + 1000)], 'big.csv', { type: 'text/csv' }),
+    );
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await direct(form, `uploads/user-${USER_ID}/1-big.csv`, database, {
+      CSV_UPLOADS: { put },
+    } as unknown as Env);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('File size exceeds'),
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  // `formData()` buffers the whole request, so the size check on the parsed file
+  // came too late to bound memory. The body is capped before it is parsed.
+  describe('the body is capped before it is buffered', () => {
+    const post = (body: ReadableStream<Uint8Array>, headers: Record<string, string>) => {
+      const key = `uploads/user-${USER_ID}/1-big.csv`;
+      const put = vi.fn();
+      const { database } = databaseOnTier('free', 0);
+      const request = new Request(
+        `https://example.com/api/upload/direct/${encodeURIComponent(key)}`,
+        {
+          method: 'POST',
+          body,
+          headers: { 'Content-Type': 'multipart/form-data; boundary=x', ...headers },
+          duplex: 'half',
+        } as unknown as RequestInit,
+      );
+      return {
+        put,
+        response: handleUploadDirect(
+          request,
+          { ...ENV, CSV_UPLOADS: { put } } as unknown as Env,
+          key,
+          database,
+        ),
+      };
+    };
+
+    it('stops reading a chunked body that has no Content-Length once it passes the limit', async () => {
+      const body = countedBody(MIB, 100);
+
+      const { response, put } = post(body.stream, {});
+
+      expect((await response).status).toBe(400);
+      expect(body.pulled()).toBeLessThan(40);
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it('refuses a declared length over the limit without reading any of the body', async () => {
+      const body = countedBody(MIB, 100);
+
+      const { response, put } = post(body.stream, { 'Content-Length': String(100 * MIB) });
+
+      expect((await response).status).toBe(400);
+      expect(body.pulled()).toBe(0);
+      expect(put).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -465,6 +563,53 @@ describe('presigned upload: initiate then PUT', () => {
     const response = await put(key, token, new Uint8Array(26 * 1024 * 1024), env);
 
     expect(response.status).toBe(400);
+    expect(bucketPut).not.toHaveBeenCalled();
+  });
+
+  it('refuses a declared length over the limit without reading any of the body', async () => {
+    const { database } = databaseOnTier('free', 0);
+    const { key, token } = await initiatePresigned(database);
+    const bucketPut = vi.fn();
+    const env = { ...ENV, CSV_UPLOADS: { put: bucketPut } } as unknown as Env;
+    const body = countedBody(MIB, 100);
+
+    const response = await handleUploadPresigned(
+      new Request('https://example.com/upload', {
+        method: 'PUT',
+        body: body.stream,
+        headers: { 'Content-Length': String(100 * MIB) },
+        duplex: 'half',
+      } as unknown as RequestInit),
+      env,
+      key,
+      token,
+    );
+
+    expect(response.status).toBe(400);
+    expect(body.pulled()).toBe(0);
+    expect(bucketPut).not.toHaveBeenCalled();
+  });
+
+  it('stops reading a chunked body that has no Content-Length once it passes the limit', async () => {
+    const { database } = databaseOnTier('free', 0);
+    const { key, token } = await initiatePresigned(database);
+    const bucketPut = vi.fn();
+    const env = { ...ENV, CSV_UPLOADS: { put: bucketPut } } as unknown as Env;
+    const body = countedBody(MIB, 100);
+
+    const response = await handleUploadPresigned(
+      new Request('https://example.com/upload', {
+        method: 'PUT',
+        body: body.stream,
+        duplex: 'half',
+      } as unknown as RequestInit),
+      env,
+      key,
+      token,
+    );
+
+    expect(response.status).toBe(400);
+    expect(body.pulled()).toBeLessThan(40);
     expect(bucketPut).not.toHaveBeenCalled();
   });
 });

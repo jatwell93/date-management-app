@@ -104,9 +104,9 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *   * `POST .../direct/:key` and `PUT .../presigned/:key` carry the uploaded
  *     file itself and are governed by the tier-aware
  *     `STANDARD_MAX_FILE_SIZE` / `getTierFileSizeLimit` -- larger, and correct
- *     for their purpose. `handleUploadDirect` does buffer `request.formData()`
- *     before its size check, so a pre-read cap would still be an improvement
- *     there; it needs the tier resolved first, so it is still open.
+ *     for their purpose. They cap the body themselves with `capBodyAtBytes`,
+ *     against that limit (plus `MULTIPART_OVERHEAD_BYTES` for the direct
+ *     route's multipart framing), before reading it.
  *   * The signed webhook paths use this cap's larger sibling, `capWebhookBody`
  *     (`MAX_WEBHOOK_BODY_BYTES`), because refusing a genuine Stripe or Clerk
  *     delivery unread turns a provider retry loop into a silent data gap.
@@ -156,7 +156,8 @@ export async function capUndeclaredBody(
   env: Env,
   requestOrigin?: string,
 ): Promise<Request | Response> {
-  return readBodyWithinCap(request, env, resolveMaxJsonBodyBytes(env), requestOrigin);
+  const max = resolveMaxJsonBodyBytes(env);
+  return readBodyWithinCap(request, max, () => tooLarge(max, env, requestOrigin));
 }
 
 /**
@@ -172,11 +173,37 @@ export async function capWebhookBody(
   requestOrigin?: string,
 ): Promise<Request | Response> {
   const max = resolveMaxWebhookBodyBytes(env);
-  if (declaredExceedsCap(request, max)) {
-    return tooLarge(max, env, requestOrigin);
-  }
-  return readBodyWithinCap(request, env, max, requestOrigin);
+  return capBodyAtBytes(request, max, () => tooLarge(max, env, requestOrigin));
 }
+
+/**
+ * Cap a body at an explicit byte count, declared length or not.
+ *
+ * The primitive under `capWebhookBody`, exposed for routes whose limit is not
+ * one of the fixed env caps (the upload routes, whose limit is tier-aware) and
+ * which want their own refusal rather than the generic 413. `refuse` builds the
+ * response returned when the body is over `max`.
+ *
+ * Returns the `Request` to read from (use it for every later body read, the
+ * original stream may be consumed) or the refusal `Response`.
+ */
+export async function capBodyAtBytes(
+  request: Request,
+  max: number,
+  refuse: () => Response,
+): Promise<Request | Response> {
+  if (declaredExceedsCap(request, max)) {
+    return refuse();
+  }
+  return readBodyWithinCap(request, max, refuse);
+}
+
+/**
+ * Room for the multipart framing (boundary lines, part headers, the
+ * `importType` field) around a file of the maximum size. A multipart upload
+ * body is always a little larger than the file inside it.
+ */
+export const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 /** The numeric `Content-Length`, or null when absent or not a number. */
 function declaredLength(request: Request): number | null {
@@ -204,9 +231,8 @@ function tooLarge(max: number, env: Env, requestOrigin?: string): Response {
 
 async function readBodyWithinCap(
   request: Request,
-  env: Env,
   max: number,
-  requestOrigin?: string,
+  refuse: () => Response,
 ): Promise<Request | Response> {
   if (BODYLESS_METHODS.has(request.method) || !request.body) {
     return request;
@@ -227,7 +253,7 @@ async function readBodyWithinCap(
     seen += value.byteLength;
     if (seen > max) {
       await reader.cancel().catch(() => undefined);
-      return tooLarge(max, env, requestOrigin);
+      return refuse();
     }
     chunks.push(value);
   }
