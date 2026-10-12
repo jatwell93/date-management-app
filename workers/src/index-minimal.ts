@@ -176,25 +176,39 @@ function isValidRole(role: string): boolean {
 }
 
 /**
- * User-management capability gate. In prod only 'admin' can manage users; in
- * dev 'manager' is permitted as well so existing test fixtures keep working.
+ * User-management gate: the organization's admin only.
+ *
+ * Managers exist in production. Since #474 a second Clerk `org:admin` is stored
+ * as `manager`, so this gate used to hand user management to them, and that is
+ * a takeover path rather than a convenience: a manager could demote the sole
+ * admin through `PUT /api/users/:id`, which frees the one admin slot, and then
+ * promote themselves into it. Every request is audited, but the organization
+ * would already have changed hands. Nothing in `applyUserRoleChange` looks at
+ * the actor's role, so the gate here is the only thing standing in the way.
+ *
+ * Normalized rather than compared raw (issue #517). The raw comparison was half
+ * of that defect: the Clerk webhook stored `'Manager'`, and `'Manager' !==
+ * 'manager'` refused user management to an actual admin with a 403 that named
+ * no cause. Nothing writes a non-canonical role now and migration 0014 rewrites
+ * the rows that hold one, but normalizing here means a row that slips through
+ * degrades to the role it plainly means instead of matching nothing at all.
  */
 function canManageUsers(role: string | undefined): boolean {
   if (!role) return false;
-  // Normalized rather than compared raw (issue #517). The raw comparison was
-  // half of that defect: the Clerk webhook stored `'Manager'`, and
-  // `'Manager' !== 'manager'` refused user management to an actual admin with a
-  // 403 that named no cause. Nothing writes a non-canonical role now and
-  // migration 0014 rewrites the rows that hold one, but normalizing here means
-  // a row that slips through — an unmigrated database, a path added later —
-  // degrades to the role it plainly means instead of matching nothing at all.
-  // The sibling gates at `:1789`, `:1897` and `:2003` already normalize.
+  return normalizeRole(role) === ROLES.ADMIN;
+}
+
+/**
+ * Organization-settings gate: admins and managers.
+ *
+ * Deliberately wider than `canManageUsers`. Markdown configuration is business
+ * setup that a second admin legitimately does, and it grants no authority over
+ * who else holds a role.
+ */
+function canEditOrgSettings(role: string | undefined): boolean {
+  if (!role) return false;
   const normalized = normalizeRole(role);
-  if (normalized === ROLES.ADMIN) return true;
-  // 'manager' is dev-only. We don't have env here so we conservatively allow
-  // it; the role itself does not exist in production Clerk so this branch is
-  // unreachable in prod.
-  return normalized === ROLES.MANAGER;
+  return normalized === ROLES.ADMIN || normalized === ROLES.MANAGER;
 }
 
 /**
@@ -3515,7 +3529,7 @@ async function handleDeleteStoreArea(
 /**
  * GET /api/users
  *
- * Restricted to admins (and managers in non-prod). The listing surfaces email,
+ * Restricted to admins. The listing surfaces email,
  * username, role and clerkUserId for every user in the org, which is sensitive
  * enough that team_member callers must not see it.
  */
@@ -4346,8 +4360,8 @@ async function handleUpdateMarkdownConfig(
   if (auth instanceof Response) {
     return auth;
   }
-  if (!canManageUsers(auth.role)) {
-    return errorResponse('Only admins can update markdown settings', 403, env);
+  if (!canEditOrgSettings(auth.role)) {
+    return errorResponse('Only admins and managers can update markdown settings', 403, env);
   }
 
   const body = await request.json().catch(() => null);
