@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { PlanComparison } from '../PlanComparison';
+import { PROFESSIONAL_TRIAL_DAYS } from '@shared/subscription-types';
 
 describe('PlanComparison', () => {
   const onSelectPlan = vi.fn();
@@ -15,6 +16,14 @@ describe('PlanComparison', () => {
     expect(screen.getByTestId('tier-card-starter')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-professional')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-enterprise')).toBeInTheDocument();
+  });
+
+  it('states the trial length from the shared constant', () => {
+    render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
+
+    expect(
+      screen.getByText(new RegExp(`No-card ${PROFESSIONAL_TRIAL_DAYS}-day Professional trial`)),
+    ).toBeInTheDocument();
   });
 
   it('emits the selected tier and billing cycle when Upgrade is clicked', () => {

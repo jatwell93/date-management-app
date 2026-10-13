@@ -64,7 +64,7 @@ const faqData = [
     icon: <Lock className="size-4" />,
     question: 'Can I export my data before the trial ends?',
     answer:
-      'There is no in-app export yet. If you are over the Starter tier limits, the API endpoint GET /api/products/export-excess returns the products over the limit. For a full copy of your data, contact support.',
+      'There is no in-app export yet. If you are over the Free plan limits, the API endpoint GET /api/products/export-excess returns the products over the limit. For a full copy of your data, contact support.',
   },
   {
     id: 'limits',

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, X, Minus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { PROFESSIONAL_TRIAL_DAYS } from '@shared/subscription-types';
 import type { TierLevel } from '../types/subscription';
 import {
   LAUNCH_TIERS,
@@ -212,7 +213,10 @@ export function PlanComparison({
       </div>
 
       <div className="mt-6 text-center text-sm text-muted-foreground">
-        <p>No-card 30-day Professional trial. Enterprise access is subject to fair-use limits.</p>
+        <p>
+          No-card {PROFESSIONAL_TRIAL_DAYS}-day Professional trial. Enterprise access is subject to
+          fair-use limits.
+        </p>
       </div>
     </div>
   );

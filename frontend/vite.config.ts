@@ -12,6 +12,7 @@ const sharedMarkdownCreditContextPath = path.resolve(
 const sharedSupplierPolicyPath = path.resolve(__dirname, '../shared/domain/supplier-policy.ts');
 const sharedCatalogueReviewPath = path.resolve(__dirname, '../shared/domain/catalogue-review.ts');
 const sharedRolesPath = path.resolve(__dirname, '../shared/domain/roles.ts');
+const sharedSubscriptionTypesPath = path.resolve(__dirname, '../shared/types/subscription.ts');
 
 // Every REACT_APP_* var referenced in source must appear in `define`, otherwise
 // the literal `process.env.X` survives into the browser bundle and throws a
@@ -72,6 +73,7 @@ export default defineConfig(({ mode }) => {
         '@shared/supplier-policy': sharedSupplierPolicyPath,
         '@shared/catalogue-review': sharedCatalogueReviewPath,
         '@shared/roles': sharedRolesPath,
+        '@shared/subscription-types': sharedSubscriptionTypesPath,
         '@': path.resolve(__dirname, 'src'),
       },
     },
