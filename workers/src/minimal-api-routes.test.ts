@@ -2412,6 +2412,109 @@ describe('minimal API route table', () => {
     });
   });
 
+  describe('PUT /api/users/:id: how a failed role change is answered', () => {
+    const put = (
+      database: Database,
+      body: unknown = { role: 'admin' },
+      pathname = '/api/users/9',
+    ) =>
+      resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request(`https://example.com${pathname}`, {
+          method: 'PUT',
+          body: JSON.stringify(body),
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        pathname,
+        method: 'PUT',
+        db: database,
+        env,
+      });
+
+    // pg unique_violation SQLSTATE.
+    const uniqueViolation = (fields: Record<string, unknown>) =>
+      Object.assign(new Error('duplicate key value violates unique constraint'), {
+        code: '23505',
+        ...fields,
+      });
+
+    it.each([
+      ['the driver reports the constraint', { constraint: 'users_one_active_admin_per_org' }],
+      [
+        'only the message names the index',
+        {
+          message:
+            'duplicate key value violates unique constraint "users_one_active_admin_per_org"',
+        },
+      ],
+    ])('answers 409 with the admin-slot message when %s', async (_label, fields) => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateUserRole = vi.fn().mockRejectedValue(uniqueViolation(fields));
+
+      const response = await put(databaseWithRole('admin', { updateUserRole }));
+
+      expect(response?.status).toBe(409);
+      await expect(response?.json()).resolves.toMatchObject({
+        error:
+          'This organization already has an admin. Change the current admin to another role first.',
+      });
+    });
+
+    it('does not turn another unique violation into the admin-slot 409', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateUserRole = vi
+        .fn()
+        .mockRejectedValue(uniqueViolation({ constraint: 'users_username_key' }));
+
+      await expect(put(databaseWithRole('admin', { updateUserRole }))).rejects.toThrow(
+        'duplicate key',
+      );
+    });
+
+    it('answers 404 when the user is not in the organization', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateUserRole = vi.fn().mockResolvedValue(null);
+
+      const response = await put(databaseWithRole('admin', { updateUserRole }));
+
+      expect(response?.status).toBe(404);
+    });
+
+    it('does not publish previousRole in the response', async () => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateUserRole = vi.fn().mockResolvedValue({
+        id: 9,
+        email: 'a@b.test',
+        username: null,
+        role: 'manager',
+        clerkUserId: 'user_9',
+        createdAt: '2026-01-01 00:00:00',
+        previousRole: 'team_member',
+      });
+
+      const response = await put(databaseWithRole('admin', { updateUserRole }), {
+        role: 'manager',
+      });
+
+      expect(response?.status).toBe(200);
+      const body = (await response?.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ id: 9, role: 'manager' });
+      expect(body).not.toHaveProperty('previousRole');
+    });
+
+    it.each([
+      ['a missing role', {}],
+      ['a role that does not exist', { role: 'owner-of-everything' }],
+    ])('answers 400 for %s and changes nothing', async (_label, body) => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const updateUserRole = vi.fn();
+
+      const response = await put(databaseWithRole('admin', { updateUserRole }), body);
+
+      expect(response?.status).toBe(400);
+      expect(updateUserRole).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /api/organization/seed-demo-data', () => {
     const seedRequest = () =>
       new Request('https://example.com/api/organization/seed-demo-data', {
