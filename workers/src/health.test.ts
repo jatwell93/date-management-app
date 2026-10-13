@@ -391,7 +391,7 @@ describe('API config guard', () => {
     expect(body.error || body.message).toBeTruthy();
   });
 
-  it('dispatches organization bootstrap before requiring the legacy JWT secret', async () => {
+  it('dispatches organization bootstrap when JWT_SECRET is unset', async () => {
     const productionLikeEnv = {
       ...env,
       NODE_ENV: 'production',

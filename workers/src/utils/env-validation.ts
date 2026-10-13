@@ -17,12 +17,12 @@ import type { Env } from '../types/env';
  * auto-deploys production.
  *
  * So the control is split by blast radius, which the Worker was already doing
- * ad hoc in two places before this module existed: `JWT_SECRET` returns a 500
- * from the API branch of `index-minimal.ts`, and a missing
- * `STRIPE_WEBHOOK_SECRET` makes the Stripe receiver answer 503 and write
- * nothing (3.1.m). This generalizes that pattern rather than replacing it --
- * every key is classified, `/health` reports the whole picture, and only the
- * routes that genuinely need a missing key fail.
+ * ad hoc before this module existed: a missing `STRIPE_WEBHOOK_SECRET` makes
+ * the Stripe receiver answer 503 and write nothing (3.1.m), and a missing
+ * `JWT_SECRET` makes the presigned-upload routes answer 503 while every other
+ * route keeps serving. This generalizes that pattern rather than replacing it
+ * -- every key is classified, `/health` reports the whole picture, and only
+ * the routes that genuinely need a missing key fail.
  */
 
 /** A key whose absence breaks essentially every authenticated request. */
@@ -63,15 +63,15 @@ export const REQUIRED_CONFIG: readonly RequiredConfigCheck[] = [
         env.HYPERDRIVE?.connectionString?.trim(),
       ),
   },
-  {
-    name: 'JWT_SECRET',
-    impact:
-      'signing of presigned-upload tokens; every /api and /upload route except bootstrap, the health probes and the signature-verified webhooks answers 500 "JWT_SECRET is required"',
-    isSatisfied: (env) => Boolean(env.JWT_SECRET?.trim()),
-  },
 ];
 
 export const FEATURE_CONFIG: readonly FeatureConfigCheck[] = [
+  {
+    name: 'JWT_SECRET',
+    feature:
+      'presigned uploads of files over 2 MiB (upload initiate and the presigned PUT answer 503 without it)',
+    isSatisfied: (env) => Boolean(env.JWT_SECRET?.trim()),
+  },
   {
     name: 'CLERK_SECRET_KEY',
     feature: 'Clerk session verification and organization bootstrap',

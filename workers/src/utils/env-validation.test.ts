@@ -59,17 +59,20 @@ describe('validateWorkerConfig', () => {
     expect(result.missingRequired).toContain('NEON_CONNECTION_STRING | DATABASE_URL | HYPERDRIVE');
   });
 
-  it('fails on a missing JWT_SECRET', () => {
+  it('reports a missing JWT_SECRET as a feature gap, not a broken deployment', () => {
+    // It signs presigned-upload tokens and nothing else, so its absence
+    // disables large uploads and leaves every other route working.
     const env = { ...complete(), JWT_SECRET: '' };
     const result = validateWorkerConfig(env as unknown as Env);
 
-    expect(result.ok).toBe(false);
-    expect(result.missingRequired).toContain('JWT_SECRET');
+    expect(result.ok).toBe(true);
+    expect(result.missingRequired).not.toContain('JWT_SECRET');
+    expect(result.missingFeatures).toContain('JWT_SECRET');
   });
 
   it('treats a whitespace-only secret as missing', () => {
     const env = { ...complete(), JWT_SECRET: '   ' };
-    expect(validateWorkerConfig(env as unknown as Env).ok).toBe(false);
+    expect(validateWorkerConfig(env as unknown as Env).missingFeatures).toContain('JWT_SECRET');
   });
 
   it('reports missing feature keys without failing the deployment', () => {
@@ -95,8 +98,9 @@ describe('describeConfigProblems', () => {
     const env = { ...complete(), JWT_SECRET: '' };
     const lines = describeConfigProblems(env as unknown as Env);
 
-    expect(lines.some((l) => l.includes('MISSING REQUIRED JWT_SECRET'))).toBe(true);
-    expect(lines.some((l) => l.includes('presigned-upload tokens'))).toBe(true);
+    expect(lines.some((l) => l.includes('JWT_SECRET not set'))).toBe(true);
+    expect(lines.some((l) => l.includes('presigned uploads'))).toBe(true);
+    expect(lines.some((l) => l.includes('MISSING REQUIRED'))).toBe(false);
   });
 
   it('says nothing about a healthy configuration', () => {
@@ -111,7 +115,7 @@ describe('logConfigOnce', () => {
 
   it('logs an error once per isolate for a broken configuration', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const env = { ...complete(), JWT_SECRET: '' } as unknown as Env;
+    const env = { ...complete(), NEON_CONNECTION_STRING: '' } as unknown as Env;
 
     logConfigOnce(env);
     logConfigOnce(env);

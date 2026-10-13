@@ -208,9 +208,9 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
 
   // The JSON body cap is enforced here rather than inherited from the entry
   // point. This route is dispatched by `resolveBootstrapApiRoute`
-  // (index-minimal.ts) *above* that check -- bootstrap must precede the legacy
-  // `JWT_SECRET` check, which is pinned by a test -- so without this it would
-  // buffer an unbounded body into the isolate (`request.text()` below).
+  // (index-minimal.ts) *above* that check -- bootstrap is dispatched before the
+  // generic database setup, which is pinned by a test -- so without this it
+  // would buffer an unbounded body into the isolate (`request.text()` below).
   //
   // It is not alone in that: `{/upload,/api/upload}/initiate` and `.../complete`
   // also dispatch above the entry-point check and buffer `request.json()`. They
