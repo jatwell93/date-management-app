@@ -1,6 +1,7 @@
 import type { Database } from '../database';
 import { normalizeRole, ROLES, type RoleValue } from '../constants/roles';
 import { isAdminSlotViolation } from '../db-errors';
+import { PROFESSIONAL_TRIAL_DAYS } from '../../../shared/types/subscription';
 import {
   ORG_AUDIT_EVENT_TYPES,
   ORG_AUDIT_TRIGGERS,
@@ -133,7 +134,7 @@ export async function ensureTrialSubscription(
       'trialing',
       'monthly',
       NOW(),
-      NOW() + INTERVAL '14 days',
+      NOW() + make_interval(days => ${PROFESSIONAL_TRIAL_DAYS}::int),
       NOW(),
       NOW()
     )

@@ -98,7 +98,12 @@ export const TIER_ANNUAL_PRICES: Record<TierLevel, number> = {
   concierge: 0,
 };
 
-export const PROFESSIONAL_TRIAL_DAYS = 14;
+/**
+ * Length of the no-card Professional trial every new organization starts on.
+ * One source for the trial row written at bootstrap (`ensureTrialSubscription`),
+ * the plan-comparison copy and the trial-conversion metric.
+ */
+export const PROFESSIONAL_TRIAL_DAYS = 30;
 
 /**
  * Default alert thresholds for metrics
