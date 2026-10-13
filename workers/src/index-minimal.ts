@@ -4622,7 +4622,10 @@ export async function handleUploadInitiate(
 
   // A presigned upload needs a signed token. Refuse before any work rather than
   // let the client send the file to a URL that cannot be honoured.
-  if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES && !hasJwtSecret(env)) {
+  // Decided once, so the 503 gate and the strategy choice below cannot drift
+  // apart and let a request reach `createUploadToken` with no secret.
+  const usePresigned = body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES;
+  if (usePresigned && !hasJwtSecret(env)) {
     return presignedUploadsUnavailable(env);
   }
 
@@ -4638,7 +4641,7 @@ export async function handleUploadInitiate(
 
   const key = `uploads/user-${auth.userId}/${Date.now()}-${body.filename}`;
 
-  if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES) {
+  if (usePresigned) {
     const uploadToken = await createUploadToken(auth.userId, key, maxFileSize, env);
     const requestUrl = new URL(request.url);
     const uploadUrl = `${requestUrl.origin}${uploadRouteBase}/presigned/${encodeURIComponent(key)}?token=${encodeURIComponent(uploadToken)}`;
