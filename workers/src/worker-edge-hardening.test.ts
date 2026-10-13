@@ -179,7 +179,7 @@ describe('JSON body cap, through the entry point', () => {
 
   it('refuses an oversized body on the bootstrap route, which dispatches above the cap', async () => {
     // `resolveBootstrapApiRoute` runs before the entry-point cap (bootstrap
-    // must precede the legacy JWT_SECRET check), and the handler buffers with
+    // precedes the generic database setup), and the handler buffers with
     // `request.text()`. Without its own call to `enforceJsonBodyLimit` this is
     // the one authenticated route that buffers an unbounded body. Found in
     // review of PR #531.
@@ -310,6 +310,30 @@ describe('configuration validation, through /health', () => {
     expect(response.status).toBe(503);
   });
 
+  it('keeps serving ordinary API routes when JWT_SECRET is unset', async () => {
+    // JWT_SECRET only signs presigned-upload tokens. Before it was scoped to
+    // that, its absence answered 500 "JWT_SECRET is required" on every /api
+    // and /upload route.
+    const response = await fetchWorker(new Request('https://api.example.com/api/products'), {
+      JWT_SECRET: '',
+    } as unknown as Partial<Env>);
+
+    expect(response.status).toBe(401);
+    const body = (await response.json()) as any;
+    expect(body.error || body.message).not.toBe('JWT_SECRET is required');
+  });
+
+  it('reports a missing JWT_SECRET as a disabled feature, not an unhealthy deploy', async () => {
+    const response = await fetchWorker(new Request('https://api.example.com/health'), {
+      JWT_SECRET: '',
+    } as unknown as Partial<Env>);
+    const body = (await response.json()) as any;
+
+    expect(body.checks.config.status).toBe('pass');
+    expect(body.checks.config.missingFeatures).toContain('JWT_SECRET');
+    expect(response.status).toBe(200);
+  });
+
   it('stays healthy when only a feature key is absent', async () => {
     // A deployment without Resend is a valid deployment with email off.
     const response = await fetchWorker(new Request('https://api.example.com/health'), {
@@ -355,16 +379,19 @@ describe('configuration validation, through /health', () => {
     // no connection string it never runs, `degrade()` is never called, and the
     // assertion passes whether or not the guard exists. The status has to be
     // *contested*: a required key missing (config says unhealthy) AND a deep
-    // check that genuinely fails (degrade fires). So JWT_SECRET is absent while
-    // a connection string is present, and the mocked driver returns no rows.
+    // check that genuinely fails (degrade fires). The R2 branch is not guarded
+    // by the connection string, so the database capability is absent (config
+    // fails) while the bucket's list call rejects (degrade fires).
     const response = await fetchWorker(new Request('https://api.example.com/health?deep=true'), {
-      JWT_SECRET: '',
-      NEON_CONNECTION_STRING: 'postgresql://user:pw@example.com/app',
+      NEON_CONNECTION_STRING: '',
+      DATABASE_URL: '',
+      HYPERDRIVE: undefined,
+      CSV_UPLOADS: { list: vi.fn().mockRejectedValue(new Error('bucket unreachable')) },
     } as unknown as Partial<Env>);
     const body = (await response.json()) as any;
 
     // Both halves: the degrade really did fire, and it did not win.
-    expect(body.checks.database?.status).toBe('fail');
+    expect(body.checks.r2?.status).toBe('fail');
     expect(body.checks.config.status).toBe('fail');
     expect(body.status).toBe('unhealthy');
     expect(response.status).toBe(503);

@@ -581,16 +581,6 @@ const sentryWrappedHandlers = Sentry.withSentry(
             return finalizeApiResponse(bootstrapRouteResponse);
           }
 
-          if (!env.JWT_SECRET?.trim()) {
-            const jwtErrorResponse = errorResponse(
-              'JWT_SECRET is required',
-              500,
-              env,
-              requestOrigin,
-            );
-            return finalizeApiResponse(jwtErrorResponse);
-          }
-
           let db: Database | null = null;
           const getDb = (): Database => {
             db ||= createWorkersDatabase(env);
@@ -809,6 +799,25 @@ import {
 } from './database';
 import { isReferentialError } from './tenant-references';
 import { SignJWT, jwtVerify } from 'jose';
+
+/**
+ * `JWT_SECRET` signs and verifies presigned-upload tokens, and nothing else
+ * (the legacy login that also used it was removed in #560). Its absence
+ * therefore disables presigned uploads only: the upload handlers check
+ * `hasJwtSecret` first and answer 503, and every other route is unaffected.
+ * `requireJwtSecret` still throws, as a backstop for a caller that skipped the
+ * check.
+ */
+function hasJwtSecret(env: Env): boolean {
+  return Boolean(env.JWT_SECRET?.trim());
+}
+
+function presignedUploadsUnavailable(env: Env): Response {
+  console.error(
+    'JWT_SECRET is not set: presigned uploads are unavailable (files over the direct-upload threshold).',
+  );
+  return errorResponse('Large file uploads are temporarily unavailable', 503, env);
+}
 
 function requireJwtSecret(env: Env): Uint8Array {
   const secret = env.JWT_SECRET?.trim();
@@ -4611,6 +4620,12 @@ export async function handleUploadInitiate(
     return errorResponse('Missing required fields: filename, fileSize, contentType', 400, env);
   }
 
+  // A presigned upload needs a signed token. Refuse before any work rather than
+  // let the client send the file to a URL that cannot be honoured.
+  if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES && !hasJwtSecret(env)) {
+    return presignedUploadsUnavailable(env);
+  }
+
   const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
   const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
   const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
@@ -4663,6 +4678,10 @@ export async function handleUploadPresigned(
   key: string,
   uploadToken: string | null,
 ): Promise<Response> {
+  if (!hasJwtSecret(env)) {
+    return presignedUploadsUnavailable(env);
+  }
+
   if (!uploadToken) {
     return errorResponse('Missing upload token', 401, env);
   }

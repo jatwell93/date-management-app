@@ -488,6 +488,57 @@ describe('upload complete and status: request guards', () => {
   });
 });
 
+describe('presigned uploads without JWT_SECRET', () => {
+  // JWT_SECRET signs presigned-upload tokens and nothing else, so its absence
+  // disables large uploads only. These routes answer 503 rather than 500, and
+  // the small-file path keeps working.
+  const NO_SECRET = { JWT_SECRET: '' } as unknown as Env;
+
+  const initiate = (fileSize: number, database: Database) =>
+    handleUploadInitiate(
+      new Request('https://example.com/api/upload/initiate', {
+        method: 'POST',
+        body: JSON.stringify({ filename: 'a.csv', fileSize, contentType: 'text/csv' }),
+      }),
+      NO_SECRET,
+      '/api/upload',
+      database,
+    );
+
+  it('refuses to initiate a presigned upload, before any storage lookup', async () => {
+    const { database, getStorageUsedBytes } = databaseOnTier('free', 0);
+
+    const response = await initiate(3 * 1024 * 1024, database);
+
+    expect(response.status).toBe(503);
+    expect(getStorageUsedBytes).not.toHaveBeenCalled();
+  });
+
+  it('still initiates a direct upload for a small file', async () => {
+    const { database } = databaseOnTier('free', 0);
+
+    const response = await initiate(1024, database);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ strategy: 'direct' });
+  });
+
+  it('answers 503 to the presigned PUT and stores nothing', async () => {
+    const bucketPut = vi.fn();
+    const key = `uploads/user-${USER_ID}/1-big.csv`;
+
+    const response = await handleUploadPresigned(
+      new Request('https://example.com/upload', { method: 'PUT', body: 'sku,name\n1,Milk' }),
+      { ...NO_SECRET, CSV_UPLOADS: { put: bucketPut } } as unknown as Env,
+      key,
+      'some-token',
+    );
+
+    expect(response.status).toBe(503);
+    expect(bucketPut).not.toHaveBeenCalled();
+  });
+});
+
 describe('presigned upload: initiate then PUT', () => {
   const THREE_MIB = 3 * 1024 * 1024;
 

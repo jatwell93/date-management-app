@@ -92,7 +92,7 @@ export function resolveMaxJsonBodyBytes(env: Env): number {
  *   * JSON API routes, from the entry point, after the upload router declines.
  *   * `POST /api/organization/bootstrap`, from inside
  *     `clerk/bootstrap-handler.ts` -- dispatched above the entry-point check
- *     (it must precede the legacy `JWT_SECRET` check) and buffers with
+ *     (it runs before the generic database setup) and buffers with
  *     `request.text()`, so it enforces the cap itself.
  *   * `POST {/upload,/api/upload}/initiate` and `.../complete`, from
  *     `upload/upload-router.ts` -- also dispatched above the entry-point check,
