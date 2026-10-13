@@ -212,7 +212,7 @@ export function PlanComparison({
       </div>
 
       <div className="mt-6 text-center text-sm text-muted-foreground">
-        <p>No-card 14-day Professional trial. Enterprise access is subject to fair-use limits.</p>
+        <p>No-card 30-day Professional trial. Enterprise access is subject to fair-use limits.</p>
       </div>
     </div>
   );

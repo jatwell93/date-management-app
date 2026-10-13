@@ -100,7 +100,7 @@ exports.TIER_ANNUAL_PRICES = {
   premium: 99000,
   concierge: 0,
 };
-exports.PROFESSIONAL_TRIAL_DAYS = 14;
+exports.PROFESSIONAL_TRIAL_DAYS = 30;
 /**
  * Default alert thresholds for metrics
  */

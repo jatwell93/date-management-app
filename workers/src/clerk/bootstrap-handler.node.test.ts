@@ -454,7 +454,7 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
         { clerkOrganizationId: 'clerk-org-trial', organizationName: 'Trial Inc' },
       );
 
-    it('is a 14-day trial of the professional tier, with its start recorded', async () => {
+    it('is a 30-day trial of the professional tier, with its start recorded', async () => {
       const response = await handleOrganizationBootstrap(founderRequest(), ENV);
       const { organizationId } = (await response.json()) as BootstrapPayload;
 
@@ -470,7 +470,7 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
         status: 'trialing',
         has_start: true,
       });
-      expect(Number(rows[0].trial_days)).toBeCloseTo(14, 1);
+      expect(Number(rows[0].trial_days)).toBeCloseTo(30, 1);
     });
 
     it('is created once: a repeat bootstrap adds no organization and no second trial', async () => {

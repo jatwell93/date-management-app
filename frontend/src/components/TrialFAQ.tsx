@@ -22,21 +22,21 @@ const faqData = [
     icon: <Clock className="size-4" />,
     question: 'What happens when my trial expires?',
     answer:
-      'Your account automatically converts to the free Starter tier. You keep all your data, but new creations are blocked if you exceed Starter limits (500 SKUs, 1 user). You can upgrade at any time to restore full access.',
+      'Your organization moves to the Free plan. You keep all your data. The Free plan has lower limits (500 products, 1 user), and adding new items may be blocked if you are over them. You can upgrade at any time to restore the Professional plan.',
   },
   {
     id: 'data-loss',
     icon: <AlertTriangle className="size-4" />,
     question: 'Will I lose my data?',
     answer:
-      'No. Your products, inventory, and all data remain fully accessible. You can view, update, and export everything. Only adding NEW items is blocked if you are over the Starter tier limits.',
+      'No. Your products, inventory, and all data remain accessible. You can view and update everything. Only adding NEW items may be blocked if you are over the Free plan limits.',
   },
   {
     id: 'creation-lock',
     icon: <Lock className="size-4" />,
     question: 'What is a creation lock?',
     answer:
-      'A creation lock prevents adding new products, inventory items, or users when your usage exceeds your tier limits. It is automatically removed when you upgrade or reduce usage to within limits.',
+      'When your trial has ended and you have not upgraded, adding new products, inventory items, or users may be blocked. Your existing data stays available, and upgrading lifts the block.',
   },
   {
     id: 'upgrade-anytime',
@@ -57,7 +57,7 @@ const faqData = [
     icon: <Clock className="size-4" />,
     question: 'Is there a grace period after expiration?',
     answer:
-      'Yes, you have a 48-hour grace period after expiration to add a payment method without any interruption. During this time, all Professional tier features remain available.',
+      'No. Your organization moves to the Free plan as soon as the trial ends, on the end date shown in your trial banner. You can upgrade at any time afterwards and your data is kept.',
   },
   {
     id: 'export-data',
@@ -69,9 +69,9 @@ const faqData = [
   {
     id: 'limits',
     icon: <AlertTriangle className="size-4" />,
-    question: 'What are the Starter tier limits?',
+    question: 'What are the Free plan limits?',
     answer:
-      'The Starter tier includes: 500 SKUs (products), 1 user, 5,000 inventory items, and 1 GB storage. If you have more than this when your trial expires, a creation lock will be applied.',
+      'The Free plan includes 500 products (SKUs), 1 user, 500 inventory items, and 1 GB of storage. If you are over these when your trial ends, adding new items may be blocked until you upgrade or reduce usage.',
   },
 ];
 

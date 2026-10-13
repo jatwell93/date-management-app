@@ -126,7 +126,10 @@ export const saasMetricsSnapshotJob: ScheduledJob = {
     const baselineDateIso = baselineDate.toISOString();
 
     // Trial cohort: trials whose nominal end (trial_started_at + the shared
-    // 14-day length — never rewritten by the Stripe upsert) fell in the window.
+    // trial length — never rewritten by the Stripe upsert) fell in the window.
+    // A trial that started under an earlier length is dated by the current one,
+    // so a change to PROFESSIONAL_TRIAL_DAYS shifts the cohort of trials still
+    // in flight at the time. Only the conversion-rate figure is affected.
     const cohortRows = (await sql`
       SELECT COUNT(*)::int AS ended,
              COUNT(*) FILTER (WHERE stripe_subscription_id IS NOT NULL)::int AS converted
