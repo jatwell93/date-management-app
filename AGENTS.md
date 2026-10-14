@@ -128,6 +128,13 @@ npm run mem:rebuild                                   # rebuild local index afte
 
 **Store proactively** — don't wait to be asked — on: a bug fix (problem + solution), an architecture/design decision (choice + rationale), a reusable pattern, a completed feature, or a resolved error (message + fix).
 
+**Capture rules** (every agent, any tool — hooks only help Claude Code):
+
+- **Before opening a PR** that changes behavior, log one entry (`FIX`, `PATTERN` or `DECISION`), or state in the PR "Lesson logged: none, because …".
+- **Before `/compact` or ending a long session**, log one `WORKFLOW` checkpoint: current state, next step, and any open risk. It is the handoff for the next session or the next tool.
+- **`memory.jsonl` is committed to a public repository.** Never log secrets, customer or organization data, production hostnames, or unfixed-vulnerability detail. `scripts/mem-log.js` rejects obvious secret patterns (`scripts/mem-redact.js`); it cannot judge prose, so you must.
+- Claude's per-machine auto-memory is a private cache, not the shared record. A lesson that matters on another machine or tool belongs here.
+
 ### Search & Refactor: When to Use What
 
 Pick the tool by the _question_, not by habit. For everyday "where is this string/symbol" lookups, `ripgrep` is the default and the fastest — reach for `mgrep` or `ast-grep` only when the question is genuinely semantic or structural.
@@ -150,6 +157,8 @@ This project uses Serena for semantic code operations. Serena's symbolic editors
 
 - `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, or `replace_content`
 - Before editing: 1) `get_symbols_overview`, 2) `find_symbol` with `include_body=true`, 3) apply the edit with a Serena symbol tool.
+
+**When Serena is unavailable** (the MCP server timed out, or you are Devin, Codex or another agent without it): do not stall. Edit with the native `Edit`/`Write` tool, read the whole symbol first, and re-run the diff-scoped gate afterwards, since nothing has checked the edit structurally. The Serena hooks live in each machine's untracked `.claude/settings.local.json`, so a fresh clone does not have them.
 
 **Reading and searching (basic tools are fine):**
 

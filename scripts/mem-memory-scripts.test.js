@@ -225,3 +225,35 @@ process.exit(1);
   assert.equal(record.kind, 'FIX');
   assert.equal(record.message, 'remove only generated prefix');
 });
+
+test('mem-redact names the pattern for a secret and passes plain prose', () => {
+  const { findSensitive } = require('./mem-redact');
+  // Assembled at runtime so this file never contains a literal that the
+  // repository secrets scan would flag.
+  const stripeKey = ['sk', 'live', 'a1B2c3D4e5F6g7H8i9J0k1L2'].join('_');
+
+  assert.deepEqual(findSensitive('rotate', `key is ${stripeKey}`), ['Stripe or Clerk secret key']);
+  assert.deepEqual(findSensitive('db', 'postgres://user:hunter2@host.example/db'), [
+    'database URL with credentials',
+  ]);
+  assert.deepEqual(
+    findSensitive('Bug fix', 'Use process.env.STRIPE_SECRET_KEY, not a literal'),
+    [],
+  );
+});
+
+test('mem-log refuses a secret and writes nothing', () => {
+  const tempDir = makeTempDir();
+  const memoryJsonl = path.join(tempDir, 'memory.jsonl');
+  const stripeKey = ['sk', 'live', 'a1B2c3D4e5F6g7H8i9J0k1L2'].join('_');
+
+  const result = runNode('mem-log.js', ['FIX', 'Leaky entry', `used ${stripeKey} in test`], {
+    MEMORY_JSONL_PATH: memoryJsonl,
+    MEMORY_FILE_PATH: path.join(tempDir, 'project-memory.mv2'),
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing to log/);
+  assert.ok(!result.stderr.includes(stripeKey), 'refusal must not echo the secret');
+  assert.equal(fs.existsSync(memoryJsonl), false);
+});
