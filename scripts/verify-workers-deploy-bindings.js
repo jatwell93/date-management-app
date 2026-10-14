@@ -328,6 +328,23 @@ const PRODUCTION_SECRET_BINDINGS = [
       'wrangler deploy does not upload shell env as Worker secrets, so without this ' +
       'step the Stripe webhook receiver can never leave its 503 state.',
   },
+  {
+    // Optional pair: every notification email needs BOTH, and each sender skips
+    // quietly when either is missing, so a binding that is missing or runs after
+    // `wrangler deploy` is invisible except as "no email ever arrives".
+    stepName: 'Bind RESEND_API_KEY secret to worker',
+    secretName: 'RESEND_API_KEY',
+    consequence:
+      'Trial reminders and credit-claim emails skip silently without the Resend key bound ' +
+      'on the Worker.',
+  },
+  {
+    stepName: 'Bind RESEND_FROM_EMAIL secret to worker',
+    secretName: 'RESEND_FROM_EMAIL',
+    consequence:
+      'Trial reminders and credit-claim emails skip silently without a sender address bound ' +
+      'on the Worker.',
+  },
 ];
 
 function verifyProductionBindingOrder(workflow = loadWorkflow()) {

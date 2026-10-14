@@ -141,6 +141,59 @@ test('real workflow: the Stripe binding tolerates an unset secret but rejects a 
   assert.match(run, /whsec_\*/, 'a non-signing-secret value must be rejected');
 });
 
+const resendSteps = () => [
+  {
+    name: 'Bind RESEND_API_KEY secret to worker (when configured)',
+    run: 'printf \'%s\' "$X" | npx wrangler secret put RESEND_API_KEY --env production',
+  },
+  {
+    name: 'Bind RESEND_FROM_EMAIL secret to worker (when configured)',
+    run: 'printf \'%s\' "$X" | npx wrangler secret put RESEND_FROM_EMAIL --env production',
+  },
+];
+
+test('real workflow: the Resend bindings tolerate an unset value but reject a malformed one', () => {
+  // Both are optional (a deployment without email is valid), so unset is a
+  // no-op. A value that is present but wrong binds cleanly and then fails at
+  // send time: a bare domain or a non-`re_` key reads like a Resend outage.
+  const workflow = loadWorkflow();
+  const steps = workflow.jobs['deploy-production'].steps;
+  const key = steps[findStepIndex(steps, 'Bind RESEND_API_KEY secret to worker')].run || '';
+  const from = steps[findStepIndex(steps, 'Bind RESEND_FROM_EMAIL secret to worker')].run || '';
+  assert.match(key, /exit 0/, 'an unset key must be a no-op, not a deploy failure');
+  assert.match(key, /re_\*/, 'a value that is not a Resend key must be rejected');
+  assert.match(from, /exit 0/, 'an unset sender must be a no-op, not a deploy failure');
+  assert.match(from, /\[:space:\]<>@/, 'a sender with no address part must be rejected');
+});
+
+test('synthetic: a missing Resend binding is reported', () => {
+  const workflow = {
+    jobs: {
+      'deploy-production': {
+        steps: [
+          {
+            name: 'Bind FRONTEND_URL secret to worker',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put FRONTEND_URL --env production',
+          },
+          {
+            name: 'Bind NEON_CONNECTION_STRING secret to worker',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put NEON_CONNECTION_STRING --env production',
+          },
+          {
+            name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
+            run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
+          },
+          { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
+        ],
+      },
+    },
+  };
+  const messages = verifyProductionBindingOrder(workflow).map((e) => e.message);
+  assert.equal(messages.length, 2);
+  assert.ok(messages.some((m) => /Missing step 'Bind RESEND_API_KEY secret to worker'/.test(m)));
+  assert.ok(messages.some((m) => /Missing step 'Bind RESEND_FROM_EMAIL secret to worker'/.test(m)));
+});
+
 test('synthetic: missing binding step is reported', () => {
   const workflow = {
     jobs: {
@@ -155,6 +208,7 @@ test('synthetic: missing binding step is reported', () => {
             name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
             run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
           },
+          ...resendSteps(),
           { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
         ],
       },
@@ -180,6 +234,7 @@ test('synthetic: binding step after deploy is reported as ordering violation', (
             name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
             run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
           },
+          ...resendSteps(),
           { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
           {
             name: 'Bind NEON_CONNECTION_STRING secret to worker',
@@ -274,6 +329,7 @@ test('synthetic: well-formed workflow returns no errors', () => {
             name: 'Bind STRIPE_WEBHOOK_SECRET secret to worker (when configured)',
             run: 'printf \'%s\' "$X" | npx wrangler secret put STRIPE_WEBHOOK_SECRET --env production',
           },
+          ...resendSteps(),
           { name: 'Deploy production worker', run: 'npx wrangler deploy --env production' },
         ],
       },

@@ -457,6 +457,60 @@ jobs:
             printf "%s" "${STRIPE_SECRET_KEY}" | npx wrangler secret put STRIPE_SECRET_KEY --env production
           '
 
+      # Bind the Resend credentials the notification emails send with:
+      # `trial-emails` (trial reminders), `credit-claim-follow-ups` and the claim
+      # send route all need BOTH of these, and each skips quietly when either is
+      # missing (`RESEND_API_KEY and RESEND_FROM_EMAIL must both be set`). Same
+      # reason as the secrets above: `wrangler deploy` does not upload shell env,
+      # so a Doppler-only value never reaches the Worker.
+      #
+      # Optional, like the Stripe secrets: an unset value leaves the existing
+      # Worker binding alone rather than failing the deploy, so a value set
+      # directly with `wrangler secret put` keeps working until Doppler holds one.
+      #
+      # Format checks catch the mistakes that bind cleanly and then fail at send
+      # time with an error that reads like a Resend outage: a bare domain or an
+      # address with no `@` in `RESEND_FROM_EMAIL`, or something that is not an
+      # `re_` key.
+      - name: Bind RESEND_API_KEY secret to worker (when configured)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run -- bash -lc '
+            if [ -z "${RESEND_API_KEY:-}" ]; then
+              echo "RESEND_API_KEY is not set in Doppler; leaving the Worker binding untouched."
+              echo "Trial and credit-claim emails will not send until it is set (with RESEND_FROM_EMAIL)."
+              exit 0
+            fi
+            if [[ "${RESEND_API_KEY}" != re_* ]]; then
+              echo "::error::RESEND_API_KEY must be a Resend API key (re_...)."
+              exit 1
+            fi
+            if [ -z "${RESEND_FROM_EMAIL:-}" ]; then
+              echo "::warning::RESEND_FROM_EMAIL is not set in Doppler: no email will send without it."
+            fi
+            printf "%s" "${RESEND_API_KEY}" | npx wrangler secret put RESEND_API_KEY --env production
+          '
+
+      - name: Bind RESEND_FROM_EMAIL secret to worker (when configured)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          doppler run -- bash -lc '
+            if [ -z "${RESEND_FROM_EMAIL:-}" ]; then
+              echo "RESEND_FROM_EMAIL is not set in Doppler; leaving the Worker binding untouched."
+              exit 0
+            fi
+            plain="^[^[:space:]<>@]+@[^[:space:]<>@]+[.][^[:space:]<>@]+$"
+            named="^[^<>]+<[^[:space:]<>@]+@[^[:space:]<>@]+[.][^[:space:]<>@]+>$"
+            if ! [[ "${RESEND_FROM_EMAIL}" =~ $plain || "${RESEND_FROM_EMAIL}" =~ $named ]]; then
+              echo "::error::RESEND_FROM_EMAIL must be an address on the verified domain, e.g."
+              echo "::error::noreply@example.com or Name <noreply@example.com>. A bare domain is rejected by Resend."
+              exit 1
+            fi
+            printf "%s" "${RESEND_FROM_EMAIL}" | npx wrangler secret put RESEND_FROM_EMAIL --env production
+          '
+
       # The four checkout price IDs, from the same Doppler keys the Worker
       # reads (`workers/src/stripe/billing-handlers.ts` `allowedPriceIds()`:
       # the four STRIPE_{STARTER,PROFESSIONAL}_{MONTHLY,ANNUAL}_PRICE_ID keys).

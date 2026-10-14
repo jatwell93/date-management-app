@@ -94,8 +94,15 @@ export const FEATURE_CONFIG: readonly FeatureConfigCheck[] = [
   },
   {
     name: 'RESEND_API_KEY',
-    feature: 'supplier credit-claim emails',
+    feature: 'supplier credit-claim emails and trial reminder emails',
     isSatisfied: (env) => Boolean(env.RESEND_API_KEY?.trim()),
+  },
+  {
+    // Every sender checks both and skips quietly when either is missing, so a
+    // key without a sender address is as inert as no key at all.
+    name: 'RESEND_FROM_EMAIL',
+    feature: 'supplier credit-claim emails and trial reminder emails (sender address)',
+    isSatisfied: (env) => Boolean(env.RESEND_FROM_EMAIL?.trim()),
   },
 ];
 
