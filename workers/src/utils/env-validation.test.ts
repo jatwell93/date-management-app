@@ -25,6 +25,7 @@ const complete = () =>
     STRIPE_WEBHOOK_SECRET: 'whsec_stripe',
     CSV_UPLOADS: {} as unknown,
     RESEND_API_KEY: 're_key',
+    RESEND_FROM_EMAIL: 'ExpiryMate <noreply@example.com>',
   }) as unknown as Env;
 
 describe('validateWorkerConfig', () => {
@@ -82,6 +83,15 @@ describe('validateWorkerConfig', () => {
 
     expect(result.ok).toBe(true);
     expect(result.missingFeatures).toEqual(['RESEND_API_KEY']);
+  });
+
+  it('reports a missing RESEND_FROM_EMAIL as a feature gap even when the key is set', () => {
+    // Every sender needs both and skips quietly when either is missing.
+    const env = { ...complete(), RESEND_FROM_EMAIL: '' };
+    const result = validateWorkerConfig(env as unknown as Env);
+
+    expect(result.ok).toBe(true);
+    expect(result.missingFeatures).toEqual(['RESEND_FROM_EMAIL']);
   });
 
   it('reports a missing R2 binding as a feature gap', () => {

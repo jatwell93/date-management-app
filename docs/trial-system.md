@@ -76,6 +76,10 @@ measured first.
 - The job does nothing unless **both** `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set, and the
   `NOTIFICATION_EMAIL_QUEUE` binding must exist. A deployment missing either sends no trial
   emails and logs a skip. Check this before starting a real trial.
+  The production deploy binds both from Doppler `prd` (`Bind RESEND_API_KEY` and
+  `Bind RESEND_FROM_EMAIL` in `workers-deploy.yml`), and `/health` lists either as a disabled
+  feature when it is missing. `RESEND_FROM_EMAIL` must be a full address on the verified domain,
+  such as `ExpiryMate <noreply@expirymate.com.au>`, not a bare domain.
 - There is no welcome email.
 
 ## Operating a trial
