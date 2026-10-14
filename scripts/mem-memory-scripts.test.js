@@ -257,3 +257,78 @@ test('mem-log refuses a secret and writes nothing', () => {
   assert.ok(!result.stderr.includes(stripeKey), 'refusal must not echo the secret');
   assert.equal(fs.existsSync(memoryJsonl), false);
 });
+
+function hasCommand(command) {
+  return spawnSync(command, ['--version'], { encoding: 'utf8' }).status === 0;
+}
+
+function runRecallHook(projectDir) {
+  return spawnSync('bash', [path.join(repoRoot, '.claude', 'hooks', 'recall-on-start.sh')], {
+    env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+    encoding: 'utf8',
+  });
+}
+
+function makeRecallRepo(branch, entries) {
+  const dir = makeTempDir();
+  const git = (...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+  git('init', '-q');
+  git('checkout', '-q', '-b', branch);
+  git(
+    '-c',
+    'user.email=t@example.com',
+    '-c',
+    'user.name=t',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'init',
+  );
+  fs.writeFileSync(
+    path.join(dir, 'memory.jsonl'),
+    `${entries.map((entry) => JSON.stringify({ ts: '2026-01-01T00:00:00Z', ...entry })).join('\n')}\n`,
+  );
+  return dir;
+}
+
+const recallHookSkip =
+  hasCommand('bash') && hasCommand('jq') && hasCommand('git')
+    ? false
+    : 'bash, jq and git are required';
+
+test(
+  'recall hook falls back to keyword match when the local index is missing',
+  { skip: recallHookSkip },
+  () => {
+    const dir = makeRecallRepo('feature/expired-writeoff-rollup', [
+      {
+        kind: 'FIX',
+        title: 'Expired write-off rollup',
+        message: 'cap not applied to scanned stock',
+      },
+      { kind: 'PATTERN', title: 'Unrelated entry', message: 'nothing to see' },
+    ]);
+
+    const result = runRecallHook(dir);
+
+    assert.equal(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    const context = output.hookSpecificOutput.additionalContext;
+    assert.match(context, /Expired write-off rollup/);
+    assert.match(context, /mem:rebuild/);
+    assert.doesNotMatch(context, /Unrelated entry/);
+  },
+);
+
+test('recall hook stays silent when nothing matches or on main', { skip: recallHookSkip }, () => {
+  const noMatch = makeRecallRepo('feature/zzzz-yyyy', [
+    { kind: 'FIX', title: 'Expired write-off rollup', message: 'cap not applied' },
+  ]);
+  assert.equal(runRecallHook(noMatch).stdout, '');
+
+  const onMain = makeRecallRepo('main', [
+    { kind: 'FIX', title: 'Main branch entry', message: 'main entry text' },
+  ]);
+  assert.equal(runRecallHook(onMain).stdout, '');
+});
