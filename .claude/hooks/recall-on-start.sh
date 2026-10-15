@@ -19,7 +19,16 @@ label="memory.jsonl, advisory"
 hits=""
 
 if [ -f project-memory.mv2 ]; then
-  hits=$(timeout 15 node scripts/mem-recall.js "$query" 2>/dev/null | head -c 3000)
+  # `timeout` is GNU coreutils and absent on stock macOS; the hook is already
+  # bounded by the timeout in .claude/settings.json.
+  if command -v timeout >/dev/null 2>&1; then
+    hits=$(timeout 15 node scripts/mem-recall.js "$query" 2>/dev/null | head -c 3000)
+  else
+    hits=$(node scripts/mem-recall.js "$query" 2>/dev/null | head -c 3000)
+  fi
+  # mem-recall.js prints this notice with exit 0 when the index has no match.
+  case "$hits" in "No project memories found"*) hits="" ;; esac
+  [ -n "$hits" ] && label="ranked recall (project-memory.mv2), advisory"
 fi
 
 if [ -z "$hits" ] && [ -f memory.jsonl ]; then
@@ -41,5 +50,12 @@ if [ -z "$hits" ] && [ -f memory.jsonl ]; then
 fi
 
 [ -z "$hits" ] && exit 0
+
+# Entries written before the redaction guard existed are not covered by it, so
+# check again before injecting into model context.
+redact="$(cd "$(dirname "$0")" && pwd)/../../scripts/mem-redact.js"
+if [ -f "$redact" ] && ! printf '%s' "$hits" | node "$redact" >/dev/null 2>&1; then
+  exit 0
+fi
 
 jq -n --arg h "$hits" --arg l "$label" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: ("Project memory recall for this branch (" + $l + "):\n" + $h)}}'

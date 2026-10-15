@@ -332,3 +332,92 @@ test('recall hook stays silent when nothing matches or on main', { skip: recallH
   ]);
   assert.equal(runRecallHook(onMain).stdout, '');
 });
+
+test('mem-redact catches bare and suffixed secret names and other provider keys', () => {
+  const { findSensitive } = require('./mem-redact');
+  const value = 'a1B2c3D4e5F6g7H8i9J0';
+
+  for (const line of [
+    `PASSWORD=${value}`,
+    `SECRET_KEY=${value}`,
+    `JWT_SECRET_KEY: ${value}`,
+    `DB_PASSWORD_PROD=${value}`,
+    `key ${['sk', 'ant', 'api03', value].join('-')}`,
+    `key ${['sk', 'proj', value].join('-')}`,
+    `key AIza${'A'.repeat(35)}`,
+    `slack ${['xoxb', '1234567890', 'abcdefghij'].join('-')}`,
+  ]) {
+    assert.notDeepEqual(findSensitive('title', line), [], `should refuse: ${line.slice(0, 20)}`);
+  }
+
+  // Prose that merely mentions the words stays loggable.
+  assert.deepEqual(
+    findSensitive('Auth', 'the password reset flow and token expiry were fixed'),
+    [],
+  );
+  assert.deepEqual(findSensitive('Task', 'risk-assessment-for-the-quarterly-review noted'), []);
+});
+
+test('recall hook withholds an entry that contains a secret', { skip: recallHookSkip }, () => {
+  const stripeKey = ['sk', 'live', 'a1B2c3D4e5F6g7H8i9J0k1L2'].join('_');
+  const dir = makeRecallRepo('feature/expired-writeoff-rollup', [
+    { kind: 'FIX', title: 'Expired write-off rollup', message: `legacy entry used ${stripeKey}` },
+  ]);
+
+  assert.equal(runRecallHook(dir).stdout, '');
+});
+
+function runNudgeHook(projectDir, payload, tmpDir) {
+  return spawnSync('bash', [path.join(repoRoot, '.claude', 'hooks', 'lesson-nudge.sh')], {
+    env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir, TMPDIR: tmpDir },
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+  });
+}
+
+function makeNudgeRepo() {
+  const dir = makeRecallRepo('main', []);
+  const git = (...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+  git('checkout', '-q', '-b', 'feature/some-work');
+  return { dir, git };
+}
+
+test('nudge hook fires once for a changed branch with no entry', { skip: recallHookSkip }, () => {
+  const { dir } = makeNudgeRepo();
+  fs.writeFileSync(path.join(dir, 'untracked.txt'), 'work in progress\n');
+  const tmpDir = makeTempDir();
+  const payload = { session_id: 'sess/../1', hook_event_name: 'Stop' };
+
+  const first = runNudgeHook(dir, payload, tmpDir);
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(JSON.parse(first.stdout).systemMessage, /No lesson logged/);
+  // The session id is sanitised, so the marker stays inside TMPDIR.
+  assert.ok(fs.readdirSync(tmpDir).every((name) => name.startsWith('lesson-nudge-')));
+
+  assert.equal(runNudgeHook(dir, payload, tmpDir).stdout, '');
+});
+
+test(
+  'nudge hook stays silent with no changes, with an entry, or on main',
+  { skip: recallHookSkip },
+  () => {
+    const tmpDir = makeTempDir();
+    const payload = { session_id: 's2', hook_event_name: 'Stop' };
+
+    const clean = makeNudgeRepo();
+    assert.equal(runNudgeHook(clean.dir, payload, tmpDir).stdout, '', 'no changes');
+
+    const logged = makeNudgeRepo();
+    fs.writeFileSync(path.join(logged.dir, 'file.txt'), 'x\n');
+    fs.writeFileSync(
+      path.join(logged.dir, 'memory.jsonl'),
+      `${JSON.stringify({ ts: '2026-01-01T00:00:00Z', kind: 'FIX', title: 't', message: 'm' })}\n`,
+    );
+    logged.git('add', '-A');
+    assert.equal(runNudgeHook(logged.dir, { ...payload, session_id: 's3' }, tmpDir).stdout, '');
+
+    const onMain = makeRecallRepo('main', []);
+    fs.writeFileSync(path.join(onMain, 'file.txt'), 'x\n');
+    assert.equal(runNudgeHook(onMain, { ...payload, session_id: 's4' }, tmpDir).stdout, '');
+  },
+);

@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same PR only. Default-branch pushes are never
+# cancelled, so the required "Frontend CI Gate" always reports for each SHA.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     name: Detect frontend changes
@@ -129,6 +135,7 @@ jobs:
     name: Lint (changed files)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       LINT_DIFF_BASE: origin/${{ github.base_ref }}
     steps:
