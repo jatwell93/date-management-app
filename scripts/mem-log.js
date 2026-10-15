@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { runMemvid } = require('./memvid-exec');
+const { findSensitive } = require('./mem-redact');
 
 // Load environment variables from .env file
 const envPath = path.join(__dirname, '..', '.env');
@@ -86,6 +87,15 @@ function logMemory(kind, title, message) {
   if (!VALID_KINDS.includes(normalizedKind)) {
     console.error(`Invalid kind: ${kind}`);
     console.error('Valid kinds:', VALID_KINDS.join(', '));
+    process.exit(1);
+  }
+
+  // memory.jsonl is committed to a public repository: refuse before the append,
+  // and name the pattern only, never echo the matched value.
+  const sensitive = findSensitive(title, message);
+  if (sensitive.length > 0) {
+    console.error(`❌ Refusing to log: text looks like it contains ${sensitive.join(', ')}.`);
+    console.error('   memory.jsonl is public. Remove the value and describe it instead.');
     process.exit(1);
   }
 

@@ -13,7 +13,8 @@
  *
  * This is a pre-commit gate, not a replacement for the full run: a change here
  * can break a file it does not touch (a renamed export, a shared type), and only
- * `eslint .` sees that. CI is unaffected either way — there is no ESLint job.
+ * `eslint .` sees that. CI runs this same script on pull requests (the `lint`
+ * job in frontend-test.yml), so the pre-commit and CI gates cannot drift.
  *
  * **Base defaults to `origin/main`**, matching `test:backend:diff` and
  * `test:frontend:diff`, which both pass `--changed origin/main`. Override with an

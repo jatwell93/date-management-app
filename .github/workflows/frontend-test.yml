@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same PR only. Default-branch pushes are never
+# cancelled, so the required "Frontend CI Gate" always reports for each SHA.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     name: Detect frontend changes
@@ -119,6 +125,42 @@ jobs:
         if: github.event_name != 'pull_request'
         run: npm test
 
+  # ESLint over the files this PR changed (scripts/lint-diff.js). Full
+  # `eslint .` takes over ten minutes, so CI lints the diff only, matching the
+  # pre-commit gate in AGENTS.md. `eslint.ignores.js` excludes workers/, so a
+  # workers-only PR lints nothing and passes quickly. Not path-filtered: the
+  # script exits at once when no lintable file changed, which keeps the gate
+  # safe to require. Runs on pull requests only.
+  lint:
+    name: Lint (changed files)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LINT_DIFF_BASE: origin/${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # lint-diff.js needs the merge base
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      # --ignore-scripts: root `prepare` runs `npm run compile`, which ESLint
+      # does not need.
+      - name: Install root dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Lint changed files
+        run: npm run lint:diff
+
   # Coverage thresholds run separately and are NOT required, so correctness
   # is never blocked on a coverage ratchet.
   coverage:
@@ -172,7 +214,7 @@ jobs:
   gate:
     name: Frontend CI Gate
     if: always()
-    needs: [changes, test]
+    needs: [changes, test, lint]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate frontend job results
@@ -180,12 +222,22 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
           TEST_RESULT: ${{ needs.test.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -u
-          echo "changes=${CHANGES_RESULT} frontend_changed=${FRONTEND_CHANGED:-<unset>} test=${TEST_RESULT}"
+          echo "changes=${CHANGES_RESULT} frontend_changed=${FRONTEND_CHANGED:-<unset>} test=${TEST_RESULT} lint=${LINT_RESULT}"
 
           if [ "$CHANGES_RESULT" != "success" ]; then
             echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate rather than letting a skipped test job pass as success."
+            exit 1
+          fi
+
+          # Lint runs on every pull request regardless of which paths changed,
+          # so a skipped lint job on a PR is a failure to report, not a pass.
+          # On push events the job is skipped by design.
+          if [ "$EVENT" = "pull_request" ] && [ "$LINT_RESULT" != "success" ]; then
+            echo "::error::Lint (changed files) did not succeed (result: ${LINT_RESULT})."
             exit 1
           fi
 
