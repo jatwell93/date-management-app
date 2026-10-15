@@ -73,7 +73,7 @@
     "globals": "^17.9.0",
     "prettier": "3.9.6",
     "typescript": "^6.0.3",
-    "wrangler": "4.144.0"
+    "wrangler": "4.151.0"
   },
   "dependencies": {
     "pg": "8.22.0"
