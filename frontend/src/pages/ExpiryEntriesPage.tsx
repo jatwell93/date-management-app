@@ -554,7 +554,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={deleting}
                   size="sm"
                   variant="destructive"
-                  className="text-xs flex-shrink-0 min-w-[70px]"
+                  className="text-xs shrink-0 min-w-[70px]"
                   aria-busy={deleting}
                 >
                   {deleting ? 'Deleting…' : 'Confirm delete'}
@@ -564,7 +564,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={deleting}
                   size="sm"
                   variant="neutral"
-                  className="text-xs flex-shrink-0 min-w-[60px]"
+                  className="text-xs shrink-0 min-w-[60px]"
                 >
                   Cancel
                 </Button>

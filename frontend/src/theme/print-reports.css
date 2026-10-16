@@ -75,6 +75,7 @@
   /* Card resets */
   .rounded-lg,
   .border,
+  .shadow-xs,
   .shadow-sm {
     border: none !important;
     border-bottom: 1px solid #eee !important;

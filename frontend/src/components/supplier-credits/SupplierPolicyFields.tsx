@@ -223,7 +223,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
             id={fieldId('creditPolicyNote')}
             maxLength={10000}
             rows={6}
-            className="mt-1 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm outline-none focus-visible:border-semantic-primary focus-visible:ring-2 focus-visible:ring-semantic-primary/30"
+            className="mt-1 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm outline-hidden focus-visible:border-semantic-primary focus-visible:ring-2 focus-visible:ring-semantic-primary/30"
             value={value.creditPolicyNote}
             onChange={(event) => onChange('creditPolicyNote', event.target.value)}
           />

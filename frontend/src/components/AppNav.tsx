@@ -29,7 +29,7 @@ export function AppNav({
     !!effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS);
 
   return (
-    <nav className="border-b border-semantic-primary-hover/30 bg-semantic-primary text-semantic-primary-foreground shadow-sm">
+    <nav className="border-b border-semantic-primary-hover/30 bg-semantic-primary text-semantic-primary-foreground shadow-xs">
       <div className="mx-auto max-w-7xl px-4">
         <div
           className="flex min-h-20 items-center justify-between gap-4"
@@ -37,7 +37,7 @@ export function AppNav({
         >
           <Link
             to="/scan"
-            className="font-heading text-lg font-semibold leading-tight hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70"
+            className="font-heading text-lg font-semibold leading-tight hover:opacity-90 focus:outline-hidden focus:ring-2 focus:ring-semantic-primary-foreground/70"
           >
             Inventory Manager
           </Link>
@@ -69,7 +69,7 @@ export function AppNav({
             </li>
             <li data-testid="desktop-primary-nav-item" data-nav-label="Reports">
               <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
+                <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-hidden focus:ring-2 focus:ring-semantic-primary-foreground/70">
                   Reports
                   <ChevronDown className="size-4" aria-hidden="true" />
                 </DropdownMenuTrigger>
@@ -97,7 +97,7 @@ export function AppNav({
             </li>
             <li data-testid="desktop-primary-nav-item" data-nav-label="Manage">
               <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
+                <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-hidden focus:ring-2 focus:ring-semantic-primary-foreground/70">
                   Manage
                   <ChevronDown className="size-4" aria-hidden="true" />
                 </DropdownMenuTrigger>
@@ -135,7 +135,7 @@ export function AppNav({
             </li>
             <li data-testid="desktop-primary-nav-item" data-nav-label="Account">
               <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
+                <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-hidden focus:ring-2 focus:ring-semantic-primary-foreground/70">
                   Account
                   <ChevronDown className="size-4" aria-hidden="true" />
                 </DropdownMenuTrigger>
@@ -164,7 +164,7 @@ export function AppNav({
 
           <button
             type="button"
-            className="inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-semantic-primary-foreground transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70 lg:hidden"
+            className="inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-semantic-primary-foreground transition-colors hover:bg-semantic-primary-hover focus:outline-hidden focus:ring-2 focus:ring-semantic-primary-foreground/70 lg:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={isMobileMenuOpen}

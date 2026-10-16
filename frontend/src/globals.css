@@ -14,11 +14,7 @@
 @import '@fontsource/outfit/700.css';
 @import '@fontsource/fraunces/700.css';
 
-@import './theme/design-tokens.css';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import './theme/design-tokens.css' layer(tokens);
 
 /* ── Brand Typography Base ────────────────────────────────── */
 @layer base {
@@ -48,6 +44,7 @@
     --clerk-pharmiq-border: var(--border-hairline);
     --clerk-pharmiq-surface: var(--surface-1);
     --clerk-pharmiq-surface-muted: var(--surface-2);
+    --clerk-pharmiq-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --clerk-pharmiq-primary: var(--semantic-primary);
     --clerk-pharmiq-primary-wash: var(--semantic-primary-muted);
     --clerk-pharmiq-focus-ring: var(--semantic-primary-focus-ring);
@@ -64,7 +61,7 @@
   .clerk-responsive-surface :where(.clerk-pharmiq-card, .cl-cardBox, .cl-card) {
     border: 1px solid var(--clerk-pharmiq-border) !important;
     background: var(--clerk-pharmiq-surface) !important;
-    box-shadow: var(--shadow-sm) !important;
+    box-shadow: var(--clerk-pharmiq-shadow) !important;
   }
 
   .clerk-responsive-surface

@@ -69,7 +69,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
           <span>{message}</span>
           <button
             onClick={onClose}
-            className="ml-4 opacity-100 transition-opacity hover:opacity-80 focus:outline-none"
+            className="ml-4 opacity-100 transition-opacity hover:opacity-80 focus:outline-hidden"
           >
             &times;
           </button>
