@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { apiService } from '../lib/api.service';
+import { calendarDaysUntil } from '../lib/utils';
 import { calculateMarkdownPrice } from '@shared/markdown';
 import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
@@ -66,13 +67,8 @@ function formatCurrencyValue(value: number): string {
 }
 
 function getDaysToExpiry(expiryDate: string) {
-  const parsedExpiryDate = new Date(expiryDate);
-  if (Number.isNaN(parsedExpiryDate.getTime())) {
-    return null;
-  }
-
-  const today = new Date();
-  return Math.ceil((parsedExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const days = calendarDaysUntil(expiryDate);
+  return Number.isNaN(days) ? null : days;
 }
 
 function formatExpiryDate(value: string) {
