@@ -79,7 +79,9 @@ jobs:
             run_tests "git diff failed (${changed}); running frontend tests."
           fi
 
-          if printf '%s\n' "$changed" | grep -q '^frontend/'; then
+          # shared/ is compiled into the frontend (see frontend/tsconfig.json include).
+          # Editing this workflow must also run it, or a broken edit ships unexercised.
+          if printf '%s\n' "$changed" | grep -qE '^(frontend|shared)/|^\.github/workflows/frontend-test\.yml$'; then
             echo "frontend=true" >> "$GITHUB_OUTPUT"
           else
             echo "frontend=false" >> "$GITHUB_OUTPUT"
@@ -116,6 +118,12 @@ jobs:
 
       - name: Token Compliance Check
         run: npm run token-compliance
+
+      # `vite build` only transpiles, so nothing else type-checks the frontend
+      # (CRA's build did, until #290). tsconfig.json also includes
+      # ../shared/**, hence the `shared/` path in the change filter above.
+      - name: Type check
+        run: npm run type-check
 
       - name: Run Tests (Changed Files Only)
         if: github.event_name == 'pull_request'
