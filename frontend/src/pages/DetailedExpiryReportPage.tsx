@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
+import { calendarDaysUntil } from '../lib/utils';
 import { calculateMarkdownPrice } from '@shared/markdown';
 import Toast from '../components/ui/toast';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
@@ -45,13 +46,8 @@ function formatCurrencyValue(value: number): string {
 }
 
 function getDaysToExpiry(expiryDate: string) {
-  const parsedExpiryDate = new Date(expiryDate);
-  if (Number.isNaN(parsedExpiryDate.getTime())) {
-    return null;
-  }
-
-  const today = new Date();
-  return Math.ceil((parsedExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const days = calendarDaysUntil(expiryDate);
+  return Number.isNaN(days) ? null : days;
 }
 
 type WorklistGroupKey = 'markdown1' | 'markdown2' | 'markdown3';

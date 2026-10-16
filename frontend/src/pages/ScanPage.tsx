@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { offlineStorage } from '../lib/offline-storage';
+import { calendarDaysUntil } from '../lib/utils';
 import { calculateMarkdownPrice, getMarkdownBandConfig } from '@shared/markdown';
 import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
@@ -136,9 +137,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
   useEffect(() => {
     if (productDetails && expiryDate) {
-      const expiry = new Date(expiryDate);
-      const today = new Date();
-      const daysToExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const daysToExpiry = calendarDaysUntil(expiryDate);
 
       const costPrice = productDetails.costPrice;
       const isExpired = daysToExpiry <= 0;
