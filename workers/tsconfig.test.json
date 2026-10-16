@@ -5,7 +5,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@/*": ["workers/src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*", "../shared/**/*"],
