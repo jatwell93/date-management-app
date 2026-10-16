@@ -4,6 +4,10 @@
  * Custom properties and theme tokens are defined in globals.css (imported by App.tsx).
  */
 
+/* design-tokens.css lives below Tailwind's theme so its --radius-xl, --tracking-wide, ...
+   do not override Tailwind's defaults (unlayered CSS beats every layer). */
+@layer tokens, theme, base, components, utilities;
+
 @import 'tailwindcss' source(none);
 
 /* Keep the JS theme (colors from design-tokens.json, tailwindcss-animate). */

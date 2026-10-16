@@ -14,7 +14,7 @@
 @import '@fontsource/outfit/700.css';
 @import '@fontsource/fraunces/700.css';
 
-@import './theme/design-tokens.css';
+@import './theme/design-tokens.css' layer(tokens);
 
 /* ── Brand Typography Base ────────────────────────────────── */
 @layer base {
@@ -60,7 +60,7 @@
   .clerk-responsive-surface :where(.clerk-pharmiq-card, .cl-cardBox, .cl-card) {
     border: 1px solid var(--clerk-pharmiq-border) !important;
     background: var(--clerk-pharmiq-surface) !important;
-    box-shadow: var(--shadow-sm) !important;
+    box-shadow: var(--shadow-xs) !important;
   }
 
   .clerk-responsive-surface

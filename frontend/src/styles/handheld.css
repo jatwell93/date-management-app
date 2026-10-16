@@ -364,16 +364,6 @@
       border-width: 0;
     }
 
-    /* Focus indicators: prominent for handheld */
-    button:focus,
-    input:focus,
-    select:focus,
-    textarea:focus,
-    a:focus {
-      outline: 2px solid #0284c7;
-      outline-offset: 2px;
-    }
-
     /* ============================================
      10. CONTAINER QUERIES / RESPONSIVE IMAGES
      ============================================ */
@@ -415,5 +405,21 @@
     body {
       -webkit-text-size-adjust: 100%;
     }
+  }
+}
+
+/*
+ * Unlayered on purpose: this focus indicator must beat the `outline-hidden`
+ * utility on Button/Input (utilities sit in a layer and lose to unlayered CSS).
+ * It won on specificity under Tailwind 3 as well.
+ */
+@media (max-width: 600px) and (max-height: 900px) {
+  button:focus,
+  input:focus,
+  select:focus,
+  textarea:focus,
+  a:focus {
+    outline: 2px solid #0284c7;
+    outline-offset: 2px;
   }
 }
