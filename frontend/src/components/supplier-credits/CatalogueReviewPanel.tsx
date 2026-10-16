@@ -269,7 +269,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
                     {suppliers.length > 0 && (
                       <select
                         aria-label={`Supplier for ${item.productName}`}
-                        className="rounded-md border px-3 py-2 text-sm outline-none focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
+                        className="rounded-md border px-3 py-2 text-sm outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
                         value={
                           supplierIds[item.productId] ?? item.brand?.supplierId ?? suppliers[0].id
                         }

@@ -20,7 +20,7 @@ const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement,
 export function MissingClerkConfiguration() {
   return (
     <main className="min-h-screen bg-background px-4 py-10 text-foreground">
-      <section className="mx-auto max-w-2xl rounded-md border bg-semantic-surface-1 p-6 shadow-sm">
+      <section className="mx-auto max-w-2xl rounded-md border bg-semantic-surface-1 p-6 shadow-xs">
         <div role="alert" aria-live="assertive">
           <h1 className="font-heading text-2xl font-semibold">
             Add REACT_APP_CLERK_PUBLISHABLE_KEY to start the app

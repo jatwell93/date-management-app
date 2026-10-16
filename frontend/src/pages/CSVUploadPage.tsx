@@ -616,7 +616,7 @@ export const CSVUploadPage: React.FC<{
                 {isExpiryImport &&
                   uploadResult.rejectedRows &&
                   uploadResult.rejectedRows.length > 0 && (
-                    <div className="mt-3 p-3 bg-semantic-surface-1 bg-opacity-60 rounded border border-semantic-critical-muted">
+                    <div className="mt-3 p-3 bg-semantic-surface-1 rounded border border-semantic-critical-muted">
                       <p className="text-sm font-medium mb-2">Rejected rows</p>
                       <div className="space-y-2">
                         {uploadResult.rejectedRows.map((row) => (
@@ -637,7 +637,7 @@ export const CSVUploadPage: React.FC<{
 
                 {/* Column Usage Summary */}
                 {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
-                  <div className="mt-3 p-3 bg-semantic-surface-1 bg-opacity-50 rounded border border-semantic-success-muted">
+                  <div className="mt-3 p-3 bg-semantic-surface-1 rounded border border-semantic-success-muted">
                     <p className="text-sm font-medium">Column summary</p>
                     <p className="text-sm">
                       Used: <span className="font-mono">{uploadResult.columnsUsed.join(', ')}</span>

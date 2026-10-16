@@ -4,9 +4,28 @@
  * Custom properties and theme tokens are defined in globals.css (imported by App.tsx).
  */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss' source(none);
+
+/* Keep the JS theme (colors from design-tokens.json, tailwindcss-animate). */
+@config '../tailwind.config.js';
+
+/* Scan only what v3's `content` globs covered: src (minus tests) + index.html. */
+@source '.';
+@source not './**/*.{test,spec}.{js,jsx,ts,tsx}';
+@source not './**/__tests__';
+@source not './tailwind-output.css';
+@source '../public/index.html';
+
+/* v4 changed the default border color from gray-200 to currentColor. Keep v3's. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
 
 body {
   margin: 0;

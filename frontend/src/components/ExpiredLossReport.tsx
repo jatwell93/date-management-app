@@ -74,7 +74,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Losses by SKU */}
-        <div className="border rounded-lg shadow-sm overflow-hidden">
+        <div className="border rounded-lg shadow-xs overflow-hidden">
           <h3 className="text-xl font-semibold font-heading p-4 bg-muted">Financial Loss by SKU</h3>
           <div className="overflow-x-auto">
             <Table>
@@ -111,7 +111,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
         </div>
 
         {/* Losses by Store Area */}
-        <div className="border rounded-lg shadow-sm overflow-hidden">
+        <div className="border rounded-lg shadow-xs overflow-hidden">
           <h3 className="text-xl font-semibold font-heading p-4 bg-muted">
             Financial Loss by Store Area
           </h3>

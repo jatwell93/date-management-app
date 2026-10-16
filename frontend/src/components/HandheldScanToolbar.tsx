@@ -44,7 +44,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
   return (
     <div
       data-testid="handheld-scan-toolbar"
-      className="handheld-scan-toolbar scanner-context sticky top-0 bg-semantic-surface-1 border-b border-border shadow-sm z-40"
+      className="handheld-scan-toolbar scanner-context sticky top-0 bg-semantic-surface-1 border-b border-border shadow-xs z-40"
     >
       <div className="px-4 py-3">
         {/* Top row: User name and sync status */}
@@ -60,7 +60,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
           <button
             type="button"
             onClick={onSettingsClick}
-            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center focus-visible:outline-none"
+            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center focus-visible:outline-hidden"
             aria-label="Settings"
           >
             <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
