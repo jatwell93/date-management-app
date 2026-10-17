@@ -62,8 +62,10 @@ const IMPLAUSIBLE_PACE_THRESHOLD = 10;
 // This many zero-finding bay checks by one user is flagged as suspicious.
 const ZERO_FINDINGS_THRESHOLD = 6;
 
+const AUDIT_NUMBER_FORMAT = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 });
+
 export function formatStoreWalkAuditNumber(value: number): string {
-  return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 }).format(value);
+  return AUDIT_NUMBER_FORMAT.format(value);
 }
 
 /**
