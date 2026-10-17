@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/react';
 import { getExpiredLossesReport } from '../services/expiredItemService';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { withOccurrenceKeys } from '../utils/listKeys';
 import {
   Table,
   TableBody,
@@ -128,16 +129,18 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lossesByStoreArea.map((item, index) => (
-                  <TableRow key={index} className="hover:bg-muted/50">
-                    <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
-                      {item.locationName}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-foreground">
-                      ${item.totalLoss.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {withOccurrenceKeys(lossesByStoreArea, (a) => a.locationName).map(
+                  ({ item, key }) => (
+                    <TableRow key={key} className="hover:bg-muted/50">
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
+                        {item.locationName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-foreground">
+                        ${item.totalLoss.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  ),
+                )}
               </TableBody>
             </Table>
           </div>
