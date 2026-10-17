@@ -143,6 +143,43 @@ jobs:
           path: migration-status.txt
           retention-days: 30
 
+      # Validate mode never applies anything, so the shared dev database only
+      # catches up when an operator runs migrate:apply. deploy-development then
+      # ships this PR's Worker onto it regardless, and a Worker that reads a
+      # column the dev database lacks fails every authenticated request
+      # ("column s.current_period_end does not exist", 2026-10-17). Fail here, before
+      # the deploy, when dev is missing a migration that is already on main.
+      # Migrations this PR adds are exempt: they are pending by definition.
+      - name: Check the dev database is not behind main
+        if: inputs.mode == 'validate'
+        run: |
+          set -u
+          catch_up='Catch the dev database up (see docs/migrations-deploy-runbook.md, adoption procedure for a database with no ledger), then re-run this job.'
+
+          if grep -q 'Ledger: not initialized' migration-status.txt; then
+            echo "::error::The dev database has no migration ledger (never adopted), so it cannot be trusted to match the schema this Worker expects."
+            echo "::error::${catch_up}"
+            exit 1
+          fi
+
+          pending=$(sed -n 's/^ *Pending: *//p' migration-status.txt | tr -d ' ')
+          added=$(git diff --name-only --diff-filter=A origin/main HEAD -- 'database/migrations/*.up.sql' | sed -E 's#.*/([0-9]{4})_.*#\1#')
+
+          behind=''
+          for id in $(printf '%s' "$pending" | tr ',' ' '); do
+            case "$id" in '(none)') continue ;; esac
+            if ! printf '%s\n' "$added" | grep -qx "$id"; then
+              behind="$behind $id"
+            fi
+          done
+
+          if [ -n "$behind" ]; then
+            echo "::error::The dev database is behind main. Pending migrations not added by this PR:${behind}"
+            echo "::error::${catch_up}"
+            exit 1
+          fi
+          echo "Dev database has every migration that is already on main."
+
       # ── Step 2: preflight (read-only readiness) ──────────────────────
       - name: Run migrate:preflight (read-only readiness)
         env:
