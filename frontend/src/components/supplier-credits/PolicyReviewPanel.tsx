@@ -39,9 +39,11 @@ interface Props {
   onChanged: () => void;
 }
 
+const POLICY_DATE_FORMAT = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
+
 function formatPolicyDate(value: string | null): string {
   if (!value) return 'Never';
-  return new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(new Date(value));
+  return POLICY_DATE_FORMAT.format(new Date(value));
 }
 
 function actionErrorMessage(cause: unknown): string {

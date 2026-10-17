@@ -16,6 +16,8 @@ import { ApiError } from '../../lib/api.service';
 
 const MAX_BULK_SELECTION = 500;
 
+const POLICY_DATE_FORMAT = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
+
 interface Props {
   suppliers: Supplier[];
   getToken: () => Promise<string | null>;
@@ -516,9 +518,7 @@ const SkuMatchingView: React.FC<{
                       </TableCell>
                       <TableCell>
                         {supplier?.policyUpdatedAt
-                          ? new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(
-                              new Date(supplier.policyUpdatedAt),
-                            )
+                          ? POLICY_DATE_FORMAT.format(new Date(supplier.policyUpdatedAt))
                           : 'Never'}
                       </TableCell>
                     </TableRow>

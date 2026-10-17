@@ -21,6 +21,7 @@ import {
 } from '../utils/csvValidator';
 import * as XLSX from 'xlsx';
 import { downloadExpiryTemplate, downloadCatalogTemplate } from '../utils/uploadUtils';
+import { withOccurrenceKeys } from '../utils/listKeys';
 import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
 
 export const CSVUploadPage: React.FC<{
@@ -156,6 +157,10 @@ export const CSVUploadPage: React.FC<{
   };
 
   const previewHeaders = filePreview[0] || [];
+  // CSV headers can repeat or be blank, so key each column by header + occurrence number.
+  const previewColumns = withOccurrenceKeys(previewHeaders, (header) => header).map(
+    ({ item, key }) => ({ header: item, key }),
+  );
   const previewRows = filePreview.slice(1);
   const activePanelId = isExpiryImport ? expiryListPanelId : productCatalogPanelId;
 
@@ -419,9 +424,9 @@ export const CSVUploadPage: React.FC<{
                     <Table className="min-w-max">
                       <TableHeader>
                         <TableRow>
-                          {previewHeaders.map((header, index) => (
+                          {previewColumns.map(({ key, header }, index) => (
                             <TableHead
-                              key={`${header}-${index}`}
+                              key={key}
                               className="text-left text-xs font-medium text-semantic-text-secondary uppercase tracking-wider"
                             >
                               {header || `Column ${index + 1}`}
@@ -656,37 +661,39 @@ export const CSVUploadPage: React.FC<{
                   <div className="mt-2">
                     <h4 className="font-semibold mt-3">Error details:</h4>
                     <ul className="list-disc pl-5 mt-1 space-y-1">
-                      {uploadResult.errors.map((error, index) => (
-                        <li key={index} className="text-sm">
-                          {error.includes('column') && error.toLowerCase().includes('name') ? (
-                            <span>
-                              {error} -{' '}
-                              <button
-                                type="button"
-                                className="cursor-pointer text-semantic-primary hover:underline"
-                                onClick={scrollToFormatGuidelines}
-                                aria-controls={formatGuidelinesId}
-                              >
-                                See format guidelines
-                              </button>
-                            </span>
-                          ) : error.includes('cost') && error.toLowerCase().includes('format') ? (
-                            <span>
-                              {error} -{' '}
-                              <button
-                                type="button"
-                                className="cursor-pointer text-semantic-primary hover:underline"
-                                onClick={scrollToFormatGuidelines}
-                                aria-controls={formatGuidelinesId}
-                              >
-                                See cost format guidelines
-                              </button>
-                            </span>
-                          ) : (
-                            <span>{error}</span>
-                          )}
-                        </li>
-                      ))}
+                      {withOccurrenceKeys(uploadResult.errors, (e) => e).map(
+                        ({ item: error, key }) => (
+                          <li key={key} className="text-sm">
+                            {error.includes('column') && error.toLowerCase().includes('name') ? (
+                              <span>
+                                {error} -{' '}
+                                <button
+                                  type="button"
+                                  className="cursor-pointer text-semantic-primary hover:underline"
+                                  onClick={scrollToFormatGuidelines}
+                                  aria-controls={formatGuidelinesId}
+                                >
+                                  See format guidelines
+                                </button>
+                              </span>
+                            ) : error.includes('cost') && error.toLowerCase().includes('format') ? (
+                              <span>
+                                {error} -{' '}
+                                <button
+                                  type="button"
+                                  className="cursor-pointer text-semantic-primary hover:underline"
+                                  onClick={scrollToFormatGuidelines}
+                                  aria-controls={formatGuidelinesId}
+                                >
+                                  See cost format guidelines
+                                </button>
+                              </span>
+                            ) : (
+                              <span>{error}</span>
+                            )}
+                          </li>
+                        ),
+                      )}
                     </ul>
                   </div>
                 )}
