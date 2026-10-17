@@ -94,6 +94,18 @@ jobs:
               echo "::error::This usually means DOPPLER_TOKEN is bound to the wrong config. Verify the preview token targets the dev/preview Doppler config."
               exit 1
             fi
+            # A pages.dev preview cannot reach a loopback API. The URL is compiled
+            # into the bundle, so a localhost value ships a preview whose every
+            # request fails (CORS to localhost) and which then shows "setup required".
+            if [[ "${api_url}" == *"localhost"* ]] \
+              || [[ "${api_url}" == *"127.0.0.1"* ]] \
+              || [[ "${api_url}" == *"0.0.0.0"* ]] \
+              || [[ "${api_url}" == *"[::1]"* ]]; then
+              echo "::error::Preview build is pointing at a loopback API (${api_url})."
+              echo "::error::The API URL is compiled into the bundle, so a deployed preview cannot reach localhost."
+              echo "::error::Set REACT_APP_API_URL in the preview Doppler config to the dev Worker (e.g. https://date-management-api-dev.date-management-app.workers.dev)."
+              exit 1
+            fi
 
           '
 
