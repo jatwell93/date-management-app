@@ -162,12 +162,14 @@ jobs:
             exit 1
           fi
 
-          pending=$(sed -n 's/^ *Pending: *//p' migration-status.txt | tr -d ' ')
+          # Take only the 4-digit ids from the Pending line. With nothing pending
+          # status.ts prints "(none — up to date)", so matching ids rather than
+          # that wording keeps the parse independent of the message text.
+          pending=$(sed -n 's/^ *Pending: *//p' migration-status.txt | grep -oE '[0-9]{4}' || true)
           added=$(git diff --name-only --diff-filter=A origin/main HEAD -- 'database/migrations/*.up.sql' | sed -E 's#.*/([0-9]{4})_.*#\1#')
 
           behind=''
-          for id in $(printf '%s' "$pending" | tr ',' ' '); do
-            case "$id" in '(none)') continue ;; esac
+          for id in $pending; do
             if ! printf '%s\n' "$added" | grep -qx "$id"; then
               behind="$behind $id"
             fi
