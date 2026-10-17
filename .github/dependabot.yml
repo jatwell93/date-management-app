@@ -15,6 +15,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     versioning-strategy: increase
+    # ESLint 10 is blocked upstream: eslint-plugin-react crashes under it (see the
+    # remediation log in docs/security.md). Drop this rule when the plugin supports 10.
+    ignore:
+      - dependency-name: eslint
+        update-types:
+          - version-update:semver-major
     groups:
       production-minor-patch:
         dependency-type: production
@@ -33,6 +39,11 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     versioning-strategy: increase
+    # See the note on the root entry: ESLint 10 is blocked on eslint-plugin-react.
+    ignore:
+      - dependency-name: eslint
+        update-types:
+          - version-update:semver-major
     groups:
       production-minor-patch:
         dependency-type: production
