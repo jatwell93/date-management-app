@@ -156,6 +156,13 @@ export const CSVUploadPage: React.FC<{
   };
 
   const previewHeaders = filePreview[0] || [];
+  // CSV headers can repeat or be blank, so key each column by header + occurrence number.
+  const headerCounts = new Map<string, number>();
+  const previewColumns = previewHeaders.map((header) => {
+    const occurrence = (headerCounts.get(header) ?? 0) + 1;
+    headerCounts.set(header, occurrence);
+    return { header, key: `${header}#${occurrence}` };
+  });
   const previewRows = filePreview.slice(1);
   const activePanelId = isExpiryImport ? expiryListPanelId : productCatalogPanelId;
 
@@ -419,9 +426,9 @@ export const CSVUploadPage: React.FC<{
                     <Table className="min-w-max">
                       <TableHeader>
                         <TableRow>
-                          {previewHeaders.map((header, index) => (
+                          {previewColumns.map(({ key, header }, index) => (
                             <TableHead
-                              key={`${header}-${index}`}
+                              key={key}
                               className="text-left text-xs font-medium text-semantic-text-secondary uppercase tracking-wider"
                             >
                               {header || `Column ${index + 1}`}

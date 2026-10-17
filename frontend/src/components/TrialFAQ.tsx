@@ -75,6 +75,22 @@ const faqData = [
   },
 ];
 
+function FAQList() {
+  return (
+    <div className="w-full divide-y rounded-md border">
+      {faqData.map((item) => (
+        <details key={item.id} className="group px-4 py-3">
+          <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
+            <span className="text-muted-foreground">{item.icon}</span>
+            <span>{item.question}</span>
+          </summary>
+          <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: TrialFAQProps) {
   const [open, setOpen] = useState(false);
 
@@ -138,17 +154,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
         </DialogHeader>
 
         <div className="mt-4">
-          <div className="w-full divide-y rounded-md border">
-            {faqData.map((item) => (
-              <details key={item.id} className="group px-4 py-3">
-                <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
-                  <span className="text-muted-foreground">{item.icon}</span>
-                  <span>{item.question}</span>
-                </summary>
-                <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
-              </details>
-            ))}
-          </div>
+          <FAQList />
         </div>
 
         <div className="mt-4 pt-4 border-t">
@@ -182,17 +188,7 @@ export function TrialFAQInline() {
         Frequently Asked Questions
       </h3>
 
-      <div className="w-full divide-y rounded-md border">
-        {faqData.map((item) => (
-          <details key={item.id} className="group px-4 py-3">
-            <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
-              <span className="text-muted-foreground">{item.icon}</span>
-              <span>{item.question}</span>
-            </summary>
-            <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
-          </details>
-        ))}
-      </div>
+      <FAQList />
     </div>
   );
 }

@@ -92,8 +92,8 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lossesBySKU.map((item, index) => (
-                  <TableRow key={index} className="hover:bg-muted/50">
+                {lossesBySKU.map((item) => (
+                  <TableRow key={item.sku} className="hover:bg-muted/50">
                     <TableCell className="whitespace-nowrap text-sm text-foreground">
                       {item.sku}
                     </TableCell>

@@ -192,18 +192,21 @@ function Step2(_props: StepProps) {
 
   const slides = [
     {
+      id: 'dashboard',
       title: 'Welcome to Your Dashboard',
       description:
         'This is your command center. See inventory summary, expiry alerts, and team activity at a glance.',
       icon: '📊',
     },
     {
+      id: 'catalog',
       title: 'Manage Your Catalog',
       description:
         'View all your products, update pricing and suppliers, and organize your inventory.',
       icon: '📦',
     },
     {
+      id: 'scanning',
       title: 'Start Scanning',
       description: 'Add items to inventory by scanning barcodes or manually entering details.',
       icon: '📱',
@@ -242,9 +245,9 @@ function Step2(_props: StepProps) {
 
         {/* Carousel Indicators */}
         <div className="flex justify-center gap-2">
-          {slides.map((_, index) => (
+          {slides.map((slide, index) => (
             <button
-              key={index}
+              key={slide.id}
               onClick={() => setSlideIndex(index)}
               className={`size-2 rounded-full transition ${
                 index === slideIndex ? 'bg-semantic-secondary w-8' : 'bg-semantic-surface-4'
