@@ -81,6 +81,7 @@ export function UsageWarning({
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3 flex-1">
             <div
+              aria-hidden="true"
               className={`w-2 h-2 rounded-full ${isUrgent ? 'bg-semantic-critical' : 'bg-semantic-warning'}`}
             />
             <div className="flex-1">
@@ -117,10 +118,12 @@ export function UsageWarning({
                 }
               >
                 Upgrade
+                <span className="sr-only"> for more {resourceNames[resourceType]}</span>
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={handleDismiss}>
               Dismiss
+              <span className="sr-only"> {resourceNames[resourceType]} warning</span>
             </Button>
           </div>
         </div>

@@ -8,7 +8,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './ui/dialog';
-import { HelpCircle, Clock, Lock, CreditCard, Mail, AlertTriangle } from 'lucide-react';
+import {
+  HelpCircle,
+  Clock,
+  Lock,
+  CreditCard,
+  Mail,
+  AlertTriangle,
+  ChevronDown,
+} from 'lucide-react';
 
 interface TrialFAQProps {
   daysRemaining?: number;
@@ -19,56 +27,56 @@ interface TrialFAQProps {
 const faqData = [
   {
     id: 'what-happens',
-    icon: <Clock className="size-4" />,
+    icon: <Clock className="size-4" aria-hidden="true" />,
     question: 'What happens when my trial expires?',
     answer:
       'Your organization moves to the Free plan. You keep all your data. The Free plan has lower limits (500 products, 1 user), and adding new items may be blocked if you are over them. You can upgrade at any time to restore the Professional plan.',
   },
   {
     id: 'data-loss',
-    icon: <AlertTriangle className="size-4" />,
+    icon: <AlertTriangle className="size-4" aria-hidden="true" />,
     question: 'Will I lose my data?',
     answer:
       'No. Your products, inventory, and all data remain accessible. You can view and update everything. Only adding NEW items may be blocked if you are over the Free plan limits.',
   },
   {
     id: 'creation-lock',
-    icon: <Lock className="size-4" />,
+    icon: <Lock className="size-4" aria-hidden="true" />,
     question: 'What is a creation lock?',
     answer:
       'When your trial has ended and you have not upgraded, adding new products, inventory items, or users may be blocked. Your existing data stays available, and upgrading lifts the block.',
   },
   {
     id: 'upgrade-anytime',
-    icon: <CreditCard className="size-4" />,
+    icon: <CreditCard className="size-4" aria-hidden="true" />,
     question: 'Can I upgrade after my trial expires?',
     answer:
       'Yes! You can upgrade at any time - even after expiration. Once you upgrade, all features are immediately restored and any creation lock is removed.',
   },
   {
     id: 'reminders',
-    icon: <Mail className="size-4" />,
+    icon: <Mail className="size-4" aria-hidden="true" />,
     question: 'When will I receive reminder emails?',
     answer:
       'We send reminder emails at 10, 5, and 2 days before your trial expires. These include upgrade links and information about what happens after expiration.',
   },
   {
     id: 'grace-period',
-    icon: <Clock className="size-4" />,
+    icon: <Clock className="size-4" aria-hidden="true" />,
     question: 'Is there a grace period after expiration?',
     answer:
       'No. Your organization moves to the Free plan as soon as the trial ends, on the end date shown in your trial banner. You can upgrade at any time afterwards and your data is kept.',
   },
   {
     id: 'export-data',
-    icon: <Lock className="size-4" />,
+    icon: <Lock className="size-4" aria-hidden="true" />,
     question: 'Can I export my data before the trial ends?',
     answer:
       'There is no in-app export yet. If you are over the Free plan limits, the API endpoint GET /api/products/export-excess returns the products over the limit. For a full copy of your data, contact support.',
   },
   {
     id: 'limits',
-    icon: <AlertTriangle className="size-4" />,
+    icon: <AlertTriangle className="size-4" aria-hidden="true" />,
     question: 'What are the Free plan limits?',
     answer:
       'The Free plan includes 500 products (SKUs), 1 user, 500 inventory items, and 1 GB of storage. If you are over these when your trial ends, adding new items may be blocked until you upgrade or reduce usage.',
@@ -82,7 +90,11 @@ function FAQList() {
         <details key={item.id} className="group px-4 py-3">
           <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
             <span className="text-muted-foreground">{item.icon}</span>
-            <span>{item.question}</span>
+            <span className="flex-1">{item.question}</span>
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground motion-safe:transition-transform group-open:rotate-180"
+            />
           </summary>
           <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
         </details>
@@ -98,8 +110,8 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
     switch (trigger) {
       case 'icon':
         return (
-          <Button variant="ghost" size="icon" className="size-8">
-            <HelpCircle className="size-4" />
+          <Button variant="ghost" size="icon" className="size-8" aria-label="Trial FAQ">
+            <HelpCircle className="size-4" aria-hidden="true" />
           </Button>
         );
       case 'link':
@@ -111,7 +123,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
       default:
         return (
           <Button variant="outline" size="sm" className="gap-2">
-            <HelpCircle className="size-4" />
+            <HelpCircle className="size-4" aria-hidden="true" />
             Trial FAQ
           </Button>
         );
@@ -147,7 +159,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="size-5" />
+            <HelpCircle className="size-5" aria-hidden="true" />
             {headerContent.title}
           </DialogTitle>
           <DialogDescription>{headerContent.description}</DialogDescription>
@@ -184,7 +196,7 @@ export function TrialFAQInline() {
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold font-heading flex items-center gap-2">
-        <HelpCircle className="size-5" />
+        <HelpCircle className="size-5" aria-hidden="true" />
         Frequently Asked Questions
       </h3>
 

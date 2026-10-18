@@ -42,7 +42,9 @@ function ActivePlanCard({ tierLevel, billingCycle }: ActivePlanCardProps) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>{planName} plan active</CardTitle>
+        <CardTitle role="heading" aria-level={1}>
+          {planName} plan active
+        </CardTitle>
         <CardDescription>
           Your current paid plan is active
           {billingCycle ? ` and billed ${billingCycle}` : ''}.
@@ -85,14 +87,21 @@ function UpgradeHeader({
   return (
     <div className="mb-8">
       <h1 className="text-3xl font-semibold font-heading mb-2 flex items-center gap-2">
-        {isInTrial && <span className="size-3 rounded-full bg-semantic-secondary animate-pulse" />}
+        {isInTrial && (
+          <span
+            aria-hidden="true"
+            className="size-3 rounded-full bg-semantic-secondary motion-safe:animate-pulse"
+          />
+        )}
         {isInTrial ? 'Professional Trial' : 'Starter plan'}
       </h1>
       <p className="text-muted-foreground">{getDescription()}</p>
 
       <Card className="mt-6 max-w-md">
         <CardHeader>
-          <CardTitle className="text-base">Your current usage</CardTitle>
+          <CardTitle role="heading" aria-level={2} className="text-base">
+            Your current usage
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex justify-between text-sm">
@@ -224,7 +233,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   if (!trialStatus) {
     return (
       <Card className="w-full max-w-md">
-        <CardContent className="py-8 text-center text-muted-foreground">
+        <CardContent role="alert" className="py-8 text-center text-muted-foreground">
           Unable to load trial status
         </CardContent>
       </Card>
@@ -254,7 +263,10 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
       />
 
       {error && (
-        <div className="mb-6 max-w-md p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md">
+        <div
+          role="alert"
+          className="mb-6 max-w-md p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md"
+        >
           <p className="text-sm text-semantic-critical-muted-foreground">{error}</p>
         </div>
       )}

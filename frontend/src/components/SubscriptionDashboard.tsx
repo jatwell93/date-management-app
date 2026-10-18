@@ -44,16 +44,22 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
           {displayCurrent} / {displayLimit}
         </span>
       </div>
-      <div className="w-full bg-semantic-surface-3 rounded-full h-2.5 dark:bg-semantic-surface-4">
-        <div
-          className={`h-2.5 rounded-full transition-all ${progressBarColorClass}`}
-          style={{ width: `${isUnlimited ? 0 : percentage}%` }}
-          role="progressbar"
-          aria-valuenow={current}
-          aria-valuemin={0}
-          aria-valuemax={limit || 100}
-        />
-      </div>
+      {/* Unlimited resources have no meaningful maximum, so no progressbar is
+          exposed; the "x / Unlimited" text above carries the value. */}
+      {!isUnlimited && (
+        <div className="w-full bg-semantic-surface-3 rounded-full h-2.5 dark:bg-semantic-surface-4">
+          <div
+            className={`h-2.5 rounded-full motion-safe:transition-[width] ${progressBarColorClass}`}
+            style={{ width: `${percentage}%` }}
+            role="progressbar"
+            aria-label={`${label} usage`}
+            aria-valuenow={Math.min(current, limit)}
+            aria-valuemin={0}
+            aria-valuemax={limit}
+            aria-valuetext={`${displayCurrent} of ${displayLimit} used`}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -118,7 +124,9 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     return (
       <Card>
         <CardContent className="py-8 text-center">
-          <p className="text-muted-foreground">Loading subscription data…</p>
+          <p role="status" className="text-muted-foreground">
+            Loading subscription data…
+          </p>
         </CardContent>
       </Card>
     );
@@ -127,7 +135,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   if (error || !subscription || !usage) {
     return (
       <Card>
-        <CardContent className="py-8 text-center">
+        <CardContent role="alert" className="py-8 text-center">
           <p className="text-semantic-critical">Unable to load subscription data</p>
           {error && <p className="text-sm text-muted-foreground mt-2">{error}</p>}
         </CardContent>
@@ -160,11 +168,12 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="flex items-center gap-3">
+            <CardTitle role="heading" aria-level={2} className="flex items-center gap-3">
               <span>Subscription Overview</span>
               <span
                 className={`text-sm font-semibold px-3 py-1 rounded-full border ${tierColors[subscription.tierLevel]}`}
               >
+                <span className="sr-only">Current plan: </span>
                 {tierDisplayName}
               </span>
             </CardTitle>

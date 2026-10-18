@@ -26,7 +26,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
           </DialogDescription>
         </DialogHeader>
 
-        <PlanComparison currentTier={currentTier} onSelectPlan={onSelectPlan} />
+        <PlanComparison currentTier={currentTier} onSelectPlan={onSelectPlan} headingLevel={3} />
       </DialogContent>
     </Dialog>
   );

@@ -24,15 +24,25 @@ interface PlanComparisonProps {
   defaultBillingCycle?: BillingCycle;
   /** Tier whose checkout is mid-flight — renders a "Processing..." button. */
   busyTier?: LaunchTier | null;
+  /** Heading level for tier names and the comparison table title (3 inside a dialog). */
+  headingLevel?: 2 | 3;
   className?: string;
 }
 
 function FeatureValue({ value }: { value: boolean | string }) {
   if (typeof value === 'boolean') {
     return value ? (
-      <Check className="size-4 text-semantic-success-muted-foreground" aria-label="Included" />
+      <Check
+        className="size-4 shrink-0 text-semantic-success-muted-foreground"
+        role="img"
+        aria-label="Included"
+      />
     ) : (
-      <X className="size-4 text-semantic-text-tertiary" aria-label="Not included" />
+      <X
+        className="size-4 shrink-0 text-semantic-text-tertiary"
+        role="img"
+        aria-label="Not included"
+      />
     );
   }
   return <Minus className="size-4 text-semantic-secondary" aria-hidden="true" />;
@@ -45,6 +55,7 @@ export function PlanComparison({
   onBillingCycleChange,
   defaultBillingCycle = 'monthly',
   busyTier = null,
+  headingLevel = 2,
   className,
 }: PlanComparisonProps) {
   const [internalCycle, setInternalCycle] = useState<BillingCycle>(defaultBillingCycle);
@@ -62,10 +73,11 @@ export function PlanComparison({
   return (
     <div className={className}>
       {/* Billing Cycle Toggle */}
-      <div className="flex justify-center gap-2 my-4">
+      <div role="group" aria-label="Billing cycle" className="flex justify-center gap-2 my-4">
         <Button
           variant={billingCycle === 'monthly' ? 'default' : 'outline'}
           onClick={() => setBillingCycle('monthly')}
+          aria-pressed={billingCycle === 'monthly'}
           size="sm"
         >
           Monthly
@@ -73,6 +85,7 @@ export function PlanComparison({
         <Button
           variant={billingCycle === 'annual' ? 'default' : 'outline'}
           onClick={() => setBillingCycle('annual')}
+          aria-pressed={billingCycle === 'annual'}
           size="sm"
         >
           Annual
@@ -118,14 +131,19 @@ export function PlanComparison({
               className={`relative ${cardEmphasis}`}
             >
               {isCurrentTier && (
-                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                <div
+                  aria-hidden="true"
+                  className="absolute -top-3 left-1/2 transform -translate-x-1/2"
+                >
                   <span className="bg-semantic-primary text-semantic-primary-foreground text-sm px-3 py-1 rounded-full">
                     Current Plan
                   </span>
                 </div>
               )}
               <CardHeader>
-                <CardTitle className="text-lg">{tierDisplayName(tier)}</CardTitle>
+                <CardTitle role="heading" aria-level={headingLevel} className="text-lg">
+                  {tierDisplayName(tier)}
+                </CardTitle>
                 <CardDescription>
                   {pricing.isContactSales ? (
                     <span className="text-2xl font-bold font-heading">Contact Sales</span>
@@ -148,10 +166,13 @@ export function PlanComparison({
                 <Button
                   className="w-full mb-4"
                   variant={isFeatured ? 'default' : 'outline'}
-                  disabled={!canCheckout || isBusy}
+                  // One checkout at a time: every tier locks while any checkout is in flight.
+                  disabled={!canCheckout || busyTier !== null}
+                  aria-busy={isBusy || undefined}
                   onClick={() => canCheckout && onSelectPlan(tier, billingCycle)}
                 >
                   {buttonLabel}
+                  <span className="sr-only"> ({tierDisplayName(tier)} plan)</span>
                 </Button>
                 <ul className="space-y-2 text-sm">
                   {TIER_FEATURES.map((feature) => {
@@ -174,14 +195,22 @@ export function PlanComparison({
 
       {/* Feature Comparison Table (Desktop) */}
       <div className="hidden lg:block mt-8">
-        <h3 className="text-lg font-semibold font-heading mb-4">Feature Comparison</h3>
+        <div
+          role="heading"
+          aria-level={headingLevel}
+          className="text-lg font-semibold font-heading mb-4"
+        >
+          Feature Comparison
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b">
-                <th className="text-left p-3 font-semibold">Feature</th>
+                <th scope="col" className="text-left p-3 font-semibold">
+                  Feature
+                </th>
                 {LAUNCH_TIERS.map((tier) => (
-                  <th key={tier} className="text-center p-3 font-semibold">
+                  <th key={tier} scope="col" className="text-center p-3 font-semibold">
                     {tierDisplayName(tier)}
                   </th>
                 ))}
@@ -190,7 +219,9 @@ export function PlanComparison({
             <tbody>
               {TIER_FEATURES.map((feature) => (
                 <tr key={feature.name} className="border-b hover:bg-semantic-surface-2">
-                  <td className="p-3 font-medium">{feature.name}</td>
+                  <th scope="row" className="text-left p-3 font-medium">
+                    {feature.name}
+                  </th>
                   {LAUNCH_TIERS.map((tier) => {
                     const value = feature[tier];
                     return (

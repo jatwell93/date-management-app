@@ -226,9 +226,15 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
       <div className="space-y-6">
         {billingLoadError && (
-          <Card className="border-semantic-critical">
+          <Card role="alert" className="border-semantic-critical">
             <CardHeader>
-              <CardTitle className="text-semantic-critical-muted-foreground">Unable to load billing settings</CardTitle>
+              <CardTitle
+                role="heading"
+                aria-level={2}
+                className="text-semantic-critical-muted-foreground"
+              >
+                Unable to load billing settings
+              </CardTitle>
               <CardDescription>{billingLoadError}</CardDescription>
             </CardHeader>
             <CardContent>
@@ -240,9 +246,15 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {checkoutError && (
-          <Card className="border-semantic-critical">
+          <Card role="alert" className="border-semantic-critical">
             <CardHeader>
-              <CardTitle className="text-semantic-critical-muted-foreground">Billing action failed</CardTitle>
+              <CardTitle
+                role="heading"
+                aria-level={2}
+                className="text-semantic-critical-muted-foreground"
+              >
+                Billing action failed
+              </CardTitle>
               <CardDescription>{checkoutError}</CardDescription>
             </CardHeader>
             <CardContent>
@@ -254,9 +266,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {cancellationScheduled && (
-          <Card className="border-hairline bg-semantic-surface-2">
+          <Card role="status" className="border-hairline bg-semantic-surface-2">
             <CardHeader>
-              <CardTitle>Subscription cancellation scheduled</CardTitle>
+              <CardTitle role="heading" aria-level={2}>
+                Subscription cancellation scheduled
+              </CardTitle>
               <CardDescription>
                 Your subscription will remain active until the end of your current billing period.
                 After that, you will be downgraded to the Starter plan.
@@ -299,7 +313,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         {/* Billing Management */}
         <Card>
           <CardHeader>
-            <CardTitle>Billing Management</CardTitle>
+            <CardTitle role="heading" aria-level={2}>
+              Billing Management
+            </CardTitle>
             <CardDescription>
               {canManageBilling
                 ? 'Update payment methods, view invoices, and manage billing details'
@@ -331,7 +347,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           subscription.tierLevel !== 'free' && (
             <Card>
               <CardHeader>
-                <CardTitle>Plan Management</CardTitle>
+                <CardTitle role="heading" aria-level={2}>
+                  Plan Management
+                </CardTitle>
                 <CardDescription>
                   Cancel your subscription or make changes to your plan
                 </CardDescription>
@@ -360,7 +378,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         {/* Help & Support */}
         <Card>
           <CardHeader>
-            <CardTitle>Need Help?</CardTitle>
+            <CardTitle role="heading" aria-level={2}>
+              Need Help?
+            </CardTitle>
             <CardDescription>
               Contact our support team for assistance with your subscription
             </CardDescription>

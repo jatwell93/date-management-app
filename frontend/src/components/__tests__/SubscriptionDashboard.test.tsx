@@ -98,6 +98,34 @@ describe('SubscriptionDashboard', () => {
     });
   });
 
+  it('names each progress bar and omits one for unlimited resources', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSubscriptionData,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockUsageData,
+      });
+
+    render(<SubscriptionDashboard token="test-token" />);
+
+    const skus = await screen.findByRole('progressbar', { name: 'SKUs (Products) usage' });
+    expect(skus).toHaveAttribute('aria-valuenow', '1200');
+    expect(skus).toHaveAttribute('aria-valuemax', '2000');
+    expect(skus).toHaveAttribute('aria-valuetext', '1,200 of 2,000 used');
+    expect(screen.getByRole('progressbar', { name: 'Users usage' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Storage usage' })).toBeInTheDocument();
+    // inventoryItems has limit: null, so it shows "Unlimited" text instead of a bar.
+    expect(
+      screen.queryByRole('progressbar', { name: 'Inventory Items usage' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /Subscription Overview/ }),
+    ).toBeInTheDocument();
+  });
+
   it('displays unlimited for null limits', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
