@@ -443,7 +443,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         Total: {numberFormatter.format(row.total_expiring)}
                       </span>
                     </div>
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
                       <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Expired</dt>
                         <dd className="font-bold tabular-nums text-semantic-critical">

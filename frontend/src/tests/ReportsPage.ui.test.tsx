@@ -148,6 +148,16 @@ describe('ReportsPage UI audit', () => {
     consoleError.mockRestore();
   });
 
+  it('stacks mobile month details in one column on the narrowest phones', async () => {
+    mockReports();
+    renderPage();
+
+    const list = await screen.findByRole('list', { name: 'Mobile monthly expiry summary' });
+    list.querySelectorAll('dl').forEach((dl) => {
+      expect(dl).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
+    });
+  });
+
   it('keeps a page heading and a full-size retry button when every report fails', async () => {
     vi.mocked(apiService.get).mockRejectedValue(new Error('Failed to load report'));
     renderPage();
