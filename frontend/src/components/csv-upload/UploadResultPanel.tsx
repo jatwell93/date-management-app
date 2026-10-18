@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '../ui/button';
 import type { UploadResponse } from '../../types/upload';
 import { withOccurrenceKeys } from '../../utils/listKeys';
+import { formatCount } from './formatCount';
 
 interface UploadResultPanelProps {
   uploadResult: UploadResponse;
@@ -9,9 +10,36 @@ interface UploadResultPanelProps {
   returnUrl: string | null;
   formatGuidelinesId: string;
   onShowGuidelines: () => void;
-  onDownloadErrorReport: (reportUrl: string) => void;
+  onDownloadErrorReport: (reportUrl: string) => Promise<boolean>;
   onContinue: (returnUrl: string) => void;
 }
+
+const ErrorReportButton: React.FC<{
+  reportUrl: string;
+  onDownload: (reportUrl: string) => Promise<boolean>;
+}> = ({ reportUrl, onDownload }) => {
+  const [failed, setFailed] = useState(false);
+  const handleClick = async () => {
+    setFailed(false);
+    setFailed(!(await onDownload(reportUrl)));
+  };
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void handleClick()}
+        className="mt-3 text-sm font-medium underline text-semantic-link"
+      >
+        Download full error report
+      </button>
+      {failed && (
+        <p role="alert" className="mt-1 text-sm font-medium">
+          The error report could not be downloaded. Please try again.
+        </p>
+      )}
+    </>
+  );
+};
 
 const isSafeReturnUrl = (returnUrl: string | null): returnUrl is string =>
   typeof returnUrl === 'string' &&
@@ -30,32 +58,39 @@ const ResultCounts: React.FC<{ uploadResult: UploadResponse; isExpiryImport: boo
     <div className="mt-2">
       {uploadResult.importedCount !== undefined && (
         <p>
-          {isExpiryImport ? 'Rows imported' : 'Products imported'}: {uploadResult.importedCount}
+          {isExpiryImport ? 'Rows imported' : 'Products imported'}:{' '}
+          {formatCount(uploadResult.importedCount)}
         </p>
       )}
       {isExpiryImport ? (
-        <p>Rows merged: {uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0}</p>
+        <p>
+          Rows merged: {formatCount(uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0)}
+        </p>
       ) : (
         <>
           {uploadResult.updatedCount !== undefined && (
-            <p>Products updated: {uploadResult.updatedCount}</p>
+            <p>Products updated: {formatCount(uploadResult.updatedCount)}</p>
           )}
           {uploadResult.unchangedCount !== undefined && (
-            <p>Products unchanged: {uploadResult.unchangedCount}</p>
+            <p>Products unchanged: {formatCount(uploadResult.unchangedCount)}</p>
           )}
         </>
       )}
-      {uploadResult.errorCount !== undefined && <p>Errors: {uploadResult.errorCount}</p>}
+      {uploadResult.errorCount !== undefined && (
+        <p>Errors: {formatCount(uploadResult.errorCount)}</p>
+      )}
       {(uploadResult.rejectedCount !== undefined || uploadResult.skippedCount !== undefined) && (
         <p>
           {isExpiryImport ? 'Rows rejected' : 'Rows skipped'}:{' '}
-          {uploadResult.rejectedCount ?? uploadResult.skippedCount ?? 0}
+          {formatCount(uploadResult.rejectedCount ?? uploadResult.skippedCount ?? 0)}
         </p>
       )}
       {uploadResult.processedCount !== undefined && (
         <p>
-          Rows processed: {uploadResult.processedCount}
-          {uploadResult.totalCount !== undefined ? ` / ${uploadResult.totalCount}` : ''}
+          Rows processed: {formatCount(uploadResult.processedCount)}
+          {uploadResult.totalCount !== undefined
+            ? ` / ${formatCount(uploadResult.totalCount)}`
+            : ''}
         </p>
       )}
     </div>
@@ -94,7 +129,7 @@ const ColumnSummary: React.FC<{ columnsUsed: string[]; columnsIgnored?: number }
     </p>
     {columnsIgnored !== undefined && columnsIgnored > 0 && (
       <p className="text-sm text-semantic-success-muted-foreground">
-        Ignored {columnsIgnored} extra column
+        Ignored {formatCount(columnsIgnored)} extra column
         {columnsIgnored > 1 ? 's' : ''}
       </p>
     )}
@@ -167,13 +202,10 @@ export const UploadResultPanel: React.FC<UploadResultPanelProps> = ({
     <ResultCounts uploadResult={uploadResult} isExpiryImport={isExpiryImport} />
 
     {uploadResult.errorReportUrl && (
-      <button
-        type="button"
-        onClick={() => onDownloadErrorReport(uploadResult.errorReportUrl as string)}
-        className="mt-3 text-sm font-medium underline text-semantic-link"
-      >
-        Download full error report
-      </button>
+      <ErrorReportButton
+        reportUrl={uploadResult.errorReportUrl}
+        onDownload={onDownloadErrorReport}
+      />
     )}
 
     {isExpiryImport && uploadResult.rejectedRows && uploadResult.rejectedRows.length > 0 && (

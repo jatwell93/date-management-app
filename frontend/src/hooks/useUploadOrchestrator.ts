@@ -39,6 +39,41 @@ async function extractStatusErrorSuffix(res: Response): Promise<string> {
   }
 }
 
+const UNREADABLE_RESPONSE_MESSAGE =
+  'The server sent an unreadable response. Please try the upload again.';
+
+// Proxy and edge error pages can arrive as 200 HTML; never surface a raw JSON SyntaxError.
+async function readJsonBody<T>(res: Response): Promise<T> {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new Error(UNREADABLE_RESPONSE_MESSAGE);
+  }
+}
+
+// Storage can be blocked (private mode, managed devices); the summary is a convenience only.
+function readStoredSummary(): LastUploadSummary | null {
+  try {
+    const storedSummary = localStorage.getItem(LAST_UPLOAD_SUMMARY_KEY);
+    return storedSummary ? (JSON.parse(storedSummary) as LastUploadSummary) : null;
+  } catch {
+    try {
+      localStorage.removeItem(LAST_UPLOAD_SUMMARY_KEY);
+    } catch {
+      // Storage unavailable; nothing to clear.
+    }
+    return null;
+  }
+}
+
+function storeSummary(summary: LastUploadSummary): void {
+  try {
+    localStorage.setItem(LAST_UPLOAD_SUMMARY_KEY, JSON.stringify(summary));
+  } catch {
+    // Storage unavailable; the in-memory summary still shows for this session.
+  }
+}
+
 function hasImmediateExpiryResult(
   importType: UploadImportType,
   data: Record<string, unknown> | undefined,
@@ -65,18 +100,9 @@ export function useUploadOrchestrator({
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
-  const [lastUploadSummary, setLastUploadSummary] = useState<LastUploadSummary | null>(() => {
-    const storedSummary = localStorage.getItem(LAST_UPLOAD_SUMMARY_KEY);
-    if (!storedSummary) {
-      return null;
-    }
-    try {
-      return JSON.parse(storedSummary) as LastUploadSummary;
-    } catch (_error) {
-      localStorage.removeItem(LAST_UPLOAD_SUMMARY_KEY);
-      return null;
-    }
-  });
+  const [lastUploadSummary, setLastUploadSummary] = useState<LastUploadSummary | null>(
+    readStoredSummary,
+  );
 
   const getFreshToken = useFreshApiToken(token);
   const getUploadAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -99,7 +125,7 @@ export function useUploadOrchestrator({
       };
 
       setLastUploadSummary(summary);
-      localStorage.setItem(LAST_UPLOAD_SUMMARY_KEY, JSON.stringify(summary));
+      storeSummary(summary);
     },
     [],
   );
@@ -185,7 +211,7 @@ export function useUploadOrchestrator({
         throw new Error('Failed to initiate upload');
       }
 
-      return initiateRes.json();
+      return readJsonBody(initiateRes);
     },
     [getUploadAuthHeaders],
   );
@@ -225,7 +251,7 @@ export function useUploadOrchestrator({
             throw new Error('Direct upload failed');
           }
 
-          const directData = (await directRes.json()) as Record<string, unknown>;
+          const directData = await readJsonBody<Record<string, unknown>>(directRes);
           const uploadKey = (directData.key as string | undefined) || initiateKey;
 
           return { uploadKey, directCompletionData: directData };
@@ -263,7 +289,7 @@ export function useUploadOrchestrator({
 
       if (!completeRes.ok) throw new Error('Processing failed');
 
-      return completeRes.json();
+      return readJsonBody(completeRes);
     },
     [getUploadAuthHeaders],
   );
@@ -423,7 +449,7 @@ export function useUploadOrchestrator({
   }, []);
 
   const downloadErrorReport = useCallback(
-    async (reportUrl: string) => {
+    async (reportUrl: string): Promise<boolean> => {
       try {
         const authHeaders = await getUploadAuthHeaders();
         const res = await fetch(buildApiUrl(reportUrl), { headers: authHeaders });
@@ -439,8 +465,10 @@ export function useUploadOrchestrator({
         anchor.click();
         anchor.remove();
         window.URL.revokeObjectURL(objectUrl);
+        return true;
       } catch (error) {
         console.error('Failed to download the error report', error);
+        return false;
       }
     },
     [getUploadAuthHeaders],

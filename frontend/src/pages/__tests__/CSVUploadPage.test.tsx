@@ -747,4 +747,137 @@ describe('CSVUploadPage expiry import', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(3);
   });
+
+  describe('resilience', () => {
+    const directInitiate = JSON.stringify({
+      strategy: 'direct',
+      uploadUrl: '/api/upload/direct',
+      method: 'POST',
+      key: 'uploads/org-123/products.csv',
+    });
+
+    const selectProductFile = () => {
+      const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+      fireEvent.change(fileInput, {
+        target: {
+          files: [
+            new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+              type: 'text/csv',
+            }),
+          ],
+        },
+      });
+      return fileInput;
+    };
+
+    const submitProductUpload = () =>
+      userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    it('locks the tabs, file input and Reset while an upload is in flight', async () => {
+      let resolveUpload!: (response: Response) => void;
+      fetchMock.mockResponseOnce(directInitiate).mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveUpload = resolve;
+          }),
+      );
+
+      render(<CSVUploadPage token="test-token" />);
+      const fileInput = selectProductFile();
+      submitProductUpload();
+
+      await screen.findByRole('progressbar', { name: 'Upload progress' });
+      expect(fileInput).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+      expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Uploading' })).toBeDisabled();
+
+      fetchMock.mockResponseOnce(JSON.stringify({ status: 'complete', importedCount: 1 }));
+      resolveUpload(new Response(JSON.stringify({ key: 'uploads/org-123/products.csv' })));
+      expect(await screen.findByText('Upload successful')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    });
+
+    it('still renders when browser storage is blocked', async () => {
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('blocked', 'SecurityError');
+      });
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('blocked', 'SecurityError');
+      });
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }))
+        .mockResponseOnce(JSON.stringify({ status: 'complete', importedCount: 2 }));
+
+      render(<CSVUploadPage token="test-token" />);
+      expect(screen.getByText('No completed uploads yet.')).toBeInTheDocument();
+
+      selectProductFile();
+      submitProductUpload();
+
+      expect(await screen.findByText('Upload successful')).toBeInTheDocument();
+      expect(screen.getAllByText('Products imported: 2').length).toBeGreaterThan(0);
+    });
+
+    it('explains a non-JSON server response instead of showing a parser error', async () => {
+      fetchMock.mockResponseOnce('<html>Bad gateway</html>', { status: 200 });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('The server sent an unreadable response');
+      expect(alert).not.toHaveTextContent(/SyntaxError|Unexpected token/);
+    });
+
+    it('announces when the error report cannot be downloaded', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }))
+        .mockResponseOnce(
+          JSON.stringify({
+            status: 'completed_with_errors',
+            importedCount: 1,
+            errorCount: 1,
+            errorReportUrl: '/api/upload/errors/report-1',
+          }),
+        )
+        .mockResponseOnce('missing', { status: 404 });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Download full error report' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'The error report could not be downloaded',
+      );
+    });
+
+    it('formats import counts with en-AU digit grouping', () => {
+      localStorage.setItem(
+        'csvUpload:lastUploadSummary',
+        JSON.stringify({
+          fileName: 'big.csv',
+          importType: 'product-catalog',
+          status: 'completed',
+          importedCount: 12345,
+          updatedCount: 1200,
+          rejectedCount: 0,
+          processedCount: 13545,
+        }),
+      );
+
+      render(<CSVUploadPage token="test-token" />);
+
+      expect(screen.getByText('Products imported: 12,345')).toBeInTheDocument();
+      expect(screen.getByText('Products updated: 1,200')).toBeInTheDocument();
+    });
+  });
 });

@@ -24,6 +24,7 @@ import { downloadExpiryTemplate, downloadCatalogTemplate } from '../utils/upload
 import { withOccurrenceKeys } from '../utils/listKeys';
 import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
 import { UploadResultPanel } from '../components/csv-upload/UploadResultPanel';
+import { LastUploadSummaryCard } from '../components/csv-upload/LastUploadSummaryCard';
 
 export const CSVUploadPage: React.FC<{
   token: string | null;
@@ -191,6 +192,7 @@ export const CSVUploadPage: React.FC<{
               aria-selected={importType === 'product-catalog'}
               aria-controls={importType === 'product-catalog' ? productCatalogPanelId : undefined}
               onClick={() => handleImportTypeChange('product-catalog')}
+              disabled={isUploading}
               variant={importType === 'product-catalog' ? 'default' : 'neutral'}
               className="min-h-11 shrink-0 px-3 py-2"
             >
@@ -203,6 +205,7 @@ export const CSVUploadPage: React.FC<{
               aria-selected={importType === 'expiry-list'}
               aria-controls={importType === 'expiry-list' ? expiryListPanelId : undefined}
               onClick={() => handleImportTypeChange('expiry-list')}
+              disabled={isUploading}
               variant={importType === 'expiry-list' ? 'default' : 'neutral'}
               className="min-h-11 shrink-0 px-3 py-2"
             >
@@ -223,43 +226,10 @@ export const CSVUploadPage: React.FC<{
                 : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode, and optional Retail Price) to update your product database.'}
             </p>
 
-            <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-              <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
-                Last uploaded file
-              </h3>
-              {lastUploadSummary ? (
-                <div className="grid gap-1 text-sm text-semantic-text-secondary sm:grid-cols-2">
-                  <p className="font-medium text-semantic-text-primary">
-                    {lastUploadSummary.fileName}
-                  </p>
-                  <p>
-                    {lastUploadSummary.importType === 'expiry-list'
-                      ? 'Expiry list'
-                      : 'Product catalog'}
-                  </p>
-                  <p>Completed</p>
-                  <p>
-                    {lastUploadSummary.importType === 'expiry-list'
-                      ? 'Rows imported'
-                      : 'Products imported'}
-                    : {lastUploadSummary.importedCount}
-                  </p>
-                  <p>
-                    {lastUploadSummary.importType === 'expiry-list'
-                      ? 'Rows merged'
-                      : 'Products updated'}
-                    : {lastUploadSummary.updatedCount}
-                  </p>
-                  <p>Rows rejected: {lastUploadSummary.rejectedCount}</p>
-                  <ReviewBrandMatchesAction
-                    importType={lastUploadSummary.importType}
-                    onReview={() => navigate('/supplier-credits?view=catalogue-review')}
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-semantic-text-secondary">No completed uploads yet.</p>
-              )}
-            </div>
+            <LastUploadSummaryCard
+              summary={lastUploadSummary}
+              onReviewBrandMatches={() => navigate('/supplier-credits?view=catalogue-review')}
+            />
 
             {/* Column name and format guidelines */}
             <div
@@ -389,6 +359,7 @@ export const CSVUploadPage: React.FC<{
                     type="file"
                     accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
                     onChange={handleFileChange}
+                    disabled={isUploading}
                     className="block h-auto min-h-11 w-full py-2 text-sm text-semantic-text-tertiary
                   cursor-pointer
                   file:mr-4 file:min-h-11 file:px-4 file:py-2
@@ -546,6 +517,7 @@ export const CSVUploadPage: React.FC<{
                 <Button
                   type="button"
                   onClick={handleReset}
+                  disabled={isUploading}
                   variant="neutral"
                   className="min-h-11 w-full px-4 py-2 sm:w-auto"
                 >
@@ -561,27 +533,13 @@ export const CSVUploadPage: React.FC<{
                 returnUrl={returnUrl}
                 formatGuidelinesId={formatGuidelinesId}
                 onShowGuidelines={scrollToFormatGuidelines}
-                onDownloadErrorReport={(reportUrl) => void downloadErrorReport(reportUrl)}
+                onDownloadErrorReport={downloadErrorReport}
                 onContinue={(url) => navigate(url)}
               />
             )}
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
-};
-
-const ReviewBrandMatchesAction: React.FC<{
-  importType: UploadImportType;
-  onReview: () => void;
-}> = ({ importType, onReview }) => {
-  if (importType !== 'product-catalog') return null;
-  return (
-    <div className="mt-3 sm:col-span-2">
-      <Button type="button" onClick={onReview}>
-        Review brand matches
-      </Button>
     </div>
   );
 };
