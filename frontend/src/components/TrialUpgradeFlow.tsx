@@ -40,9 +40,13 @@ function ActivePlanCard({ tierLevel, billingCycle }: ActivePlanCardProps) {
   const planName = `${tierLevel.charAt(0).toUpperCase()}${tierLevel.slice(1)}`;
 
   return (
-    <Card className="w-full max-w-md">
+    <Card
+      role="region"
+      aria-labelledby="upgrade-active-plan-heading"
+      className="mx-auto w-full max-w-md"
+    >
       <CardHeader>
-        <CardTitle role="heading" aria-level={1}>
+        <CardTitle id="upgrade-active-plan-heading" role="heading" aria-level={1}>
           {planName} plan active
         </CardTitle>
         <CardDescription>
@@ -86,7 +90,10 @@ function UpgradeHeader({
 
   return (
     <div className="mb-8">
-      <h1 className="text-3xl font-semibold font-heading mb-2 flex items-center gap-2">
+      <h1
+        id="upgrade-heading"
+        className="text-3xl font-semibold font-heading mb-2 flex items-center gap-2"
+      >
         {isInTrial && (
           <span
             aria-hidden="true"
@@ -232,7 +239,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
   if (!trialStatus) {
     return (
-      <Card className="w-full max-w-md">
+      <Card className="mx-auto w-full max-w-md">
         <CardContent role="alert" className="py-8 text-center text-muted-foreground">
           Unable to load trial status
         </CardContent>
@@ -253,7 +260,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
+    <section aria-labelledby="upgrade-heading" className="mx-auto w-full max-w-6xl">
       <UpgradeHeader
         isInTrial={isInTrial}
         isTrialExpired={isTrialExpired}
@@ -278,6 +285,6 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         onSelectPlan={handleUpgrade}
         busyTier={converting ? selectedTier : null}
       />
-    </div>
+    </section>
   );
 }

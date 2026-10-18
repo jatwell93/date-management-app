@@ -73,12 +73,17 @@ export function PlanComparison({
   return (
     <div className={className}>
       {/* Billing Cycle Toggle */}
-      <div role="group" aria-label="Billing cycle" className="flex justify-center gap-2 my-4">
+      <div
+        role="group"
+        aria-label="Billing cycle"
+        className="flex flex-wrap justify-center gap-2 my-4"
+      >
         <Button
           variant={billingCycle === 'monthly' ? 'default' : 'outline'}
           onClick={() => setBillingCycle('monthly')}
           aria-pressed={billingCycle === 'monthly'}
           size="sm"
+          className="min-h-11"
         >
           Monthly
         </Button>
@@ -87,6 +92,7 @@ export function PlanComparison({
           onClick={() => setBillingCycle('annual')}
           aria-pressed={billingCycle === 'annual'}
           size="sm"
+          className="min-h-11"
         >
           Annual
           <span className="ml-2 text-sm bg-semantic-success-muted text-semantic-success-muted-foreground px-2 py-0.5 rounded-full">
@@ -164,7 +170,7 @@ export function PlanComparison({
               </CardHeader>
               <CardContent>
                 <Button
-                  className="w-full mb-4"
+                  className="w-full min-h-11 mb-4"
                   variant={isFeatured ? 'default' : 'outline'}
                   // One checkout at a time: every tier locks while any checkout is in flight.
                   disabled={!canCheckout || busyTier !== null}

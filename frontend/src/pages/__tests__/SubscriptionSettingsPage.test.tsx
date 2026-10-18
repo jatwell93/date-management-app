@@ -164,6 +164,20 @@ describe('SubscriptionSettingsPage', () => {
 
     expect(await screen.findByRole('button', { name: /View plans/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Manage Billing/i })).not.toBeInTheDocument();
+    // 44px touch target for handheld scanners.
+    expect(screen.getByRole('button', { name: /View plans/i })).toHaveClass('min-h-11');
+  });
+
+  it('renders a labelled section without a second container gutter inside the shell main', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, json: async () => ({}) });
+
+    render(<SubscriptionSettingsPage token="test-token" />);
+
+    const region = screen.getByRole('region', { name: 'Subscription & Billing' });
+    expect(region.tagName).toBe('SECTION');
+    expect(region).not.toHaveClass('container', 'px-4', 'py-8');
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    await screen.findByText(/Unable to load billing settings/i);
   });
 
   it('shows Manage Billing for an active paid plan', async () => {

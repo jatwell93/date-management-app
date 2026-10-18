@@ -106,22 +106,22 @@ export function UsageWarning({
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {onUpgrade && (
               <Button
                 size="sm"
                 onClick={onUpgrade}
                 className={
                   isUrgent
-                    ? 'bg-semantic-critical hover:bg-semantic-critical-hover text-semantic-critical-foreground'
-                    : 'bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
+                    ? 'min-h-11 bg-semantic-critical hover:bg-semantic-critical-hover text-semantic-critical-foreground'
+                    : 'min-h-11 bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
                 }
               >
                 Upgrade
                 <span className="sr-only"> for more {resourceNames[resourceType]}</span>
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={handleDismiss}>
+            <Button size="sm" variant="ghost" className="min-h-11" onClick={handleDismiss}>
               Dismiss
               <span className="sr-only"> {resourceNames[resourceType]} warning</span>
             </Button>

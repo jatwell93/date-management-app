@@ -88,7 +88,7 @@ function FAQList() {
     <div className="w-full divide-y rounded-md border">
       {faqData.map((item) => (
         <details key={item.id} className="group px-4 py-3">
-          <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 text-left text-base font-medium">
             <span className="text-muted-foreground">{item.icon}</span>
             <span className="flex-1">{item.question}</span>
             <ChevronDown
@@ -110,19 +110,23 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
     switch (trigger) {
       case 'icon':
         return (
-          <Button variant="ghost" size="icon" className="size-8" aria-label="Trial FAQ">
+          <Button variant="ghost" size="icon" className="size-11" aria-label="Trial FAQ">
             <HelpCircle className="size-4" aria-hidden="true" />
           </Button>
         );
       case 'link':
         return (
-          <Button variant="link" size="sm" className="h-auto p-0">
+          <Button
+            variant="link"
+            size="sm"
+            className="min-h-11 px-1 text-semantic-primary underline"
+          >
             FAQ
           </Button>
         );
       default:
         return (
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="min-h-11 gap-2">
             <HelpCircle className="size-4" aria-hidden="true" />
             Trial FAQ
           </Button>

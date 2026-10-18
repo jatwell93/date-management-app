@@ -216,9 +216,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
+    <section aria-labelledby="subscription-settings-heading" className="mx-auto w-full max-w-6xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-semibold font-heading mb-2">Subscription & Billing</h1>
+        <h1 id="subscription-settings-heading" className="text-3xl font-semibold font-heading mb-2">
+          Subscription & Billing
+        </h1>
         <p className="text-muted-foreground">
           Manage your subscription, view usage, and update billing information
         </p>
@@ -238,7 +240,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
               <CardDescription>{billingLoadError}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => loadSubscriptionData()} disabled={billingLoading}>
+              <Button
+                className="min-h-11"
+                onClick={() => loadSubscriptionData()}
+                disabled={billingLoading}
+              >
                 {billingLoading ? 'Retrying...' : 'Retry billing data'}
               </Button>
             </CardContent>
@@ -258,7 +264,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
               <CardDescription>{checkoutError}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" onClick={() => setCheckoutError(null)}>
+              <Button variant="outline" className="min-h-11" onClick={() => setCheckoutError(null)}>
                 Dismiss
               </Button>
             </CardContent>
@@ -323,16 +329,23 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-start gap-3">
               {canManageBilling ? (
                 <>
-                  <ManageSubscriptionButton token={token} variant="default" />
-                  <Button variant="outline" onClick={handleUpgrade}>
+                  {/* Own column so the portal error stacks under its button. */}
+                  <div className="flex flex-col">
+                    <ManageSubscriptionButton
+                      token={token}
+                      variant="default"
+                      className="min-h-11"
+                    />
+                  </div>
+                  <Button variant="outline" className="min-h-11" onClick={handleUpgrade}>
                     Change Plan
                   </Button>
                 </>
               ) : (
-                <Button variant="default" onClick={handleUpgrade}>
+                <Button variant="default" className="min-h-11" onClick={handleUpgrade}>
                   View plans
                 </Button>
               )}
@@ -356,8 +369,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
-                    <p className="text-sm text-semantic-warning-muted-foreground">
+                  <div className="p-4 bg-semantic-surface-2 border border-hairline rounded-lg">
+                    <p className="text-sm text-semantic-text-primary">
                       <strong>Note:</strong> If you cancel, you'll retain access to your current
                       plan until the end of your billing period. After that, you'll be downgraded to
                       the Starter plan.
@@ -365,6 +378,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
                   </div>
                   <Button
                     variant="destructive"
+                    className="min-h-11"
                     onClick={handleCancelSubscription}
                     disabled={cancelLoading}
                   >
@@ -390,7 +404,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
               If you have questions about billing, plan features, or need assistance, our support
               team is here to help.
             </p>
-            <Button variant="outline" onClick={() => window.open('mailto:support@example.com')}>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => window.open('mailto:support@example.com')}
+            >
               Contact Support
             </Button>
           </CardContent>
@@ -404,6 +422,6 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         onSelectPlan={handleSelectPlan}
         currentTier={subscription?.tierLevel || 'free'}
       />
-    </div>
+    </section>
   );
 }

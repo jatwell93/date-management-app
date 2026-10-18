@@ -88,6 +88,8 @@ describe('PlanComparison', () => {
     const annual = within(group).getByRole('button', { name: /Annual/ });
     expect(monthly).toHaveAttribute('aria-pressed', 'true');
     expect(annual).toHaveAttribute('aria-pressed', 'false');
+    expect(monthly).toHaveClass('min-h-11');
+    expect(annual).toHaveClass('min-h-11');
 
     fireEvent.click(annual);
 

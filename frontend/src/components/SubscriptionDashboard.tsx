@@ -166,7 +166,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle role="heading" aria-level={2} className="flex items-center gap-3">
               <span>Subscription Overview</span>
@@ -196,7 +196,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
             </CardDescription>
           </div>
           {showUpgrade && onUpgrade && (
-            <Button onClick={onUpgrade} size="sm">
+            <Button onClick={onUpgrade} className="min-h-11">
               Upgrade Plan
             </Button>
           )}
@@ -235,7 +235,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
             <p className="text-sm text-muted-foreground mb-3">
               Need more resources? Upgrade to unlock higher limits and premium features.
             </p>
-            <Button onClick={onUpgrade} variant="outline" className="w-full">
+            <Button onClick={onUpgrade} variant="outline" className="w-full min-h-11">
               Compare Plans
             </Button>
           </div>
