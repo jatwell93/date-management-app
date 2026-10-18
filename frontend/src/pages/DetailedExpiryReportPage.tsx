@@ -309,8 +309,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           </Button>
         </div>
         <p className="mt-2 max-w-3xl text-sm text-semantic-text-secondary">
-          Work top to bottom through this month&apos;s markdown decisions. To navigate or fix every
-          active entry, open the full expiry entries table.
+          This month&apos;s markdown decisions, grouped by days to expiry. To find or fix any active
+          entry, open the full expiry entries table.
         </p>
       </header>
       <MarkdownMatricesNotice {...markdownConfig} />
