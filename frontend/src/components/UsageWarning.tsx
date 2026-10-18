@@ -95,8 +95,10 @@ export function UsageWarning({
                 {resourceNames[resourceType]} usage at {Math.round(percentage)}%
               </p>
               <p
-                className={`text-xs ${
-                  isUrgent ? 'text-semantic-critical' : 'text-semantic-warning'
+                className={`text-sm tabular-nums ${
+                  isUrgent
+                    ? 'text-semantic-critical-muted-foreground'
+                    : 'text-semantic-warning-muted-foreground'
                 }`}
               >
                 Using {displayCurrent} of {displayLimit} ({displayRemaining} remaining)

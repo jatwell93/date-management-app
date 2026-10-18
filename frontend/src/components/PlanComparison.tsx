@@ -30,9 +30,9 @@ interface PlanComparisonProps {
 function FeatureValue({ value }: { value: boolean | string }) {
   if (typeof value === 'boolean') {
     return value ? (
-      <Check className="size-4 text-semantic-success" aria-label="Included" />
+      <Check className="size-4 text-semantic-success-muted-foreground" aria-label="Included" />
     ) : (
-      <X className="size-4 text-semantic-text-muted" aria-label="Not included" />
+      <X className="size-4 text-semantic-text-tertiary" aria-label="Not included" />
     );
   }
   return <Minus className="size-4 text-semantic-secondary" aria-hidden="true" />;
@@ -76,7 +76,7 @@ export function PlanComparison({
           size="sm"
         >
           Annual
-          <span className="ml-2 text-xs bg-semantic-success text-semantic-success-foreground px-2 py-0.5 rounded-full">
+          <span className="ml-2 text-sm bg-semantic-success-muted text-semantic-success-muted-foreground px-2 py-0.5 rounded-full">
             Save 17%
           </span>
         </Button>
@@ -115,11 +115,11 @@ export function PlanComparison({
               key={tier}
               data-tier={tier}
               data-testid={`tier-card-${tier}`}
-              className={`relative ${cardEmphasis} ${isDowngrade ? 'opacity-60' : ''}`}
+              className={`relative ${cardEmphasis}`}
             >
               {isCurrentTier && (
                 <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-semantic-primary text-semantic-primary-foreground text-xs px-3 py-1 rounded-full">
+                  <span className="bg-semantic-primary text-semantic-primary-foreground text-sm px-3 py-1 rounded-full">
                     Current Plan
                   </span>
                 </div>
@@ -136,7 +136,7 @@ export function PlanComparison({
                       </span>
                       <span className="text-sm text-muted-foreground">/month</span>
                       {billingCycle === 'annual' && pricing.annualBilled !== null && (
-                        <div className="text-xs text-muted-foreground mt-1 tabular-nums">
+                        <div className="text-sm text-muted-foreground mt-1 tabular-nums">
                           Billed A${formatPrice(pricing.annualBilled)} annually
                         </div>
                       )}

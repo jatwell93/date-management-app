@@ -75,7 +75,7 @@ export function ManageSubscriptionButton({
         {loading ? 'Loading...' : 'Manage Billing'}
       </Button>
       {error && (
-        <p id="manage-subscription-error" role="alert" className="mt-2 text-sm text-destructive">
+        <p id="manage-subscription-error" role="alert" className="mt-2 text-sm text-semantic-critical-muted-foreground">
           {error}
         </p>
       )}

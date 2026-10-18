@@ -255,7 +255,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
       {error && (
         <div className="mb-6 max-w-md p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md">
-          <p className="text-sm text-semantic-critical">{error}</p>
+          <p className="text-sm text-semantic-critical-muted-foreground">{error}</p>
         </div>
       )}
 

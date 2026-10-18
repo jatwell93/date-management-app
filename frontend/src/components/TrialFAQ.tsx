@@ -158,7 +158,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
         </div>
 
         <div className="mt-4 pt-4 border-t">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Need more help? Contact support at{' '}
             <a href="mailto:support@yourdomain.com" className="underline">
               support@yourdomain.com

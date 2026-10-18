@@ -65,6 +65,21 @@ describe('PlanComparison', () => {
     expect(currentButton).toBeDisabled();
   });
 
+  it('keeps downgrade cards at full opacity so their text stays AA legible', () => {
+    render(<PlanComparison currentTier="professional" onSelectPlan={onSelectPlan} />);
+
+    expect(screen.getByTestId('tier-card-free')).not.toHaveClass('opacity-60');
+    expect(screen.getByTestId('tier-card-starter')).not.toHaveClass('opacity-60');
+  });
+
+  it('uses AA-contrast tokens for the annual saving badge', () => {
+    render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
+
+    const badge = screen.getByText('Save 17%');
+    expect(badge).toHaveClass('text-semantic-success-muted-foreground', 'text-sm');
+    expect(badge).not.toHaveClass('bg-semantic-success');
+  });
+
   it('never exposes Enterprise self-serve checkout', () => {
     render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
 

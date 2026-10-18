@@ -226,9 +226,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
       <div className="space-y-6">
         {billingLoadError && (
-          <Card className="border-destructive/40 bg-destructive/5">
+          <Card className="border-semantic-critical">
             <CardHeader>
-              <CardTitle>Unable to load billing settings</CardTitle>
+              <CardTitle className="text-semantic-critical-muted-foreground">Unable to load billing settings</CardTitle>
               <CardDescription>{billingLoadError}</CardDescription>
             </CardHeader>
             <CardContent>
@@ -240,9 +240,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {checkoutError && (
-          <Card className="border-destructive/40 bg-destructive/5">
+          <Card className="border-semantic-critical">
             <CardHeader>
-              <CardTitle>Billing action failed</CardTitle>
+              <CardTitle className="text-semantic-critical-muted-foreground">Billing action failed</CardTitle>
               <CardDescription>{checkoutError}</CardDescription>
             </CardHeader>
             <CardContent>
@@ -254,7 +254,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {cancellationScheduled && (
-          <Card className="border-green-500/40 bg-green-500/5">
+          <Card className="border-hairline bg-semantic-surface-2">
             <CardHeader>
               <CardTitle>Subscription cancellation scheduled</CardTitle>
               <CardDescription>
