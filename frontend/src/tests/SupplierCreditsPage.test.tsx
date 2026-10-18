@@ -907,3 +907,48 @@ describe('supplier policy role plumbing', () => {
     expect(screen.queryByText('Only admins can change supplier policy')).not.toBeInTheDocument();
   });
 });
+
+describe('SupplierCreditsPage resilience', () => {
+  it('announces a failed inline brand add instead of swallowing it', async () => {
+    mocked.getBrandReview.mockResolvedValue({
+      items: [
+        { productId: 301, sku: 'MISSING', barcode: '', productName: 'Needs a brand', brand: null },
+      ],
+      nextCursor: null,
+    });
+    mocked.addBrand.mockRejectedValueOnce(new Error('Brand service unavailable'));
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    await screen.findByText('Needs a brand');
+    await userEvent.type(screen.getByLabelText('Brand name for Needs a brand'), 'Added Brand');
+    await userEvent.click(screen.getByRole('button', { name: 'Add brand' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Brand service unavailable');
+    expect(screen.getByRole('button', { name: 'Add brand' })).toBeEnabled();
+    expect(mocked.getClaimablePool).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes in the background after building a claim instead of blanking the page', async () => {
+    mocked.buildClaim.mockResolvedValue({ id: 9 });
+    renderPage();
+    // The same heading node must survive the refresh: a skeleton swap would unmount it.
+    const heading = await screen.findByRole('heading', { name: 'Supplier Credits' });
+    await userEvent.click(screen.getByRole('button', { name: 'Begin claim' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Create draft claim' }));
+
+    await waitFor(() => expect(mocked.getClaimablePool).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText(/New claim/)).toBeNull());
+    expect(heading).toBeInTheDocument();
+  });
+
+  it('accepts cents in the credited value field', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+
+    const credited = await screen.findByLabelText(/Credited value/);
+    expect(credited).toHaveAttribute('step', '0.01');
+    expect(credited).toHaveAttribute('inputmode', 'decimal');
+  });
+});

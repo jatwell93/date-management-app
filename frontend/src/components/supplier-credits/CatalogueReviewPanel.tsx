@@ -40,6 +40,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
   const [error, setError] = useState<string | null>(null);
   const [brandNames, setBrandNames] = useState<Record<number, string>>({});
   const [supplierIds, setSupplierIds] = useState<Record<number, number>>({});
+  const [busyProductId, setBusyProductId] = useState<number | null>(null);
 
   const loadPage = useCallback(async () => {
     setLoading(true);
@@ -124,16 +125,31 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
     />
   );
 
+  const runRowAction = async (productId: number, action: () => Promise<unknown>) => {
+    setBusyProductId(productId);
+    setError(null);
+    try {
+      await action();
+      await loadPage();
+      onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to update this catalogue product');
+    } finally {
+      setBusyProductId(null);
+    }
+  };
+
   const confirm = async (item: BrandReviewItem) => {
-    if (!item.brand) return;
-    const supplierId = supplierIds[item.productId] ?? item.brand.supplierId ?? suppliers[0]?.id;
+    const brand = item.brand;
+    if (!brand) return;
+    const supplierId = supplierIds[item.productId] ?? brand.supplierId ?? suppliers[0]?.id;
     if (supplierId == null) {
       setError('Create a supplier before confirming this brand.');
       return;
     }
-    await svc.confirmBrandSupplier(item.brand.id, supplierId, await getToken());
-    await loadPage();
-    onChanged();
+    await runRowAction(item.productId, async () =>
+      svc.confirmBrandSupplier(brand.id, supplierId, await getToken()),
+    );
   };
 
   const add = async (item: BrandReviewItem) => {
@@ -142,16 +158,16 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
       setError('Enter a brand name.');
       return;
     }
-    await svc.addBrand(
-      {
-        productId: item.productId,
-        name,
-        supplierId: supplierIds[item.productId] ?? null,
-      },
-      await getToken(),
+    await runRowAction(item.productId, async () =>
+      svc.addBrand(
+        {
+          productId: item.productId,
+          name,
+          supplierId: supplierIds[item.productId] ?? null,
+        },
+        await getToken(),
+      ),
     );
-    await loadPage();
-    onChanged();
   };
 
   if (mode === 'SKU_MATCHING') {
@@ -220,7 +236,11 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
         </div>
       </div>
       {controls}
-      {error && <p className="text-sm text-semantic-critical">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-semantic-critical">
+          {error}
+        </p>
+      )}
       {!loading && groups.length === 0 && (
         <div className="rounded-lg border border-dashed py-12 text-center text-sm text-semantic-text-secondary">
           No products in this review bucket.
@@ -289,7 +309,11 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
                         ))}
                       </select>
                     )}
-                    <Button size="sm" onClick={() => void (item.brand ? confirm(item) : add(item))}>
+                    <Button
+                      size="sm"
+                      disabled={busyProductId != null}
+                      onClick={() => void (item.brand ? confirm(item) : add(item))}
+                    >
                       {item.brand ? 'Complete setup' : 'Add brand'}
                     </Button>
                   </div>

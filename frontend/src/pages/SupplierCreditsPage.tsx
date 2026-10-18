@@ -171,7 +171,9 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-semantic-critical font-medium">{error}</p>
+        <p role="alert" className="text-semantic-critical font-medium">
+          {error}
+        </p>
         <Button variant="outline" className="mt-4" onClick={() => void load()}>
           Try again
         </Button>
@@ -251,7 +253,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setBuildGroup(null)}
           onbuilt={() => {
             setBuildGroup(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -264,7 +266,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setAssignItem(null)}
           onAssigned={() => {
             setAssignItem(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -275,7 +277,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setDetailClaim(null)}
           onChanged={() => {
             setDetailClaim(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -286,7 +288,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setDisposeItem(null)}
           onDisposed={() => {
             setDisposeItem(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -488,7 +490,11 @@ const DisposeWriteOffModal: React.FC<{
           {item.productName} will be removed from the claimable pool. This does not delete its
           expiry transaction.
         </p>
-        {error && <p className="text-sm text-semantic-critical">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {error}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
@@ -612,7 +618,11 @@ const BuildClaimModal: React.FC<{
             </div>
           ))}
         </div>
-        {err && <p className="text-sm text-semantic-critical">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {err}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
@@ -842,7 +852,11 @@ const AssignSupplierModal: React.FC<{
             {permissionError}
           </p>
         )}
-        {err && <p className="text-sm text-semantic-critical">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {err}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
@@ -968,7 +982,11 @@ const ClaimDetailModal: React.FC<{
           </ul>
         </div>
 
-        {err && <p className="text-sm text-semantic-critical">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {err}
+          </p>
+        )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {claim.status === 'DRAFT' && (
@@ -997,6 +1015,8 @@ const ClaimDetailModal: React.FC<{
                     id="credited"
                     type="number"
                     min="0"
+                    step="0.01"
+                    inputMode="decimal"
                     value={creditedValue}
                     onChange={(e) => setCreditedValue(e.target.value)}
                   />
