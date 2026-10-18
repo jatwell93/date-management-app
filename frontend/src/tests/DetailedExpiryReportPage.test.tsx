@@ -66,8 +66,10 @@ describe('DetailedExpiryReportPage', () => {
     expect(
       await screen.findByRole('heading', { name: /Markdown Worklist/i, level: 1 }),
     ).toBeInTheDocument();
+    // The app shell owns the single <main> landmark; the page is a labelled region.
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('main', { name: /Detailed expiry reporting workspace/i }),
+      screen.getByRole('region', { name: /Detailed expiry reporting workspace/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Expiry stock action summary/i })).toHaveTextContent(
       /Markdown action/i,
@@ -165,8 +167,11 @@ describe('DetailedExpiryReportPage', () => {
       'M3 Product',
     );
 
-    const soldThroughButtons = screen.getAllByRole('button', { name: /Sold through/i });
-    fireEvent.click(soldThroughButtons[0]);
+    // Each row's action names its product so screen-reader users can tell the buttons apart.
+    expect(
+      screen.getByRole('button', { name: /^Sold through\s*:\s*M3 Product$/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Sold through\s*:\s*M1 Product$/ }));
 
     const postMock = apiService.post as unknown as jest.Mock;
     await waitFor(() => {
@@ -174,6 +179,45 @@ describe('DetailedExpiryReportPage', () => {
     });
     expect(postMock.mock.calls[0][0]).toBe('/expired-items/process');
     expect(postMock.mock.calls[0][1]).toEqual({ inventoryItemId: 1, action: 'sold_through' });
+  });
+
+  it('announces a failed sold-through and lets the user dismiss it', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([
+          {
+            inventoryId: 7,
+            expiryDate: daysFromNow(15),
+            status: 'Markdown 3',
+            productId: 7,
+            productName: 'Failing Product',
+            sku: 'SKU-F',
+            costPrice: 10,
+            locationId: 2,
+            locationName: 'Front Counter',
+            subDepartment: null,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    // @ts-expect-error — apiService.post is mocked as vi.fn()
+    apiService.post.mockRejectedValue(new Error('Could not record sold through.'));
+
+    render(<DetailedExpiryReportPage token="test-session-value" />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /^Sold through\s*:\s*Failing Product$/ }),
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not record sold through.');
+
+    const dismiss = screen.getByRole('button', { name: 'Dismiss error' });
+    expect(dismiss).toHaveAttribute('type', 'button');
+    fireEvent.click(dismiss);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('prices rows using the org markdown matrix, including a retail-basis band (#338)', async () => {

@@ -225,43 +225,52 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
 
   if (loading) {
     return (
-      <main
+      <section
         className="container mx-auto max-w-7xl space-y-6 p-4"
         aria-label="Detailed expiry reporting workspace"
       >
         <header className="mb-5">
           <div
-            className="h-7 w-72 animate-pulse rounded bg-semantic-surface-4"
+            className="h-7 w-72 motion-safe:animate-pulse rounded bg-semantic-surface-4"
             aria-hidden="true"
           />
           <div
-            className="mt-2 h-4 w-96 animate-pulse rounded bg-semantic-surface-4"
+            className="mt-2 h-4 w-96 motion-safe:animate-pulse rounded bg-semantic-surface-4"
             aria-hidden="true"
           />
         </header>
-        <div className="h-32 animate-pulse rounded-lg bg-semantic-surface-3" aria-hidden="true" />
+        <div
+          className="h-32 motion-safe:animate-pulse rounded-lg bg-semantic-surface-3"
+          aria-hidden="true"
+        />
         <Card className="overflow-hidden">
           <CardHeader>
             <div
-              className="h-6 w-36 animate-pulse rounded bg-semantic-surface-4"
+              className="h-6 w-36 motion-safe:animate-pulse rounded bg-semantic-surface-4"
               aria-hidden="true"
             />
           </CardHeader>
           <CardContent className="space-y-3 p-4">
-            <div className="h-16 animate-pulse rounded bg-semantic-surface-4" />
-            <div className="h-16 animate-pulse rounded bg-semantic-surface-4" />
+            <div
+              className="h-16 motion-safe:animate-pulse rounded bg-semantic-surface-4"
+              aria-hidden="true"
+            />
+            <div
+              className="h-16 motion-safe:animate-pulse rounded bg-semantic-surface-4"
+              aria-hidden="true"
+            />
           </CardContent>
         </Card>
         <p className="sr-only" role="status" aria-live="polite">
           Loading detailed expiry report…
         </p>
-      </main>
+      </section>
     );
   }
 
   if (fetchError) {
     return (
-      <main
+      <section
         className="container mx-auto max-w-7xl p-4"
         aria-label="Detailed expiry reporting workspace"
       >
@@ -274,14 +283,14 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             Try again
           </Button>
         </div>
-      </main>
+      </section>
     );
   }
 
   const hasData = reportData && reportData.length > 0;
 
   return (
-    <main
+    <section
       className="container mx-auto max-w-7xl space-y-6 p-4"
       aria-label="Detailed expiry reporting workspace"
     >
@@ -308,7 +317,9 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           role="region"
           aria-label="Primary shelf decision"
         >
-          <p className="text-sm font-medium text-semantic-critical">Expired risk</p>
+          <p className="text-sm font-medium text-semantic-critical-muted-foreground">
+            Expired risk
+          </p>
           <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical">
             {numberFormatter.format(expirySummary.expired)}
           </p>
@@ -337,14 +348,14 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       {actionError && (
         <div
           role="alert"
-          aria-live="assertive"
-          className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted px-4 py-3 text-sm text-semantic-critical"
+          className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted px-4 py-3 text-sm text-semantic-critical-muted-foreground"
         >
           <span>{actionError}</span>
           <button
+            type="button"
             onClick={() => setActionError(null)}
             aria-label="Dismiss error"
-            className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+            className="shrink-0 rounded-md outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
           >
             &times;
           </button>
@@ -366,9 +377,14 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             {WORKLIST_GROUPS.map(({ key, label, hint }) => {
               const items = worklistGroups[key];
               return (
-                <section key={key} aria-label={label}>
+                <section key={key} aria-labelledby={`worklist-group-${key}`}>
                   <div className="flex items-baseline justify-between gap-3 border-b pb-2">
-                    <h3 className="font-heading text-base font-semibold">{label}</h3>
+                    <h3
+                      id={`worklist-group-${key}`}
+                      className="font-heading text-base font-semibold"
+                    >
+                      {label}
+                    </h3>
                     <span className="text-xs text-semantic-text-secondary">
                       {numberFormatter.format(items.length)} item{items.length === 1 ? '' : 's'}
                     </span>
@@ -426,6 +442,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                                 aria-busy={isSubmitting}
                               >
                                 {isSubmitting ? 'Recording…' : 'Sold through'}
+                                <span className="sr-only">: {item.productName}</span>
                               </Button>
                             </div>
                           </li>
@@ -454,6 +471,6 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         isVisible={toast.visible}
         onClose={() => setToast((t) => ({ ...t, visible: false }))}
       />
-    </main>
+    </section>
   );
 }
