@@ -39,6 +39,22 @@
   }
 }
 
+/* ── Reduced motion (app-wide) ────────────────────────────────
+ * Unlayered + !important so it beats Tailwind `animate-*`/`transition-*`
+ * utilities, Radix enter/exit animations and component CSS. Animations still
+ * run one 0.01ms frame so `animationend` listeners fire.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer components {
   .clerk-responsive-surface {
     --clerk-pharmiq-border: var(--border-hairline);

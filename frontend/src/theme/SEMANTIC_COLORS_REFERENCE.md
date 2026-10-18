@@ -126,6 +126,8 @@ Series 2 (2.8:1) and series 4 (2.5:1) are below the 3:1 non-text contrast floor 
 
 Multi-series charts may keep the brand palette when every series also has a label, legend entry or pattern.
 
+Chart.js defaults (14px Inter, `semantic-text-secondary` ink for ticks/legend/titles, hairline grid, animation off under `prefers-reduced-motion`) are set once in `components/charts/chartDefaults.ts` when the chart chunk loads. Per-chart options still override them.
+
 ## Tailwind Class Usage
 
 ```html
