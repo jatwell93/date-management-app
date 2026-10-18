@@ -78,8 +78,9 @@ function formatExpiry(raw: string): string {
 }
 
 const SKELETON_ROWS = Array.from({ length: 5 }, (_, i) => i);
-const PROCESS_DIALOG_LABEL_CLASS = 'text-xs font-medium text-semantic-text-secondary';
-const PROCESS_DIALOG_VALUE_CLASS = 'text-sm font-medium text-semantic-text-primary break-words';
+const PROCESS_DIALOG_LABEL_CLASS = 'text-sm font-medium text-semantic-text-secondary';
+const PROCESS_DIALOG_VALUE_CLASS =
+  'text-sm font-medium tabular-nums text-semantic-text-primary break-words';
 const PROCESS_DIALOG_HELP_CLASS = 'mt-1 text-sm font-medium text-semantic-text-secondary';
 const PROCESS_DIALOG_ERROR_CLASS = 'mt-1 text-sm font-medium text-semantic-critical';
 
@@ -548,7 +549,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       {expiredItems.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <p className="text-semantic-text-secondary text-sm">No expired items found.</p>
-          <p className="text-semantic-text-tertiary text-xs max-w-xs">
+          <p className="text-semantic-text-tertiary text-sm max-w-xs">
             Items that have reached their expiry date will appear here for processing.
           </p>
         </div>
@@ -565,7 +566,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                       <span className="font-mono">{item.sku}</span> · {item.locationName}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-md bg-semantic-critical-muted px-2 py-1 text-xs font-medium text-semantic-critical-muted-foreground">
+                  <span className="shrink-0 rounded-md bg-semantic-critical-muted px-2 py-1 text-sm font-medium text-semantic-critical-muted-foreground">
                     {item.status}
                   </span>
                 </div>
@@ -610,28 +611,28 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       SKU
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Product Name
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Location
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Expiry Date
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-right text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Cost Price
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-right text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Qty
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Status
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Actions
                     </TableHead>
                   </TableRow>
@@ -654,10 +655,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                       <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
                         {formatExpiry(item.expiryDate)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
                         {currencyFormatter.format(item.costPrice)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
                         {item.quantityAvailable}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
@@ -696,25 +697,25 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               <Table aria-label="Printable expired items table">
                 <TableHeader>
                   <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       SKU
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Product Name
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Location
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Expiry Date
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-right text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Cost Price
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-right text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Qty
                     </TableHead>
-                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                       Status
                     </TableHead>
                   </TableRow>
@@ -734,10 +735,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                       <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
                         {formatExpiry(item.expiryDate)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
                         {currencyFormatter.format(item.costPrice)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
                         {item.quantityAvailable}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">

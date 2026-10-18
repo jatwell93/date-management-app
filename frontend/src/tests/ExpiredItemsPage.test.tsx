@@ -545,4 +545,32 @@ describe('ExpiredItemsPage', () => {
       actions.forEach((button) => expect(button).toHaveClass('min-h-11'));
     });
   });
+
+  describe('typography', () => {
+    it('keeps text at 14px or larger and numbers tabular', async () => {
+      mockedGetExpiredItems.mockResolvedValue([
+        {
+          id: 401,
+          productId: 50,
+          productName: 'Eye Drops',
+          sku: 'EYE-400',
+          expiryDate: '2026-05-01',
+          status: 'Expired',
+          costPrice: 6.25,
+          locationId: 7,
+          locationName: 'Front Shop',
+          quantityAvailable: 8,
+        },
+      ]);
+      mockedApiGet.mockResolvedValue([]);
+
+      const { container } = render(<ExpiredItemsPage token="test-session-value" />);
+
+      await screen.findAllByText('Eye Drops');
+      expect(container.querySelector('.text-xs')).toBeNull();
+      screen.getAllByText('$6.25').forEach((cell) => {
+        expect(cell).toHaveClass('tabular-nums');
+      });
+    });
+  });
 });

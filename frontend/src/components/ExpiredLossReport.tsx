@@ -93,13 +93,13 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                  <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     SKU
                   </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                  <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Product Name
                   </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                  <TableHead className="text-right text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Total Loss
                   </TableHead>
                 </TableRow>
@@ -113,7 +113,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                     <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
                       {item.productName}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                    <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
                       ${item.totalLoss.toFixed(2)}
                     </TableCell>
                   </TableRow>
@@ -132,10 +132,10 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                  <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Location Name
                   </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                  <TableHead className="text-right text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Total Loss
                   </TableHead>
                 </TableRow>
@@ -147,7 +147,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                       <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
                         {item.locationName}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
                         ${item.totalLoss.toFixed(2)}
                       </TableCell>
                     </TableRow>
