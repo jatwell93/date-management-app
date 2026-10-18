@@ -237,30 +237,30 @@ export function ReportsPage({ token }: ReportsPageProps) {
         aria-label="Loading expiry reports"
       >
         <div className="mb-6">
-          <div className="h-8 w-56 rounded-md bg-semantic-surface-3 animate-pulse" />
-          <div className="mt-2 h-4 w-96 rounded bg-semantic-surface-3 animate-pulse" />
+          <div className="h-8 w-56 rounded-md bg-semantic-surface-3 motion-safe:animate-pulse" />
+          <div className="mt-2 h-4 w-full max-w-96 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
         </div>
         <div className="mb-6 rounded-xl border overflow-hidden">
           <div className="px-6 py-4 border-b">
-            <div className="h-5 w-44 rounded bg-semantic-surface-3 animate-pulse" />
+            <div className="h-5 w-44 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
           </div>
           <div className="px-6 py-5 grid gap-4 md:grid-cols-[1.2fr_1fr]">
-            <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
-            <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
+            <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
+            <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
           </div>
         </div>
         <div className="rounded-xl border overflow-hidden">
           <div className="px-6 py-4 border-b">
-            <div className="h-5 w-44 rounded bg-semantic-surface-3 animate-pulse" />
+            <div className="h-5 w-44 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
           </div>
           <div className="px-6 py-5">
             {SKELETON_ROWS.map((i) => (
               <div key={i} className="flex gap-6 py-3 border-b last:border-0">
-                <div className="h-4 w-20 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse ml-auto" />
-                <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-24 rounded bg-semantic-surface-3 animate-pulse" />
+                <div className="h-4 w-20 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                <div className="h-4 w-16 rounded bg-semantic-surface-3 motion-safe:animate-pulse ml-auto" />
+                <div className="h-4 w-16 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                <div className="h-4 w-16 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                <div className="h-4 w-24 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
               </div>
             ))}
           </div>
@@ -314,8 +314,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
               aria-live="polite"
               aria-label="Loading expiry summary"
             >
-              <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
-              <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
+              <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
+              <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
             </div>
           ) : overallError ? (
             <p className="text-semantic-critical text-sm" role="alert">

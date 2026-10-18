@@ -113,6 +113,20 @@ describe('ReportsPage UI audit', () => {
     expect(await screen.findByText('Expired items route')).toBeInTheDocument();
   });
 
+  it('gates skeleton pulse on reduced motion and keeps skeletons within narrow viewports', () => {
+    vi.mocked(apiService.get).mockReturnValue(new Promise(() => {}));
+    renderPage();
+
+    const loading = screen.getByRole('status', { name: 'Loading expiry reports' });
+    const pulsing = loading.querySelectorAll('[class*="animate-pulse"]');
+    expect(pulsing.length).toBeGreaterThan(0);
+    pulsing.forEach((el) => {
+      expect(el.className).not.toMatch(/(^|\s)animate-pulse/);
+      expect(el).toHaveClass('motion-safe:animate-pulse');
+    });
+    expect(loading.querySelector('.w-96')).toBeNull();
+  });
+
   it('keeps a page heading and a full-size retry button when every report fails', async () => {
     vi.mocked(apiService.get).mockRejectedValue(new Error('Failed to load report'));
     renderPage();
