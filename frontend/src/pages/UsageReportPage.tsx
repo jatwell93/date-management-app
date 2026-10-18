@@ -273,8 +273,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         {
           label: 'Items Added',
           data: itemsByUser?.map((item) => item.itemCount) || [],
-          backgroundColor: semanticDataViz.series4,
-          borderColor: semanticDataViz.series4,
+          // Teal (series1) clears the 3:1 non-text contrast floor on white; green/sky do not.
+          backgroundColor: semanticDataViz.series1,
+          borderColor: semanticDataViz.series1,
           borderWidth: 1,
         },
       ],
@@ -291,8 +292,8 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           label: 'Items Added',
           data: itemsByDate?.map((item) => item.itemCount) || [],
           fill: false,
-          borderColor: semanticDataViz.series2,
-          backgroundColor: semanticDataViz.series2,
+          borderColor: semanticDataViz.series1,
+          backgroundColor: semanticDataViz.series1,
           tension: 0.1,
         },
       ],
@@ -300,12 +301,14 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     [itemsByDate],
   );
 
-  const barChartOptions = useMemo(
+  // The card h2 already titles each chart, so the in-canvas title is hidden (its text lives
+  // on as the canvas aria-label). Both charts share one options object.
+  const lineChartOptions = useMemo(
     () => ({
       responsive: true,
       plugins: {
         title: {
-          display: true,
+          display: false,
         },
         legend: {
           display: false,
@@ -320,24 +323,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     [],
   );
 
-  const lineChartOptions = useMemo(
-    () => ({
-      responsive: true,
-      plugins: {
-        title: {
-          display: true,
-        },
-        legend: {
-          display: false,
-        },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-        },
-      },
-    }),
-    [],
+  const barChartOptions = useMemo(
+    () => ({ ...lineChartOptions, maintainAspectRatio: false }),
+    [lineChartOptions],
   );
 
   if (loading) {
@@ -418,17 +406,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                       role="img"
                       aria-label="Bar chart of items added per team member. The same figures are listed below."
                       data={itemsByUserChartData}
-                      options={{
-                        ...barChartOptions,
-                        maintainAspectRatio: false,
-                        plugins: {
-                          ...barChartOptions.plugins,
-                          title: {
-                            display: true,
-                            text: 'Items added per team member',
-                          },
-                        },
-                      }}
+                      options={barChartOptions}
                     />
                   </Suspense>
                 </div>
@@ -442,7 +420,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                       <span className="font-medium text-semantic-text-primary">
                         {formatUserLabel(item)}
                       </span>
-                      <span className="font-bold text-semantic-teal">
+                      <span className="font-bold tabular-nums text-semantic-text-primary">
                         {numberFormatter.format(item.itemCount)} items
                       </span>
                     </li>
@@ -460,7 +438,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                       {itemsByUser.map((item) => (
                         <TableRow key={item.userId}>
                           <TableCell>{formatUserLabel(item)}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right tabular-nums">
                             {numberFormatter.format(item.itemCount)}
                           </TableCell>
                         </TableRow>
@@ -503,16 +481,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     role="img"
                     aria-label="Line chart of stock additions over time. The same figures are listed below."
                     data={itemsByDateChartData}
-                    options={{
-                      ...lineChartOptions,
-                      plugins: {
-                        ...lineChartOptions.plugins,
-                        title: {
-                          display: true,
-                          text: 'Stock additions over time',
-                        },
-                      },
-                    }}
+                    options={lineChartOptions}
                   />
                 </Suspense>
                 <Table aria-label="Items added per day summary">
@@ -526,7 +495,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     {itemsByDate.map((item) => (
                       <TableRow key={item.date}>
                         <TableCell>{formatUsageDate(item.date)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right tabular-nums">
                           {numberFormatter.format(item.itemCount)}
                         </TableCell>
                       </TableRow>
@@ -648,9 +617,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                   >
                     <div className="flex items-center justify-between border-b pb-2 mb-3">
                       <span className="font-heading font-bold">{formatUsageDate(row.date)}</span>
-                      <span className="text-xs text-semantic-text-secondary">{row.user_role}</span>
+                      <span className="text-sm text-semantic-text-secondary">{row.user_role}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="grid grid-cols-3 gap-2 text-center text-sm">
                       <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items added</p>
                         <p className="text-lg font-bold tabular-nums text-semantic-text-primary">

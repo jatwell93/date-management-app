@@ -1,7 +1,8 @@
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { UsageReportPage } from '../pages/UsageReportPage';
 import { apiService } from '../lib/api.service';
+import { semanticDataViz } from '../theme/semantic-tokens';
 import '@testing-library/jest-dom';
 
 vi.mock('../hooks/useFreshApiToken', () => ({
@@ -24,14 +25,33 @@ vi.mock('../lib/api.service', () => ({
   },
 }));
 
+interface MockChartProps {
+  role?: string;
+  'aria-label'?: string;
+  data: { datasets: Array<{ backgroundColor?: string; borderColor?: string }> };
+  options: {
+    animation?: boolean;
+    maintainAspectRatio?: boolean;
+    plugins: { title: { display: boolean } };
+  };
+}
+
+// Record the props each chart receives so tests can assert colours/options.
+const chartProps = vi.hoisted(() => ({
+  bar: null as MockChartProps | null,
+  line: null as MockChartProps | null,
+}));
+
 // Forward the accessibility props the page passes so tests can assert the canvas name.
 vi.mock('react-chartjs-2', () => ({
-  Bar: (props: { role?: string; 'aria-label'?: string }) => (
-    <div data-testid="bar-chart" role={props.role} aria-label={props['aria-label']} />
-  ),
-  Line: (props: { role?: string; 'aria-label'?: string }) => (
-    <div data-testid="line-chart" role={props.role} aria-label={props['aria-label']} />
-  ),
+  Bar: (props: MockChartProps) => {
+    chartProps.bar = props;
+    return <div data-testid="bar-chart" role={props.role} aria-label={props['aria-label']} />;
+  },
+  Line: (props: MockChartProps) => {
+    chartProps.line = props;
+    return <div data-testid="line-chart" role={props.role} aria-label={props['aria-label']} />;
+  },
 }));
 
 describe('UsageReportPage', () => {
@@ -93,11 +113,22 @@ describe('UsageReportPage', () => {
     expect(
       await screen.findByRole('img', { name: /stock additions over time/i }),
     ).toBeInTheDocument();
+    // Both single-series charts use teal (>= 3:1 on white) and no in-canvas title,
+    // because the card heading already names the chart.
+    expect(chartProps.bar?.data.datasets[0].backgroundColor).toBe(semanticDataViz.series1);
+    expect(chartProps.line?.data.datasets[0].borderColor).toBe(semanticDataViz.series1);
+    expect(chartProps.bar?.options.plugins.title.display).toBe(false);
+    expect(chartProps.line?.options.plugins.title.display).toBe(false);
+    expect(chartProps.bar?.options.maintainAspectRatio).toBe(false);
     expect(screen.getByRole('table', { name: /Daily activity by user/i })).toHaveTextContent(
       /Manager/i,
     );
     expect(screen.getByRole('list', { name: /^Stock added by team member$/i })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: /^Daily activity$/i })).toBeInTheDocument();
+    // Daily counts are neutral ink (green/amber/red on muted tiles failed AA and implied urgency).
+    const dailyList = screen.getByRole('list', { name: /^Daily activity$/i });
+    for (const count of ['5', '3', '1']) {
+      expect(within(dailyList).getByText(count)).toHaveClass('text-semantic-text-primary');
+    }
     expect(screen.getByRole('heading', { name: /Daily Activity/i })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: /Daily Stock Additions/i, level: 2 }),
