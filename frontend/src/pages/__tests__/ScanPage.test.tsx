@@ -487,36 +487,21 @@ describe('ScanPage Integration', () => {
     });
   });
 
-  it('keeps the new product form and typed values when validation fails', async () => {
-    (apiService.get as jest.Mock).mockImplementation((url) => {
-      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
-      return Promise.reject(new Error('404 Not found'));
-    });
-
+  const renderScanPage = () =>
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
       </HandheldProvider>,
     );
 
-    await screen.findByTestId('mock-scanner');
-    userEvent.click(screen.getByTestId('trigger-scan'));
-    await screen.findByText(/No catalog match for barcode 1234567890/i);
-
-    fireEvent.change(screen.getByLabelText(/Product Name/i), {
-      target: { value: 'Half-entered Product' },
+  const mockUnknownProduct = () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      return Promise.reject(new Error('404 Not found'));
     });
-    userEvent.click(screen.getByRole('button', { name: /Create product/i }));
+  };
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /Enter product name, SKU, and cost price/i,
-    );
-    expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Half-entered Product');
-    expect(screen.getByLabelText(/Cost Price/i)).toHaveAttribute('inputmode', 'decimal');
-    expect(apiService.post).not.toHaveBeenCalled();
-  });
-
-  it('labels the location select and names each delete button by its expiry', async () => {
+  const mockProductWithRecentEntry = () => {
     (apiService.get as jest.Mock).mockImplementation((url) => {
       if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
       if (url.includes('/products/by-barcode/1234567890')) {
@@ -538,89 +523,76 @@ describe('ScanPage Integration', () => {
       if (url.includes('/inventory-items/')) return Promise.resolve([]);
       return Promise.reject(new Error(`Not found call: ${url}`));
     });
+  };
 
-    render(
-      <HandheldProvider>
-        <ScanPage token={mockToken} />
-      </HandheldProvider>,
-    );
-
+  const scanAndWaitFor = async (text: string | RegExp) => {
     await screen.findByTestId('mock-scanner');
     userEvent.click(screen.getByTestId('trigger-scan'));
-    await screen.findByText('Test Product Barcode');
+    return screen.findByText(text);
+  };
+
+  it('keeps the new product form and typed values when validation fails', async () => {
+    mockUnknownProduct();
+    renderScanPage();
+    await scanAndWaitFor(/No catalog match for barcode 1234567890/i);
+
+    fireEvent.change(screen.getByLabelText(/Product Name/i), {
+      target: { value: 'Half-entered Product' },
+    });
+    userEvent.click(screen.getByRole('button', { name: /Create product/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Enter product name, SKU, and cost price/i,
+    );
+    expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Half-entered Product');
+    expect(screen.getByLabelText(/Cost Price/i)).toHaveAttribute('inputmode', 'decimal');
+    expect(apiService.post).not.toHaveBeenCalled();
+  });
+
+  it('labels the location select and names each delete button by its expiry', async () => {
+    mockProductWithRecentEntry();
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
 
     const locationLabel = screen.getByText(/^Location$/i);
     expect(locationLabel).toHaveAttribute('for', 'location');
     expect(screen.getByTestId('location-trigger')).toHaveAttribute('id', 'location');
     expect(
-      await screen.findByRole('button', { name: /Delete entry expiring 31\/12\/2025/i }),
+      await screen.findByRole('button', {
+        name: /Delete entry expiring 31\/12\/2025/i,
+      }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: /Inventory scan/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: /Recent entries/i })).toBeInTheDocument();
   });
 
   it('gives page-level controls 44px touch targets', async () => {
-    (apiService.get as jest.Mock).mockImplementation((url) => {
-      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
-      if (url.includes('/products/by-barcode/1234567890')) {
-        return Promise.resolve(mockProductBarcode);
-      }
-      if (url.includes('/inventory-items/recent')) {
-        return Promise.resolve([
-          {
-            id: 8,
-            productId: 1,
-            expiryDate: '2025-12-31T00:00:00.000Z',
-            locationId: 1,
-            status: 'active',
-            createdAt: '2025-01-01T00:00:00.000Z',
-            updatedAt: '2025-01-01T00:00:00.000Z',
-          },
-        ]);
-      }
-      if (url.includes('/inventory-items/')) return Promise.resolve([]);
-      return Promise.reject(new Error(`Not found call: ${url}`));
-    });
-
-    render(
-      <HandheldProvider>
-        <ScanPage token={mockToken} />
-      </HandheldProvider>,
-    );
-
-    await screen.findByTestId('mock-scanner');
-    userEvent.click(screen.getByTestId('trigger-scan'));
-    await screen.findByText('Test Product Barcode');
+    mockProductWithRecentEntry();
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
 
     expect(screen.getByLabelText(/Expiry Date/i)).toHaveClass('h-11');
     expect(screen.getByRole('button', { name: /Save expiry item/i })).toHaveClass('min-h-11');
-    const deleteButton = await screen.findByRole('button', { name: /Delete entry expiring/i });
+    const deleteButton = await screen.findByRole('button', {
+      name: /Delete entry expiring/i,
+    });
     expect(deleteButton).toHaveClass('min-h-11');
     expect(deleteButton).not.toHaveClass('h-8');
   });
 
   it('announces success politely instead of as an alert', async () => {
-    (apiService.get as jest.Mock).mockImplementation((url) => {
-      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
-      return Promise.reject(new Error('404 Not found'));
-    });
+    mockUnknownProduct();
     (apiService.post as jest.Mock).mockResolvedValue(mockProductBarcode);
+    renderScanPage();
+    await scanAndWaitFor(/No catalog match for barcode 1234567890/i);
 
-    render(
-      <HandheldProvider>
-        <ScanPage token={mockToken} />
-      </HandheldProvider>,
-    );
-
-    await screen.findByTestId('mock-scanner');
-    userEvent.click(screen.getByTestId('trigger-scan'));
-    await screen.findByText(/No catalog match for barcode 1234567890/i);
-
-    fireEvent.change(screen.getByLabelText(/Product Name/i), {
-      target: { value: 'Created Product' },
-    });
-    fireEvent.change(screen.getByLabelText(/^SKU$/i), { target: { value: 'CREATED-1' } });
-    fireEvent.change(screen.getByLabelText(/Cost Price/i), { target: { value: '12.50' } });
+    for (const [label, value] of [
+      [/Product Name/i, 'Created Product'],
+      [/^SKU$/i, 'CREATED-1'],
+      [/Cost Price/i, '12.50'],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
     userEvent.click(screen.getByRole('button', { name: /Create product/i }));
 
     const success = await screen.findByText(/Product created. Add expiry details next./i);
