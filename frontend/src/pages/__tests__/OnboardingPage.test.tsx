@@ -55,6 +55,12 @@ describe('OnboardingPage structure', () => {
     expect(screen.getByTestId('clerk-create-organization')).toBeInTheDocument();
   });
 
+  it('does not force a full viewport height inside the app shell', () => {
+    mockOrganization.current = null;
+    renderOnboarding();
+    expect(screen.getByRole('region').className).not.toContain('min-h-screen');
+  });
+
   it('marks the current step in the progress list', () => {
     renderOnboarding('/onboarding?step=1');
 
@@ -119,6 +125,14 @@ describe('OnboardingPage tour step', () => {
       'aria-current',
       'true',
     );
+  });
+
+  it('gives tour controls 44px touch targets', () => {
+    renderOnboarding('/onboarding?step=2');
+
+    expect(screen.getByRole('button', { name: 'Next' })).toHaveClass('min-h-11');
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('min-h-11');
+    expect(screen.getByRole('button', { name: /^Slide 1 of 3/ })).toHaveClass('size-11');
   });
 
   it('sends the user to the scan page from the last slide', async () => {

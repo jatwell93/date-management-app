@@ -94,7 +94,7 @@ function CatalogOption({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`w-full text-left border-2 border-dashed border-hairline rounded-lg p-6 transition cursor-pointer outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`w-full text-left border-2 border-dashed border-hairline rounded-lg p-6 motion-safe:transition-colors cursor-pointer outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       <span className="flex items-center justify-center mb-3">{icon}</span>
       <span className="block font-semibold text-semantic-text-primary">{title}</span>
@@ -105,7 +105,12 @@ function CatalogOption({
 
 function DemoDataIcon({ isLoading }: { isLoading: boolean }) {
   if (isLoading) {
-    return <Loader2 aria-hidden="true" className="size-8 text-semantic-success animate-spin" />;
+    return (
+      <Loader2
+        aria-hidden="true"
+        className="size-8 text-semantic-success motion-safe:animate-spin"
+      />
+    );
   }
   return <Zap aria-hidden="true" className="size-8 text-semantic-success" />;
 }
@@ -244,7 +249,7 @@ function TourDots({ slideIndex, onSelect }: TourDotsProps) {
           >
             <span
               aria-hidden="true"
-              className={`block h-2 rounded-full transition ${
+              className={`block h-2 rounded-full motion-safe:transition-colors ${
                 isCurrent ? 'bg-semantic-secondary w-8' : 'bg-semantic-surface-4 w-2'
               }`}
             />
@@ -308,11 +313,11 @@ function Step2(_props: StepProps) {
             variant="outline"
             onClick={handleBack}
             disabled={slideIndex === 0}
-            className="flex-1"
+            className="flex-1 min-h-11"
           >
             Back
           </Button>
-          <Button onClick={handleNext} className="flex-1">
+          <Button onClick={handleNext} className="flex-1 min-h-11">
             {isLastSlide ? 'Go to Dashboard' : 'Next'}
           </Button>
         </div>
@@ -349,7 +354,7 @@ function StepProgress({ currentStep }: { currentStep: OnboardingStep }) {
         <li
           key={step}
           aria-current={step === currentStep ? 'step' : undefined}
-          className={`h-2 flex-1 rounded-full transition ${
+          className={`h-2 flex-1 rounded-full motion-safe:transition-colors ${
             step <= currentStep ? 'bg-semantic-secondary' : 'bg-semantic-surface-4'
           }`}
         >
@@ -431,11 +436,8 @@ export function OnboardingPage() {
   const isLastStep = currentStep === MAX_STEP;
 
   return (
-    <section
-      aria-labelledby="onboarding-title"
-      className="flex items-center justify-center min-h-screen bg-semantic-surface-2"
-    >
-      <div className="w-full max-w-2xl px-4">
+    <section aria-labelledby="onboarding-title" className="flex justify-center py-6">
+      <div className="w-full max-w-2xl">
         <div className="mb-6 text-center">
           <p className="text-sm font-medium text-semantic-text-secondary">
             Step {currentStep + 1} of {STEP_COUNT}
