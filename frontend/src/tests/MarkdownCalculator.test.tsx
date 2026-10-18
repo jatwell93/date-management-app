@@ -319,6 +319,35 @@ describe('MarkdownCalculator', () => {
     expect(screen.getByText(/\$25\.00/i)).toBeInTheDocument();
   });
 
+  it('treats stock expiring today as expired at any local time of day', async () => {
+    // Only Date is faked so promises and waitFor keep running on real timers.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // 00:05 local: a UTC-midnight parse of the expiry date would still be hours away
+      // in any zone east of UTC and produce a 1-day markdown band instead of Expired.
+      vi.setSystemTime(new Date(2026, 9, 16, 0, 5));
+      render(<MarkdownCalculator token={mockToken} />);
+      await waitForMatrixReady();
+
+      fireEvent.change(screen.getByLabelText(/Cost Price/i), { target: { value: '50' } });
+      fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+        target: { value: '2026-10-16' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+
+      const result = screen.getByRole('status', { name: /markdown result/i });
+      expect(result).toHaveTextContent(/Expired/i);
+
+      fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+        target: { value: '2026-10-17' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+      expect(result).toHaveTextContent(/Markdown 3/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('passes handheld scanner intent and uses touch-friendly primary controls', async () => {
     render(<MarkdownCalculator token={mockToken} />);
     await waitForMatrixReady();

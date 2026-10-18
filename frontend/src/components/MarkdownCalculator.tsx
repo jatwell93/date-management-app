@@ -9,6 +9,7 @@ import { calculateMarkdownPrice, getMarkdownLevelForDays } from '@shared/markdow
 import { HardwareScanResult } from '../types/handheld';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
+import { calendarDaysUntil } from '../lib/utils';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
 import { MarkdownCreditScopeBadge } from './MarkdownCreditScopeBadge';
 import { MarkdownMatricesNotice } from './MarkdownMatricesNotice';
@@ -142,10 +143,8 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       return;
     }
 
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    const diffTime = expiry.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Whole local calendar days, so the band does not shift with the time of day.
+    const diffDays = calendarDaysUntil(expiryDate);
 
     // Status derives from the shared day-to-band mapping (no local ladder to drift).
     const level = getMarkdownLevelForDays(diffDays);
