@@ -327,7 +327,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 role="region"
                 aria-label="Primary expiry decision"
               >
-                <p className="text-sm font-medium text-semantic-critical-muted-foreground">Expiry risk</p>
+                <p className="text-sm font-medium text-semantic-critical-muted-foreground">
+                  Expiry risk
+                </p>
                 <p className="mt-2 text-2xl font-bold tabular-nums text-semantic-critical-muted-foreground">
                   {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
@@ -373,8 +375,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
         <Card>
           <CardHeader>
             <CardTitle className="text-xl" role="heading" aria-level={2}>
-            Sell-through by markdown level
-          </CardTitle>
+              Sell-through by markdown level
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-base text-semantic-text-secondary">
@@ -431,7 +433,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
               {/* Mobile row summary */}
               <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile monthly expiry summary">
                 {reportData.map((row, index) => (
-                  <li key={`${row.month}-${index}`} className="rounded-lg border bg-semantic-surface-1 p-4">
+                  <li
+                    key={`${row.month}-${index}`}
+                    className="rounded-lg border bg-semantic-surface-1 p-4"
+                  >
                     <div className="flex items-center justify-between border-b pb-2 mb-3">
                       <span className="font-heading font-bold text-lg">{row.month}</span>
                       <span className="rounded-md bg-semantic-secondary-muted px-2 py-1 text-sm font-medium tabular-nums text-semantic-text-secondary">
@@ -447,7 +452,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                       </div>
                       <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Latest expiry</dt>
-                        <dd className="font-medium tabular-nums">{formatReportDate(row.latest_expiry_date)}</dd>
+                        <dd className="font-medium tabular-nums">
+                          {formatReportDate(row.latest_expiry_date)}
+                        </dd>
                       </div>
                     </dl>
                   </li>
