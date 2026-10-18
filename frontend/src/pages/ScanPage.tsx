@@ -537,7 +537,7 @@ export function ScanPage({ token }: ScanPageProps) {
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="newProductName" className="text-foreground">
-                      Product Name
+                      Product name
                     </Label>
                     <Input
                       id="newProductName"
@@ -563,7 +563,7 @@ export function ScanPage({ token }: ScanPageProps) {
                   </div>
                   <div>
                     <Label htmlFor="newProductCostPrice" className="text-foreground">
-                      Cost Price
+                      Cost price
                     </Label>
                     <Input
                       id="newProductCostPrice"
@@ -618,7 +618,7 @@ export function ScanPage({ token }: ScanPageProps) {
                     <MarkdownMatricesNotice {...markdownConfig} />
                     {markdownPrice !== null && markdownPercentage !== null && (
                       <p className="text-semantic-warning-muted-foreground font-semibold mt-1 tabular-nums">
-                        Markdown Price ({markdownPercentage}% off):{' '}
+                        Markdown price ({markdownPercentage}% off):{' '}
                         {currencyFormatter.format(markdownPrice)}
                       </p>
                     )}
@@ -633,7 +633,7 @@ export function ScanPage({ token }: ScanPageProps) {
                 <div className="mt-6 space-y-6">
                   <div>
                     <Label htmlFor="expiryDate" className="text-foreground">
-                      Expiry Date
+                      Expiry date
                     </Label>
                     <Input
                       id="expiryDate"

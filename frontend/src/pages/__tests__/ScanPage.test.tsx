@@ -315,7 +315,7 @@ describe('ScanPage Integration', () => {
       const markdownLine = await screen.findByText((_content, element) =>
         Boolean(
           element?.tagName === 'P' &&
-          element.textContent === `Markdown Price (${percentage}% off): $${price}`,
+          element.textContent === `Markdown price (${percentage}% off): $${price}`,
         ),
       );
       expect(markdownLine).toBeInTheDocument();

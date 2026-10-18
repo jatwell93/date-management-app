@@ -138,7 +138,7 @@ export function Scanner({
               size={isHandheld ? 'lg' : 'default'}
               className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}`}
             >
-              Use Camera
+              Use camera
             </Button>
           </div>
         </form>
@@ -150,7 +150,7 @@ export function Scanner({
             <h3
               className={`text-lg font-semibold font-heading text-foreground ${isHandheld ? 'text-xl' : ''}`}
             >
-              Camera Scanner
+              Camera scanner
             </h3>
             <Button
               type="button"
@@ -160,7 +160,7 @@ export function Scanner({
               size={isHandheld ? 'lg' : 'default'}
               className={isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}
             >
-              Use Text Input
+              Use text input
             </Button>
           </div>
           <div className={isHandheld ? 'flex-1 camera-scanner-fullscreen' : ''}>

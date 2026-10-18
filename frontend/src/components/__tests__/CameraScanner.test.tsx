@@ -118,7 +118,7 @@ describe('CameraScanner', () => {
     expect(Quagga.start).not.toHaveBeenCalled();
     // Expect error message
     expect(screen.getByText(/Camera Error/i)).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/camera permissions/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/Allow camera permission/i);
   });
 
   it('calls onDetected when code is scanned', () => {

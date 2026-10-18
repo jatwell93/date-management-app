@@ -137,7 +137,7 @@ export function CameraScanner({
           Sentry.captureException(initError, {
             tags: { feature: 'camera-scanner' },
           });
-          setError('Error accessing camera. Please ensure you have granted camera permissions.');
+          setError('Camera access failed. Allow camera permission for this site, then try again.');
           setScannerState('error');
           return;
         }
@@ -232,7 +232,7 @@ export function CameraScanner({
         >
           <div className="text-center p-4" role="alert">
             <p className={`text-semantic-critical font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
-              Camera Error
+              Camera error
             </p>
             <p className={`text-semantic-text-secondary ${isHandheld ? 'text-base' : 'text-sm'}`}>
               {error}
@@ -240,7 +240,7 @@ export function CameraScanner({
             <div className="mt-4">
               <ResetScannerButton
                 isHandheld={isHandheld}
-                label="Try Again"
+                label="Try again"
                 disabled={disabled}
                 onClick={handleResetScanner}
               />
@@ -277,7 +277,7 @@ export function CameraScanner({
       <div className="mt-2">
         <ResetScannerButton
           isHandheld={isHandheld}
-          label="Reset Scanner"
+          label="Reset scanner"
           disabled={disabled}
           onClick={handleResetScanner}
         />
