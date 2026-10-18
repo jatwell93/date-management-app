@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrganization } from '@clerk/clerk-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -35,8 +36,29 @@ function getMemberEmail(member: MemberRecord): string {
   return member.publicUserData?.identifier?.trim() || 'Email unavailable';
 }
 
+// Display only: Clerk role keys are namespaced (`org:admin`), staff should read "admin".
 function getMemberRole(member: MemberRecord): string {
-  return member.role?.trim() || 'Role unavailable';
+  return member.role?.trim().replace(/^org:/, '') || 'Role unavailable';
+}
+
+function SettingsLink() {
+  return (
+    <Link
+      to="/settings"
+      className="rounded-sm font-medium text-semantic-primary underline underline-offset-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary"
+    >
+      Settings
+    </Link>
+  );
+}
+
+function MemberCountNotice({ shown, total }: { shown: number; total: number }) {
+  if (total <= shown) return null;
+  return (
+    <p className="mt-3 text-sm text-semantic-text-secondary">
+      Showing the first {shown} of {total} members.
+    </p>
+  );
 }
 
 function getMemberStatus(member: MemberRecord): string {
@@ -154,12 +176,13 @@ function MembersError({ message, onRetry }: { message: string; onRetry: () => vo
 
 interface MembersBodyProps {
   members: MemberRecord[];
+  totalMembers: number;
   isFetching: boolean;
   error: string | null;
   onRetry: () => void;
 }
 
-function MembersBody({ members, isFetching, error, onRetry }: MembersBodyProps) {
+function MembersBody({ members, totalMembers, isFetching, error, onRetry }: MembersBodyProps) {
   if (isFetching) {
     return <StatusMessage label="Loading team members">Loading team members...</StatusMessage>;
   }
@@ -169,7 +192,8 @@ function MembersBody({ members, isFetching, error, onRetry }: MembersBodyProps) 
   if (members.length === 0) {
     return (
       <StatusMessage label="No team members found">
-        No team members found in this organization. Use Settings to invite the first team member.
+        No team members found in this organization. Use <SettingsLink /> to invite the first team
+        member.
       </StatusMessage>
     );
   }
@@ -177,6 +201,7 @@ function MembersBody({ members, isFetching, error, onRetry }: MembersBodyProps) 
     <>
       <MemberSummaryList members={members} />
       <MemberTable members={members} />
+      <MemberCountNotice shown={members.length} total={totalMembers} />
     </>
   );
 }
@@ -184,6 +209,7 @@ function MembersBody({ members, isFetching, error, onRetry }: MembersBodyProps) 
 export function UserManagementPage() {
   const { organization, isLoaded } = useOrganization();
   const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [totalMembers, setTotalMembers] = useState(0);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
   const latestRequestIdRef = useRef(0);
@@ -211,9 +237,11 @@ export function UserManagementPage() {
       const result = await organization.getMemberships({ pageSize: 50 });
       if (!canUpdate()) return;
       setMembers(result.data as MemberRecord[]);
+      setTotalMembers(result.total_count ?? result.data.length);
     } catch {
       if (!canUpdate()) return;
       setMembers([]);
+      setTotalMembers(0);
       setMembersError('We could not load team members. Check the connection and try again.');
     } finally {
       if (canUpdate()) {
@@ -227,6 +255,7 @@ export function UserManagementPage() {
       latestRequestIdRef.current += 1;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: resets member state when the organization becomes absent
       setMembers([]);
+      setTotalMembers(0);
       setMembersError(null);
       setIsFetchingMembers(false);
       return undefined;
@@ -270,12 +299,13 @@ export function UserManagementPage() {
               Organization members
             </CardTitle>
             <CardDescription className="max-w-3xl">
-              Members in {organization.name}. To invite new team members, use the Settings tab.
+              Members in {organization.name}. To invite new team members, go to <SettingsLink />.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">
             <MembersBody
               members={members}
+              totalMembers={totalMembers}
               isFetching={isFetchingMembers}
               error={membersError}
               onRetry={handleRetryMembers}

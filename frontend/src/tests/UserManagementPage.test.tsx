@@ -2,6 +2,9 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { UserManagementPage } from '../pages/UserManagementPage';
 import { useOrganization } from '@clerk/clerk-react';
+import { MemoryRouter } from 'react-router-dom';
+
+const renderPage = () => render(<UserManagementPage />, { wrapper: MemoryRouter });
 
 // Mock Clerk hooks
 const mockGetMemberships = vi.fn();
@@ -88,7 +91,7 @@ describe('UserManagementPage', () => {
       ],
     });
 
-    render(<UserManagementPage />);
+    renderPage();
 
     expect(screen.getByText('Team members')).toBeInTheDocument();
     expect(screen.getByText(/Members in Test Org/i)).toBeInTheDocument();
@@ -127,14 +130,14 @@ describe('UserManagementPage', () => {
       isLoaded: false,
     });
 
-    render(<UserManagementPage />);
+    renderPage();
     expect(screen.getByRole('status', { name: /loading organization/i })).toBeInTheDocument();
   });
 
   test('announces member loading state while memberships are pending', () => {
     mockGetMemberships.mockReturnValue(new Promise(() => undefined));
 
-    render(<UserManagementPage />);
+    renderPage();
 
     expect(screen.getByRole('status', { name: /loading team members/i })).toBeInTheDocument();
   });
@@ -142,7 +145,7 @@ describe('UserManagementPage', () => {
   test('shows empty state when no members found', async () => {
     mockGetMemberships.mockResolvedValue({ data: [] });
 
-    render(<UserManagementPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByRole('status', { name: /no team members found/i })).toBeInTheDocument();
@@ -167,7 +170,7 @@ describe('UserManagementPage', () => {
         ],
       });
 
-    render(<UserManagementPage />);
+    renderPage();
 
     expect(
       await screen.findByRole('alert', {
@@ -220,7 +223,7 @@ describe('UserManagementPage', () => {
       isLoaded: true,
     });
 
-    const { rerender } = render(<UserManagementPage />);
+    const { rerender } = renderPage();
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
@@ -279,7 +282,7 @@ describe('UserManagementPage', () => {
       ],
     });
 
-    render(<UserManagementPage />);
+    renderPage();
 
     const summaries = await screen.findByRole('list', { name: /team member summaries/i });
     const [summary] = within(summaries).getAllByRole('listitem');
@@ -310,7 +313,7 @@ describe('UserManagementPage', () => {
       ],
     });
 
-    render(<UserManagementPage />);
+    renderPage();
 
     // The shell <main> owns the gutter; the page is a labelled region, not a second main.
     expect(screen.queryByRole('main')).not.toBeInTheDocument();
@@ -332,16 +335,69 @@ describe('UserManagementPage', () => {
   test('uses full-width retry action on narrow screens', async () => {
     mockGetMemberships.mockRejectedValue(new Error('Network unavailable'));
 
-    render(<UserManagementPage />);
+    renderPage();
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try again/i })).toHaveClass('min-h-11', 'w-full');
   });
 
+  test('shows readable role names, a Settings link and a truncation notice', async () => {
+    mockGetMemberships.mockResolvedValue({
+      data: [
+        {
+          id: 'mem_1',
+          role: 'org:admin',
+          createdAt: new Date('2026-01-01'),
+          publicUserData: { firstName: 'Mira', lastName: 'Patel', identifier: 'mira@example.com' },
+        },
+      ],
+      total_count: 60,
+    });
+
+    renderPage();
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('admin')).toBeInTheDocument();
+    expect(screen.queryByText('org:admin')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    expect(screen.getByText('Showing the first 1 of 60 members.')).toBeInTheDocument();
+  });
+
+  test('omits the truncation notice when every member is shown', async () => {
+    mockGetMemberships.mockResolvedValue({
+      data: [
+        {
+          id: 'mem_1',
+          role: 'org:member',
+          createdAt: null,
+          publicUserData: { firstName: 'Mira', lastName: 'Patel', identifier: 'mira@example.com' },
+        },
+      ],
+      total_count: 1,
+    });
+
+    renderPage();
+
+    await screen.findByRole('table');
+    expect(screen.queryByText(/showing the first/i)).not.toBeInTheDocument();
+  });
+
+  test('links the empty state to Settings for inviting members', async () => {
+    mockGetMemberships.mockResolvedValue({ data: [], total_count: 0 });
+
+    renderPage();
+
+    const empty = await screen.findByRole('status', { name: /no team members found/i });
+    expect(within(empty).getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/settings',
+    );
+  });
+
   test('renders the load error with the AA-contrast muted critical pair', async () => {
     mockGetMemberships.mockRejectedValue(new Error('Network unavailable'));
 
-    render(<UserManagementPage />);
+    renderPage();
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveClass('bg-semantic-critical-muted');
