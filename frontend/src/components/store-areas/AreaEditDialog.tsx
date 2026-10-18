@@ -113,7 +113,7 @@ export function AreaEditDialog({
               value={editedAreaName}
               onChange={(e) => dispatch({ type: 'SET_EDITED_AREA_NAME', value: e.target.value })}
               {...fieldErrorProps(EDIT_NAME_ERROR_ID, nameInvalid)}
-              className="sm:col-span-3"
+              className="min-h-11 sm:col-span-3"
               maxLength={AREA_NAME_MAX_LENGTH}
             />
             <div className="sm:col-span-3 sm:col-start-2">
@@ -132,7 +132,7 @@ export function AreaEditDialog({
               onChange={(e) =>
                 dispatch({ type: 'SET_EDITED_SUB_DEPARTMENT', value: e.target.value })
               }
-              className="sm:col-span-3"
+              className="min-h-11 sm:col-span-3"
               maxLength={SUB_DEPARTMENT_MAX_LENGTH}
             />
           </div>

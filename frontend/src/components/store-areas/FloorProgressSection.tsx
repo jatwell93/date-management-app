@@ -65,6 +65,7 @@ export function FloorProgressSection({
                 onChange={(event) => onNewCycleNameChange(event.target.value)}
                 placeholder="July walk"
                 maxLength={100}
+                className="min-h-11"
               />
             </div>
             <Button

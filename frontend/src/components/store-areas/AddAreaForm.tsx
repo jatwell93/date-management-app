@@ -13,6 +13,10 @@ import {
 
 const ADD_NAME_ERROR_ID = 'newAreaName-error';
 
+// Native select (so scanners and phones get the OS picker), sized and focused like Input.
+const SELECT_CLASS =
+  'border-input min-h-11 w-full rounded-md border bg-transparent px-3 py-1 text-base text-semantic-text-primary dark:bg-semantic-surface-2 outline-hidden focus-visible:border-semantic-primary focus-visible:ring-semantic-primary/50 focus-visible:ring-[3px]';
+
 interface AddAreaFormProps {
   newAreaName: string;
   newSubDepartmentName: string;
@@ -53,20 +57,18 @@ export function AddAreaForm({
             onChange={(e) => onAreaNameChange(e.target.value)}
             {...fieldErrorProps(ADD_NAME_ERROR_ID, nameInvalid)}
             maxLength={AREA_NAME_MAX_LENGTH}
+            className="min-h-11"
           />
-          <FieldError id={ADD_NAME_ERROR_ID} show={nameInvalid}>
-            {AREA_NAME_REQUIRED_MESSAGE}
-          </FieldError>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="newSubDepartmentName">Sub-department</Label>
+          <Label htmlFor="newSubDepartmentName">Sub-department (optional)</Label>
           <Input
             id="newSubDepartmentName"
             type="text"
-            placeholder="Optional"
             value={newSubDepartmentName}
             onChange={(e) => onSubDepartmentChange(e.target.value)}
             maxLength={SUB_DEPARTMENT_MAX_LENGTH}
+            className="min-h-11"
           />
         </div>
         <div className="grid gap-1.5">
@@ -75,7 +77,7 @@ export function AddAreaForm({
             id="newParentDepartmentId"
             value={newParentDepartmentId}
             onChange={(e) => onParentChange(e.target.value)}
-            className="border-input h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
+            className={SELECT_CLASS}
           >
             <option value="">None</option>
             {departmentOptions.map((department) => (
@@ -88,6 +90,11 @@ export function AddAreaForm({
         <Button onClick={onSubmit} disabled={isAddingArea} className="min-h-11 w-full md:w-auto">
           {isAddingArea ? 'Adding location' : 'Add location'}
         </Button>
+      </div>
+      <div className="mt-1.5">
+        <FieldError id={ADD_NAME_ERROR_ID} show={nameInvalid}>
+          {AREA_NAME_REQUIRED_MESSAGE}
+        </FieldError>
       </div>
     </div>
   );

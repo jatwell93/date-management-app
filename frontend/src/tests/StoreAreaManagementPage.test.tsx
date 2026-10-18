@@ -616,6 +616,41 @@ describe('StoreAreaManagementPage UI audit', () => {
     expect(overdue).toHaveClass('text-semantic-warning-muted-foreground');
   });
 
+  it('sizes every form control and dialog button for touch', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }], {
+      ...activeProgress,
+      activeCycle: null,
+    });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    [/^Area name$/i, /Sub-department \(optional\)/i, /Parent department/i, /Walk name/i].forEach(
+      (label) => expect(screen.getByLabelText(label)).toHaveClass('min-h-11'),
+    );
+    expect(screen.getByLabelText(/Parent department/i)).toHaveClass('text-base');
+
+    const mobileRow = within(screen.getByRole('list', { name: 'Store areas' })).getByRole(
+      'listitem',
+      { name: 'Aisle 1' },
+    );
+    const areaLabel = within(mobileRow).getByText('Area');
+    expect(areaLabel.tagName).toBe('DT');
+    expect(areaLabel).toHaveClass('text-sm');
+    expect(areaLabel).not.toHaveClass('text-xs', 'uppercase');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0]);
+    within(screen.getByRole('dialog'))
+      .getAllByRole('textbox')
+      .forEach((input) => expect(input).toHaveClass('min-h-11'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Aisle 1' })[0]);
+    within(screen.getByRole('alertdialog'))
+      .getAllByRole('button')
+      .forEach((button) => expect(button).toHaveClass('min-h-11'));
+  });
+
   it('exposes one page heading with section headings beneath it', async () => {
     mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }], activeProgress);
 

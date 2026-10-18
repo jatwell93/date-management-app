@@ -24,17 +24,17 @@ type RowActions = (area: StoreArea, triggerClassName: string, dialogKey: string)
 
 function MobileField({
   label,
-  className,
+  wide = false,
   children,
 }: {
   label: string;
-  className?: string;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <dt className="text-xs font-medium uppercase text-semantic-text-secondary">{label}</dt>
-      <dd className={className ?? 'text-sm text-semantic-text-primary'}>{children}</dd>
+    <div className={wide ? 'col-span-2' : undefined}>
+      <dt className="text-sm font-medium text-semantic-text-secondary">{label}</dt>
+      <dd className="break-words text-base tabular-nums text-semantic-text-primary">{children}</dd>
     </div>
   );
 }
@@ -55,23 +55,13 @@ function MobileAreaCards({
           className="rounded-md border border-hairline bg-semantic-surface-1 p-3"
         >
           <div className="grid gap-3">
-            <dl className="grid gap-3">
-              <MobileField
-                label="Area"
-                className="break-words text-sm font-medium text-semantic-text-primary"
-              >
-                {area.name}
+            <dl className="grid grid-cols-2 gap-3">
+              <MobileField label="Area" wide>
+                <span className="font-medium">{area.name}</span>
               </MobileField>
-              <div className="grid grid-cols-2 gap-3">
-                <MobileField label="ID">{area.id}</MobileField>
-                <MobileField label="Last checked">
-                  {formatLastChecked(area.lastChecked)}
-                </MobileField>
-              </div>
-              <MobileField
-                label="Sub-department"
-                className="break-words text-sm text-semantic-text-primary"
-              >
+              <MobileField label="ID">{area.id}</MobileField>
+              <MobileField label="Last checked">{formatLastChecked(area.lastChecked)}</MobileField>
+              <MobileField label="Sub-department" wide>
                 {area.subDepartment || 'None recorded'}
               </MobileField>
             </dl>
@@ -107,12 +97,12 @@ function DesktopAreaTable({
         <TableBody>
           {storeAreas.map((area) => (
             <TableRow key={area.id}>
-              <TableCell>{area.id}</TableCell>
+              <TableCell className="tabular-nums">{area.id}</TableCell>
               <TableCell className="max-w-64 whitespace-normal break-words">{area.name}</TableCell>
               <TableCell className="max-w-64 whitespace-normal break-words">
                 {area.subDepartment || 'None recorded'}
               </TableCell>
-              <TableCell>{formatLastChecked(area.lastChecked)}</TableCell>
+              <TableCell className="tabular-nums">{formatLastChecked(area.lastChecked)}</TableCell>
               <TableCell className="text-right">
                 <div className="inline-flex gap-2">
                   {actions(area, 'min-h-11', `desktop-${area.id}`)}
