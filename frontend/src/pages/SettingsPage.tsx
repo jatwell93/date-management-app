@@ -10,7 +10,7 @@ function SettingsControlsFallback() {
       role="alert"
       className="w-full rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-4 text-semantic-critical-muted-foreground"
     >
-      <h2 className="break-words text-lg font-semibold font-heading text-semantic-critical">
+      <h2 className="break-words text-lg font-semibold font-heading text-semantic-critical-muted-foreground">
         Workspace settings could not be loaded.
       </h2>
       <p className="mt-2 max-w-prose break-words text-sm">

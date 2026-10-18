@@ -59,6 +59,9 @@ describe('MarkdownMatrixSettings', () => {
     screen
       .getAllByRole('button', { name: /^(Cost|Retail)$/ })
       .forEach((btn) => expect(btn).toHaveClass('focus-visible:ring-[3px]'));
+    // Selected basis uses the teal semantic primary, not the navy shadcn primary.
+    const [cost] = screen.getAllByRole('button', { name: 'Cost', pressed: true });
+    expect(cost).toHaveClass('bg-semantic-primary', 'text-semantic-primary-foreground');
   });
 
   it('explains the disabled retail basis to assistive tech', async () => {
@@ -176,6 +179,8 @@ describe('MarkdownMatrixSettings', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(/Markdown matrices saved/i),
     );
+    // AA contrast: the success text uses the dark muted-foreground green, not #10B981.
+    expect(screen.getByRole('status')).toHaveClass('text-semantic-success-muted-foreground');
     expect(saveButton).toBeDisabled();
   });
 });

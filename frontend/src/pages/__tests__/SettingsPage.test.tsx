@@ -127,6 +127,9 @@ describe('SettingsPage', () => {
 
     expect(screen.queryByTestId('clerk-organization-profile')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Workspace settings could not be loaded.');
+    expect(
+      screen.getByRole('heading', { name: 'Workspace settings could not be loaded.' }),
+    ).toHaveClass('text-semantic-critical-muted-foreground');
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Reload settings before changing team members or roles.',
     );

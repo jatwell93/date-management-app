@@ -82,7 +82,9 @@ function BasisButton({
       title={title}
       onClick={onSelect}
       className={`${BASIS_BUTTON_CLASS} ${
-        selected ? 'bg-primary text-primary-foreground' : 'bg-transparent'
+        selected
+          ? 'bg-semantic-primary text-semantic-primary-foreground'
+          : 'bg-transparent hover:bg-semantic-surface-3'
       }`}
     >
       {label}
@@ -107,7 +109,7 @@ function BandRow({ scope, band, value, hasRetailData, errorId, onUpdate }: BandR
     <div className="grid gap-3 rounded-md bg-semantic-surface-2 p-4 sm:grid-cols-[1fr_auto]">
       <div className="min-w-0">
         <h4 className="font-heading text-base font-semibold">{title}</h4>
-        <p className="text-sm text-muted-foreground">{window}</p>
+        <p className="text-sm text-semantic-text-secondary">{window}</p>
       </div>
       <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
@@ -135,7 +137,7 @@ function BandRow({ scope, band, value, hasRetailData, errorId, onUpdate }: BandR
             Basis
           </span>
           <div
-            className="inline-flex rounded-md border"
+            className="inline-flex rounded-md border border-hairline"
             role="group"
             aria-label={`${scopeLabel} ${title} basis`}
           >
@@ -184,12 +186,15 @@ export function MarkdownMatrixEditor({
   const errorId = isValidMatrix(matrix) ? undefined : `${scope}-matrix-error`;
 
   return (
-    <section aria-labelledby={`${scope}-heading`} className="space-y-3 rounded-lg border p-4">
+    <section
+      aria-labelledby={`${scope}-heading`}
+      className="space-y-3 rounded-lg border border-hairline p-4"
+    >
       <div>
         <h3 id={`${scope}-heading`} className="font-heading text-lg font-semibold">
           {scopeLabel}
         </h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-semantic-text-secondary">
           {scope === 'FULL_CREDIT'
             ? 'Pricing for stock eligible for full supplier credit.'
             : 'Pricing for stock without confirmed full supplier credit.'}
@@ -207,7 +212,7 @@ export function MarkdownMatrixEditor({
         />
       ))}
       {errorId && (
-        <p id={errorId} role="alert" className="text-sm text-semantic-critical">
+        <p id={errorId} role="alert" className="text-sm text-semantic-critical-muted-foreground">
           {scopeLabel} discounts must be between 0 and 100 and must not decrease as expiry nears.
         </p>
       )}
@@ -297,7 +302,7 @@ export function MarkdownMatrixSettings() {
         <CardTitle id={MARKDOWN_MATRICES_HEADING_ID} role="heading" aria-level={2}>
           Markdown matrices
         </CardTitle>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+        <p className="mt-1 max-w-prose text-sm text-semantic-text-secondary">
           Set separate discounts for stock with and without confirmed full supplier credit.
           {!hasRetailData && (
             <span id={RETAIL_HINT_ID}>
@@ -310,7 +315,7 @@ export function MarkdownMatrixSettings() {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p role="status" className="text-sm text-muted-foreground">
+          <p role="status" className="text-sm text-semantic-text-secondary">
             Loading markdown settings…
           </p>
         ) : matrices ? (
@@ -328,12 +333,12 @@ export function MarkdownMatrixSettings() {
               onChange={(matrix) => updateMatrix('FULL_CREDIT', matrix)}
             />
             {error && (
-              <p role="alert" className="text-sm text-semantic-critical">
+              <p role="alert" className="text-sm text-semantic-critical-muted-foreground">
                 {error}
               </p>
             )}
             {success && (
-              <p role="status" className="text-sm text-semantic-success">
+              <p role="status" className="text-sm text-semantic-success-muted-foreground">
                 {success}
               </p>
             )}
@@ -365,7 +370,7 @@ export function MarkdownMatrixSettings() {
             </AlertDialog>
           </div>
         ) : error ? (
-          <p role="alert" className="text-sm text-semantic-critical">
+          <p role="alert" className="text-sm text-semantic-critical-muted-foreground">
             {error}
           </p>
         ) : null}
