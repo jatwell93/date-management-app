@@ -180,8 +180,9 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
               Match unmatched SKUs in one atomic brand-link operation.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
+              className="min-h-11"
               variant="outline"
               size="sm"
               aria-pressed={false}
@@ -189,7 +190,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
             >
               Brand setup
             </Button>
-            <Button size="sm" aria-pressed>
+            <Button className="min-h-11" size="sm" aria-pressed>
               SKU matching
             </Button>
           </div>
@@ -221,11 +222,12 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
             later.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" aria-pressed>
+        <div className="flex flex-wrap gap-2">
+          <Button className="min-h-11" size="sm" aria-pressed>
             Brand setup
           </Button>
           <Button
+            className="min-h-11"
             variant="outline"
             size="sm"
             aria-pressed={false}
@@ -234,6 +236,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
             SKU matching
           </Button>
           <Button
+            className="min-h-11"
             variant={filter === 'ALL' ? 'default' : 'outline'}
             size="sm"
             aria-pressed={filter === 'ALL'}
@@ -242,6 +245,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
             All matches
           </Button>
           <Button
+            className="min-h-11"
             variant={filter === 'NEEDS_BRAND' ? 'default' : 'outline'}
             size="sm"
             aria-pressed={filter === 'NEEDS_BRAND'}
@@ -293,7 +297,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
                     ) : (
                       <Input
                         aria-label={`Brand name for ${item.productName}`}
-                        className="mt-2 max-w-xs"
+                        className="mt-2 max-w-xs min-h-11"
                         value={brandNames[item.productId] ?? ''}
                         onChange={(event) =>
                           setBrandNames((value) => ({
@@ -309,7 +313,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
                     {suppliers.length > 0 && (
                       <select
                         aria-label={`Supplier for ${item.productName}`}
-                        className="rounded-md border px-3 py-2 text-sm outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
+                        className="min-h-11 rounded-md border px-3 py-2 text-sm outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
                         value={
                           supplierIds[item.productId] ?? item.brand?.supplierId ?? suppliers[0].id
                         }
@@ -328,6 +332,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
                       </select>
                     )}
                     <Button
+                      className="min-h-11"
                       size="sm"
                       disabled={busyProductId != null}
                       onClick={() => void (item.brand ? confirm(item) : add(item))}
@@ -450,7 +455,12 @@ const SkuMatchingView: React.FC<{
     <div className="space-y-4">
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
-          <Button variant="outline" onClick={selectFirstUnmatched} disabled={loading}>
+          <Button
+            className="min-h-11"
+            variant="outline"
+            onClick={selectFirstUnmatched}
+            disabled={loading}
+          >
             Select first 500 unmatched SKUs
           </Button>
           <p className="text-sm text-semantic-text-secondary">{selected.size} of 500 selected</p>
@@ -458,7 +468,7 @@ const SkuMatchingView: React.FC<{
             <Label htmlFor="bulk-existing-brand">Existing brand</Label>
             <select
               id="bulk-existing-brand"
-              className="h-9 min-w-48 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+              className="h-11 min-w-48 rounded-md border bg-semantic-surface-1 px-3 text-sm"
               value={brandId ?? ''}
               onChange={(event) => {
                 setBrandId(event.target.value ? Number(event.target.value) : null);
@@ -476,6 +486,7 @@ const SkuMatchingView: React.FC<{
           <div className="space-y-1">
             <Label htmlFor="bulk-new-brand">New brand name</Label>
             <Input
+              className="min-h-11"
               id="bulk-new-brand"
               aria-label="New brand name"
               value={brandName}
@@ -486,6 +497,7 @@ const SkuMatchingView: React.FC<{
             />
           </div>
           <Button
+            className="min-h-11"
             onClick={() => void link()}
             disabled={saving || selected.size === 0 || (brandId == null && !brandName.trim())}
           >
@@ -537,15 +549,18 @@ const SkuMatchingView: React.FC<{
                     >
                       <TableCell>
                         {unmatched && (
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${item.productName}`}
-                            checked={selected.has(item.productId)}
-                            disabled={
-                              !selected.has(item.productId) && selected.size >= MAX_BULK_SELECTION
-                            }
-                            onChange={() => toggle(item.productId)}
-                          />
+                          <label className="inline-flex size-11 cursor-pointer items-center justify-center">
+                            <input
+                              type="checkbox"
+                              className="size-5"
+                              aria-label={`Select ${item.productName}`}
+                              checked={selected.has(item.productId)}
+                              disabled={
+                                !selected.has(item.productId) && selected.size >= MAX_BULK_SELECTION
+                              }
+                              onChange={() => toggle(item.productId)}
+                            />
+                          </label>
                         )}
                       </TableCell>
                       <TableCell className="font-mono">{item.sku}</TableCell>
@@ -608,6 +623,7 @@ const CatalogueControls: React.FC<CatalogueControlsProps> = ({
     <div className="min-w-48 flex-1 space-y-1">
       <Label htmlFor="catalogue-title-filter">Product title</Label>
       <Input
+        className="min-h-11"
         id="catalogue-title-filter"
         aria-label="Filter product titles"
         value={titleDraft}
@@ -620,7 +636,7 @@ const CatalogueControls: React.FC<CatalogueControlsProps> = ({
       <select
         id="catalogue-title-match"
         aria-label="Title match"
-        className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+        className="h-11 rounded-md border bg-semantic-surface-1 px-3 text-sm"
         value={titleMatch}
         onChange={(event) => onTitleMatchChange(event.target.value as CatalogueTitleMatch)}
       >
@@ -633,7 +649,7 @@ const CatalogueControls: React.FC<CatalogueControlsProps> = ({
       <select
         id="catalogue-title-order"
         aria-label="Title order"
-        className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+        className="h-11 rounded-md border bg-semantic-surface-1 px-3 text-sm"
         value={sort}
         onChange={(event) => onSortChange(event.target.value as CatalogueTitleSort)}
       >
@@ -646,7 +662,7 @@ const CatalogueControls: React.FC<CatalogueControlsProps> = ({
       <select
         id="catalogue-page-size"
         aria-label="Rows per page"
-        className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+        className="h-11 rounded-md border bg-semantic-surface-1 px-3 text-sm"
         value={pageSize}
         onChange={(event) => onPageSizeChange(Number(event.target.value))}
       >
@@ -657,7 +673,7 @@ const CatalogueControls: React.FC<CatalogueControlsProps> = ({
         ))}
       </select>
     </div>
-    <Button type="submit" variant="outline">
+    <Button className="min-h-11" type="submit" variant="outline">
       Apply title filter
     </Button>
   </form>
@@ -698,6 +714,7 @@ const CataloguePagination: React.FC<CataloguePaginationProps> = ({
       </p>
       <div className="flex flex-wrap gap-1">
         <Button
+          className="min-h-11"
           variant="outline"
           size="sm"
           aria-label="First page"
@@ -707,6 +724,7 @@ const CataloguePagination: React.FC<CataloguePaginationProps> = ({
           First
         </Button>
         <Button
+          className="min-h-11"
           variant="outline"
           size="sm"
           aria-label="Previous page"
@@ -717,6 +735,7 @@ const CataloguePagination: React.FC<CataloguePaginationProps> = ({
         </Button>
         {visiblePages.map((page) => (
           <Button
+            className="min-h-11"
             key={page}
             variant={page === currentPage ? 'default' : 'outline'}
             size="sm"
@@ -729,6 +748,7 @@ const CataloguePagination: React.FC<CataloguePaginationProps> = ({
           </Button>
         ))}
         <Button
+          className="min-h-11"
           variant="outline"
           size="sm"
           aria-label="Next page"
@@ -738,6 +758,7 @@ const CataloguePagination: React.FC<CataloguePaginationProps> = ({
           Next
         </Button>
         <Button
+          className="min-h-11"
           variant="outline"
           size="sm"
           aria-label="Last page"

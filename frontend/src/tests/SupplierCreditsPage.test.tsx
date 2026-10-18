@@ -985,6 +985,39 @@ describe('SupplierCreditsPage accessibility', () => {
   });
 });
 
+describe('SupplierCreditsPage touch targets and narrow screens', () => {
+  it('gives view tabs and claim actions 44px targets and lets the tab bar scroll', async () => {
+    renderPage();
+    const nav = await screen.findByRole('navigation', { name: 'Supplier credit views' });
+    expect(nav).toHaveClass('overflow-x-auto');
+    for (const tab of screen.getAllByRole('button', { name: /To Claim|Settled|Review/ })) {
+      expect(tab).toHaveClass('min-h-11');
+    }
+    expect(screen.getByRole('button', { name: 'Begin claim' })).toHaveClass('min-h-11');
+    expect(screen.getByRole('button', { name: 'Assign supplier' })).toHaveClass('min-h-11');
+  });
+
+  it('wraps bulk-select checkboxes in a 44px hit area', async () => {
+    mocked.getPolicyReview.mockResolvedValue([
+      {
+        brandId: 41,
+        brandName: 'Nature Brand',
+        supplier,
+        status: 'ATTACHED',
+        policyUpdatedAt: supplier.policyUpdatedAt,
+        representativeName: supplier.representativeName,
+      },
+    ]);
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+
+    const checkbox = await screen.findByRole('checkbox', { name: 'Select Nature Brand' });
+    expect(checkbox.closest('label')).toHaveClass('size-11');
+    await userEvent.click(checkbox.closest('label') as HTMLElement);
+    expect(checkbox).toBeChecked();
+  });
+});
+
 describe('SupplierCreditsPage typography', () => {
   it('marks claim detail sections as headings at body-readable size', async () => {
     renderPage();

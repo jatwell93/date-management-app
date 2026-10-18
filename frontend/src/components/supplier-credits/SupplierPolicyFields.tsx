@@ -122,6 +122,7 @@ const ContactFields: React.FC<ContactsProps> = ({
       <div>
         <Label htmlFor={fieldId('contactEmail')}>Contact email</Label>
         <Input
+          className="min-h-11"
           id={fieldId('contactEmail')}
           {...errorProps(fieldId('contactEmail'), fieldErrors.contactEmail)}
           type="email"
@@ -134,6 +135,7 @@ const ContactFields: React.FC<ContactsProps> = ({
       <div>
         <Label htmlFor={fieldId('contactPhone')}>Contact phone</Label>
         <Input
+          className="min-h-11"
           id={fieldId('contactPhone')}
           {...errorProps(fieldId('contactPhone'), fieldErrors.contactPhone)}
           maxLength={80}
@@ -208,7 +210,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         <Label htmlFor={fieldId('creditType')}>Credit treatment</Label>
         <select
           id={fieldId('creditType')}
-          className="mt-1 h-9 w-full rounded-md border bg-semantic-surface-1 px-3 text-sm"
+          className="mt-1 h-11 w-full rounded-md border bg-semantic-surface-1 px-3 text-sm"
           value={value.creditType}
           onChange={(event) => onChange('creditType', event.target.value)}
         >
@@ -219,7 +221,13 @@ const PolicySection: React.FC<PolicySectionProps> = ({
       <div>
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor={fieldId('creditPolicyNote')}>Store instructions</Label>
-          <Button type="button" variant="ghost" size="sm" onClick={() => onPreviewChange(!preview)}>
+          <Button
+            className="min-h-11"
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onPreviewChange(!preview)}
+          >
             {preview ? 'Edit instructions' : 'Preview instructions'}
           </Button>
         </div>
@@ -251,6 +259,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         <div>
           <Label htmlFor={fieldId('representativeName')}>Representative name</Label>
           <Input
+            className="min-h-11"
             id={fieldId('representativeName')}
             {...errorProps(fieldId('representativeName'), fieldErrors.representativeName)}
             maxLength={120}
@@ -265,6 +274,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         <div>
           <Label htmlFor={fieldId('representativeEmail')}>Representative email</Label>
           <Input
+            className="min-h-11"
             id={fieldId('representativeEmail')}
             {...errorProps(fieldId('representativeEmail'), fieldErrors.representativeEmail)}
             type="email"
@@ -282,6 +292,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         <div>
           <Label htmlFor={fieldId('policyWriteOffQty')}>Write off</Label>
           <Input
+            className="min-h-11"
             id={fieldId('policyWriteOffQty')}
             type="number"
             min="1"
@@ -292,6 +303,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         <div>
           <Label htmlFor={fieldId('policyCreditQty')}>Credit</Label>
           <Input
+            className="min-h-11"
             id={fieldId('policyCreditQty')}
             type="number"
             min="0"
@@ -302,6 +314,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         <div>
           <Label htmlFor={fieldId('followUpDays')}>Follow up days</Label>
           <Input
+            className="min-h-11"
             id={fieldId('followUpDays')}
             type="number"
             min="1"

@@ -174,7 +174,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
         <p role="alert" className="text-semantic-critical font-medium">
           {error}
         </p>
-        <Button variant="outline" className="mt-4" onClick={() => void load()}>
+        <Button variant="outline" className="mt-4 min-h-11" onClick={() => void load()}>
           Try again
         </Button>
       </div>
@@ -195,7 +195,10 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
 
       {report && <RecoveryPanel report={report} />}
 
-      <nav className="mt-8 mb-4 flex gap-2 border-b" aria-label="Supplier credit views">
+      <nav
+        className="mt-8 mb-4 flex gap-2 overflow-x-auto border-b"
+        aria-label="Supplier credit views"
+      >
         <TabButton active={tab === 'to-claim'} onClick={() => setTab('to-claim')}>
           To Claim
         </TabButton>
@@ -305,7 +308,7 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 }) => (
   <button
     onClick={onClick}
-    className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+    className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
       active
         ? 'border-semantic-primary text-semantic-primary'
         : 'border-transparent text-semantic-text-secondary hover:text-semantic-text-primary'
@@ -394,7 +397,7 @@ const ToClaimBoard: React.FC<{
     <div className="space-y-4">
       {pool.map((group) => (
         <Card key={group.supplierId ?? 'needs-supplier'}>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
             <CardTitle role="heading" aria-level={2} className="text-lg">
               {group.supplierName ?? (
                 <>
@@ -412,7 +415,7 @@ const ToClaimBoard: React.FC<{
               </span>
             </CardTitle>
             {group.supplierId != null && (
-              <Button size="sm" onClick={() => onBuild(group)}>
+              <Button className="min-h-11" size="sm" onClick={() => onBuild(group)}>
                 Begin claim
               </Button>
             )}
@@ -422,7 +425,7 @@ const ToClaimBoard: React.FC<{
               {group.items.map((item) => (
                 <li
                   key={item.transactionId}
-                  className="flex items-center justify-between py-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
                 >
                   <span>
                     <span className="font-medium">{item.productName}</span>{' '}
@@ -431,6 +434,7 @@ const ToClaimBoard: React.FC<{
                   </span>
                   {group.state === 'NEEDS_BRAND' && (
                     <Button
+                      className="min-h-11"
                       size="sm"
                       variant="outline"
                       onClick={() => onAssign({ productId: item.productId, sku: item.sku })}
@@ -440,6 +444,7 @@ const ToClaimBoard: React.FC<{
                   )}
                   {group.state === 'PENDING_CONFIRMATION' && item.brandId != null && (
                     <Button
+                      className="min-h-11"
                       size="sm"
                       variant="outline"
                       onClick={() =>
@@ -456,6 +461,7 @@ const ToClaimBoard: React.FC<{
                   )}
                   {group.state === 'NO_POLICY' && (
                     <Button
+                      className="min-h-11"
                       size="sm"
                       variant="outline"
                       onClick={() => onDispose(item.transactionId, item.productName)}
@@ -508,10 +514,15 @@ const DisposeWriteOffModal: React.FC<{
           </p>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={() => void dispose()} disabled={submitting}>
+          <Button
+            className="min-h-11"
+            variant="destructive"
+            onClick={() => void dispose()}
+            disabled={submitting}
+          >
             Confirm disposal
           </Button>
         </DialogFooter>
@@ -538,7 +549,7 @@ const ClaimList: React.FC<{
         <li key={claim.id}>
           <button
             onClick={() => onOpen(claim)}
-            className="flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-semantic-surface-2/50"
+            className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-semantic-surface-2/50"
           >
             <span>
               <span className="font-medium">Claim #{claim.id}</span> · {claim.supplier.name}
@@ -618,6 +629,7 @@ const BuildClaimModal: React.FC<{
               <div className="mt-2">
                 <Label htmlFor={`batch-${item.transactionId}`}>Batch number</Label>
                 <Input
+                  className="min-h-11"
                   id={`batch-${item.transactionId}`}
                   value={batches[item.transactionId] ?? ''}
                   onChange={(e) =>
@@ -634,10 +646,10 @@ const BuildClaimModal: React.FC<{
           </p>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={submitting}>
+          <Button className="min-h-11" onClick={() => void submit()} disabled={submitting}>
             {submitting ? 'Creating…' : 'Create draft claim'}
           </Button>
         </DialogFooter>
@@ -776,6 +788,7 @@ const AssignSupplierModal: React.FC<{
         {suppliers.length > 0 && (
           <div className="mb-3 flex gap-2">
             <Button
+              className="min-h-11"
               variant={mode === 'existing' ? 'default' : 'outline'}
               size="sm"
               aria-pressed={mode === 'existing'}
@@ -784,6 +797,7 @@ const AssignSupplierModal: React.FC<{
               Existing
             </Button>
             <Button
+              className="min-h-11"
               variant={mode === 'new' ? 'default' : 'outline'}
               size="sm"
               aria-pressed={mode === 'new'}
@@ -800,7 +814,7 @@ const AssignSupplierModal: React.FC<{
               <Label htmlFor="supplier-select">Supplier</Label>
               <select
                 id="supplier-select"
-                className="mt-1 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm"
+                className="mt-1 min-h-11 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm"
                 value={supplierId}
                 onChange={(event) => setSupplierId(Number(event.target.value))}
               >
@@ -824,7 +838,13 @@ const AssignSupplierModal: React.FC<{
               />
             )}
             {isAdmin && selectedSupplier && (
-              <Button type="button" variant="outline" size="sm" onClick={enterEditMode}>
+              <Button
+                className="min-h-11"
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={enterEditMode}
+              >
                 Edit supplier policy
               </Button>
             )}
@@ -834,6 +854,7 @@ const AssignSupplierModal: React.FC<{
             <div>
               <Label htmlFor="supplier-name">Name</Label>
               <Input
+                className="min-h-11"
                 id="supplier-name"
                 maxLength={255}
                 aria-invalid={fieldErrors.name ? true : undefined}
@@ -874,10 +895,11 @@ const AssignSupplierModal: React.FC<{
           </p>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button
+            className="min-h-11"
             onClick={() => void submit()}
             disabled={
               submitting ||
@@ -955,12 +977,15 @@ const ClaimDetailModal: React.FC<{
             </h3>
             <ul className="space-y-2">
               {claim.lines.map((line) => (
-                <li key={line.id} className="flex items-center justify-between text-sm">
+                <li
+                  key={line.id}
+                  className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                >
                   <span>
                     Batch {line.batchNumber ?? '—'} · {line.unitsClaimed} units ·{' '}
                     {line.photos.length} photo(s)
                   </span>
-                  <label className="inline-flex cursor-pointer items-center rounded-md px-2 font-medium text-semantic-primary underline-offset-4 hover:underline focus-within:ring-[3px] focus-within:ring-semantic-primary/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+                  <label className="inline-flex min-h-11 cursor-pointer items-center rounded-md px-2 font-medium text-semantic-primary underline-offset-4 hover:underline focus-within:ring-[3px] focus-within:ring-semantic-primary/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
                     {uploadingLine === line.id ? 'Uploading…' : 'Add photo'}
                     <span className="sr-only"> for batch {line.batchNumber ?? 'unknown'}</span>
                     <input
@@ -1006,6 +1031,7 @@ const ClaimDetailModal: React.FC<{
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {claim.status === 'DRAFT' && (
             <Button
+              className="min-h-11"
               disabled={busy}
               onClick={() => void run(async () => svc.sendClaim(claim.id, await getToken()))}
             >
@@ -1015,16 +1041,18 @@ const ClaimDetailModal: React.FC<{
           {(claim.status === 'SENT' || claim.status === 'ACKNOWLEDGED') && (
             <>
               <Button
+                className="min-h-11"
                 variant="outline"
                 disabled={busy}
                 onClick={() => void run(async () => svc.sendFollowUp(claim.id, await getToken()))}
               >
                 Send follow-up
               </Button>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-40 flex-1">
                   <Label htmlFor="credited">Credited value (AUD)</Label>
                   <Input
+                    className="min-h-11"
                     id="credited"
                     type="number"
                     min="0"
@@ -1035,6 +1063,7 @@ const ClaimDetailModal: React.FC<{
                   />
                 </div>
                 <Button
+                  className="min-h-11"
                   disabled={busy}
                   onClick={() =>
                     void run(async () =>
@@ -1052,7 +1081,7 @@ const ClaimDetailModal: React.FC<{
                 </Button>
                 <Button
                   variant="outline"
-                  className="text-semantic-critical border-semantic-critical"
+                  className="text-semantic-critical border-semantic-critical min-h-11"
                   disabled={busy}
                   onClick={() =>
                     void run(async () =>
@@ -1065,7 +1094,7 @@ const ClaimDetailModal: React.FC<{
               </div>
             </>
           )}
-          <Button variant="outline" onClick={onClose} disabled={busy}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={busy}>
             Close
           </Button>
         </DialogFooter>
