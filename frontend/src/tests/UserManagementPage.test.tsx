@@ -288,6 +288,10 @@ describe('UserManagementPage', () => {
     expect(within(summary).getByText(longEmail)).toHaveClass('break-all');
     expect(within(summary).getByText(/regional-operations-manager/i)).toHaveClass('break-words');
     expect(within(summary).getByText('Pending')).toBeInTheDocument();
+
+    const emailLabel = within(summary).getByText('Email');
+    expect(emailLabel).toHaveClass('text-sm');
+    expect(emailLabel).not.toHaveClass('text-xs', 'uppercase');
   });
 
   test('keeps responsive layout usable through phone and small tablet widths', async () => {

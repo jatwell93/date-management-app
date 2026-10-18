@@ -58,7 +58,7 @@ function StatusMessage({ label, children }: { label: string; children: React.Rea
 function MemberField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-medium uppercase text-semantic-text-secondary">{label}</p>
+      <p className="text-sm font-medium text-semantic-text-secondary">{label}</p>
       {children}
     </div>
   );
