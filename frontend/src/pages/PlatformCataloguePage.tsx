@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getCatalogueProvenance,
   getPendingCatalogueCorrections,
@@ -18,6 +18,37 @@ function age(createdAt: string): string {
   return days === 0 ? 'Today' : `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function describeCorrection(item: PlatformCatalogueCorrection): string {
+  const detail = item.barcode ?? item.enteredBrandName;
+  return detail ? `correction ${item.id} (${detail})` : `correction ${item.id}`;
+}
+
+interface SelectAllCheckboxProps {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+function SelectAllCheckbox({ checked, indeterminate, onChange }: SelectAllCheckboxProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label="Select all corrections"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+    />
+  );
+}
+
 export default function PlatformCataloguePage({ token }: PlatformCataloguePageProps) {
   const [provenance, setProvenance] = useState<CatalogueProvenanceResponse | null>(null);
   const [corrections, setCorrections] = useState<PlatformCatalogueCorrection[]>([]);
@@ -26,6 +57,10 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [hasMore, setHasMore] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const correctionsHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +72,8 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
       ]);
       setProvenance(nextProvenance);
       setCorrections(queue.items);
+      setHasMore(queue.nextCursor != null);
+      setHasLoaded(true);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load catalogue triage');
     } finally {
@@ -65,27 +102,44 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
     }
     setBusy(true);
     setActionError(null);
+    setStatusMessage('Saving…');
     const results = await Promise.allSettled(
       ids.map((id) => reviewCatalogueCorrection(id, status, token)),
     );
     const failed = new Set(ids.filter((_id, index) => results[index].status === 'rejected'));
+    const succeeded = ids.length - failed.size;
     setSelected(failed);
     if (failed.size > 0) {
       setActionError(
         `${failed.size} correction${failed.size === 1 ? '' : 's'} failed; successful actions were saved.`,
       );
     }
+    setStatusMessage(
+      succeeded > 0
+        ? `${plural(succeeded, 'correction')} ${status === 'ACCEPTED' ? 'accepted' : 'rejected'}.`
+        : '',
+    );
     await load();
     setBusy(false);
+    // The acted-on row is removed, so return focus to a stable point instead of <body>.
+    correctionsHeadingRef.current?.focus();
   };
 
-  if (loading) {
+  if (loading && !hasLoaded) {
     return <p role="status">Loading platform catalogue…</p>;
   }
   if (error) {
     return (
-      <section className="space-y-3">
-        <p role="alert">{error}</p>
+      <section aria-labelledby="catalogue-error-heading" className="space-y-3">
+        <h1 id="catalogue-error-heading" className="text-3xl font-bold">
+          Catalogue provenance and triage
+        </h1>
+        <p
+          role="alert"
+          className="rounded-md bg-semantic-critical-muted p-3 text-semantic-critical-muted-foreground"
+        >
+          {error}
+        </p>
         <button type="button" onClick={() => void load()}>
           Retry
         </button>
@@ -95,6 +149,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
 
   const latest = provenance?.latest;
   const allSelected = corrections.length > 0 && corrections.every((item) => selected.has(item.id));
+  const someSelected = !allSelected && corrections.some((item) => selected.has(item.id));
 
   return (
     <div className="space-y-8">
@@ -169,9 +224,18 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
         )}
       </section>
 
-      <section aria-labelledby="corrections-heading" className="rounded-lg border p-5">
+      <section
+        aria-labelledby="corrections-heading"
+        aria-busy={busy}
+        className="rounded-lg border p-5"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="corrections-heading" className="text-xl font-semibold">
+          <h2
+            id="corrections-heading"
+            ref={correctionsHeadingRef}
+            tabIndex={-1}
+            className="text-xl font-semibold"
+          >
             Pending corrections
           </h2>
           <div className="flex gap-2">
@@ -191,24 +255,38 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
             </button>
           </div>
         </div>
-        {actionError && <p role="alert">{actionError}</p>}
+        <p role="status" aria-live="polite" className="mt-3 empty:hidden">
+          {statusMessage}
+        </p>
+        {actionError && (
+          <p
+            role="alert"
+            className="mt-3 rounded-md bg-semantic-critical-muted p-3 text-semantic-critical-muted-foreground"
+          >
+            {actionError}
+          </p>
+        )}
+        {hasMore && (
+          <p className="mt-3">
+            Showing the first {plural(corrections.length, 'correction')}. More are pending and load
+            as these are reviewed.
+          </p>
+        )}
         {corrections.length === 0 ? (
           <p>No pending catalogue corrections.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
+              <caption className="sr-only">Pending catalogue corrections</caption>
               <thead>
                 <tr>
                   <th>
-                    <input
-                      type="checkbox"
-                      aria-label="Select all corrections"
+                    <SelectAllCheckbox
                       checked={allSelected}
-                      onChange={(event) =>
+                      indeterminate={someSelected}
+                      onChange={(checked) =>
                         setSelected(
-                          event.target.checked
-                            ? new Set(corrections.map((item) => item.id))
-                            : new Set(),
+                          checked ? new Set(corrections.map((item) => item.id)) : new Set(),
                         )
                       }
                     />
@@ -228,7 +306,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
                     <td>
                       <input
                         type="checkbox"
-                        aria-label={`Select correction ${item.id}`}
+                        aria-label={`Select ${describeCorrection(item)}`}
                         checked={selected.has(item.id)}
                         onChange={(event) => {
                           const next = new Set(selected);
@@ -248,6 +326,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
                       <button
                         type="button"
                         disabled={busy}
+                        aria-label={`Accept ${describeCorrection(item)}`}
                         onClick={() => void runActions([item.id], 'ACCEPTED', false)}
                       >
                         Accept
@@ -255,6 +334,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
                       <button
                         type="button"
                         disabled={busy}
+                        aria-label={`Reject ${describeCorrection(item)}`}
                         onClick={() => void runActions([item.id], 'REJECTED', true)}
                       >
                         Reject

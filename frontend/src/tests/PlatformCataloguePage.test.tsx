@@ -88,5 +88,89 @@ describe('PlatformCataloguePage', () => {
     expect(service.getPendingCatalogueCorrections).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('checkbox', { name: /select correction 11/i })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: /select correction 12/i })).toBeChecked();
+    expect(screen.getByRole('status')).toHaveTextContent('1 correction accepted.');
+  });
+
+  it('names row actions with the correction they act on', async () => {
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    expect(
+      screen.getByRole('button', { name: 'Accept correction 11 (9300000000001)' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reject correction 12 (Entered B)' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', { name: 'Select correction 12 (Entered B)' }),
+    ).toBeInTheDocument();
+  });
+
+  it('announces a successful row action, keeps the page mounted, and moves focus to the heading', async () => {
+    vi.mocked(service.reviewCatalogueCorrection).mockResolvedValue({} as never);
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    let finishRefresh: (value: typeof corrections) => void = () => {};
+    vi.mocked(service.getPendingCatalogueCorrections).mockReturnValue(
+      new Promise((resolve) => {
+        finishRefresh = resolve;
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /accept correction 11/i }));
+
+    // While the queue refreshes, the page stays mounted so the live region is not torn down.
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('1 correction accepted.'),
+    );
+    expect(screen.queryByText(/loading platform catalogue/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Store A')).toBeInTheDocument();
+    finishRefresh({ items: [corrections.items[1]], nextCursor: null });
+    await waitFor(() => expect(screen.queryByText('Store A')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Pending corrections' })).toHaveFocus();
+  });
+
+  it('marks select-all as indeterminate when only some rows are selected', async () => {
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    const selectAll = screen.getByRole<HTMLInputElement>('checkbox', { name: /select all/i });
+    expect(selectAll.indeterminate).toBe(false);
+    fireEvent.click(screen.getByRole('checkbox', { name: /select correction 11/i }));
+    expect(selectAll.indeterminate).toBe(true);
+    expect(selectAll).not.toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: /select correction 12/i }));
+    expect(selectAll.indeterminate).toBe(false);
+    expect(selectAll).toBeChecked();
+  });
+
+  it('tells the reviewer when more corrections are pending than are shown', async () => {
+    vi.mocked(service.getPendingCatalogueCorrections).mockResolvedValue({
+      ...corrections,
+      nextCursor: 12,
+    });
+    render(<PlatformCataloguePage token="token" />);
+
+    expect(await screen.findByText(/showing the first 2 corrections/i)).toBeInTheDocument();
+  });
+
+  it('does not show the more-pending notice on the last page', async () => {
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    expect(screen.queryByText(/more are pending/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a load error with the page heading and a retry that preserves the flow', async () => {
+    vi.mocked(service.getCatalogueProvenance).mockRejectedValueOnce(new Error('Server down'));
+    render(<PlatformCataloguePage token="token" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Server down');
+    expect(
+      screen.getByRole('heading', { level: 1, name: /catalogue provenance and triage/i }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Version 3')).toBeInTheDocument();
   });
 });
