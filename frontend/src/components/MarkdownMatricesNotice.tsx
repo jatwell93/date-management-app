@@ -13,9 +13,12 @@ export function MarkdownMatricesNotice({ status, error, retry }: Props) {
     );
   }
   return (
-    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-semantic-critical">
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-2 text-sm text-semantic-critical-muted-foreground"
+    >
       <span>{error ?? 'Markdown pricing is unavailable.'}</span>
-      <Button type="button" size="sm" variant="outline" onClick={retry}>
+      <Button type="button" variant="outline" onClick={retry}>
         Try again
       </Button>
     </div>

@@ -29,11 +29,11 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
   const getSyncStatusColor = () => {
     switch (syncStatus) {
       case 'syncing':
-        return 'text-semantic-secondary';
+        return 'text-semantic-secondary-strong';
       case 'synced':
-        return 'text-semantic-success';
+        return 'text-semantic-success-strong';
       case 'offline':
-        return 'text-semantic-warning';
+        return 'text-semantic-warning-strong';
       case 'failed':
         return 'text-semantic-critical';
       default:

@@ -22,6 +22,13 @@ describe('phase 2 semantic UI primitives', () => {
     expect(buttonVariants({ variant: 'error' })).toContain('bg-semantic-critical');
   });
 
+  it('keeps white button labels and link text at AA contrast', () => {
+    expect(buttonVariants({ variant: 'success' })).toContain('bg-semantic-success-strong');
+    expect(buttonVariants({ variant: 'secondary' })).toContain('bg-semantic-secondary-strong');
+    expect(buttonVariants({ variant: 'link' })).toContain('text-semantic-primary');
+    expect(buttonVariants({ variant: 'link' })).not.toMatch(/\btext-semantic-secondary\b/);
+  });
+
   it('uses semantic focus and validation tokens for text inputs', () => {
     render(<Input aria-label="email" />);
 
@@ -49,10 +56,10 @@ describe('phase 2 semantic UI primitives', () => {
   });
 
   it.each([
-    ['success', 'bg-semantic-success'],
+    ['success', 'bg-semantic-success-strong'],
     ['error', 'bg-semantic-critical'],
-    ['warning', 'bg-semantic-warning'],
-    ['info', 'bg-semantic-secondary'],
+    ['warning', 'bg-semantic-warning-strong'],
+    ['info', 'bg-semantic-secondary-strong'],
   ] as const)('uses semantic %s token for toast variants', (type, className) => {
     render(<Toast message={`${type} toast`} type={type} isVisible onClose={() => undefined} />);
 

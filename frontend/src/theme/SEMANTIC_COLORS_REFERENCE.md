@@ -2,6 +2,23 @@
 
 > Single source of truth for semantic token mappings. All components MUST reference semantic tokens, never raw brand tokens.
 
+## Text contrast rules (read first)
+
+The DEFAULT sky, green and amber values are **fill, icon and border colours**. They fail WCAG AA as text on white and behind white text:
+
+| DEFAULT | On white | Use instead for text / white-label fills |
+|---------|----------|------------------------------------------|
+| `semantic-secondary` `#0EA5E9` | 2.8:1 | `semantic-secondary-strong` `#0369A1` (5.9:1) |
+| `semantic-success` `#10B981` | 2.5:1 | `semantic-success-strong` `#047857` (5.5:1) |
+| `semantic-warning` `#D97706` | 3.2:1 | `semantic-warning-strong` `#B45309` (5.0:1) |
+
+- Text on white: `text-semantic-{intent}-strong`.
+- Text on a `-muted` background: `text-semantic-{intent}-muted-foreground`.
+- A fill behind white (`-foreground`) text: `bg-semantic-{intent}-strong`, hover `-strong-hover`.
+- Teal primary (`#0F766E`, 5.5:1) and critical red (`#DC2626`, 4.8:1) are AA-safe at DEFAULT.
+- Links are teal (`text-semantic-primary`), never sky blue.
+- `semantic-text-muted` (`#94A3B8`, 2.6:1) is decorative only (placeholders, disabled), never information.
+
 ## Token Categories
 
 ### 1. `semantic-primary` — CTAs, Selection, Navigation
@@ -15,11 +32,13 @@
 | `semantic-primary-muted` | `#CCFBF1` | teal-100 | Subtle primary backgrounds (badges, chips) |
 | `semantic-primary-muted-foreground` | `#0F766E` | brand teal | Text on muted primary backgrounds |
 
-### 2. `semantic-secondary` — Data Viz, Informational, Links
+### 2. `semantic-secondary` — Data Viz, Informational
 
 | Token | Value | Source | Usage |
 |-------|-------|--------|-------|
-| `semantic-secondary` | `#0EA5E9` | brand sky-blue | Data visualization primary, informational highlights, links |
+| `semantic-secondary` | `#0EA5E9` | brand sky-blue | Data visualization, informational dots/borders/icons. Not text, not links |
+| `semantic-secondary-strong` | `#0369A1` | sky-700 | Informational text on white; fill behind white text |
+| `semantic-secondary-strong-hover` | `#075985` | sky-800 | Hover/active for `-strong` fills |
 | `semantic-secondary-foreground` | `#FFFFFF` | — | Text on secondary backgrounds |
 | `semantic-secondary-hover` | `#0284C7` | sky-600 | Hover state |
 | `semantic-secondary-active` | `#0369A1` | sky-700 | Active/pressed state |
@@ -32,7 +51,9 @@
 
 | Token | Value | Source | Usage |
 |-------|-------|--------|-------|
-| `semantic-warning` | `#D97706` | brand amber | Warning alerts, pending badges, form validation warnings |
+| `semantic-warning` | `#D97706` | brand amber | Warning dots, borders, icons. Not text (3.2:1) |
+| `semantic-warning-strong` | `#B45309` | amber-700 | Warning text on white; fill behind white text |
+| `semantic-warning-strong-hover` | `#92400E` | amber-800 | Hover/active for `-strong` fills |
 | `semantic-warning-foreground` | `#FFFFFF` | — | Text on warning backgrounds |
 | `semantic-warning-hover` | `#B45309` | amber-700 | Hover state |
 | `semantic-warning-active` | `#92400E` | amber-800 | Active/pressed state |
@@ -43,7 +64,9 @@
 
 | Token | Value | Source | Usage |
 |-------|-------|--------|-------|
-| `semantic-success` | `#10B981` | brand green | Success confirmations, active badges, positive indicators |
+| `semantic-success` | `#10B981` | brand green | Success dots, borders, icons. Not text (2.5:1) |
+| `semantic-success-strong` | `#047857` | green-700 | Success text on white; fill behind white text (Button `success`, success toast) |
+| `semantic-success-strong-hover` | `#065F46` | green-800 | Hover/active for `-strong` fills |
 | `semantic-success-foreground` | `#FFFFFF` | — | Text on success backgrounds |
 | `semantic-success-hover` | `#059669` | green-600 | Hover state |
 | `semantic-success-active` | `#047857` | green-700 | Active/pressed state |
@@ -93,6 +116,16 @@
 | `semantic-data-viz-5` | `#DC2626` | brand red | Fifth data series |
 | `semantic-data-viz-6` | `#0F172A` | brand navy | Sixth data series |
 
+Series 2 (2.8:1) and series 4 (2.5:1) are below the 3:1 non-text contrast floor on white (WCAG 1.4.11); series 3 (3.2:1) passes but is marginal for thin lines. When a series is drawn alone, or as a 1-2px line, use the strong variant (`semantic-data-viz-strong-*`, `semanticDataVizStrong` in `semantic-tokens.ts`):
+
+| Token | Value | On white |
+|-------|-------|----------|
+| `semantic-data-viz-strong-2` | `#0369A1` | 5.9:1 |
+| `semantic-data-viz-strong-3` | `#B45309` | 5.0:1 |
+| `semantic-data-viz-strong-4` | `#047857` | 5.5:1 |
+
+Multi-series charts may keep the brand palette when every series also has a label, legend entry or pattern.
+
 ## Tailwind Class Usage
 
 ```html
@@ -109,6 +142,17 @@
 <p class="text-semantic-critical">
 ```
 
+## shadcn/ui tokens vs semantic tokens
+
+`globals.css` also defines the shadcn/ui HSL tokens (`bg-primary`, `text-muted-foreground`, `text-destructive`, ...). Two differ from the semantic layer:
+
+- **`--primary` is navy** (`#0F172A`-ish), while `semantic-primary` is **teal**. `LoadingSpinner`, `ErrorBoundary`'s refresh button, the shell's loading/error states and any page using `bg-primary` render navy. This is a known split, **not** recoloured here because it changes several pages at once. Follow-up: point `--primary` at teal (or migrate those call sites to `semantic-primary`) behind a visual check.
+- `--destructive` is `#DC2626` (matches `semantic-critical`); `--muted-foreground` is 40% L (5.6:1 on `--muted`, 6.1:1 on white).
+
+New code should use `semantic-*` classes.
+
 ## Dark Mode
 
 Surface and text tokens use CSS custom properties (`var(--surface-*)`, `var(--text-*)`) that automatically switch values when `.dark` class is applied. Color intent tokens (primary, warning, etc.) remain constant across themes for brand consistency.
+
+Dark mode is not enabled in the app today. The `-muted` / `-muted-foreground` intent pairs are light-only hex values (no `.dark` override). They are deliberately not converted to CSS variables yet: a mechanical swap would need a dark value for every pair, and those values need a visual pass on the dark surface ladder first. Convert them when dark mode is scheduled.

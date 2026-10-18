@@ -26,17 +26,18 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
     }
   }, [isVisible, message, onClose, type]);
 
+  // -strong fills keep the white message at AA (sky, green and amber DEFAULTs fail).
   const getToastStyle = () => {
     switch (type) {
       case 'success':
-        return 'bg-semantic-success';
+        return 'bg-semantic-success-strong';
       case 'error':
         return 'bg-semantic-critical';
       case 'warning':
-        return 'bg-semantic-warning';
+        return 'bg-semantic-warning-strong';
       case 'info':
       default:
-        return 'bg-semantic-secondary';
+        return 'bg-semantic-secondary-strong';
     }
   };
 
