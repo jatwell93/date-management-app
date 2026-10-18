@@ -246,6 +246,26 @@ describe('ExpiryEntriesPage', () => {
     expect(summary.querySelectorAll(':scope > li')).toHaveLength(50);
   });
 
+  it('prints the same derived markdown status the screen shows', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) =>
+      Promise.resolve(
+        url === '/reports/expiry-entries'
+          ? [{ ...twoLocationRows[0], status: 'Normal', expiryDate: daysFromNow(20) }]
+          : [],
+      ),
+    );
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    const printTable = await screen.findByRole('table', {
+      name: /Printable expiry entries table/i,
+      hidden: true,
+    });
+    const statusCell = printTable.querySelector('tbody tr td:last-child');
+    expect(statusCell).toHaveTextContent('Markdown 3');
+  });
+
   it('announces a missing token', async () => {
     render(<ExpiryEntriesPage token={null} role={ROLES.ADMIN} />);
 

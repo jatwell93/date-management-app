@@ -979,7 +979,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                             {formatCurrencyValue(item.costPrice)}
                           </td>
                           <td className="px-4 py-3 align-top">{item.subDepartment || 'N/A'}</td>
-                          <td className="px-4 py-3 align-top">{item.status}</td>
+                          <td className="px-4 py-3 align-top">
+                            {getMarkdownStatus(getDaysToExpiry(item.expiryDate))}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
