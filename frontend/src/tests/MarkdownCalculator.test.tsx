@@ -353,6 +353,26 @@ describe('MarkdownCalculator', () => {
     expect(costInput).toHaveValue(12.5);
   });
 
+  it('uses AA error ink, a decimal keypad and tabular money values', async () => {
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    const costInput = screen.getByLabelText(/Cost Price \(AUD\)/i);
+    expect(costInput).toHaveAttribute('inputmode', 'decimal');
+
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+    expect(screen.getByRole('alert')).toHaveClass('text-semantic-critical-muted-foreground');
+
+    fireEvent.change(costInput, { target: { value: '100' } });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: { value: futureDate.toISOString().split('T')[0] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+    expect(screen.getByText(/\$25\.00/i)).toHaveClass('tabular-nums');
+  });
+
   it('calculates when the form is submitted with Enter', async () => {
     render(<MarkdownCalculator token={mockToken} />);
     await waitForMatrixReady();

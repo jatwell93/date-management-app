@@ -226,7 +226,10 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
             )}
 
             {error && (
-              <p role="alert" className="min-w-0 break-words text-sm text-semantic-critical">
+              <p
+                role="alert"
+                className="min-w-0 break-words text-sm text-semantic-critical-muted-foreground"
+              >
                 {error}
               </p>
             )}
@@ -247,7 +250,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                   <dt className="font-medium text-muted-foreground">Barcode</dt>
                   <dd className="min-w-0 break-words">{productDetails.barcode}</dd>
                   <dt className="font-medium text-muted-foreground">Cost price</dt>
-                  <dd className="min-w-0 break-words">{formattedProductCost}</dd>
+                  <dd className="min-w-0 break-words tabular-nums">{formattedProductCost}</dd>
                 </dl>
                 <div className="mt-3">
                   <MarkdownCreditScopeBadge
@@ -272,11 +275,12 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
             </div>
             <form noValidate onSubmit={calculateMarkdown} className="grid gap-4">
               <div className="space-y-2">
-                <Label htmlFor="costPrice">Cost price</Label>
+                <Label htmlFor="costPrice">Cost price (AUD)</Label>
                 <Input
                   ref={costPriceRef}
                   id="costPrice"
                   type="number"
+                  inputMode="decimal"
                   min="0.01"
                   step="0.01"
                   value={costPrice}
@@ -330,7 +334,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                 <p
                   id={VALIDATION_ERROR_ID}
                   role="alert"
-                  className="min-w-0 break-words text-sm text-semantic-critical"
+                  className="min-w-0 break-words text-sm text-semantic-critical-muted-foreground"
                 >
                   {validationError.message}
                 </p>
@@ -346,7 +350,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                     <dt className="font-medium text-muted-foreground">Status</dt>
                     <dd className="min-w-0 break-words font-semibold">{markdownResult.status}</dd>
                     <dt className="font-medium text-muted-foreground">Markdown value</dt>
-                    <dd className="min-w-0 break-words font-semibold">
+                    <dd className="min-w-0 break-words font-semibold tabular-nums">
                       {currencyFormatter.format(markdownResult.value)}
                     </dd>
                   </dl>
