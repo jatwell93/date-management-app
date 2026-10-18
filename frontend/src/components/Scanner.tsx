@@ -113,6 +113,11 @@ export function Scanner({
             value={input}
             onChange={handleInputChange}
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            enterKeyHint="go"
             placeholder="Scan or type barcode/SKU"
             className={`mb-3 ${isHandheld ? 'h-12 text-lg' : ''}`}
           />

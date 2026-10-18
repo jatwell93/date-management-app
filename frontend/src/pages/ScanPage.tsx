@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as Sentry from '@sentry/react';
 import { Scanner } from '../components/Scanner';
 import { HandheldScanner } from '../components/HandheldScanner';
@@ -106,14 +106,18 @@ export function ScanPage({ token }: ScanPageProps) {
   const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
   const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
-  // Effect to scroll error messages into view on handheld devices
+  // Effect to scroll this page's error message into view on handheld devices
   useEffect(() => {
-    if (error && isHandheld) {
-      const errorElement = document.querySelector('[role="alert"]');
-      if (errorElement) {
-        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+    if (error && isHandheld && errorRef.current) {
+      const prefersReducedMotion =
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      errorRef.current.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'center',
+      });
     }
   }, [error, isHandheld]);
 
@@ -316,6 +320,7 @@ export function ScanPage({ token }: ScanPageProps) {
         authToken,
       );
       setProductDetails(newProduct);
+      setError(null);
       setSuccessMessage('Product created. Add expiry details next.');
       setShowNewProductForm(false);
       setNewProductName('');
@@ -477,11 +482,12 @@ export function ScanPage({ token }: ScanPageProps) {
       >
         {!isHandheld && (
           <CardHeader className="bg-muted/50 border-b border-border">
-            <CardTitle className="text-2xl font-bold font-heading text-center">
-              Inventory Scan
+            <CardTitle>
+              <h1 className="text-2xl font-bold font-heading">Inventory scan</h1>
             </CardTitle>
           </CardHeader>
         )}
+        {isHandheld && <h1 className="sr-only">Inventory scan</h1>}
         <CardContent className={isHandheld ? 'p-0 h-full' : 'p-6'}>
           {isHandheld ? (
             <HandheldScanner onScan={handleBarcodeScan} />
@@ -490,6 +496,7 @@ export function ScanPage({ token }: ScanPageProps) {
           )}
           {error && (
             <div
+              ref={errorRef}
               className="bg-semantic-critical-muted border border-semantic-critical text-semantic-critical-muted-foreground px-4 py-3 rounded relative text-center mt-4"
               role="alert"
             >
@@ -499,12 +506,13 @@ export function ScanPage({ token }: ScanPageProps) {
           {successMessage && (
             <div
               className="bg-semantic-success-muted border border-semantic-success text-semantic-success-muted-foreground px-4 py-3 rounded relative text-center mt-4"
-              role="alert"
+              role="status"
+              aria-live="polite"
             >
               <span className="block sm:inline">{successMessage}</span>
             </div>
           )}
-          {scannedBarcode && !productDetails && !error && !successMessage && showNewProductForm && (
+          {scannedBarcode && !productDetails && !successMessage && showNewProductForm && (
             <div className="mt-6 p-4 border rounded-md bg-muted">
               <p className="text-center font-semibold text-foreground">
                 No catalog match for barcode {scannedBarcode}
@@ -546,6 +554,9 @@ export function ScanPage({ token }: ScanPageProps) {
                   <Input
                     id="newProductCostPrice"
                     type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
                     value={newProductCostPrice}
                     onChange={(e) => setNewProductCostPrice(e.target.value)}
                     className="mt-1 border-input bg-background text-foreground"
@@ -622,7 +633,7 @@ export function ScanPage({ token }: ScanPageProps) {
                     Location
                   </Label>
                   <Select onValueChange={setSelectedLocationId} value={selectedLocationId}>
-                    <SelectTrigger className="w-full mt-1 border-input bg-background text-foreground">
+                    <SelectTrigger id="location" className="w-full mt-1 border-input bg-background text-foreground">
                       <SelectValue placeholder="Select a location" />
                     </SelectTrigger>
                     <SelectContent className="border-input bg-background text-foreground">
@@ -643,7 +654,7 @@ export function ScanPage({ token }: ScanPageProps) {
           )}
           {productDetails && recentEntries && recentEntries.length > 0 && (
             <div className="mt-8 p-4 border rounded-md bg-muted">
-              <h3 className="font-semibold text-lg text-foreground mb-4">Recent Entries</h3>
+              <h2 className="font-semibold text-lg text-foreground mb-4">Recent entries</h2>
               <div className="space-y-3">
                 {recentEntries.map((entry) => (
                   <div
@@ -673,6 +684,7 @@ export function ScanPage({ token }: ScanPageProps) {
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDeleteRecentEntry(entry.id)}
+                          aria-label={`Delete entry expiring ${formatExpiryDateForCopy(entry.expiryDate)}`}
                         >
                           Delete entry
                         </Button>

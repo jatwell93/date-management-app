@@ -200,7 +200,7 @@ export function CameraScanner({
             isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
           }`}
         >
-          <div className="text-center p-4">
+          <div className="text-center p-4" role="alert">
             <p className={`text-semantic-critical font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
               Camera Error
             </p>
