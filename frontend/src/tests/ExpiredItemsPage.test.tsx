@@ -35,7 +35,9 @@ vi.mock('../components/ExpiredLossReport', () => ({
 }));
 
 vi.mock('react-chartjs-2', () => ({
-  Bar: () => <div role="img" aria-label="Loss chart" />,
+  Bar: ({ role, 'aria-label': ariaLabel }: { role?: string; 'aria-label'?: string }) => (
+    <canvas role={role} aria-label={ariaLabel} />
+  ),
 }));
 
 describe('ExpiredItemsPage', () => {
@@ -133,7 +135,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    await userEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    await userEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
 
     const unitsInput = screen.getByLabelText(/Units to Discard/i);
     await userEvent.clear(unitsInput);
@@ -233,7 +235,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
     // '0' is invalid (must be >= 1), so the error element renders and we can assert
     // its typography class. The quantity is intentionally NOT capped at the
     // scanned count anymore (issue #268), so a value above quantityAvailable is valid.
@@ -299,7 +301,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
 
     const unitsInput = screen.getByLabelText(/Units to Discard/i);
     fireEvent.change(unitsInput, { target: { value: '15' } });
@@ -340,7 +342,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
     fireEvent.change(screen.getByLabelText(/Units to Discard/i), {
       target: { value: quantity },
     });
@@ -381,5 +383,93 @@ describe('ExpiredItemsPage', () => {
     expect(printTable).toHaveTextContent('EXP-200');
     expect(printTable).not.toHaveTextContent(/Actions/i);
     expect(printTable).not.toHaveTextContent(/Sold Through/i);
+  });
+
+  describe('accessibility', () => {
+    const item = {
+      id: 301,
+      productId: 40,
+      productName: 'Saline Ampoule',
+      sku: 'SAL-300',
+      expiryDate: '2026-05-01',
+      status: 'Expired',
+      costPrice: 4,
+      locationId: 6,
+      locationName: 'Dispensary',
+      quantityAvailable: 3,
+    };
+
+    it('names each row action after its product', async () => {
+      mockedGetExpiredItems.mockResolvedValue([item]);
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(
+        await screen.findAllByRole('button', { name: 'Mark Saline Ampoule as expired' }),
+      ).toHaveLength(2);
+      expect(
+        screen.getAllByRole('button', { name: 'Mark Saline Ampoule as sold through' }),
+      ).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Print Report' })).toBeInTheDocument();
+    });
+
+    it('gives each loss chart a text alternative and a heading', async () => {
+      mockedGetExpiredItems.mockResolvedValue([]);
+      mockedApiGet.mockImplementation(async (url: string) =>
+        url === '/reports/loss-by-sku'
+          ? [{ sku: 'SAL-300', productName: 'Saline Ampoule', totalLoss: 12, count: 3 }]
+          : [{ department: 'Dispensary', totalLoss: 30.5, count: 4 }],
+      );
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(
+        await screen.findByRole('img', {
+          name: 'Bar chart of total loss by SKU: SAL-300 $12.00',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByRole('img', {
+          name: 'Bar chart of total loss by department: Dispensary $30.50',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: '5 Worst Performing SKUs' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: '5 Worst Performing Departments' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Expired Items' })).toBeInTheDocument();
+      expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    });
+
+    it('announces a failed write-off inside the dialog with an AA-safe colour', async () => {
+      mockedGetExpiredItems.mockResolvedValue([item]);
+      mockedApiGet.mockResolvedValue([]);
+      mockedProcessExpiredItem.mockRejectedValue(new Error('Write-off failed'));
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      fireEvent.click(
+        (await screen.findAllByRole('button', { name: 'Mark Saline Ampoule as expired' }))[0],
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Confirm/i }));
+
+      const dialog = await screen.findByRole('dialog', { name: /Process Expired Item/i });
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent('Write-off failed');
+      expect(alert).toHaveClass('text-semantic-critical-muted-foreground');
+    });
+
+    it('announces an initial load failure', async () => {
+      mockedGetExpiredItems.mockRejectedValue(new Error('boom'));
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to fetch expired items');
+    });
   });
 });

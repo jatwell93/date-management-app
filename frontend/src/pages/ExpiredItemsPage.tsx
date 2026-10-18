@@ -407,6 +407,22 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     [lossByDepartmentData],
   );
 
+  const lossBySkuChartLabel = useMemo(
+    () =>
+      `Bar chart of total loss by SKU: ${(lossBySkuData ?? [])
+        .map((item) => `${item.sku} ${currencyFormatter.format(item.totalLoss)}`)
+        .join(', ')}`,
+    [lossBySkuData],
+  );
+
+  const lossByDepartmentChartLabel = useMemo(
+    () =>
+      `Bar chart of total loss by department: ${(lossByDepartmentData ?? [])
+        .map((item) => `${item.department} ${currencyFormatter.format(item.totalLoss)}`)
+        .join(', ')}`,
+    [lossByDepartmentData],
+  );
+
   const chartOptions = useMemo<ChartOptions<'bar'>>(
     () => ({
       responsive: true,
@@ -460,16 +476,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         aria-label="Loading expired items"
       >
         <div className="mb-6">
-          <div className="h-8 w-48 rounded-md bg-semantic-surface-3 animate-pulse" />
-          <div className="mt-2 h-4 w-80 rounded bg-semantic-surface-3 animate-pulse" />
+          <div className="h-8 w-48 rounded-md bg-semantic-surface-3 motion-safe:animate-pulse" />
+          <div className="mt-2 h-4 w-80 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
         </div>
         <div className="rounded-md border overflow-hidden">
           {SKELETON_ROWS.map((i) => (
             <div key={i} className="flex gap-4 px-4 py-3 border-b last:border-0">
-              <div className="h-4 w-20 rounded bg-semantic-surface-3 animate-pulse" />
-              <div className="h-4 w-40 rounded bg-semantic-surface-3 animate-pulse" />
-              <div className="h-4 w-28 rounded bg-semantic-surface-3 animate-pulse" />
-              <div className="h-4 w-24 rounded bg-semantic-surface-3 animate-pulse ml-auto" />
+              <div className="h-4 w-20 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+              <div className="h-4 w-40 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+              <div className="h-4 w-28 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+              <div className="h-4 w-24 rounded bg-semantic-surface-3 motion-safe:animate-pulse ml-auto" />
             </div>
           ))}
         </div>
@@ -481,8 +497,11 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <p className="text-semantic-critical font-medium">{error}</p>
+          <p className="text-semantic-critical font-medium" role="alert">
+            {error}
+          </p>
           <button
+            type="button"
             onClick={retryFetchItems}
             className="rounded-md border border-semantic-primary px-4 py-2 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors"
           >
@@ -494,14 +513,19 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   }
 
   return (
-    <div className="print-report-root container mx-auto px-4 py-8">
+    <section
+      className="print-report-root container mx-auto px-4 py-8"
+      aria-labelledby="expired-items-heading"
+    >
       <header className="mb-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-semibold font-heading">Expired Items</h1>
+          <h1 id="expired-items-heading" className="text-3xl font-semibold font-heading">
+            Expired Items
+          </h1>
           <button
+            type="button"
             onClick={() => window.print()}
-            aria-label="Print this report"
-            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
+            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors no-print"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -548,7 +572,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                       <span className="font-mono">{item.sku}</span> · {item.locationName}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-md bg-semantic-critical-muted px-2 py-1 text-xs font-medium text-semantic-critical">
+                  <span className="shrink-0 rounded-md bg-semantic-critical-muted px-2 py-1 text-xs font-medium text-semantic-critical-muted-foreground">
                     {item.status}
                   </span>
                 </div>
@@ -565,6 +589,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 <div className="mt-4 flex gap-2">
                   <Button
                     onClick={() => handleAction(item, 'sold_through')}
+                    aria-label={`Mark ${item.productName} as sold through`}
                     variant="outline"
                     size="sm"
                     className="flex-1"
@@ -574,6 +599,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   </Button>
                   <Button
                     onClick={() => handleAction(item, 'expired')}
+                    aria-label={`Mark ${item.productName} as expired`}
                     variant="outline"
                     size="sm"
                     className="flex-1 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
@@ -648,6 +674,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                         <div className="flex gap-2">
                           <Button
                             onClick={() => handleAction(item, 'sold_through')}
+                            aria-label={`Mark ${item.productName} as sold through`}
                             variant="outline"
                             size="sm"
                             disabled={isProcessing}
@@ -656,6 +683,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                           </Button>
                           <Button
                             onClick={() => handleAction(item, 'expired')}
+                            aria-label={`Mark ${item.productName} as expired`}
                             variant="outline"
                             size="sm"
                             className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
@@ -733,32 +761,39 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       {/* Chart Section */}
       {chartsError && (
         <div
-          className="mt-6 p-3 rounded-md bg-destructive/10 text-destructive text-sm"
+          className="mt-6 p-3 rounded-md border border-semantic-critical/20 bg-semantic-critical-muted text-semantic-critical-muted-foreground text-sm"
           role="alert"
         >
           {chartsError}
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-8">
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-8" aria-label="Loss charts">
         <Card>
           <CardHeader>
-            <CardTitle>5 Worst Performing SKUs</CardTitle>
+            <CardTitle role="heading" aria-level={2}>
+              5 Worst Performing SKUs
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="min-h-[12rem]">
               {chartsLoading ? (
-                <div className="space-y-2 py-2" role="status" aria-label="Loading chart">
-                  <div className="h-4 w-3/4 rounded bg-semantic-surface-3 animate-pulse" />
-                  <div className="h-32 w-full rounded bg-semantic-surface-3 animate-pulse" />
-                  <div className="h-4 w-1/2 rounded bg-semantic-surface-3 animate-pulse" />
+                <div className="space-y-2 py-2" role="status" aria-label="Loading SKU loss chart">
+                  <div className="h-4 w-3/4 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                  <div className="h-32 w-full rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                  <div className="h-4 w-1/2 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
                 </div>
               ) : lossBySkuData && lossBySkuData.length > 0 ? (
                 <Suspense
                   fallback={
-                    <div className="h-48 w-full rounded bg-semantic-surface-3 animate-pulse" />
+                    <div className="h-48 w-full rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
                   }
                 >
-                  <Bar data={lossBySkuChartData} options={skuChartOptions} />
+                  <Bar
+                    data={lossBySkuChartData}
+                    options={skuChartOptions}
+                    role="img"
+                    aria-label={lossBySkuChartLabel}
+                  />
                 </Suspense>
               ) : (
                 <div className="py-8 text-center text-sm text-semantic-text-tertiary">
@@ -771,23 +806,34 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
         <Card>
           <CardHeader>
-            <CardTitle>5 Worst Performing Departments</CardTitle>
+            <CardTitle role="heading" aria-level={2}>
+              5 Worst Performing Departments
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="min-h-[12rem]">
               {chartsLoading ? (
-                <div className="space-y-2 py-2" role="status" aria-label="Loading chart">
-                  <div className="h-4 w-3/4 rounded bg-semantic-surface-3 animate-pulse" />
-                  <div className="h-32 w-full rounded bg-semantic-surface-3 animate-pulse" />
-                  <div className="h-4 w-1/2 rounded bg-semantic-surface-3 animate-pulse" />
+                <div
+                  className="space-y-2 py-2"
+                  role="status"
+                  aria-label="Loading department loss chart"
+                >
+                  <div className="h-4 w-3/4 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                  <div className="h-32 w-full rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                  <div className="h-4 w-1/2 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
                 </div>
               ) : lossByDepartmentData && lossByDepartmentData.length > 0 ? (
                 <Suspense
                   fallback={
-                    <div className="h-48 w-full rounded bg-semantic-surface-3 animate-pulse" />
+                    <div className="h-48 w-full rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
                   }
                 >
-                  <Bar data={lossByDepartmentChartData} options={deptChartOptions} />
+                  <Bar
+                    data={lossByDepartmentChartData}
+                    options={deptChartOptions}
+                    role="img"
+                    aria-label={lossByDepartmentChartLabel}
+                  />
                 </Suspense>
               ) : (
                 <div className="py-8 text-center text-sm text-semantic-text-tertiary">
@@ -797,7 +843,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </section>
 
       {/* Process Expired Item Dialog */}
       <Dialog
@@ -866,7 +912,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
             )}
 
             {processError && (
-              <div className="mb-4 p-3 bg-semantic-critical-muted text-semantic-critical rounded-md border border-semantic-critical/20">
+              <div
+                className="mb-4 p-3 bg-semantic-critical-muted text-semantic-critical-muted-foreground rounded-md border border-semantic-critical/20"
+                role="alert"
+              >
                 {processError}
               </div>
             )}
@@ -932,7 +981,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           onClose={() => setIsToastVisible(false)}
         />
       )}
-    </div>
+    </section>
   );
 };
 

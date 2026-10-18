@@ -62,16 +62,26 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
   }, [token, getFreshApiToken]);
 
   if (loading) {
-    return <div className="text-center py-10">Loading expired losses report…</div>;
+    return (
+      <div className="text-center py-10" role="status">
+        Loading expired losses report…
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-center py-10 text-semantic-critical">{error}</div>;
+    return (
+      <div className="text-center py-10 text-semantic-critical" role="alert">
+        {error}
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="text-2xl font-semibold font-heading mb-6">Expired Item Loss Report</h2>
+    <section className="container mx-auto px-4 py-8" aria-labelledby="expired-loss-report-heading">
+      <h2 id="expired-loss-report-heading" className="text-2xl font-semibold font-heading mb-6">
+        Expired Item Loss Report
+      </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Losses by SKU */}
@@ -146,7 +156,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
