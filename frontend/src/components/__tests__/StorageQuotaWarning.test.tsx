@@ -52,6 +52,24 @@ describe('StorageQuotaWarning', () => {
     props: Partial<React.ComponentProps<typeof StorageQuotaWarning>> = {},
   ) => render(<StorageQuotaWarning userId={mockUserId} {...props} />);
 
+  describe('Dialog semantics', () => {
+    it('is a labelled modal dialog that takes focus and closes on Escape', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
+      const onDismiss = vi.fn();
+
+      renderWarning({ onDismiss });
+
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      expect(screen.getByRole('button', { name: 'Remind Me Later' })).toHaveFocus();
+
+      await userEvent.keyboard('{Escape}');
+
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
   describe('API Integration', () => {
     it('fetches quota data on mount with correct URL and headers', async () => {
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));

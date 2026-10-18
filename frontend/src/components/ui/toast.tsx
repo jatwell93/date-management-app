@@ -56,6 +56,9 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
 
   if (!show) return null;
 
+  // Errors interrupt (role="alert"); everything else waits its turn (role="status").
+  const isError = type === 'error';
+
   return (
     <div className="fixed bottom-4 right-4 z-50">
       <div
@@ -64,14 +67,19 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
         }`}
       >
         <div
-          className={`${getToastStyle()} ${getToastTextStyle()} px-4 py-3 rounded-md shadow-lg flex items-center`}
+          role={isError ? 'alert' : 'status'}
+          aria-live={isError ? 'assertive' : 'polite'}
+          aria-atomic="true"
+          className={`${getToastStyle()} ${getToastTextStyle()} pl-4 pr-1 py-1 rounded-md shadow-lg flex items-center gap-2`}
         >
-          <span>{message}</span>
+          <span className="py-2">{message}</span>
           <button
+            type="button"
             onClick={onClose}
-            className="ml-4 opacity-100 transition-opacity hover:opacity-80 focus:outline-hidden"
+            aria-label="Dismiss notification"
+            className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-xl leading-none transition-opacity hover:opacity-80 outline-hidden focus-visible:ring-2 focus-visible:ring-current"
           >
-            &times;
+            <span aria-hidden="true">&times;</span>
           </button>
         </div>
       </div>

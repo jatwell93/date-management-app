@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './StorageQuotaWarning.css';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { buildApiUrl } from '../lib/api.service';
@@ -33,6 +33,28 @@ interface StorageQuotaWarningProps {
   autoHideDays?: number; // Days before showing warning again (default 7)
 }
 
+/** Moves focus into the open dialog and dismisses it on Escape. */
+function useDialogFocus(
+  isOpen: boolean,
+  initialFocusRef: React.RefObject<HTMLButtonElement | null>,
+  onEscape: () => void,
+) {
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  });
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    initialFocusRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onEscapeRef.current();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, initialFocusRef]);
+}
+
 export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   userId,
   token,
@@ -45,6 +67,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const dismissButtonRef = useRef<HTMLButtonElement>(null);
 
   // Fetch storage quota on component mount
   useEffect(() => {
@@ -113,8 +136,11 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
     onDismiss?.();
   };
 
+  const isOpen = !dismissed && !loading && !error && !!quota?.isWarning;
+  useDialogFocus(isOpen, dismissButtonRef, handleDismiss);
+
   // Don't show if dismissed, loading, error, or no warning
-  if (dismissed || loading || error || !quota || !quota.isWarning) {
+  if (!isOpen || !quota) {
     return null;
   }
 
@@ -135,24 +161,34 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
         className="storage-quota-warning__overlay"
         onClick={handleDismiss}
         aria-label="Dismiss storage quota warning"
+        tabIndex={-1}
       />
 
-      <div className="storage-quota-warning__modal">
+      <div
+        className="storage-quota-warning__modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="storage-quota-warning-title"
+        aria-describedby="storage-quota-warning-message"
+      >
         <div className="storage-quota-warning__header">
-          <h2>Storage Quota Warning</h2>
+          <h2 id="storage-quota-warning-title">Storage Quota Warning</h2>
           <button
+            type="button"
             className="storage-quota-warning__close"
             onClick={handleDismiss}
             aria-label="Close warning"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
 
         <div className="storage-quota-warning__content">
-          <div className="storage-quota-warning__icon">⚠️</div>
+          <div className="storage-quota-warning__icon" aria-hidden="true">
+            ⚠️
+          </div>
 
-          <p className="storage-quota-warning__message">
+          <p id="storage-quota-warning-message" className="storage-quota-warning__message">
             You're using <strong>{quota.percentageUsed}%</strong> of your storage quota
           </p>
 
@@ -191,6 +227,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
         <div className="storage-quota-warning__actions">
           {onUpgrade && (
             <button
+              type="button"
               className="storage-quota-warning__button storage-quota-warning__button--primary"
               onClick={onUpgrade}
             >
@@ -199,6 +236,8 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
           )}
 
           <button
+            ref={dismissButtonRef}
+            type="button"
             className="storage-quota-warning__button storage-quota-warning__button--secondary"
             onClick={handleDismiss}
           >
