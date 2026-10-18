@@ -151,6 +151,16 @@ describe('PlatformCataloguePage', () => {
     expect(screen.getByText('Reinstated').nextElementSibling).toHaveTextContent('1');
   });
 
+  it('uses the singular for a single retired entry', async () => {
+    vi.mocked(service.getCatalogueProvenance).mockResolvedValue({
+      ...provenance,
+      latest: { ...provenance.latest, retired: 1 },
+    });
+    render(<PlatformCataloguePage token="token" />);
+
+    expect(await screen.findByText('1 entry retired in this seed')).toBeInTheDocument();
+  });
+
   it('gives every button and checkbox a 44px touch target', async () => {
     render(<PlatformCataloguePage token="token" />);
 

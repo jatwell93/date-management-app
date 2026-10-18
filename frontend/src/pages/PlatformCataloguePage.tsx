@@ -233,7 +233,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
                 }
               >
                 {latest.retired > 0
-                  ? `${latest.retired} entries retired in this seed`
+                  ? `${latest.retired} ${latest.retired === 1 ? 'entry' : 'entries'} retired in this seed`
                   : 'No entries retired'}
               </div>
             </div>
