@@ -291,6 +291,14 @@ describe('DashboardPage', () => {
     // #D97706 on the amber tint is 2.86:1; the muted-foreground token is 6.37:1.
     expect(expiringCount).toHaveClass('text-semantic-warning-muted-foreground');
     expect(expiringCount).not.toHaveClass('text-semantic-warning');
+    // Tile headings carry their own tint-matched colour instead of inheriting
+    // the theme text colour, which would flip to near-white under `.dark`.
+    expect(screen.getByRole('heading', { name: /Expiring soon/i, level: 3 })).toHaveClass(
+      'text-semantic-warning-muted-foreground',
+    );
+    expect(screen.getByRole('heading', { name: /Expired — needs action/i, level: 3 })).toHaveClass(
+      'text-semantic-critical-muted-foreground',
+    );
     expect(container.querySelector('.text-xs')).toBeNull();
     expect(container.querySelector('dl[aria-label]')).toBeNull();
   });

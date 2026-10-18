@@ -177,7 +177,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
 
             <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-1 xl:grid-cols-2">
               <div className="rounded-md border border-semantic-warning/20 bg-semantic-warning-muted p-3 sm:p-4">
-                <h3 id="dashboard-expiring-soon-heading" className="text-sm font-semibold">
+                <h3
+                  id="dashboard-expiring-soon-heading"
+                  className="text-sm font-semibold text-semantic-warning-muted-foreground"
+                >
                   Expiring soon
                 </h3>
                 <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-warning-muted-foreground sm:mt-2 sm:text-3xl">
@@ -189,7 +192,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
               </div>
 
               <div className="rounded-md border border-semantic-critical/20 bg-semantic-critical-muted p-3 sm:p-4">
-                <h3 id="dashboard-expired-action-heading" className="text-sm font-semibold">
+                <h3
+                  id="dashboard-expired-action-heading"
+                  className="text-sm font-semibold text-semantic-critical-muted-foreground"
+                >
                   Expired — needs action
                 </h3>
                 <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical sm:mt-2 sm:text-3xl">
