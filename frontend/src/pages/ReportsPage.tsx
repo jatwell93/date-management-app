@@ -291,14 +291,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
       aria-label="Expiry reporting workspace"
     >
       <header>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-2xl font-semibold">Expiry reporting</h1>
-            <p className="mt-1.5 max-w-xl text-sm text-semantic-text-secondary">
-              Start with expired stock and markdown pressure, then review month-by-month movement.
-            </p>
-          </div>
-        </div>
+        <h1 className="font-heading text-2xl font-semibold">Expiry reporting</h1>
+        <p className="mt-1.5 max-w-xl text-base text-semantic-text-secondary">
+          Start with expired stock and markdown pressure, then review month-by-month movement.
+        </p>
       </header>
       <Card>
         <CardHeader>
@@ -332,7 +328,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 aria-label="Primary expiry decision"
               >
                 <p className="text-sm font-medium text-semantic-critical-muted-foreground">Expiry risk</p>
-                <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical-muted-foreground">
+                <p className="mt-2 text-2xl font-bold tabular-nums text-semantic-critical-muted-foreground">
                   {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
@@ -345,10 +341,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     Entering markdown next month
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning-muted-foreground">
+                  <dd className="mt-1 text-2xl font-bold tabular-nums text-semantic-warning-muted-foreground">
                     {numberFormatter.format(overallReportData.next_month_markdown_count)}
                   </dd>
-                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                  <dd className="mt-1 text-sm text-semantic-text-secondary">
                     Next batch crossing into Markdown 1 (≈3 months out) — line up first reductions.
                   </dd>
                 </div>
@@ -356,10 +352,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     Active expiry stock
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-text-primary">
+                  <dd className="mt-1 text-2xl font-bold tabular-nums text-semantic-text-primary">
                     {numberFormatter.format(overallReportData.active_expiry_stock_count)}
                   </dd>
-                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                  <dd className="mt-1 text-sm text-semantic-text-secondary">
                     All stock not yet expired — your live markdown pipeline.
                   </dd>
                 </div>
@@ -381,7 +377,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
           </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-4 text-sm text-semantic-text-secondary">
+            <p className="mb-4 text-base text-semantic-text-secondary">
               How many items sold at each reduction depth — stock that only moves at deeper
               markdowns is a candidate for range or ordering review.
             </p>
@@ -394,7 +390,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     {markdownLevelLabel(row.markdownLevel)}
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold">
+                  <dd className="mt-1 text-2xl font-bold tabular-nums">
                     {numberFormatter.format(row.soldCount)}
                   </dd>
                 </div>
@@ -418,7 +414,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
             <Button asChild variant="outline" className="min-h-11 flex-1" size="lg">
               <Link to="/expiry-entries">Open all expiry entries</Link>
             </Button>
-            <Button asChild variant="destructive" className="min-h-11 flex-1" size="lg">
+            <Button asChild variant="outline" className="min-h-11 flex-1" size="lg">
               <Link to="/expired-items">Review expired items</Link>
             </Button>
           </div>
@@ -434,24 +430,24 @@ export function ReportsPage({ token }: ReportsPageProps) {
             <>
               {/* Mobile row summary */}
               <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile monthly expiry summary">
-                {reportData.map((row) => (
-                  <li key={row.month} className="rounded-lg border bg-semantic-surface-1 p-4">
+                {reportData.map((row, index) => (
+                  <li key={`${row.month}-${index}`} className="rounded-lg border bg-semantic-surface-1 p-4">
                     <div className="flex items-center justify-between border-b pb-2 mb-3">
                       <span className="font-heading font-bold text-lg">{row.month}</span>
-                      <span className="rounded-md bg-semantic-secondary-muted px-2 py-1 text-xs font-medium text-semantic-text-secondary">
+                      <span className="rounded-md bg-semantic-secondary-muted px-2 py-1 text-sm font-medium tabular-nums text-semantic-text-secondary">
                         Total: {numberFormatter.format(row.total_expiring)}
                       </span>
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                       <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Expired</dt>
-                        <dd className="font-bold text-semantic-critical">
+                        <dd className="font-bold tabular-nums text-semantic-critical">
                           {numberFormatter.format(row.expired_count)}
                         </dd>
                       </div>
                       <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Latest Expiry</dt>
-                        <dd className="font-medium">{formatReportDate(row.latest_expiry_date)}</dd>
+                        <dt className="text-semantic-text-secondary">Latest expiry</dt>
+                        <dd className="font-medium tabular-nums">{formatReportDate(row.latest_expiry_date)}</dd>
                       </div>
                     </dl>
                   </li>
@@ -466,19 +462,19 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         Month
                       </TableHead>
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Total Expiring
+                        Total expiring
                       </TableHead>
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Expired Items
+                        Expired items
                       </TableHead>
                       <TableHead className="text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Latest Expiry
+                        Latest expiry
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.map((row) => (
-                      <TableRow key={row.month}>
+                    {reportData.map((row, index) => (
+                      <TableRow key={`${row.month}-${index}`}>
                         <TableCell className="font-medium">{row.month}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {numberFormatter.format(row.total_expiring)}

@@ -127,6 +127,27 @@ describe('ReportsPage UI audit', () => {
     expect(loading.querySelector('.w-96')).toBeNull();
   });
 
+  it('sets metrics in tabular numerals with no sub-14px copy and no duplicate row keys', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockReports();
+    const { container } = renderPage();
+
+    const risk = await screen.findByRole('region', { name: 'Primary expiry decision' });
+    await screen.findByRole('heading', { level: 2, name: 'Sell-through by markdown level' });
+    expect(screen.getByText('3')).toHaveClass('tabular-nums', 'text-2xl');
+    expect(risk.querySelector('.text-3xl')).toBeNull();
+    expect(screen.getByText('45')).toHaveClass('tabular-nums');
+    expect(screen.getByText('4')).toHaveClass('tabular-nums');
+    expect(container.querySelector('.text-xs:not(th)')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Review expired items' })).not.toHaveClass(
+      'bg-semantic-critical',
+    );
+    expect(consoleError.mock.calls.some((call) => String(call[0]).includes('same key'))).toBe(
+      false,
+    );
+    consoleError.mockRestore();
+  });
+
   it('keeps a page heading and a full-size retry button when every report fails', async () => {
     vi.mocked(apiService.get).mockRejectedValue(new Error('Failed to load report'));
     renderPage();
