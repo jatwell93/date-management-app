@@ -12,6 +12,11 @@ import {
   TableRow,
 } from '../components/ui/table';
 
+const currencyFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+});
+
 interface ExpiredLossReportProps {
   token: string | null;
 }
@@ -31,17 +36,23 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
     if (!token) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setError('Authentication token not found');
+      setLoading(false);
       return;
     }
+
+    // Ignore results that land after unmount or a token change.
+    let active = true;
 
     const fetchExpiredLosses = async () => {
       try {
         setLoading(true);
         const authToken = await getFreshApiToken('expired-loss-report');
         const data = await getExpiredLossesReport(authToken || null);
+        if (!active) return;
         setLossesBySKU(data.lossesBySKU);
         setLossesByStoreArea(data.lossesByStoreArea);
       } catch (err) {
+        if (!active) return;
         setError('Failed to fetch expired losses report');
         if (err instanceof Error) {
           Sentry.captureException(err, {
@@ -54,11 +65,14 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
           });
         }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchExpiredLosses();
+    return () => {
+      active = false;
+    };
   }, [token, getFreshApiToken]);
 
   if (loading) {
@@ -105,6 +119,16 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {lossesBySKU.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={3}
+                      className="py-6 text-center text-sm text-semantic-text-secondary"
+                    >
+                      No SKU losses recorded yet.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {lossesBySKU.map((item) => (
                   <TableRow key={item.sku} className="hover:bg-semantic-surface-2/50">
                     <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
@@ -114,7 +138,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                       {item.productName}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
-                      ${item.totalLoss.toFixed(2)}
+                      {currencyFormatter.format(item.totalLoss)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -141,6 +165,16 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {lossesByStoreArea.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={2}
+                      className="py-6 text-center text-sm text-semantic-text-secondary"
+                    >
+                      No store area losses recorded yet.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {withOccurrenceKeys(lossesByStoreArea, (a) => a.locationName).map(
                   ({ item, key }) => (
                     <TableRow key={key} className="hover:bg-semantic-surface-2/50">
@@ -148,7 +182,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
                         {item.locationName}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right text-sm tabular-nums text-semantic-text-primary">
-                        ${item.totalLoss.toFixed(2)}
+                        {currencyFormatter.format(item.totalLoss)}
                       </TableCell>
                     </TableRow>
                   ),
