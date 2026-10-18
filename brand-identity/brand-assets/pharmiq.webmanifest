@@ -1,0 +1,54 @@
+{
+  "name": "PharmIQ",
+  "short_name": "PharmIQ",
+  "description": "Smart Ops. Better Margins. Operational intelligence for Australian pharmacies.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0F766E",
+  "theme_color": "#0F766E",
+  "categories": ["business", "productivity", "medical"],
+  "lang": "en-AU",
+  "icons": [
+    {
+      "src": "/favicons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand-assets/logo/pharmiq-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open pharmacy dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/favicons/favicon-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Expiry Mate",
+      "short_name": "Expiry",
+      "description": "Check expiry alerts",
+      "url": "/expiry-mate",
+      "icons": [{ "src": "/favicons/favicon-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Dead Stock",
+      "short_name": "Dead Stock",
+      "description": "View dead stock optimizer",
+      "url": "/dead-stock",
+      "icons": [{ "src": "/favicons/favicon-96x96.png", "sizes": "96x96" }]
+    }
+  ]
+}

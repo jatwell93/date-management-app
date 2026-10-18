@@ -1,0 +1,600 @@
+/**
+ * PharmIQ Design Tokens — CSS Custom Properties
+ * Generated from design-tokens.json v2.0.0
+ *
+ * Usage: import this file before all component stylesheets.
+ * Use semantic tokens in components (never raw hex values).
+ *
+ * Example: color: var(--ink);
+ *          background: var(--canvas-dark);
+ *          font-family: var(--font-display);
+ *
+ * Font load (add to <head>):
+ * <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+ */
+
+:root {
+  /* ─────────────────────────────────────────
+     TYPOGRAPHY — FONT FAMILIES
+  ───────────────────────────────────────── */
+  --font-display:  'Fraunces', 'Georgia', 'Times New Roman', serif;
+  --font-heading:  'Outfit', 'DM Sans', system-ui, sans-serif;
+  --font-body:     'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Consumer/worker tools only (Pay Checker) */
+  --font-consumer-heading: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-consumer-body:    'DM Sans', system-ui, -apple-system, sans-serif;
+
+  /* ─────────────────────────────────────────
+     TYPOGRAPHY — FONT SIZES
+     Strict lane: Fraunces = display 48px+
+                  Outfit = headings, labels, eyebrow
+                  Inter = body, captions, buttons
+  ───────────────────────────────────────── */
+  --text-display-xl: 64px;   /* Fraunces — hero headline. One per page. */
+  --text-display-lg: 48px;   /* Fraunces — section opener */
+  --text-display-md: 40px;   /* Fraunces — large callout */
+  --text-h1:         36px;   /* Outfit */
+  --text-h2:         28px;   /* Outfit */
+  --text-h3:         22px;   /* Outfit */
+  --text-h4:         18px;   /* Outfit */
+  --text-body-lg:    18px;   /* Inter — lead body */
+  --text-body:       16px;   /* Inter — standard body / minimum on mobile */
+  --text-body-sm:    14px;   /* Inter — secondary body */
+  --text-eyebrow:    12px;   /* Outfit 600 uppercase +tracking */
+  --text-label:      13px;   /* Inter 500 */
+  --text-caption:    12px;   /* Inter */
+  --text-button-lg:  15px;   /* Outfit — hero CTAs */
+  --text-button:     14px;   /* Inter 500 — standard buttons */
+  --text-data-xl:    36px;   /* Inter 700 tabular-nums — hero KPIs */
+  --text-data-lg:    28px;   /* Inter 600 tabular-nums — module KPIs */
+  --text-data:       15px;   /* Inter tabular-nums — table cells */
+  --text-mono:       13px;   /* JetBrains Mono */
+
+  /* ─────────────────────────────────────────
+     TYPOGRAPHY — LETTER SPACING
+     Negative at display, positive at eyebrow
+  ───────────────────────────────────────── */
+  --tracking-display-xl: -0.015em; /* Fraunces 64px */
+  --tracking-display-lg: -0.012em; /* Fraunces 48px */
+  --tracking-display-md: -0.010em; /* Fraunces 40px */
+  --tracking-h1:         -0.015em; /* Outfit 36px */
+  --tracking-h2:         -0.012em; /* Outfit 28px */
+  --tracking-h3:         -0.008em; /* Outfit 22px */
+  --tracking-h4:         -0.005em; /* Outfit 18px */
+  --tracking-body:        0;
+  --tracking-label:       0.01em;
+  --tracking-eyebrow:     0.06em;  /* Positive — marks it as taxonomy */
+  --tracking-caption:     0;
+
+  /* ─────────────────────────────────────────
+     TYPOGRAPHY — LINE HEIGHTS
+  ───────────────────────────────────────── */
+  --leading-display-xl: 1.05; /* Fraunces — tight stacking is structural */
+  --leading-display-lg: 1.08;
+  --leading-display-md: 1.10;
+  --leading-h1:         1.20;
+  --leading-h2:         1.25;
+  --leading-h3:         1.30;
+  --leading-h4:         1.35;
+  --leading-body:       1.60;
+  --leading-body-compact: 1.45; /* Data tables */
+  --leading-label:      1.30;
+  --leading-caption:    1.40;
+
+  /* ─────────────────────────────────────────
+     TYPOGRAPHY — WEIGHTS
+  ───────────────────────────────────────── */
+  --weight-regular:   400;
+  --weight-medium:    500;
+  --weight-semibold:  600;
+  --weight-bold:      700;
+  --weight-extrabold: 800;
+
+  /* ─────────────────────────────────────────
+     BRAND COLORS
+  ───────────────────────────────────────── */
+  --color-teal:         #0F766E;
+  --color-teal-light:   #14B8A6;
+  --color-teal-dark:    #0D5D5A;
+  --color-teal-50:      #F0FDFA;
+  --color-teal-100:     #CCFBF1;
+
+  --color-amber:        #D97706;
+  --color-amber-light:  #FDE68A;
+  --color-amber-50:     #FFFBEB;
+  --color-amber-dark:   #92400E;
+
+  /* ─────────────────────────────────────────
+     SURFACE LADDER — LIGHT MODE
+     Depth via lift, not shadows.
+  ───────────────────────────────────────── */
+  --canvas:     #FFFFFF;   /* Level 0 — page background */
+  --surface-1:  #F8FAFC;  /* Level 1 — cards, sidebars */
+  --surface-2:  #F1F5F9;  /* Level 2 — elevated cards, hover */
+  --surface-3:  #E2E8F0;  /* Level 3 — chips, deep hierarchy */
+
+  /* ─────────────────────────────────────────
+     SURFACE LADDER — DARK CANVAS (Marketing)
+     Dark-first marketing surface. Navy tint, never true black.
+  ───────────────────────────────────────── */
+  --canvas-dark:     #070E1A;  /* Level 0 — marketing hero anchor */
+  --dark-surface-1:  #0F172A;  /* Level 1 — cards on dark (PharmIQ Navy) */
+  --dark-surface-2:  #1E293B;  /* Level 2 — feature cards, pricing */
+  --dark-surface-3:  #273549;  /* Level 3 — further elevated */
+  --dark-surface-4:  #334155;  /* Level 4 — highest elevation */
+
+  /* ─────────────────────────────────────────
+     HAIRLINE BORDERS
+     Replace solid border colors with translucent values.
+  ───────────────────────────────────────── */
+  --hairline:        rgba(15,23,42,0.08);   /* Light mode row dividers */
+  --hairline-strong: rgba(15,23,42,0.14);   /* Light mode card/input borders */
+  --hairline-focus:  #0F766E;               /* Focus rings — always teal */
+
+  --dark-hairline:        rgba(241,245,249,0.08);  /* Dark mode dividers */
+  --dark-hairline-strong: rgba(241,245,249,0.15);  /* Dark mode card borders */
+
+  /* ─────────────────────────────────────────
+     ATMOSPHERIC GLOWS
+     Radial gradient color stops — never solid surfaces.
+     Pattern: radial-gradient(ellipse 80% 40% at 50% 0%, var(--teal-glow) 0%, transparent 100%)
+  ───────────────────────────────────────── */
+  --teal-glow:       rgba(15,118,110,0.18);  /* Dark canvas teal section openers */
+  --amber-glow:      rgba(217,119,6,0.14);   /* Dark canvas urgency sections */
+  --teal-glow-light: rgba(15,118,110,0.06);  /* Light canvas subtle depth */
+
+  /* ─────────────────────────────────────────
+     INK (TEXT) HIERARCHY
+  ───────────────────────────────────────── */
+  --ink:              #0F172A;               /* Headings, primary text — light mode */
+  --ink-muted:        #475569;               /* Secondary body copy */
+  --ink-subtle:       #94A3B8;               /* Captions, decorative only — NEVER informational */
+  --ink-tertiary:     #CBD5E1;               /* Disabled, footnotes */
+
+  --ink-on-dark:      #F1F5F9;               /* All text on dark canvas */
+  --ink-on-dark-muted: rgba(241,245,249,0.72); /* Secondary on dark canvas */
+  --ink-on-dark-subtle: rgba(241,245,249,0.45); /* Captions on dark canvas */
+
+  /* ─────────────────────────────────────────
+     SEMANTIC COLORS
+  ───────────────────────────────────────── */
+  --color-success:      #10B981;
+  --color-success-bg:   #ECFDF5;
+  --color-success-dark: #34D399;
+
+  --color-warning:      #D97706;
+  --color-warning-bg:   #FFFBEB;
+  --color-warning-dark: #FBBF24;
+
+  --color-critical:     #EF4444;
+  --color-critical-bg:  #FEF2F2;
+  --color-critical-dark: #F87171;
+
+  --color-info:         #0EA5E9;
+  --color-info-bg:      #F0F9FF;
+  --color-info-dark:    #38BDF8;
+
+  --color-dead-stock:    #8B5CF6;
+  --color-dead-stock-bg: #F5F3FF;
+  --color-dead-stock-dark: #A78BFA;
+
+  /* ─────────────────────────────────────────
+     CHART / DATA VIZ PALETTE
+  ───────────────────────────────────────── */
+  --chart-1:      #0F766E;
+  --chart-2:      #0EA5E9;
+  --chart-3:      #D97706;
+  --chart-4:      #8B5CF6;
+  --chart-5:      #10B981;
+  --chart-6:      #F43F5E;
+  --chart-grid:   #E2E8F0;
+  --chart-axis:   #94A3B8;
+
+  --heatmap-0:    #F8FAFC;
+  --heatmap-1:    #CCFBF1;
+  --heatmap-2:    #5EEAD4;
+  --heatmap-3:    #0F766E;
+  --heatmap-4:    #D97706;
+  --heatmap-5:    #92400E;
+
+  /* ─────────────────────────────────────────
+     SPACING (4px base grid)
+  ───────────────────────────────────────── */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+  --space-24:  96px;  /* Marketing section vertical padding */
+
+  /* ─────────────────────────────────────────
+     BORDER RADIUS
+     Strict vocabulary: md=buttons, lg=cards, full=pills
+  ───────────────────────────────────────── */
+  --radius-sm:    4px;     /* Badges, tags */
+  --radius-md:    8px;     /* ALL buttons and inputs */
+  --radius-lg:    12px;    /* ALL cards, panels, modals */
+  --radius-xl:    16px;    /* Product screenshots, large hero frames */
+  --radius-full:  9999px;  /* Pills, avatars — NEVER for CTA buttons */
+
+  /* ─────────────────────────────────────────
+     ELEVATION / SHADOWS
+     Prefer hairline borders. Use shadows only for interactive lift on light mode.
+  ───────────────────────────────────────── */
+  --shadow-none: none;
+  --shadow-xs:   0 1px 2px rgba(15,23,42,0.06);
+  --shadow-sm:   0 1px 3px rgba(15,23,42,0.10), 0 1px 2px rgba(15,23,42,0.06);
+  --shadow-md:   0 4px 6px rgba(15,23,42,0.07), 0 2px 4px rgba(15,23,42,0.06);
+  --shadow-lg:   0 10px 15px rgba(15,23,42,0.10), 0 4px 6px rgba(15,23,42,0.05);
+  --shadow-xl:   0 20px 25px rgba(15,23,42,0.10), 0 8px 10px rgba(15,23,42,0.04);
+
+  /* Focus rings */
+  --focus-ring-teal:  0 0 0 3px rgba(15,118,110,0.15);
+  --focus-ring-error: 0 0 0 3px rgba(239,68,68,0.15);
+
+  /* ─────────────────────────────────────────
+     ANIMATION
+  ───────────────────────────────────────── */
+  --duration-fast:    150ms;
+  --duration-normal:  250ms;
+  --duration-slow:    350ms;
+  --duration-chart:   300ms;
+
+  --ease-enter:    cubic-bezier(0.0, 0.0, 0.2, 1);
+  --ease-exit:     cubic-bezier(0.4, 0.0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1);
+
+  /* ─────────────────────────────────────────
+     LAYOUT
+  ───────────────────────────────────────── */
+  --sidebar-width:           240px;
+  --sidebar-width-collapsed: 60px;
+  --topbar-height:           60px;
+  --content-max-width:       1280px;
+
+  /* ─────────────────────────────────────────
+     Z-INDEX SCALE
+  ───────────────────────────────────────── */
+  --z-base:     0;
+  --z-raised:   10;
+  --z-dropdown: 20;
+  --z-sticky:   40;
+  --z-overlay:  60;
+  --z-modal:    80;
+  --z-toast:    100;
+  --z-tooltip:  120;
+}
+
+/* ─────────────────────────────────────────
+   DARK CANVAS (Marketing sections / hero)
+   Use .dark-canvas on any section, not just <body>
+───────────────────────────────────────── */
+.dark-canvas {
+  --canvas:      var(--canvas-dark);
+  --surface-1:   var(--dark-surface-1);
+  --surface-2:   var(--dark-surface-2);
+  --surface-3:   var(--dark-surface-3);
+  --hairline:        var(--dark-hairline);
+  --hairline-strong: var(--dark-hairline-strong);
+  --ink:              var(--ink-on-dark);
+  --ink-muted:        var(--ink-on-dark-muted);
+  --ink-subtle:       var(--ink-on-dark-subtle);
+}
+
+/* ─────────────────────────────────────────
+   DASHBOARD DARK MODE (.dark on <html>/<body>)
+───────────────────────────────────────── */
+.dark {
+  --canvas:     #0F172A;
+  --surface-1:  #1E293B;
+  --surface-2:  #273549;
+  --surface-3:  #334155;
+
+  --hairline:        rgba(241,245,249,0.08);
+  --hairline-strong: rgba(241,245,249,0.15);
+
+  --ink:              #F1F5F9;
+  --ink-muted:        #94A3B8;
+  --ink-subtle:       #64748B;
+  --ink-tertiary:     #475569;
+
+  --color-teal:       #14B8A6;
+  --color-teal-50:    rgba(20,184,166,0.10);
+  --color-teal-100:   rgba(20,184,166,0.20);
+
+  --color-success-bg:    rgba(16,185,129,0.12);
+  --color-warning-bg:    rgba(217,119,6,0.12);
+  --color-critical-bg:   rgba(239,68,68,0.12);
+  --color-info-bg:       rgba(14,165,233,0.12);
+  --color-dead-stock-bg: rgba(139,92,246,0.12);
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.30), 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-md:  0 4px 6px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.20);
+  --shadow-lg:  0 10px 15px rgba(0,0,0,0.30), 0 4px 6px rgba(0,0,0,0.20);
+}
+
+/* ─────────────────────────────────────────
+   REDUCED MOTION
+───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast:   0ms;
+    --duration-normal: 0ms;
+    --duration-slow:   0ms;
+    --duration-chart:  0ms;
+  }
+}
+
+/* ─────────────────────────────────────────
+   MOBILE TYPOGRAPHY SCALE (≤768px)
+   clamp() is preferred on the type scale,
+   but these fallbacks ensure safe floors.
+───────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --text-display-xl: 36px;  /* Fraunces scales with clamp() in component CSS */
+    --text-display-lg: 30px;
+    --text-display-md: 26px;
+    --text-h1:         28px;
+    --text-h2:         22px;
+    --text-h3:         18px;
+    --text-h4:         16px;
+    --text-data-xl:    28px;
+    --text-data-lg:    22px;
+    --space-24:        64px;  /* Section padding compresses on mobile */
+  }
+}
+
+/* ─────────────────────────────────────────
+   TABULAR NUMBERS — always on for data values
+───────────────────────────────────────── */
+.tabular-nums,
+[data-value],
+.metric,
+.kpi,
+.table-cell--numeric,
+td.numeric,
+.badge-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────
+   ATMOSPHERIC GLOW HELPERS
+   Apply to section wrappers for dark canvas.
+───────────────────────────────────────── */
+.section-glow-teal {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, var(--teal-glow) 0%, transparent 100%),
+    var(--canvas-dark);
+}
+
+.section-glow-amber {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, var(--amber-glow) 0%, transparent 100%),
+    var(--canvas-dark);
+}
+
+/* Light canvas subtle depth */
+.section-glow-teal-light {
+  background:
+    radial-gradient(ellipse 60% 30% at 50% 0%, var(--teal-glow-light) 0%, transparent 100%),
+    var(--canvas);
+}
+
+/* ─────────────────────────────────────────
+   DISPLAY TYPE HELPERS (Fraunces)
+───────────────────────────────────────── */
+.display-xl {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 600;
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 0, 'WONK' 0;
+  line-height: var(--leading-display-xl);
+  letter-spacing: var(--tracking-display-xl);
+}
+
+.display-lg {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.5vw, 48px);
+  font-weight: 600;
+  font-optical-sizing: auto;
+  line-height: var(--leading-display-lg);
+  letter-spacing: var(--tracking-display-lg);
+}
+
+/* ─────────────────────────────────────────
+   EYEBROW TEXT (Outfit — positive tracking)
+───────────────────────────────────────── */
+.eyebrow {
+  font-family: var(--font-heading);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  line-height: var(--leading-label);
+}
+
+.dark-canvas .eyebrow {
+  color: var(--color-teal-light); /* Teal eyebrow on dark canvas sections */
+}
+
+/* ─────────────────────────────────────────
+   CARD PATTERNS
+───────────────────────────────────────── */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.card--elevated {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.card--metric {
+  background: var(--canvas);
+  border: 1px solid var(--hairline-strong);
+  border-top: 3px solid var(--color-teal);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.card--alert {
+  background: var(--color-amber-50);
+  border: 1px solid rgba(217,119,6,0.25);
+  border-left: 4px solid var(--color-amber);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.card--dark {
+  background: var(--dark-surface-1);
+  border: 1px solid var(--dark-hairline-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.card--dark-elevated {
+  background: var(--dark-surface-2);
+  border: 1px solid var(--dark-hairline-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+/* ─────────────────────────────────────────
+   BUTTON PATTERNS
+───────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 var(--space-5);
+  font-family: var(--font-body);
+  font-size: var(--text-button);
+  font-weight: var(--weight-medium);
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--hairline-focus);
+  outline-offset: 2px;
+}
+
+.btn--primary {
+  background: var(--color-teal);
+  color: #FFFFFF;
+  font-family: var(--font-heading); /* Outfit label */
+  font-weight: var(--weight-semibold);
+}
+.btn--primary:hover { background: var(--color-teal-dark); }
+
+.btn--primary-lg {
+  height: 48px;
+  padding: 0 var(--space-6);
+  font-size: var(--text-button-lg);
+  background: var(--color-teal);
+  color: #FFFFFF;
+  font-family: var(--font-heading);
+  font-weight: var(--weight-semibold);
+}
+.btn--primary-lg:hover { background: var(--color-teal-dark); }
+
+.btn--secondary {
+  background: transparent;
+  color: var(--color-teal);
+  border: 1.5px solid var(--color-teal);
+}
+.btn--secondary:hover { background: var(--color-teal-50); }
+
+.btn--ghost {
+  background: var(--surface-1);
+  color: var(--ink-muted);
+  border: 1px solid var(--hairline-strong);
+}
+.btn--ghost:hover { background: var(--surface-2); color: var(--ink); }
+
+/* Dark canvas buttons */
+.btn--dark-primary {
+  background: var(--ink-on-dark);
+  color: var(--canvas-dark);
+  font-family: var(--font-heading);
+  font-weight: var(--weight-semibold);
+}
+.btn--dark-primary:hover { background: #E2E8F0; }
+
+.btn--dark-ghost {
+  background: var(--dark-surface-2);
+  color: var(--ink-on-dark);
+  border: 1px solid var(--dark-hairline-strong);
+}
+.btn--dark-ghost:hover { background: var(--dark-surface-3); }
+
+/* ─────────────────────────────────────────
+   FORM INPUTS
+───────────────────────────────────────── */
+.input {
+  height: 44px;
+  padding: 0 12px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-body); /* 16px — prevents iOS zoom */
+  color: var(--ink);
+  transition: border-color var(--duration-fast) var(--ease-standard),
+              box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.input:focus {
+  border-color: var(--hairline-focus);
+  box-shadow: var(--focus-ring-teal);
+  outline: none;
+}
+
+.input:disabled {
+  background: var(--surface-2);
+  color: var(--ink-subtle);
+  cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────
+   STATUS BADGES
+───────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.badge--success    { background: var(--color-success-bg);    color: #10B981; }
+.badge--warning    { background: var(--color-warning-bg);    color: var(--color-amber-dark); }
+.badge--critical   { background: var(--color-critical-bg);   color: var(--color-critical); }
+.badge--dead-stock { background: var(--color-dead-stock-bg); color: var(--color-dead-stock); }
+.badge--info       { background: var(--color-info-bg);       color: var(--color-info); }
+.badge--muted      { background: var(--surface-1);           color: var(--ink-subtle); }

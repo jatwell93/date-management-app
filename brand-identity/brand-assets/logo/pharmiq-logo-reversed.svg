@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PharmIQ — Full Horizontal Logo REVERSED
+  For use on dark (navy, teal, black) backgrounds
+  Icon: white bars on transparent hex outline; Wordmark: white "Pharm" + teal-light "IQ"
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none" aria-label="PharmIQ (reversed)">
+  <title>PharmIQ</title>
+  <defs>
+    <clipPath id="hex-clip-rev-full">
+      <polygon points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"/>
+    </clipPath>
+  </defs>
+
+  <!-- ── ICON MARK (reversed) ── -->
+  <!-- White filled hex for reversed version -->
+  <polygon
+    points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"
+    fill="white"
+    fill-opacity="0.15"
+  />
+  <polygon
+    points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"
+    fill="none"
+    stroke="white"
+    stroke-width="2"
+  />
+  <g clip-path="url(#hex-clip-rev-full)">
+    <rect x="11" y="29" width="7" height="10" rx="1.5" fill="white" fill-opacity="0.9"/>
+    <rect x="20.5" y="21" width="7" height="18" rx="1.5" fill="white"/>
+    <rect x="30" y="11" width="7" height="28" rx="1.5" fill="white"/>
+  </g>
+
+  <!-- ── WORDMARK (reversed) ── -->
+  <text
+    x="58"
+    y="34"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="white"
+  >Pharm</text>
+
+  <!-- "IQ" in teal-light for reversed version -->
+  <text
+    x="138"
+    y="34"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="#14B8A6"
+  >IQ</text>
+</svg>

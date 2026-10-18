@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PharmIQ — Full Horizontal Logo (Icon + Wordmark)
+  Primary variant: teal icon, navy "Pharm", teal "IQ"
+  Font: Space Grotesk 700 — must be loaded in consuming document
+  viewBox: 200×48 units
+  Minimum display width: 140px digital / 40mm print
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none" aria-label="PharmIQ">
+  <title>PharmIQ</title>
+  <defs>
+    <clipPath id="hex-clip-full">
+      <polygon points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"/>
+    </clipPath>
+  </defs>
+
+  <!-- ── ICON MARK ── -->
+  <polygon
+    points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"
+    fill="#0F766E"
+  />
+  <g clip-path="url(#hex-clip-full)">
+    <rect x="11" y="29" width="7" height="10" rx="1.5" fill="white" fill-opacity="0.9"/>
+    <rect x="20.5" y="21" width="7" height="18" rx="1.5" fill="white"/>
+    <rect x="30" y="11" width="7" height="28" rx="1.5" fill="white"/>
+  </g>
+
+  <!-- ── WORDMARK ── -->
+  <!-- "Pharm" in navy -->
+  <text
+    x="58"
+    y="34"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="#0F172A"
+  >Pharm</text>
+
+  <!-- "IQ" in teal (brand differentiator) -->
+  <text
+    x="138"
+    y="34"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="#0F766E"
+  >IQ</text>
+</svg>

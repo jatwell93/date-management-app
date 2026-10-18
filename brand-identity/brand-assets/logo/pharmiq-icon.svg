@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PharmIQ — Icon Mark (Hex-Chart)
+  Flat-top hexagon + ascending bar chart (pharmacy hex + business intelligence)
+  Primary variant: teal background (#0F766E), white bars
+  viewBox: 48×48 units
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-label="PharmIQ logo mark">
+  <title>PharmIQ</title>
+  <defs>
+    <!-- Clip bars to hexagon shape -->
+    <clipPath id="hex-clip">
+      <polygon points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"/>
+    </clipPath>
+  </defs>
+
+  <!-- Hexagon background fill -->
+  <polygon
+    points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"
+    fill="#0F766E"
+  />
+
+  <!-- Ascending bar chart (clipped to hexagon) — 3 bars: low, mid, high -->
+  <g clip-path="url(#hex-clip)">
+    <!-- Bar 1: shortest (left) -->
+    <rect x="11" y="29" width="7" height="10" rx="1.5" fill="white" fill-opacity="0.9"/>
+    <!-- Bar 2: medium (centre) -->
+    <rect x="20.5" y="21" width="7" height="18" rx="1.5" fill="white"/>
+    <!-- Bar 3: tallest (right) -->
+    <rect x="30" y="11" width="7" height="28" rx="1.5" fill="white"/>
+  </g>
+</svg>
