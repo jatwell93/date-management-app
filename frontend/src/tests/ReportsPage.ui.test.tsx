@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import '@testing-library/jest-dom';
 import { ReportsPage } from '../pages/ReportsPage';
 import { apiService } from '../lib/api.service';
@@ -50,7 +50,7 @@ function renderPage() {
   );
 }
 
-describe('ReportsPage accessibility', () => {
+describe('ReportsPage UI audit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -94,6 +94,23 @@ describe('ReportsPage accessibility', () => {
     for (const name of ['Open next 90 days', 'Open all expiry entries', 'Review expired items']) {
       expect(await screen.findByRole('link', { name })).toHaveClass('min-h-11');
     }
+  });
+
+  it('navigates quick links client-side through the router', async () => {
+    mockReports();
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage token="token" />} />
+          <Route path="/expired-items" element={<p>Expired items route</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const link = await screen.findByRole('link', { name: 'Review expired items' });
+    expect(link).toHaveAttribute('href', '/expired-items');
+    fireEvent.click(link);
+    expect(await screen.findByText('Expired items route')).toBeInTheDocument();
   });
 
   it('keeps a page heading and a full-size retry button when every report fails', async () => {

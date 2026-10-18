@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   Table,
@@ -413,13 +413,13 @@ export function ReportsPage({ token }: ReportsPageProps) {
         <CardContent>
           <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row">
             <Button asChild className="min-h-11 flex-1" size="lg">
-              <a href="/detailed-expiry-report">Open next 90 days</a>
+              <Link to="/detailed-expiry-report">Open next 90 days</Link>
             </Button>
             <Button asChild variant="outline" className="min-h-11 flex-1" size="lg">
-              <a href="/expiry-entries">Open all expiry entries</a>
+              <Link to="/expiry-entries">Open all expiry entries</Link>
             </Button>
             <Button asChild variant="destructive" className="min-h-11 flex-1" size="lg">
-              <a href="/expired-items">Review expired items</a>
+              <Link to="/expired-items">Review expired items</Link>
             </Button>
           </div>
           {loading ? (
