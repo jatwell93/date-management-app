@@ -901,9 +901,9 @@ describe('supplier policy role plumbing', () => {
     await userEvent.type(screen.getByLabelText('Store instructions'), 'Return stock');
     await userEvent.click(screen.getByRole('button', { name: 'Assign' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'You no longer have permission to change supplier policy',
-    );
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('You no longer have permission to change supplier policy');
+    expect(notice).toHaveClass('text-semantic-critical-muted-foreground');
     expect(screen.queryByText('Only admins can change supplier policy')).not.toBeInTheDocument();
   });
 });

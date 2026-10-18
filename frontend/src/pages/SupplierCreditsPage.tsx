@@ -884,7 +884,7 @@ const AssignSupplierModal: React.FC<{
         {permissionError && (
           <p
             role="alert"
-            className="rounded-md bg-semantic-critical-muted p-3 text-sm text-semantic-critical"
+            className="rounded-md bg-semantic-critical-muted p-3 text-sm text-semantic-critical-muted-foreground"
           >
             {permissionError}
           </p>
