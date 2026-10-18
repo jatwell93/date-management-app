@@ -23,7 +23,12 @@ export function UsageWarning({
 
   useEffect(() => {
     const dismissedKey = `usage-warning-dismissed-${resourceType}`;
-    const lastDismissed = localStorage.getItem(dismissedKey);
+    let lastDismissed: string | null = null;
+    try {
+      lastDismissed = localStorage.getItem(dismissedKey);
+    } catch {
+      // Storage blocked (private mode, kiosk policy): show the warning.
+    }
 
     if (lastDismissed) {
       const dismissedDate = new Date(lastDismissed);
@@ -47,7 +52,11 @@ export function UsageWarning({
 
   const handleDismiss = () => {
     const dismissedKey = `usage-warning-dismissed-${resourceType}`;
-    localStorage.setItem(dismissedKey, new Date().toISOString());
+    try {
+      localStorage.setItem(dismissedKey, new Date().toISOString());
+    } catch {
+      // Storage blocked: dismiss for this render session only.
+    }
     setDismissed(true);
   };
 
@@ -62,10 +71,10 @@ export function UsageWarning({
     inventoryItems: 'Inventory Items',
   };
 
-  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString();
-  const displayLimit = formatValue ? formatValue(limit) : limit.toLocaleString();
+  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString('en-AU');
+  const displayLimit = formatValue ? formatValue(limit) : limit.toLocaleString('en-AU');
   const remaining = limit - current;
-  const displayRemaining = formatValue ? formatValue(remaining) : remaining.toLocaleString();
+  const displayRemaining = formatValue ? formatValue(remaining) : remaining.toLocaleString('en-AU');
 
   const isUrgent = percentage >= 95;
 

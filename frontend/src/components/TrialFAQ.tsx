@@ -96,7 +96,7 @@ function FAQList() {
               className="size-4 shrink-0 text-muted-foreground motion-safe:transition-transform group-open:rotate-180"
             />
           </summary>
-          <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
+          <p className="text-muted-foreground pl-7 pt-3 text-base">{item.answer}</p>
         </details>
       ))}
     </div>
@@ -137,14 +137,14 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
   const getHeaderContent = () => {
     if (isExpired) {
       return {
-        title: 'Trial Expired - What Now?',
+        title: 'Your trial has ended',
         description:
           'Your Professional trial has ended. Learn what happens next and how to restore full access.',
       };
     }
     if (daysRemaining && daysRemaining <= 3) {
       return {
-        title: `Only ${daysRemaining} Day${daysRemaining === 1 ? '' : 's'} Left!`,
+        title: `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in your trial`,
         description:
           'Your trial is ending soon. Here are common questions about what happens next.',
       };

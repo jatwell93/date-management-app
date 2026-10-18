@@ -36,8 +36,12 @@ interface ActivePlanCardProps {
   billingCycle: string | null;
 }
 
+function capitalize(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
 function ActivePlanCard({ tierLevel, billingCycle }: ActivePlanCardProps) {
-  const planName = `${tierLevel.charAt(0).toUpperCase()}${tierLevel.slice(1)}`;
+  const planName = capitalize(tierLevel);
 
   return (
     <Card
@@ -69,6 +73,7 @@ interface UpgradeHeaderProps {
   status: SubscriptionTierResponse['status'] | undefined;
   daysRemaining: number;
   tierLimits: TrialStatusResponse['tierLimits'];
+  tierLevel: string;
 }
 
 function UpgradeHeader({
@@ -77,6 +82,7 @@ function UpgradeHeader({
   status,
   daysRemaining,
   tierLimits,
+  tierLevel,
 }: UpgradeHeaderProps) {
   function getDescription(): string {
     if (isInTrial && daysRemaining > 0) {
@@ -100,29 +106,31 @@ function UpgradeHeader({
             className="size-3 rounded-full bg-semantic-secondary motion-safe:animate-pulse"
           />
         )}
-        {isInTrial ? 'Professional Trial' : 'Starter plan'}
+        {isInTrial ? 'Professional Trial' : `${capitalize(tierLevel)} plan`}
       </h1>
       <p className="text-muted-foreground">{getDescription()}</p>
 
+      {/* The trial-status payload carries limits only, not live usage, so this
+          card states the limits rather than showing placeholder usage counts. */}
       <Card className="mt-6 max-w-md">
         <CardHeader>
           <CardTitle role="heading" aria-level={2} className="text-base">
-            Your current usage
+            Your plan limits
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Products</span>
-            <span className="tabular-nums">0 / {tierLimits.maxProducts}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Users</span>
-            <span className="tabular-nums">1 / {tierLimits.maxUsers}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Store Areas</span>
-            <span className="tabular-nums">0 / {tierLimits.maxStoreAreas}</span>
-          </div>
+        <CardContent>
+          <dl className="space-y-2">
+            {[
+              { label: 'Products', value: tierLimits.maxProducts },
+              { label: 'Users', value: tierLimits.maxUsers },
+              { label: 'Store Areas', value: tierLimits.maxStoreAreas },
+            ].map((row) => (
+              <div key={row.label} className="flex justify-between text-sm">
+                <dt className="text-muted-foreground">{row.label}</dt>
+                <dd className="tabular-nums">up to {row.value.toLocaleString('en-AU')}</dd>
+              </div>
+            ))}
+          </dl>
         </CardContent>
       </Card>
     </div>
@@ -175,7 +183,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     // Free is a no-op (nothing to buy); Enterprise is contract-based.
     if (tier === 'free') return;
     if (tier === 'enterprise') {
-      alert('Enterprise plans are configured by contract. Please contact support.');
+      setError('Enterprise plans are configured by contract. Please contact support.');
       return;
     }
 
@@ -215,7 +223,8 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        // A non-JSON error body (e.g. a gateway page) must not replace the message.
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to convert trial');
       }
 
@@ -233,8 +242,16 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     }
   };
 
-  if (loading || !token) {
+  if (!token) {
     return null;
+  }
+
+  if (loading) {
+    return (
+      <p role="status" className="py-8 text-center text-muted-foreground">
+        Loading plan details…
+      </p>
+    );
   }
 
   if (!trialStatus) {
@@ -267,6 +284,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         status={status}
         daysRemaining={daysRemaining}
         tierLimits={tierLimits}
+        tierLevel={tierLevel}
       />
 
       {error && (

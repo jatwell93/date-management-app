@@ -35,6 +35,24 @@ describe('UsageWarning', () => {
     expect(detail).not.toHaveClass('text-semantic-critical');
   });
 
+  it('still renders and dismisses when storage is blocked', () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+
+    render(<UsageWarning resourceType="skus" current={9000} limit={10000} />);
+
+    expect(screen.getByText(/Using 9,000 of 10,000/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss SKUs warning' }));
+    expect(screen.queryByText(/SKUs usage at 90%/)).not.toBeInTheDocument();
+
+    getItem.mockRestore();
+    setItem.mockRestore();
+  });
+
   it('hides the warning after dismissal', () => {
     render(<UsageWarning resourceType="skus" current={90} limit={100} />);
 

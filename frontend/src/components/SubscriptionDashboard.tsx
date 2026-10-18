@@ -40,14 +40,14 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
     ? 'bg-semantic-critical'
     : isWarning
       ? 'bg-semantic-warning'
-      : 'bg-semantic-secondary';
+      : 'bg-semantic-primary';
 
-  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString();
+  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString('en-AU');
   const displayLimit = isUnlimited
     ? 'Unlimited'
     : formatValue
       ? formatValue(limit)
-      : limit.toLocaleString();
+      : limit.toLocaleString('en-AU');
 
   return (
     <div className="space-y-2">
@@ -210,7 +210,10 @@ export function SubscriptionDashboard({ token, onUpgrade, data }: SubscriptionDa
                 <span>
                   Billed {subscription.billingCycle}
                   {subscription.currentPeriodEnd && (
-                    <> • Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
+                    <>
+                      {' '}
+                      • Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-AU')}
+                    </>
                   )}
                 </span>
               )}
