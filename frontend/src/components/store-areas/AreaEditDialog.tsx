@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -10,13 +12,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../ui/dialog';
+import { FieldError } from './FieldError';
 import type { StoreAreaAction } from './storeAreaReducer';
 import {
   AREA_NAME_MAX_LENGTH,
+  AREA_NAME_REQUIRED_MESSAGE,
   SUB_DEPARTMENT_MAX_LENGTH,
+  fieldErrorProps,
   type InvalidField,
   type StoreArea,
 } from './types';
+
+const EDIT_NAME_ERROR_ID = 'editedAreaName-error';
 
 interface AreaEditDialogProps {
   area: StoreArea;
@@ -26,9 +33,29 @@ interface AreaEditDialogProps {
   editedAreaName: string;
   editedSubDepartmentName: string;
   invalidField: InvalidField;
+  error: string | null;
   isEditingArea: boolean;
   dispatch: React.Dispatch<StoreAreaAction>;
   onSave: () => void;
+}
+
+/**
+ * The page-level error sits behind the modal overlay (and outside the dialog's
+ * accessible tree), so a save failure is repeated inside the dialog. Errors that
+ * were already showing when the dialog opened belong to another action and stay out,
+ * and so does the validation message, which the inline field error already covers.
+ */
+function useErrorRaisedWhileOpen(
+  open: boolean,
+  error: string | null,
+  ignoreCurrent: boolean,
+): string | null {
+  const [snapshot, setSnapshot] = useState({ open, error });
+  if (snapshot.open !== open || (ignoreCurrent && snapshot.error !== error)) {
+    setSnapshot({ open, error });
+    return null;
+  }
+  return open && error !== snapshot.error ? error : null;
 }
 
 export function AreaEditDialog({
@@ -39,15 +66,20 @@ export function AreaEditDialog({
   editedAreaName,
   editedSubDepartmentName,
   invalidField,
+  error,
   isEditingArea,
   dispatch,
   onSave,
 }: AreaEditDialogProps) {
+  const open = editingDialogKey === dialogKey;
+  const nameInvalid = invalidField === 'editAreaName';
+  const saveError = useErrorRaisedWhileOpen(open, error, nameInvalid);
+
   return (
     <Dialog
-      open={editingDialogKey === dialogKey}
-      onOpenChange={(open) => {
-        if (open) {
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
           dispatch({ type: 'OPEN_EDIT_DIALOG_WITH_KEY', area, dialogKey });
           return;
         }
@@ -80,10 +112,15 @@ export function AreaEditDialog({
               id="editedAreaName"
               value={editedAreaName}
               onChange={(e) => dispatch({ type: 'SET_EDITED_AREA_NAME', value: e.target.value })}
-              aria-invalid={invalidField === 'editAreaName'}
+              {...fieldErrorProps(EDIT_NAME_ERROR_ID, nameInvalid)}
               className="sm:col-span-3"
               maxLength={AREA_NAME_MAX_LENGTH}
             />
+            <div className="sm:col-span-3 sm:col-start-2">
+              <FieldError id={EDIT_NAME_ERROR_ID} show={nameInvalid}>
+                {AREA_NAME_REQUIRED_MESSAGE}
+              </FieldError>
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
             <Label htmlFor="editedSubDepartmentName" className="sm:text-right">
@@ -99,9 +136,19 @@ export function AreaEditDialog({
               maxLength={SUB_DEPARTMENT_MAX_LENGTH}
             />
           </div>
+          {saveError && (
+            <p role="alert" className="text-sm text-semantic-critical-muted-foreground">
+              {saveError}
+            </p>
+          )}
         </div>
 
         <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" className="min-h-11">
+              Cancel
+            </Button>
+          </DialogClose>
           <Button onClick={onSave} disabled={isEditingArea} className="min-h-11">
             {isEditingArea ? 'Saving location' : 'Save location'}
           </Button>

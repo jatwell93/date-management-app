@@ -32,10 +32,17 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
   } = useStoreAreaManagement(token);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-3 py-4 sm:px-4 lg:px-6">
+    <section aria-labelledby="store-area-management-title" className="mx-auto w-full max-w-5xl">
       <Card className="mx-auto w-full">
         <CardHeader className="px-4 sm:px-6">
-          <CardTitle className="text-left sm:text-center">Store Area Management</CardTitle>
+          <CardTitle
+            id="store-area-management-title"
+            role="heading"
+            aria-level={1}
+            className="text-left sm:text-center"
+          >
+            Store Area Management
+          </CardTitle>
         </CardHeader>
         <CardContent className="px-4 sm:px-6">
           {view.error && (
@@ -88,6 +95,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
             editedAreaName={view.editedAreaName}
             editedSubDepartmentName={view.editedSubDepartmentName}
             invalidField={view.invalidField}
+            error={view.error}
             isEditingArea={isEditingArea}
             deleteDialogKey={view.deleteDialogKey}
             deletingAreaId={deletingAreaId}
@@ -97,6 +105,6 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
           />
         </CardContent>
       </Card>
-    </div>
+    </section>
   );
 }

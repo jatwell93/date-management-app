@@ -1,12 +1,17 @@
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { FieldError } from './FieldError';
 import {
   AREA_NAME_MAX_LENGTH,
+  AREA_NAME_REQUIRED_MESSAGE,
   SUB_DEPARTMENT_MAX_LENGTH,
+  fieldErrorProps,
   type InvalidField,
   type StoreArea,
 } from './types';
+
+const ADD_NAME_ERROR_ID = 'newAreaName-error';
 
 interface AddAreaFormProps {
   newAreaName: string;
@@ -33,9 +38,10 @@ export function AddAreaForm({
   onParentChange,
   onSubmit,
 }: AddAreaFormProps) {
+  const nameInvalid = invalidField === 'addAreaName';
   return (
     <div className="mb-6">
-      <h3 className="text-lg font-semibold font-heading mb-2">Add expiry-check location</h3>
+      <h2 className="text-lg font-semibold font-heading mb-2">Add expiry-check location</h2>
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
         <div className="grid gap-1.5">
           <Label htmlFor="newAreaName">Area name</Label>
@@ -45,9 +51,12 @@ export function AddAreaForm({
             placeholder="Dispensary shelf"
             value={newAreaName}
             onChange={(e) => onAreaNameChange(e.target.value)}
-            aria-invalid={invalidField === 'addAreaName'}
+            {...fieldErrorProps(ADD_NAME_ERROR_ID, nameInvalid)}
             maxLength={AREA_NAME_MAX_LENGTH}
           />
+          <FieldError id={ADD_NAME_ERROR_ID} show={nameInvalid}>
+            {AREA_NAME_REQUIRED_MESSAGE}
+          </FieldError>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="newSubDepartmentName">Sub-department</Label>
@@ -64,7 +73,6 @@ export function AddAreaForm({
           <Label htmlFor="newParentDepartmentId">Parent department</Label>
           <select
             id="newParentDepartmentId"
-            aria-label="Parent department"
             value={newParentDepartmentId}
             onChange={(e) => onParentChange(e.target.value)}
             className="border-input h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"

@@ -37,9 +37,9 @@ export function FloorProgressSection({
     <section className="mb-8 space-y-4" aria-labelledby="floor-progress-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 id="floor-progress-heading" className="text-lg font-semibold font-heading">
-            Floor Progress
-          </h3>
+          <h2 id="floor-progress-heading" className="text-lg font-semibold font-heading">
+            Floor progress
+          </h2>
           {floorProgress?.activeCycle ? (
             <p className="text-sm text-semantic-text-secondary">{floorProgress.activeCycle.name}</p>
           ) : (
@@ -93,6 +93,69 @@ export function FloorProgressSection({
   );
 }
 
+function CoverageBar({ percent }: { percent: number }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span id="store-coverage-label" className="font-medium text-semantic-text-primary">
+          Store coverage
+        </span>
+        <span className="tabular-nums text-semantic-text-secondary">{percent}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-labelledby="store-coverage-label"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-valuetext={`${percent}% of bays checked`}
+        className="h-2 rounded bg-semantic-surface-3"
+      >
+        <div className="h-2 rounded bg-semantic-primary" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function BayRow({
+  bay,
+  checkingBayId,
+  onRecordBayCheck,
+}: {
+  bay: FloorProgressBay;
+  checkingBayId: number | null;
+  onRecordBayCheck: (bay: FloorProgressBay) => void;
+}) {
+  const isChecked = bay.state === 'checked';
+  return (
+    <div className="grid gap-2 rounded border border-hairline bg-semantic-surface-1 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+      <div>
+        <p className="font-medium text-semantic-text-primary">{bay.name}</p>
+        <p
+          className={
+            bay.state === 'overdue'
+              ? 'text-sm font-medium text-semantic-warning-muted-foreground'
+              : 'text-sm text-semantic-text-secondary'
+          }
+        >
+          {renderBayState(bay)}
+          {bay.checkedBy?.name ? ` by ${bay.checkedBy.name}` : ''}
+          {bay.checkedAt ? ` at ${formatLastChecked(bay.checkedAt)}` : ''}
+        </p>
+      </div>
+      <Button
+        variant={isChecked ? 'outline' : 'default'}
+        className="min-h-11"
+        disabled={isChecked || checkingBayId !== null}
+        onClick={() => onRecordBayCheck(bay)}
+        aria-label={isChecked ? `${bay.name} checked` : `Mark ${bay.name} checked`}
+      >
+        {checkingBayId === bay.id ? 'Checking' : isChecked ? 'Checked' : 'Mark checked'}
+      </Button>
+    </div>
+  );
+}
+
 function FloorProgressDepartments({
   floorProgress,
   checkingBayId,
@@ -104,20 +167,7 @@ function FloorProgressDepartments({
 }) {
   return (
     <div className="space-y-4">
-      <div>
-        <div className="mb-1 flex items-center justify-between text-sm">
-          <span className="font-medium text-semantic-text-primary">Store coverage</span>
-          <span className="tabular-nums text-semantic-text-secondary">
-            {floorProgress.summary.coveragePercent}%
-          </span>
-        </div>
-        <div className="h-2 rounded bg-semantic-surface-3">
-          <div
-            className="h-2 rounded bg-semantic-primary"
-            style={{ width: `${floorProgress.summary.coveragePercent}%` }}
-          />
-        </div>
-      </div>
+      <CoverageBar percent={floorProgress.summary.coveragePercent} />
 
       {floorProgress.departments.length === 0 ? (
         <p className="text-sm text-semantic-text-tertiary">
@@ -126,52 +176,29 @@ function FloorProgressDepartments({
       ) : (
         <div className="space-y-4">
           {floorProgress.departments.map((department) => (
-            <section
+            <div
               key={department.department.id ?? department.department.name}
               className="rounded-md border border-hairline bg-semantic-surface-2 p-3"
-              aria-label={`${department.department.name} progress`}
             >
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h4 className="font-heading text-base font-semibold">
+                <h3 className="font-heading text-base font-semibold">
                   {department.department.name}
-                </h4>
+                </h3>
                 <span className="text-sm tabular-nums text-semantic-text-secondary">
                   {department.summary.coveragePercent}%
                 </span>
               </div>
               <div className="grid gap-2">
                 {department.bays.map((bay) => (
-                  <div
+                  <BayRow
                     key={bay.id}
-                    className="grid gap-2 rounded border border-hairline bg-semantic-surface-1 p-3 sm:grid-cols-[1fr_auto] sm:items-center"
-                  >
-                    <div>
-                      <p className="font-medium text-semantic-text-primary">{bay.name}</p>
-                      <p
-                        className={
-                          bay.state === 'overdue'
-                            ? 'text-sm font-medium text-semantic-warning-muted-foreground'
-                            : 'text-sm text-semantic-text-secondary'
-                        }
-                      >
-                        {renderBayState(bay)}
-                        {bay.checkedBy?.name ? ` by ${bay.checkedBy.name}` : ''}
-                        {bay.checkedAt ? ` at ${formatLastChecked(bay.checkedAt)}` : ''}
-                      </p>
-                    </div>
-                    <Button
-                      variant={bay.state === 'checked' ? 'outline' : 'default'}
-                      className="min-h-11"
-                      disabled={bay.state === 'checked' || checkingBayId !== null}
-                      onClick={() => onRecordBayCheck(bay)}
-                      aria-label={`Mark ${bay.name} checked`}
-                    >
-                      {checkingBayId === bay.id ? 'Checking' : 'Mark checked'}
-                    </Button>
-                  </div>
+                    bay={bay}
+                    checkingBayId={checkingBayId}
+                    onRecordBayCheck={onRecordBayCheck}
+                  />
                 ))}
               </div>
-            </section>
+            </div>
           ))}
         </div>
       )}

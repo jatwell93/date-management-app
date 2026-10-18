@@ -45,7 +45,8 @@ export function AreaDeleteDialog({
           variant="outline"
           className={cn('text-semantic-critical-muted-foreground', triggerClassName)}
           aria-label={`Delete ${area.name}`}
-          disabled={deletingAreaId !== null}
+          // Stays enabled while a delete is in flight so Radix can return focus here
+          // when the dialog closes; the confirm action below is what stays disabled.
         >
           {deletingAreaId === area.id ? 'Deleting' : 'Delete'}
         </Button>
