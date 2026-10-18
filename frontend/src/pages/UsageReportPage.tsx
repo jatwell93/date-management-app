@@ -342,7 +342,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-4 text-center" role="status" aria-live="polite">
+      <div className="py-8 text-center" role="status" aria-live="polite">
         Loading usage report…
       </div>
     );
@@ -350,20 +350,19 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
   if (usageError && !usageData) {
     return (
-      <div className="container mx-auto p-4 text-center text-semantic-critical" role="alert">
+      <div className="py-8 text-center text-semantic-critical" role="alert">
         {usageError}
       </div>
     );
   }
 
   return (
-    <main
-      className="container mx-auto max-w-6xl space-y-7 p-4"
-      aria-label="Usage reporting workspace"
-    >
+    <section className="mx-auto max-w-6xl space-y-7" aria-labelledby="usage-report-heading">
       <header className="max-w-3xl">
         <div className="flex items-center justify-between">
-          <h1 className="font-heading text-2xl font-semibold">Usage Report</h1>
+          <h1 id="usage-report-heading" className="font-heading text-2xl font-semibold">
+            Usage Report
+          </h1>
         </div>
         <p className="mt-2 text-sm text-semantic-text-secondary">
           See which team members are adding stock, and review daily adds, edits, and removals over
@@ -372,14 +371,23 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       </header>
       {/* Chart Section */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <Card role="region" aria-label="User contribution summary">
+        <Card role="region" aria-labelledby="usage-report-by-user-heading">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <CardTitle>
-                <h2 className="text-xl font-semibold">Stock Added by Team Member</h2>
+                <h2 id="usage-report-by-user-heading" className="text-xl font-semibold">
+                  Stock Added by Team Member
+                </h2>
               </CardTitle>
+              <span id="usage-report-timeframe-label" className="sr-only">
+                Time frame
+              </span>
               <Select value={timeFrame} onValueChange={setTimeFrame}>
-                <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectTrigger
+                  id="usage-report-timeframe"
+                  aria-labelledby="usage-report-timeframe-label usage-report-timeframe"
+                  className="w-full sm:w-[180px]"
+                >
                   <SelectValue placeholder="Select time frame" />
                 </SelectTrigger>
                 <SelectContent>
@@ -407,6 +415,8 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     fallback={<div className="h-64 animate-pulse rounded bg-semantic-surface-3" />}
                   >
                     <Bar
+                      role="img"
+                      aria-label="Bar chart of items added per team member. The same figures are listed below."
                       data={itemsByUserChartData}
                       options={{
                         ...barChartOptions,
@@ -423,10 +433,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                   </Suspense>
                 </div>
                 {/* Mobile row summary for Items by User */}
-                <ul
-                  className="space-y-3 sm:hidden"
-                  aria-label="Mobile stock by team member summary"
-                >
+                <ul className="space-y-3 sm:hidden" aria-label="Stock added by team member">
                   {itemsByUser.map((item) => (
                     <li
                       key={item.userId}
@@ -470,10 +477,12 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card role="region" aria-labelledby="usage-report-by-date-heading">
           <CardHeader>
             <CardTitle>
-              <h2 className="text-xl font-semibold">Daily Stock Additions</h2>
+              <h2 id="usage-report-by-date-heading" className="text-xl font-semibold">
+                Daily Stock Additions
+              </h2>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -491,6 +500,8 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                   fallback={<div className="h-64 animate-pulse rounded bg-semantic-surface-3" />}
                 >
                   <Line
+                    role="img"
+                    aria-label="Line chart of stock additions over time. The same figures are listed below."
                     data={itemsByDateChartData}
                     options={{
                       ...lineChartOptions,
@@ -532,10 +543,12 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         </Card>
       </div>
 
-      <Card role="region" aria-label="Store walk audit">
+      <Card role="region" aria-labelledby="usage-report-walk-audit-heading">
         <CardHeader>
           <CardTitle>
-            <h2 className="text-xl font-semibold">Store Walk Audit</h2>
+            <h2 id="usage-report-walk-audit-heading" className="text-xl font-semibold">
+              Store Walk Audit
+            </h2>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -560,7 +573,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     </span>
                   </div>
                   <div className="overflow-x-auto">
-                    <Table aria-label="Store walk productivity">
+                    <Table aria-label={`${cycle.cycleName} store walk productivity`}>
                       <TableHeader>
                         <TableRow>
                           <TableHead>User</TableHead>
@@ -594,11 +607,11 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                           key={`${cycle.cycleId}-${flag.type}-${flag.userName}-${flag.message}`}
                           className="rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-3 text-sm"
                         >
-                          <p className="font-medium text-semantic-critical">
+                          <p className="font-medium text-semantic-critical-muted-foreground">
                             {formatAuditFlagType(flag.type)}
                           </p>
-                          <p className="text-semantic-critical">{flag.userName}</p>
-                          <p className="text-semantic-critical">{flag.message}</p>
+                          <p className="text-semantic-critical-muted-foreground">{flag.userName}</p>
+                          <p className="text-semantic-critical-muted-foreground">{flag.message}</p>
                         </li>
                       ))}
                     </ul>
@@ -615,17 +628,19 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       </Card>
 
       {/* Original Table Section */}
-      <Card>
+      <Card role="region" aria-labelledby="usage-report-daily-activity-heading">
         <CardHeader>
           <CardTitle>
-            <h2 className="text-xl font-semibold">Daily Activity — Last 90 Days</h2>
+            <h2 id="usage-report-daily-activity-heading" className="text-xl font-semibold">
+              Daily Activity — Last 90 Days
+            </h2>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {usageData && usageData.length > 0 ? (
             <>
               {/* Mobile daily activity summary */}
-              <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile daily activity summary">
+              <ul className="mb-5 space-y-3 md:hidden" aria-label="Daily activity">
                 {usageData.map((row) => (
                   <li
                     key={`${row.date}-${row.user_id}`}
@@ -636,21 +651,21 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                       <span className="text-xs text-semantic-text-secondary">{row.user_role}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div className="rounded bg-semantic-success-muted p-2">
+                      <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items added</p>
-                        <p className="text-lg font-bold text-semantic-success">
+                        <p className="text-lg font-bold tabular-nums text-semantic-text-primary">
                           {numberFormatter.format(row.creations)}
                         </p>
                       </div>
-                      <div className="rounded bg-semantic-warning-muted p-2">
+                      <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items edited</p>
-                        <p className="text-lg font-bold text-semantic-warning">
+                        <p className="text-lg font-bold tabular-nums text-semantic-text-primary">
                           {numberFormatter.format(row.updates)}
                         </p>
                       </div>
-                      <div className="rounded bg-semantic-critical-muted p-2">
+                      <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items removed</p>
-                        <p className="text-lg font-bold text-semantic-critical">
+                        <p className="text-lg font-bold tabular-nums text-semantic-text-primary">
                           {numberFormatter.format(row.deletions)}
                         </p>
                       </div>
@@ -660,7 +675,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               </ul>
 
               <div className="hidden md:block overflow-x-auto">
-                <Table>
+                <Table aria-label="Daily activity by user">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
@@ -699,6 +714,6 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }

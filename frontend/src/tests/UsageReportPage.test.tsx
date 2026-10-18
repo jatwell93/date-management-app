@@ -24,9 +24,14 @@ vi.mock('../lib/api.service', () => ({
   },
 }));
 
+// Forward the accessibility props the page passes so tests can assert the canvas name.
 vi.mock('react-chartjs-2', () => ({
-  Bar: () => <div role="img" aria-label="Items added by user chart" />,
-  Line: () => <div role="img" aria-label="Items added per day chart" />,
+  Bar: (props: { role?: string; 'aria-label'?: string }) => (
+    <div data-testid="bar-chart" role={props.role} aria-label={props['aria-label']} />
+  ),
+  Line: (props: { role?: string; 'aria-label'?: string }) => (
+    <div data-testid="line-chart" role={props.role} aria-label={props['aria-label']} />
+  ),
 }));
 
 describe('UsageReportPage', () => {
@@ -72,10 +77,27 @@ describe('UsageReportPage', () => {
       await screen.findByRole('heading', { name: /Stock Added by Team Member/i, level: 2 }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Usage Report/i, level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('main', { name: /Usage reporting workspace/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /User contribution summary/i })).toHaveTextContent(
+    // The app shell owns <main>; the page must not render a second one.
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /^Usage Report$/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Stock Added by Team Member/i })).toHaveTextContent(
       /Manager 1/i,
     );
+    expect(screen.getByRole('region', { name: /Daily Stock Additions/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Daily Activity/i })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /Time frame/i })).toBeInTheDocument();
+    // Charts load lazily behind Suspense, so wait for them.
+    expect(
+      await screen.findByRole('img', { name: /items added per team member/i }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole('img', { name: /stock additions over time/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: /Daily activity by user/i })).toHaveTextContent(
+      /Manager/i,
+    );
+    expect(screen.getByRole('list', { name: /^Stock added by team member$/i })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: /^Daily activity$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Daily Activity/i })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: /Daily Stock Additions/i, level: 2 }),
@@ -212,17 +234,17 @@ describe('UsageReportPage', () => {
     expect(screen.getByRole('region', { name: /Store walk audit/i })).toHaveTextContent(
       /July walk/i,
     );
-    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
-      /Alex Checker/i,
-    );
-    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
-      /75%/i,
-    );
-    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
-      /12.5 bays\/hour/i,
-    );
+    // Each cycle's table is named after its cycle so screen-reader table lists can tell them apart.
+    const walkTable = screen.getByRole('table', { name: /July walk store walk productivity/i });
+    expect(walkTable).toHaveTextContent(/Alex Checker/i);
+    expect(walkTable).toHaveTextContent(/75%/i);
+    expect(walkTable).toHaveTextContent(/12.5 bays\/hour/i);
     expect(screen.getByText(/42 min/i)).toBeInTheDocument();
     expect(screen.getByText(/Implausible pace/i)).toBeInTheDocument();
+    // Flag text uses the AA-safe muted-foreground token on the muted critical surface.
+    expect(screen.getByText(/Implausible pace/i)).toHaveClass(
+      'text-semantic-critical-muted-foreground',
+    );
     expect(screen.getByText(/All-zero findings/i)).toBeInTheDocument();
     expect(apiService.get).toHaveBeenCalledWith(
       '/reports/store-walk-audit',
