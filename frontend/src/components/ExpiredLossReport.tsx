@@ -78,7 +78,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
   }
 
   return (
-    <section className="container mx-auto px-4 py-8" aria-labelledby="expired-loss-report-heading">
+    <section className="py-8" aria-labelledby="expired-loss-report-heading">
       <h2 id="expired-loss-report-heading" className="text-2xl font-semibold font-heading mb-6">
         Expired Item Loss Report
       </h2>

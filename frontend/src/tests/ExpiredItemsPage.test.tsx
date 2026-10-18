@@ -472,4 +472,44 @@ describe('ExpiredItemsPage', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent('Failed to fetch expired items');
     });
   });
+
+  describe('responsive', () => {
+    const makeItem = (n: number) => ({
+      id: 1000 + n,
+      productId: n,
+      productName: `Bulk Item ${n}`,
+      sku: `BLK-${n}`,
+      expiryDate: '2026-05-01',
+      status: 'Expired',
+      costPrice: 1,
+      locationId: 1,
+      locationName: 'Shelf',
+      quantityAvailable: 1,
+    });
+
+    it('lists every expired item on phone, not just the first 50', async () => {
+      mockedGetExpiredItems.mockResolvedValue(Array.from({ length: 60 }, (_, i) => makeItem(i)));
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      const phoneList = await screen.findByRole('list', { name: 'Expired items' });
+      expect(within(phoneList).getAllByRole('listitem')).toHaveLength(60);
+      expect(within(phoneList).getByText('Bulk Item 59')).toBeInTheDocument();
+    });
+
+    it('gives row actions a 44px minimum touch target', async () => {
+      mockedGetExpiredItems.mockResolvedValue([makeItem(1)]);
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      const actions = [
+        ...(await screen.findAllByRole('button', { name: /as expired$/i })),
+        ...screen.getAllByRole('button', { name: /as sold through$/i }),
+        screen.getByRole('button', { name: 'Print Report' }),
+      ];
+      actions.forEach((button) => expect(button).toHaveClass('min-h-11'));
+    });
+  });
 });

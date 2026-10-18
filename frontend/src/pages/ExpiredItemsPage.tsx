@@ -469,12 +469,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   if (loading) {
     return (
-      <div
-        className="container mx-auto px-4 py-8"
-        role="status"
-        aria-live="polite"
-        aria-label="Loading expired items"
-      >
+      <div className="py-8" role="status" aria-live="polite" aria-label="Loading expired items">
         <div className="mb-6">
           <div className="h-8 w-48 rounded-md bg-semantic-surface-3 motion-safe:animate-pulse" />
           <div className="mt-2 h-4 w-80 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
@@ -495,7 +490,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="py-8">
         <div className="flex flex-col items-center gap-4 py-16 text-center">
           <p className="text-semantic-critical font-medium" role="alert">
             {error}
@@ -503,7 +498,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           <button
             type="button"
             onClick={retryFetchItems}
-            className="rounded-md border border-semantic-primary px-4 py-2 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors"
+            className="min-h-11 rounded-md border border-semantic-primary px-4 py-2 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors"
           >
             Try again
           </button>
@@ -513,10 +508,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   }
 
   return (
-    <section
-      className="print-report-root container mx-auto px-4 py-8"
-      aria-labelledby="expired-items-heading"
-    >
+    <section className="print-report-root py-8" aria-labelledby="expired-items-heading">
       <header className="mb-6">
         <div className="flex items-center justify-between">
           <h1 id="expired-items-heading" className="text-3xl font-semibold font-heading">
@@ -525,7 +517,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           <button
             type="button"
             onClick={() => window.print()}
-            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors no-print"
+            className="hidden md:flex min-h-11 items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors no-print"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -563,7 +555,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         <>
           {/* Mobile row summary */}
           <ul className="mb-5 space-y-3 lg:hidden" aria-label="Expired items">
-            {expiredItems.slice(0, 50).map((item) => (
+            {expiredItems.map((item) => (
               <li key={item.id} className="rounded-lg border bg-semantic-surface-1 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -592,7 +584,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                     aria-label={`Mark ${item.productName} as sold through`}
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className="min-h-11 flex-1"
                     disabled={isProcessing}
                   >
                     Sold Through
@@ -602,7 +594,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                     aria-label={`Mark ${item.productName} as expired`}
                     variant="outline"
                     size="sm"
-                    className="flex-1 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                    className="min-h-11 flex-1 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
                     disabled={isProcessing}
                   >
                     Expired
@@ -677,6 +669,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                             aria-label={`Mark ${item.productName} as sold through`}
                             variant="outline"
                             size="sm"
+                            className="min-h-11"
                             disabled={isProcessing}
                           >
                             Sold Through
@@ -686,7 +679,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                             aria-label={`Mark ${item.productName} as expired`}
                             variant="outline"
                             size="sm"
-                            className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                            className="min-h-11 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
                             disabled={isProcessing}
                           >
                             Expired
@@ -921,14 +914,21 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
             )}
 
             <DialogFooter className="mt-6">
-              <Button variant="outline" onClick={closeModal} disabled={isProcessing}>
+              <Button
+                variant="outline"
+                className="min-h-11"
+                onClick={closeModal}
+                disabled={isProcessing}
+              >
                 Cancel
               </Button>
               <Button
                 onClick={handleProcessItem}
                 disabled={isProcessing || !!unitsDiscardedError}
                 className={
-                  action === 'expired' ? 'bg-semantic-critical hover:bg-semantic-critical/90' : ''
+                  action === 'expired'
+                    ? 'min-h-11 bg-semantic-critical hover:bg-semantic-critical/90'
+                    : 'min-h-11'
                 }
               >
                 {action === 'expired' ? 'Mark Expired' : 'Mark Sold Through'}
@@ -950,6 +950,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel
+                    className="min-h-11"
                     onClick={() => {
                       setIsConfirmDialogOpen(false);
                       setIsModalOpen(true); // Reopen the main modal if user cancels
@@ -957,7 +958,11 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   >
                     Cancel
                   </AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmProcessItem} disabled={isProcessing}>
+                  <AlertDialogAction
+                    className="min-h-11"
+                    onClick={confirmProcessItem}
+                    disabled={isProcessing}
+                  >
                     {isProcessing ? 'Processing…' : 'Confirm'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
