@@ -47,6 +47,42 @@ const isSafeReturnUrl = (returnUrl: string | null): returnUrl is string =>
   !returnUrl.startsWith('//') &&
   !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl);
 
+type CountRow = { label: string; value: string };
+
+const countRow = (label: string, value: number | undefined): CountRow[] =>
+  value === undefined ? [] : [{ label, value: formatCount(value) }];
+
+const expiryCountRows = (result: UploadResponse): CountRow[] => [
+  ...countRow('Rows imported', result.importedCount),
+  ...countRow('Rows merged', result.mergedCount ?? result.updatedCount ?? 0),
+];
+
+const productCountRows = (result: UploadResponse): CountRow[] => [
+  ...countRow('Products imported', result.importedCount),
+  ...countRow('Products updated', result.updatedCount),
+  ...countRow('Products unchanged', result.unchangedCount),
+];
+
+const hasRejectedOrSkipped = (result: UploadResponse): boolean =>
+  result.rejectedCount !== undefined || result.skippedCount !== undefined;
+
+const processedRow = (result: UploadResponse): CountRow[] => {
+  if (result.processedCount === undefined) return [];
+  const total = result.totalCount !== undefined ? ` / ${formatCount(result.totalCount)}` : '';
+  return [{ label: 'Rows processed', value: `${formatCount(result.processedCount)}${total}` }];
+};
+
+const sharedCountRows = (result: UploadResponse, isExpiryImport: boolean): CountRow[] => [
+  ...countRow('Errors', result.errorCount),
+  ...(hasRejectedOrSkipped(result)
+    ? countRow(
+        isExpiryImport ? 'Rows rejected' : 'Rows skipped',
+        result.rejectedCount ?? result.skippedCount ?? 0,
+      )
+    : []),
+  ...processedRow(result),
+];
+
 const ResultCounts: React.FC<{ uploadResult: UploadResponse; isExpiryImport: boolean }> = ({
   uploadResult,
   isExpiryImport,
@@ -54,45 +90,17 @@ const ResultCounts: React.FC<{ uploadResult: UploadResponse; isExpiryImport: boo
   if (uploadResult.importedCount === undefined && uploadResult.processedCount === undefined) {
     return null;
   }
+  const rows = [
+    ...(isExpiryImport ? expiryCountRows(uploadResult) : productCountRows(uploadResult)),
+    ...sharedCountRows(uploadResult, isExpiryImport),
+  ];
   return (
     <div className="mt-2">
-      {uploadResult.importedCount !== undefined && (
-        <p>
-          {isExpiryImport ? 'Rows imported' : 'Products imported'}:{' '}
-          {formatCount(uploadResult.importedCount)}
+      {rows.map(({ label, value }) => (
+        <p key={label}>
+          {label}: {value}
         </p>
-      )}
-      {isExpiryImport ? (
-        <p>
-          Rows merged: {formatCount(uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0)}
-        </p>
-      ) : (
-        <>
-          {uploadResult.updatedCount !== undefined && (
-            <p>Products updated: {formatCount(uploadResult.updatedCount)}</p>
-          )}
-          {uploadResult.unchangedCount !== undefined && (
-            <p>Products unchanged: {formatCount(uploadResult.unchangedCount)}</p>
-          )}
-        </>
-      )}
-      {uploadResult.errorCount !== undefined && (
-        <p>Errors: {formatCount(uploadResult.errorCount)}</p>
-      )}
-      {(uploadResult.rejectedCount !== undefined || uploadResult.skippedCount !== undefined) && (
-        <p>
-          {isExpiryImport ? 'Rows rejected' : 'Rows skipped'}:{' '}
-          {formatCount(uploadResult.rejectedCount ?? uploadResult.skippedCount ?? 0)}
-        </p>
-      )}
-      {uploadResult.processedCount !== undefined && (
-        <p>
-          Rows processed: {formatCount(uploadResult.processedCount)}
-          {uploadResult.totalCount !== undefined
-            ? ` / ${formatCount(uploadResult.totalCount)}`
-            : ''}
-        </p>
-      )}
+      ))}
     </div>
   );
 };
