@@ -55,6 +55,13 @@ interface ToastState {
 }
 
 const ALL_LOCATIONS = '__all__';
+const PAGE_HEADING_ID = 'expiry-entries-page-heading';
+const TABLE_HEADING_ID = 'expiry-entries-table-heading';
+
+const editButtonId = (inventoryId: number) => `expiry-entry-edit-${inventoryId}`;
+const editDateInputId = (inventoryId: number) => `expiry-entry-edit-date-${inventoryId}`;
+const deleteButtonId = (inventoryId: number) => `expiry-entry-delete-${inventoryId}`;
+const deleteCancelButtonId = (inventoryId: number) => `expiry-entry-delete-cancel-${inventoryId}`;
 
 const currencyFormatter = new Intl.NumberFormat('en-AU', {
   style: 'currency',
@@ -130,6 +137,20 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   const showToast = useCallback((message: string, type: ToastState['type']) => {
     setToast({ message, type, visible: true });
   }, []);
+
+  // Row actions swap their buttons out (Edit -> Save/Cancel, Delete -> Confirm/Cancel),
+  // which would otherwise drop keyboard focus to <body>. Queue the element id to focus
+  // once the next render has mounted it.
+  const pendingFocusIdRef = useRef<string | null>(null);
+  const queueFocus = useCallback((id: string) => {
+    pendingFocusIdRef.current = id;
+  }, []);
+  useEffect(() => {
+    const id = pendingFocusIdRef.current;
+    if (!id) return;
+    pendingFocusIdRef.current = null;
+    document.getElementById(id)?.focus();
+  });
 
   const fetchReportData = useCallback(
     async (signal?: AbortSignal) => {
@@ -224,6 +245,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         authToken,
       );
       setReportData(updatedData);
+      queueFocus(editButtonId(editingItem.inventoryId));
       setEditingItem(null);
       showToast('Item updated successfully.', 'success');
       return true;
@@ -235,7 +257,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
     } finally {
       setSaving(false);
     }
-  }, [editingItem, token, getFreshApiToken, showToast]);
+  }, [editingItem, token, getFreshApiToken, showToast, queueFocus]);
 
   const handleEdit = useCallback(
     async (item: ExpiryEntryItem) => {
@@ -246,19 +268,21 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         }
       }
       setActionError(null);
+      queueFocus(editDateInputId(item.inventoryId));
       setEditingItem({
         inventoryId: item.inventoryId,
         expiryDate: item.expiryDate,
         locationId: item.locationId,
       });
     },
-    [editingItem, handleSaveEdit],
+    [editingItem, handleSaveEdit, queueFocus],
   );
 
   const handleCancelEdit = useCallback(() => {
+    if (editingItem) queueFocus(editButtonId(editingItem.inventoryId));
     setEditingItem(null);
     setActionError(null);
-  }, []);
+  }, [editingItem, queueFocus]);
 
   const handleDelete = useCallback(
     async (inventoryId: number) => {
@@ -276,6 +300,8 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           authToken,
         );
         setReportData(updatedData);
+        // The row is gone; return focus to the table heading rather than <body>.
+        queueFocus(TABLE_HEADING_ID);
         setDeleteConfirmation(null);
         showToast('Item deleted.', 'success');
       } catch (err: unknown) {
@@ -286,17 +312,26 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         setDeleting(false);
       }
     },
-    [token, getFreshApiToken, showToast],
+    [token, getFreshApiToken, showToast, queueFocus],
   );
 
-  const confirmDelete = useCallback((inventoryId: number) => {
-    setDeleteConfirmation(inventoryId);
-    setActionError(null);
-  }, []);
+  const confirmDelete = useCallback(
+    (inventoryId: number) => {
+      // Land on Cancel, not the destructive confirm, so a stray Enter is safe.
+      queueFocus(deleteCancelButtonId(inventoryId));
+      setDeleteConfirmation(inventoryId);
+      setActionError(null);
+    },
+    [queueFocus],
+  );
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirmation(null);
-  }, []);
+  const cancelDelete = useCallback(
+    (inventoryId: number) => {
+      queueFocus(deleteButtonId(inventoryId));
+      setDeleteConfirmation(null);
+    },
+    [queueFocus],
+  );
 
   // Define columns for the data table
   const columns: ColumnDef<ExpiryEntryItem>[] = useMemo(
@@ -311,7 +346,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             return (
               <div className="min-w-[140px]">
                 <Input
+                  id={editDateInputId(row.original.inventoryId)}
                   type="date"
+                  aria-label={`Expiry date for ${row.original.productName}`}
                   value={editingItem.expiryDate}
                   onChange={(e) =>
                     setEditingItem({
@@ -396,7 +433,14 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
 
           return (
             <div className={`min-w-[100px] tabular-nums ${urgencyClass}`}>
-              {daysToExpiry === null ? '—' : daysToExpiry}
+              {daysToExpiry === null ? (
+                <>
+                  <span aria-hidden="true">—</span>
+                  <span className="sr-only">Date not available</span>
+                </>
+              ) : (
+                daysToExpiry
+              )}
             </div>
           );
         },
@@ -503,7 +547,10 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                     }
                     disabled={saving || storeAreas.length === 0}
                   >
-                    <SelectTrigger className="w-full" aria-label="Location">
+                    <SelectTrigger
+                      className="w-full"
+                      aria-label={`Location for ${row.original.productName}`}
+                    >
                       <SelectValue
                         placeholder={storeAreas.length === 0 ? 'Loading…' : 'Location'}
                       />
@@ -561,9 +608,11 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   aria-busy={deleting}
                 >
                   {deleting ? 'Deleting…' : 'Confirm delete'}
+                  <span className="sr-only"> {row.original.productName}</span>
                 </Button>
                 <Button
-                  onClick={cancelDelete}
+                  id={deleteCancelButtonId(rowId)}
+                  onClick={() => cancelDelete(rowId)}
                   disabled={deleting}
                   size="sm"
                   variant="neutral"
@@ -604,23 +653,25 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           return (
             <div className="flex gap-2 justify-start min-w-[140px]">
               <Button
+                id={editButtonId(rowId)}
                 onClick={() => handleEdit(row.original)}
                 disabled={!!anotherRowEditing || deleting}
                 size="sm"
                 variant="default"
                 className="min-w-[50px] font-medium"
               >
-                Edit
+                Edit<span className="sr-only"> {row.original.productName}</span>
               </Button>
               {canDelete && (
                 <Button
+                  id={deleteButtonId(rowId)}
                   onClick={() => confirmDelete(rowId)}
                   disabled={!!editingItem || deleting}
                   size="sm"
                   variant="destructive"
                   className="min-w-[50px] font-medium"
                 >
-                  Delete
+                  Delete<span className="sr-only"> {row.original.productName}</span>
                 </Button>
               )}
             </div>
@@ -681,10 +732,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
 
   if (loading) {
     return (
-      <main
-        className="container mx-auto max-w-7xl space-y-6 p-4"
-        aria-label="All expiry entries workspace"
-      >
+      <section className="space-y-6" aria-label="All expiry entries" aria-busy="true">
         <header className="mb-5">
           <div
             className="h-7 w-72 animate-pulse rounded bg-semantic-surface-4"
@@ -709,13 +757,13 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         <p className="sr-only" role="status" aria-live="polite">
           Loading all expiry entries…
         </p>
-      </main>
+      </section>
     );
   }
 
   if (fetchError) {
     return (
-      <main className="container mx-auto max-w-7xl p-4" aria-label="All expiry entries workspace">
+      <section aria-label="All expiry entries">
         <div
           role="alert"
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-6 text-center"
@@ -725,24 +773,24 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             Try again
           </Button>
         </div>
-      </main>
+      </section>
     );
   }
 
   const hasData = reportData && reportData.length > 0;
 
   return (
-    <main
-      className="print-report-root container mx-auto max-w-7xl space-y-6 p-4"
-      aria-label="All expiry entries workspace"
-    >
+    <section className="print-report-root space-y-6" aria-labelledby={PAGE_HEADING_ID}>
       <header className="mb-5">
         <div className="flex items-center justify-between">
-          <h1 className="font-heading text-2xl font-semibold">All Expiry Entries</h1>
-          <button
+          <h1 id={PAGE_HEADING_ID} className="font-heading text-2xl font-semibold">
+            All Expiry Entries
+          </h1>
+          <Button
+            type="button"
+            variant="outline"
             onClick={() => window.print()}
-            aria-label="Print this report"
-            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
+            className="no-print hidden md:inline-flex"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -761,7 +809,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
               <rect x="6" y="14" width="12" height="8" />
             </svg>
             Print Report
-          </button>
+          </Button>
         </div>
         <p className="mt-2 max-w-3xl text-sm text-semantic-text-secondary">
           Browse and sort every active expiry entry. Fix data-entry errors by editing an item&apos;s
@@ -773,14 +821,14 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       {actionError && (
         <div
           role="alert"
-          aria-live="assertive"
           className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted px-4 py-3 text-sm text-semantic-critical-muted-foreground"
         >
           <span>{actionError}</span>
           <button
+            type="button"
             onClick={() => setActionError(null)}
             aria-label="Dismiss error"
-            className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+            className="shrink-0 rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
           >
             &times;
           </button>
@@ -788,7 +836,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       )}
 
       {hasData ? (
-        <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile expiry entry summary">
+        <ul className="mb-5 space-y-3 md:hidden" aria-label="Expiry entry summary">
           {filteredData.slice(0, 50).map((item) => {
             const daysToExpiry = getDaysToExpiry(item.expiryDate);
             const matrix = markdownConfig.matrices?.[item.creditScope ?? 'NO_CREDIT'];
@@ -846,7 +894,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       <Card className="print-report-target overflow-hidden">
         <CardHeader className="gap-4 sm:flex sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>
-            <h2 className="text-xl font-semibold">Expiry entries</h2>
+            <h2 id={TABLE_HEADING_ID} tabIndex={-1} className="text-xl font-semibold outline-none">
+              Expiry entries
+            </h2>
           </CardTitle>
           {hasData ? (
             <div className="no-print flex items-center gap-2">
@@ -944,6 +994,6 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         isVisible={toast.visible}
         onClose={() => setToast((t) => ({ ...t, visible: false }))}
       />
-    </main>
+    </section>
   );
 }

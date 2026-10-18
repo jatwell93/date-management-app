@@ -108,8 +108,8 @@ describe('ExpiryEntriesPage', () => {
 
     await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
 
-    expect(screen.getAllByRole('button', { name: /^Edit$/i }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Edit /i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /^Delete /i })).not.toBeInTheDocument();
   });
 
   it('shows delete controls for admins', async () => {
@@ -119,8 +119,62 @@ describe('ExpiryEntriesPage', () => {
 
     await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
 
-    expect(screen.getAllByRole('button', { name: /^Edit$/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /^Delete$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^Edit /i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^Delete /i }).length).toBeGreaterThan(0);
+  });
+
+  it('names row actions by product and keeps a single main landmark', async () => {
+    mockApi();
+
+    const { container } = render(
+      <ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />,
+    );
+
+    await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
+
+    // The app shell owns <main>; the page must not nest another one.
+    expect(container.querySelector('main')).toBeNull();
+    expect(screen.getByRole('region', { name: 'All Expiry Entries' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Front Counter Product' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Aisle One Product' })).toBeInTheDocument();
+    // Visible text and accessible name match (WCAG 2.5.3).
+    expect(screen.getByRole('button', { name: 'Print Report' })).toBeInTheDocument();
+  });
+
+  it('moves focus into the edit row and back to Edit on cancel', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    const editButton = await screen.findByRole('button', { name: 'Edit Front Counter Product' });
+    fireEvent.click(editButton);
+
+    const dateInput = await screen.findByLabelText('Expiry date for Front Counter Product');
+    await waitFor(() => expect(dateInput).toHaveFocus());
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit Front Counter Product' })).toHaveFocus(),
+    );
+  });
+
+  it('focuses Cancel when a delete is pending and returns focus on cancel', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Aisle One Product' }));
+
+    expect(
+      screen.getByRole('button', { name: 'Confirm delete Aisle One Product' }),
+    ).toBeInTheDocument();
+    const cancel = screen.getByRole('button', { name: /^Cancel$/i });
+    await waitFor(() => expect(cancel).toHaveFocus());
+
+    fireEvent.click(cancel);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Delete Aisle One Product' })).toHaveFocus(),
+    );
   });
 
   it('exposes a location filter control', async () => {
