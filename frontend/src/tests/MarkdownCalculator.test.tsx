@@ -373,6 +373,18 @@ describe('MarkdownCalculator', () => {
     expect(screen.getByText(/\$25\.00/i)).toHaveClass('tabular-nums');
   });
 
+  it('keeps the last-scanned live region mounted before the first scan', async () => {
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    const lastScanned = screen.getByRole('status', { name: /last scanned code/i });
+    expect(lastScanned).toBeEmptyDOMElement();
+
+    fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+    expect(screen.getByRole('status', { name: /last scanned code/i })).toBe(lastScanned);
+    expect(lastScanned).toHaveTextContent('Last scanned: SKU123');
+  });
+
   it('calculates when the form is submitted with Enter', async () => {
     render(<MarkdownCalculator token={mockToken} />);
     await waitForMatrixReady();

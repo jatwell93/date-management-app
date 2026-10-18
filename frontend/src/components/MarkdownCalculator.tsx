@@ -215,15 +215,16 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
               <Scanner onScan={handleBarcodeScan} isHandheld />
             </section>
 
-            {scannedInput && (
-              <p
-                role="status"
-                aria-label="Last scanned code"
-                className="min-w-0 break-words text-sm text-muted-foreground"
-              >
-                Last scanned: {scannedInput}
-              </p>
-            )}
+            {/* Kept mounted so screen readers announce each new scan reliably. */}
+            <p
+              role="status"
+              aria-label="Last scanned code"
+              className={
+                scannedInput ? 'min-w-0 break-words text-sm text-muted-foreground' : 'sr-only'
+              }
+            >
+              {scannedInput ? `Last scanned: ${scannedInput}` : null}
+            </p>
 
             {error && (
               <p
