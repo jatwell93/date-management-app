@@ -682,6 +682,10 @@ describe('StoreAreaManagementPage UI audit', () => {
     expect(checkedBay).toBeDisabled();
     expect(checkedBay).toHaveTextContent('Checked');
     expect(screen.getByRole('button', { name: 'Mark Hair Bay 2 checked' })).toBeEnabled();
+
+    const bays = within(screen.getByRole('list', { name: 'Hair bays' })).getAllByRole('listitem');
+    expect(bays).toHaveLength(2);
+    bays.forEach((bay) => expect(bay).not.toHaveClass('border'));
   });
 
   it('ties the add-name validation error to its field', async () => {

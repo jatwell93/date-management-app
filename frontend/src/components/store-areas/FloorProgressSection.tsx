@@ -118,6 +118,11 @@ function CoverageBar({ percent }: { percent: number }) {
   );
 }
 
+function bayButtonText(bay: FloorProgressBay, checkingBayId: number | null): string {
+  if (checkingBayId === bay.id) return 'Checking';
+  return bay.state === 'checked' ? 'Checked' : 'Mark checked';
+}
+
 function BayRow({
   bay,
   checkingBayId,
@@ -129,7 +134,7 @@ function BayRow({
 }) {
   const isChecked = bay.state === 'checked';
   return (
-    <div className="grid gap-2 rounded border border-hairline bg-semantic-surface-1 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+    <li className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1fr_auto] sm:items-center">
       <div>
         <p className="font-medium text-semantic-text-primary">{bay.name}</p>
         <p
@@ -151,9 +156,9 @@ function BayRow({
         onClick={() => onRecordBayCheck(bay)}
         aria-label={isChecked ? `${bay.name} checked` : `Mark ${bay.name} checked`}
       >
-        {checkingBayId === bay.id ? 'Checking' : isChecked ? 'Checked' : 'Mark checked'}
+        {bayButtonText(bay, checkingBayId)}
       </Button>
-    </div>
+    </li>
   );
 }
 
@@ -189,7 +194,10 @@ function FloorProgressDepartments({
                   {department.summary.coveragePercent}%
                 </span>
               </div>
-              <div className="grid gap-2">
+              <ul
+                aria-label={`${department.department.name} bays`}
+                className="divide-y divide-hairline"
+              >
                 {department.bays.map((bay) => (
                   <BayRow
                     key={bay.id}
@@ -198,7 +206,7 @@ function FloorProgressDepartments({
                     onRecordBayCheck={onRecordBayCheck}
                   />
                 ))}
-              </div>
+              </ul>
             </div>
           ))}
         </div>
