@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { DetailedExpiryReportPage } from '../pages/DetailedExpiryReportPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
@@ -25,6 +26,13 @@ vi.mock('../lib/api.service', () => ({
     delete: vi.fn(),
   },
 }));
+
+const renderPage = (token: string | null) =>
+  render(
+    <MemoryRouter>
+      <DetailedExpiryReportPage token={token} />
+    </MemoryRouter>,
+  );
 
 const daysFromNow = (n: number) => {
   const d = new Date();
@@ -59,7 +67,7 @@ describe('DetailedExpiryReportPage', () => {
       return Promise.resolve([]);
     });
 
-    render(<DetailedExpiryReportPage token="test-session-value" />);
+    renderPage('test-session-value');
 
     expect(screen.getByRole('status')).toHaveTextContent(/Loading detailed expiry report/i);
 
@@ -83,7 +91,7 @@ describe('DetailedExpiryReportPage', () => {
   });
 
   it('announces missing token and fetch errors', async () => {
-    render(<DetailedExpiryReportPage token={null} />);
+    renderPage(null);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Authentication token is missing/i);
@@ -112,7 +120,7 @@ describe('DetailedExpiryReportPage', () => {
       return Promise.resolve([]);
     });
 
-    render(<DetailedExpiryReportPage token="test-session-value" />);
+    renderPage('test-session-value');
 
     await screen.findByRole('heading', { name: /Markdown Worklist/i, level: 1 });
 
@@ -159,7 +167,7 @@ describe('DetailedExpiryReportPage', () => {
     // @ts-expect-error — apiService.post is mocked as vi.fn()
     apiService.post.mockResolvedValue({});
 
-    render(<DetailedExpiryReportPage token="test-session-value" />);
+    renderPage('test-session-value');
 
     const markdown1Group = await screen.findByRole('region', { name: /Apply Markdown 1/i });
     expect(markdown1Group).toHaveTextContent('M1 Product');
@@ -208,7 +216,7 @@ describe('DetailedExpiryReportPage', () => {
     // @ts-expect-error — apiService.post is mocked as vi.fn()
     apiService.post.mockRejectedValue(new Error('Could not record sold through.'));
 
-    render(<DetailedExpiryReportPage token="test-session-value" />);
+    renderPage('test-session-value');
 
     fireEvent.click(
       await screen.findByRole('button', { name: /^Sold through\s*:\s*Failing Product$/ }),
@@ -265,7 +273,7 @@ describe('DetailedExpiryReportPage', () => {
       return Promise.resolve([]);
     });
 
-    render(<DetailedExpiryReportPage token="test-session-value" />);
+    renderPage('test-session-value');
 
     const group = await screen.findByRole('region', { name: /Apply Markdown 1/i });
     // 50% off the $40 retail price = $20.00 — not the $5.00 the default cost ladder

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
@@ -298,7 +299,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-heading text-2xl font-semibold">Markdown Worklist (Next 90 Days)</h1>
           <Button asChild variant="outline" className="min-h-11">
-            <a href="/expiry-entries">Browse all expiry entries</a>
+            <Link to="/expiry-entries">Browse all expiry entries</Link>
           </Button>
         </div>
         <p className="mt-2 max-w-3xl text-sm text-semantic-text-secondary">
