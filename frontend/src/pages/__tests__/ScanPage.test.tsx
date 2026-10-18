@@ -554,6 +554,46 @@ describe('ScanPage Integration', () => {
     expect(screen.getByRole('heading', { level: 2, name: /Recent entries/i })).toBeInTheDocument();
   });
 
+  it('gives page-level controls 44px touch targets', async () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      if (url.includes('/products/by-barcode/1234567890')) {
+        return Promise.resolve(mockProductBarcode);
+      }
+      if (url.includes('/inventory-items/recent')) {
+        return Promise.resolve([
+          {
+            id: 8,
+            productId: 1,
+            expiryDate: '2025-12-31T00:00:00.000Z',
+            locationId: 1,
+            status: 'active',
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        ]);
+      }
+      if (url.includes('/inventory-items/')) return Promise.resolve([]);
+      return Promise.reject(new Error(`Not found call: ${url}`));
+    });
+
+    render(
+      <HandheldProvider>
+        <ScanPage token={mockToken} />
+      </HandheldProvider>,
+    );
+
+    await screen.findByTestId('mock-scanner');
+    userEvent.click(screen.getByTestId('trigger-scan'));
+    await screen.findByText('Test Product Barcode');
+
+    expect(screen.getByLabelText(/Expiry Date/i)).toHaveClass('h-11');
+    expect(screen.getByRole('button', { name: /Save expiry item/i })).toHaveClass('min-h-11');
+    const deleteButton = await screen.findByRole('button', { name: /Delete entry expiring/i });
+    expect(deleteButton).toHaveClass('min-h-11');
+    expect(deleteButton).not.toHaveClass('h-8');
+  });
+
   it('announces success politely instead of as an alert', async () => {
     (apiService.get as jest.Mock).mockImplementation((url) => {
       if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
@@ -816,6 +856,28 @@ describe('ScanPage Integration', () => {
       // Should render HandheldScanner (which uses camera mode by default)
       expect(screen.getByTestId('handheld-scanner')).toBeInTheDocument();
       expect(screen.queryByTestId('mock-scanner')).not.toBeInTheDocument();
+    });
+
+    it('pads scan results away from the screen edge in handheld mode', async () => {
+      (apiService.get as jest.Mock).mockImplementation((url) => {
+        if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+        return Promise.reject(new Error('Network request failed'));
+      });
+
+      render(
+        <HandheldProvider>
+          <ScanPage token={mockToken} />
+        </HandheldProvider>,
+      );
+
+      await waitFor(() => expect(apiService.get).toHaveBeenCalledWith('/store-areas', mockToken));
+      userEvent.click(screen.getByTestId('handheld-scan-trigger'));
+
+      const alert = await screen.findByText(/Error: Network request failed/i);
+      expect(alert.closest('.px-3')).not.toBeNull();
+      expect(screen.getByRole('heading', { level: 1, name: /Inventory scan/i })).toHaveClass(
+        'sr-only',
+      );
     });
 
     it('auto-populates expiry date from GS1 barcode data in handheld mode', async () => {

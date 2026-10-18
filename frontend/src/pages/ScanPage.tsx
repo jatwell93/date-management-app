@@ -494,225 +494,230 @@ export function ScanPage({ token }: ScanPageProps) {
           ) : (
             <Scanner onScan={handleBarcodeScan} />
           )}
-          {error && (
-            <div
-              ref={errorRef}
-              className="bg-semantic-critical-muted border border-semantic-critical text-semantic-critical-muted-foreground px-4 py-3 rounded relative text-center mt-4"
-              role="alert"
-            >
-              <span className="block sm:inline">Error: {error}</span>
-            </div>
-          )}
-          {successMessage && (
-            <div
-              className="bg-semantic-success-muted border border-semantic-success text-semantic-success-muted-foreground px-4 py-3 rounded relative text-center mt-4"
-              role="status"
-              aria-live="polite"
-            >
-              <span className="block sm:inline">{successMessage}</span>
-            </div>
-          )}
-          {scannedBarcode && !productDetails && !successMessage && showNewProductForm && (
-            <div className="mt-6 p-4 border rounded-md bg-muted">
-              <p className="text-center font-semibold text-foreground">
-                No catalog match for barcode {scannedBarcode}
-              </p>
-              <p className="text-center text-sm mb-4 text-muted-foreground">
-                Create a product record before adding expiry stock.
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="newProductName" className="text-foreground">
-                    Product Name
-                  </Label>
-                  <Input
-                    id="newProductName"
-                    type="text"
-                    value={newProductName}
-                    onChange={(e) => setNewProductName(e.target.value)}
-                    className="mt-1 border-input bg-background text-foreground"
-                    placeholder="Enter product name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="newProductSKU" className="text-foreground">
-                    SKU
-                  </Label>
-                  <Input
-                    id="newProductSKU"
-                    type="text"
-                    value={newProductSKU}
-                    onChange={(e) => setNewProductSKU(e.target.value)}
-                    className="mt-1 border-input bg-background text-foreground"
-                    placeholder="Enter SKU"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="newProductCostPrice" className="text-foreground">
-                    Cost Price
-                  </Label>
-                  <Input
-                    id="newProductCostPrice"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    value={newProductCostPrice}
-                    onChange={(e) => setNewProductCostPrice(e.target.value)}
-                    className="mt-1 border-input bg-background text-foreground"
-                    placeholder="Enter cost price"
-                  />
-                </div>
-                <Button onClick={handleAddNewProduct} className="w-full">
-                  Create product
-                </Button>
+          <div className={isHandheld ? 'px-3 pb-6' : undefined}>
+            {error && (
+              <div
+                ref={errorRef}
+                className="bg-semantic-critical-muted border border-semantic-critical text-semantic-critical-muted-foreground px-4 py-3 rounded relative text-center mt-4"
+                role="alert"
+              >
+                <span className="block sm:inline">Error: {error}</span>
               </div>
-            </div>
-          )}
-          {productDetails && (
-            <div className="mt-6 p-4 border rounded-md bg-muted">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="font-semibold text-foreground">Product Details:</p>
-                  <p className="text-foreground">
-                    <span className="font-medium">Name:</span> {productDetails.name}
-                  </p>
-                  <p className="text-foreground">
-                    <span className="font-medium">SKU:</span> {productDetails.sku}
-                  </p>
-                  <p className="text-foreground">
-                    <span className="font-medium">Barcode:</span> {productDetails.barcode}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-foreground">
-                    <span className="font-medium">Cost Price:</span>{' '}
-                    {typeof productDetails.costPrice === 'number' &&
-                    Number.isFinite(productDetails.costPrice)
-                      ? `$${productDetails.costPrice.toFixed(2)}`
-                      : 'Not available'}
-                  </p>
-                  <div className="mt-2">
-                    <MarkdownCreditScopeBadge
-                      creditScope={productDetails.creditScope ?? 'NO_CREDIT'}
-                      creditScopeReason={productDetails.creditScopeReason ?? 'NO_CREDIT'}
-                      creditSupplierId={productDetails.creditSupplierId ?? null}
-                      creditSupplierName={productDetails.creditSupplierName ?? null}
+            )}
+            {successMessage && (
+              <div
+                className="bg-semantic-success-muted border border-semantic-success text-semantic-success-muted-foreground px-4 py-3 rounded relative text-center mt-4"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="block sm:inline">{successMessage}</span>
+              </div>
+            )}
+            {scannedBarcode && !productDetails && !successMessage && showNewProductForm && (
+              <div className="mt-6 p-4 border rounded-md bg-muted">
+                <p className="text-center font-semibold text-foreground">
+                  No catalog match for barcode {scannedBarcode}
+                </p>
+                <p className="text-center text-sm mb-4 text-muted-foreground">
+                  Create a product record before adding expiry stock.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="newProductName" className="text-foreground">
+                      Product Name
+                    </Label>
+                    <Input
+                      id="newProductName"
+                      type="text"
+                      value={newProductName}
+                      onChange={(e) => setNewProductName(e.target.value)}
+                      className="mt-1 h-11 border-input bg-background text-foreground"
+                      placeholder="Enter product name"
                     />
                   </div>
-
-                  <MarkdownMatricesNotice {...markdownConfig} />
-                  {markdownPrice !== null && markdownPercentage !== null && (
-                    <p className="text-semantic-warning font-semibold mt-1">
-                      Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}
-                    </p>
-                  )}
-                  {isExpiredStock && (
-                    <div className="mt-2">
-                      <Badge variant="error">Expired</Badge>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-6">
-                <div>
-                  <Label htmlFor="expiryDate" className="text-foreground">
-                    Expiry Date
-                  </Label>
-                  <Input
-                    id="expiryDate"
-                    type="date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                    className="mt-1 border-input bg-background text-foreground w-full"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="location" className="text-foreground">
-                    Location
-                  </Label>
-                  <Select onValueChange={setSelectedLocationId} value={selectedLocationId}>
-                    <SelectTrigger id="location" className="w-full mt-1 border-input bg-background text-foreground">
-                      <SelectValue placeholder="Select a location" />
-                    </SelectTrigger>
-                    <SelectContent className="border-input bg-background text-foreground">
-                      {storeAreas.map((area) => (
-                        <SelectItem key={area.id} value={area.id.toString()}>
-                          {area.name}
-                          {area.subDepartment ? ` (${area.subDepartment})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={handleSubmit} className="w-full">
-                  Save expiry item
-                </Button>
-              </div>
-            </div>
-          )}
-          {productDetails && recentEntries && recentEntries.length > 0 && (
-            <div className="mt-8 p-4 border rounded-md bg-muted">
-              <h2 className="font-semibold text-lg text-foreground mb-4">Recent entries</h2>
-              <div className="space-y-3">
-                {recentEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between p-3 bg-background border rounded-md"
-                  >
-                    <div>
-                      <p className="text-foreground">
-                        <span className="font-medium">Expiry Date:</span>{' '}
-                        {new Date(entry.expiryDate).toLocaleDateString('en-AU', {
-                          timeZone: 'Australia/Sydney',
-                        })}
-                      </p>
-                      <p className="text-muted-foreground text-sm">
-                        Added:{' '}
-                        {new Date(entry.createdAt).toLocaleString('en-AU', {
-                          timeZone: 'Australia/Sydney',
-                        })}
-                      </p>
-                    </div>
-                    <AlertDialog
-                      open={isAlertDialogOpen && itemToDelete === entry.id}
-                      onOpenChange={setAlertDialogOpen}
-                    >
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteRecentEntry(entry.id)}
-                          aria-label={`Delete entry expiring ${formatExpiryDateForCopy(entry.expiryDate)}`}
-                        >
-                          Delete entry
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete expiry entry?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {entryPendingDelete
-                              ? `This removes the ${formatExpiryDateForCopy(
-                                  entryPendingDelete.expiryDate,
-                                )} expiry entry for ${productDetails.name}. This cannot be undone.`
-                              : 'This removes the selected expiry entry. This cannot be undone.'}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={confirmDelete}>
-                            Delete entry
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                  <div>
+                    <Label htmlFor="newProductSKU" className="text-foreground">
+                      SKU
+                    </Label>
+                    <Input
+                      id="newProductSKU"
+                      type="text"
+                      value={newProductSKU}
+                      onChange={(e) => setNewProductSKU(e.target.value)}
+                      className="mt-1 h-11 border-input bg-background text-foreground"
+                      placeholder="Enter SKU"
+                    />
                   </div>
-                ))}
+                  <div>
+                    <Label htmlFor="newProductCostPrice" className="text-foreground">
+                      Cost Price
+                    </Label>
+                    <Input
+                      id="newProductCostPrice"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={newProductCostPrice}
+                      onChange={(e) => setNewProductCostPrice(e.target.value)}
+                      className="mt-1 h-11 border-input bg-background text-foreground"
+                      placeholder="Enter cost price"
+                    />
+                  </div>
+                  <Button onClick={handleAddNewProduct} className="w-full min-h-11">
+                    Create product
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {productDetails && (
+              <div className="mt-6 p-4 border rounded-md bg-muted">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-semibold text-foreground">Product Details:</p>
+                    <p className="text-foreground">
+                      <span className="font-medium">Name:</span> {productDetails.name}
+                    </p>
+                    <p className="text-foreground">
+                      <span className="font-medium">SKU:</span> {productDetails.sku}
+                    </p>
+                    <p className="text-foreground">
+                      <span className="font-medium">Barcode:</span> {productDetails.barcode}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-foreground">
+                      <span className="font-medium">Cost Price:</span>{' '}
+                      {typeof productDetails.costPrice === 'number' &&
+                      Number.isFinite(productDetails.costPrice)
+                        ? `$${productDetails.costPrice.toFixed(2)}`
+                        : 'Not available'}
+                    </p>
+                    <div className="mt-2">
+                      <MarkdownCreditScopeBadge
+                        creditScope={productDetails.creditScope ?? 'NO_CREDIT'}
+                        creditScopeReason={productDetails.creditScopeReason ?? 'NO_CREDIT'}
+                        creditSupplierId={productDetails.creditSupplierId ?? null}
+                        creditSupplierName={productDetails.creditSupplierName ?? null}
+                      />
+                    </div>
+
+                    <MarkdownMatricesNotice {...markdownConfig} />
+                    {markdownPrice !== null && markdownPercentage !== null && (
+                      <p className="text-semantic-warning font-semibold mt-1">
+                        Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}
+                      </p>
+                    )}
+                    {isExpiredStock && (
+                      <div className="mt-2">
+                        <Badge variant="error">Expired</Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-6">
+                  <div>
+                    <Label htmlFor="expiryDate" className="text-foreground">
+                      Expiry Date
+                    </Label>
+                    <Input
+                      id="expiryDate"
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                      className="mt-1 h-11 border-input bg-background text-foreground w-full"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="location" className="text-foreground">
+                      Location
+                    </Label>
+                    <Select onValueChange={setSelectedLocationId} value={selectedLocationId}>
+                      <SelectTrigger
+                        id="location"
+                        className="w-full mt-1 data-[size=default]:h-11 text-base border-input bg-background text-foreground"
+                      >
+                        <SelectValue placeholder="Select a location" />
+                      </SelectTrigger>
+                      <SelectContent className="border-input bg-background text-foreground">
+                        {storeAreas.map((area) => (
+                          <SelectItem key={area.id} value={area.id.toString()}>
+                            {area.name}
+                            {area.subDepartment ? ` (${area.subDepartment})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={handleSubmit} className="w-full min-h-11">
+                    Save expiry item
+                  </Button>
+                </div>
+              </div>
+            )}
+            {productDetails && recentEntries && recentEntries.length > 0 && (
+              <div className="mt-8 p-4 border rounded-md bg-muted">
+                <h2 className="font-semibold text-lg text-foreground mb-4">Recent entries</h2>
+                <div className="space-y-3">
+                  {recentEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-3 bg-background border rounded-md"
+                    >
+                      <div>
+                        <p className="text-foreground">
+                          <span className="font-medium">Expiry Date:</span>{' '}
+                          {new Date(entry.expiryDate).toLocaleDateString('en-AU', {
+                            timeZone: 'Australia/Sydney',
+                          })}
+                        </p>
+                        <p className="text-muted-foreground text-sm">
+                          Added:{' '}
+                          {new Date(entry.createdAt).toLocaleString('en-AU', {
+                            timeZone: 'Australia/Sydney',
+                          })}
+                        </p>
+                      </div>
+                      <AlertDialog
+                        open={isAlertDialogOpen && itemToDelete === entry.id}
+                        onOpenChange={setAlertDialogOpen}
+                      >
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            className="min-h-11"
+                            onClick={() => handleDeleteRecentEntry(entry.id)}
+                            aria-label={`Delete entry expiring ${formatExpiryDateForCopy(entry.expiryDate)}`}
+                          >
+                            Delete entry
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete expiry entry?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {entryPendingDelete
+                                ? `This removes the ${formatExpiryDateForCopy(
+                                    entryPendingDelete.expiryDate,
+                                  )} expiry entry for ${productDetails.name}. This cannot be undone.`
+                                : 'This removes the selected expiry entry. This cannot be undone.'}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={confirmDelete}>
+                              Delete entry
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

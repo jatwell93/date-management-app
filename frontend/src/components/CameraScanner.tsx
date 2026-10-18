@@ -36,7 +36,7 @@ function ResetScannerButton({
       disabled={disabled}
       onClick={onClick}
       size={isHandheld ? 'lg' : 'default'}
-      className={isHandheld ? 'min-h-[48px] text-lg' : ''}
+      className={isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}
     >
       {label}
     </Button>
@@ -82,21 +82,24 @@ export function CameraScanner({
   }, []);
 
   // Debounce utility to track recent barcode scans (last 2 seconds)
-  const isDuplicateScan = useCallback((barcode: string): boolean => {
-    if (recentScansRef.current.has(barcode)) {
-      return true;
-    }
+  const isDuplicateScan = useCallback(
+    (barcode: string): boolean => {
+      if (recentScansRef.current.has(barcode)) {
+        return true;
+      }
 
-    // Add to recent scans
-    recentScansRef.current.add(barcode);
+      // Add to recent scans
+      recentScansRef.current.add(barcode);
 
-    // Remove after 2 seconds (using config constant - fixes 17.9)
-    schedule(() => {
-      recentScansRef.current.delete(barcode);
-    }, TIMING_CONSTANTS.DEDUP_WINDOW_MS);
+      // Remove after 2 seconds (using config constant - fixes 17.9)
+      schedule(() => {
+        recentScansRef.current.delete(barcode);
+      }, TIMING_CONSTANTS.DEDUP_WINDOW_MS);
 
-    return false;
-  }, [schedule]);
+      return false;
+    },
+    [schedule],
+  );
 
   // Extract scanner initialization logic so it can be reused
   const initScanner = useCallback(() => {
@@ -263,7 +266,9 @@ export function CameraScanner({
             Aim at the product barcode
           </p>
           {continuous && (
-            <p className={`mt-1 text-semantic-warning-muted ${isHandheld ? 'text-sm' : 'text-xs'}`}>
+            <p
+              className={`mt-1 text-semantic-warning-muted ${isHandheld ? 'text-base' : 'text-sm'}`}
+            >
               Continuous scan mode
             </p>
           )}
