@@ -188,6 +188,63 @@ const ErrorDetails: React.FC<{
   </div>
 );
 
+const SUCCESS_TONE = {
+  role: 'status',
+  heading: 'Upload successful',
+  className: 'bg-semantic-success-muted text-semantic-success-muted-foreground',
+} as const;
+const FAILURE_TONE = {
+  role: 'alert',
+  heading: 'Upload failed',
+  className: 'bg-semantic-critical-muted text-semantic-critical-muted-foreground',
+} as const;
+
+const hasItems = <T,>(items: T[] | undefined): items is T[] => !!items && items.length > 0;
+
+const ErrorReportSection: React.FC<{
+  reportUrl?: string;
+  onDownload: (reportUrl: string) => Promise<boolean>;
+}> = ({ reportUrl, onDownload }) =>
+  reportUrl ? <ErrorReportButton reportUrl={reportUrl} onDownload={onDownload} /> : null;
+
+const RejectedRowsSection: React.FC<{
+  rows?: UploadResponse['rejectedRows'];
+  isExpiryImport: boolean;
+}> = ({ rows, isExpiryImport }) =>
+  isExpiryImport && hasItems(rows) ? <RejectedRows rows={rows} /> : null;
+
+const ColumnSummarySection: React.FC<{ columnsUsed?: string[]; columnsIgnored?: number }> = ({
+  columnsUsed,
+  columnsIgnored,
+}) =>
+  hasItems(columnsUsed) ? (
+    <ColumnSummary columnsUsed={columnsUsed} columnsIgnored={columnsIgnored} />
+  ) : null;
+
+const ErrorDetailsSection: React.FC<{
+  errors?: string[];
+  formatGuidelinesId: string;
+  onShowGuidelines: () => void;
+}> = ({ errors, ...rest }) =>
+  hasItems(errors) ? <ErrorDetails errors={errors} {...rest} /> : null;
+
+const ContinueSection: React.FC<{
+  show: boolean;
+  returnUrl: string | null;
+  onContinue: (returnUrl: string) => void;
+}> = ({ show, returnUrl, onContinue }) =>
+  show && isSafeReturnUrl(returnUrl) ? (
+    <div className="mt-6 pt-4 border-t border-semantic-success-muted">
+      <Button
+        type="button"
+        onClick={() => onContinue(returnUrl)}
+        className="min-h-11 w-full py-2 font-semibold"
+      >
+        Continue to next step
+      </Button>
+    </div>
+  ) : null;
+
 export const UploadResultPanel: React.FC<UploadResultPanelProps> = ({
   uploadResult,
   isExpiryImport,
@@ -196,55 +253,28 @@ export const UploadResultPanel: React.FC<UploadResultPanelProps> = ({
   onShowGuidelines,
   onDownloadErrorReport,
   onContinue,
-}) => (
-  <div
-    role={uploadResult.success ? 'status' : 'alert'}
-    className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-semantic-success-muted text-semantic-success-muted-foreground' : 'bg-semantic-critical-muted text-semantic-critical-muted-foreground'}`}
-  >
-    <h2 className="font-semibold mb-2">
-      {uploadResult.success ? 'Upload successful' : 'Upload failed'}
-    </h2>
-
-    <p>{uploadResult.message}</p>
-
-    <ResultCounts uploadResult={uploadResult} isExpiryImport={isExpiryImport} />
-
-    {uploadResult.errorReportUrl && (
-      <ErrorReportButton
+}) => {
+  const tone = uploadResult.success ? SUCCESS_TONE : FAILURE_TONE;
+  return (
+    <div role={tone.role} className={`mt-6 p-4 rounded-md ${tone.className}`}>
+      <h2 className="font-semibold mb-2">{tone.heading}</h2>
+      <p>{uploadResult.message}</p>
+      <ResultCounts uploadResult={uploadResult} isExpiryImport={isExpiryImport} />
+      <ErrorReportSection
         reportUrl={uploadResult.errorReportUrl}
         onDownload={onDownloadErrorReport}
       />
-    )}
-
-    {isExpiryImport && uploadResult.rejectedRows && uploadResult.rejectedRows.length > 0 && (
-      <RejectedRows rows={uploadResult.rejectedRows} />
-    )}
-
-    {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
-      <ColumnSummary
+      <RejectedRowsSection rows={uploadResult.rejectedRows} isExpiryImport={isExpiryImport} />
+      <ColumnSummarySection
         columnsUsed={uploadResult.columnsUsed}
         columnsIgnored={uploadResult.columnsIgnored}
       />
-    )}
-
-    {uploadResult.errors && uploadResult.errors.length > 0 && (
-      <ErrorDetails
+      <ErrorDetailsSection
         errors={uploadResult.errors}
         formatGuidelinesId={formatGuidelinesId}
         onShowGuidelines={onShowGuidelines}
       />
-    )}
-
-    {uploadResult.success && isSafeReturnUrl(returnUrl) && (
-      <div className="mt-6 pt-4 border-t border-semantic-success-muted">
-        <Button
-          type="button"
-          onClick={() => onContinue(returnUrl)}
-          className="min-h-11 w-full py-2 font-semibold"
-        >
-          Continue to next step
-        </Button>
-      </div>
-    )}
-  </div>
-);
+      <ContinueSection show={uploadResult.success} returnUrl={returnUrl} onContinue={onContinue} />
+    </div>
+  );
+};
