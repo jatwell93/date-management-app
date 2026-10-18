@@ -71,6 +71,19 @@ describe('MarkdownMatrixSettings', () => {
     expect(retail).toHaveAccessibleDescription(/retail \(or selling price\) column/i);
   });
 
+  it('adapts inputs and the save action for phones and scanners', async () => {
+    await renderLoaded();
+
+    expect(screen.getByLabelText('No supplier credit Markdown 1 Discount %')).toHaveAttribute(
+      'inputmode',
+      'decimal',
+    );
+    expect(screen.getByRole('button', { name: /Save markdown matrices/i })).toHaveClass(
+      'w-full',
+      'sm:w-auto',
+    );
+  });
+
   it('ties the validation error to the invalid scope inputs', async () => {
     await renderLoaded();
 

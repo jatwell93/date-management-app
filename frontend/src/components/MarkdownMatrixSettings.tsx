@@ -136,6 +136,7 @@ function BandRow({ scope, band, value, hasRetailData, errorId, onUpdate }: BandR
             min="0"
             max="100"
             step="1"
+            inputMode="decimal"
             className="min-h-11 w-28"
             aria-invalid={errorId ? true : undefined}
             aria-describedby={errorId}
@@ -354,7 +355,7 @@ export function MarkdownMatrixSettings() {
             <Button
               type="button"
               size="lg"
-              className="min-h-11"
+              className="min-h-11 w-full sm:w-auto"
               onClick={() => setConfirming(true)}
               disabled={saving || !valid || !dirty}
             >
