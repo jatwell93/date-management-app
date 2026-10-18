@@ -51,6 +51,12 @@ function getDaysToExpiry(expiryDate: string) {
   return Number.isNaN(days) ? null : days;
 }
 
+function formatDaysLeft(daysToExpiry: number | null): string {
+  if (daysToExpiry === null) return 'Expiry date unknown';
+  if (daysToExpiry === 0) return 'Expires today';
+  return `${daysToExpiry} day${daysToExpiry === 1 ? '' : 's'} left`;
+}
+
 type WorklistGroupKey = 'markdown1' | 'markdown2' | 'markdown3';
 
 // The monthly markdown worklist mirrors the in-store process: items entering the
@@ -310,7 +316,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       <MarkdownMatricesNotice {...markdownConfig} />
 
       <section
-        className="grid gap-4 rounded-lg border bg-semantic-surface-1 p-4 md:grid-cols-[1.15fr_1fr]"
+        className="grid gap-4 md:grid-cols-[1.15fr_1fr]"
         aria-label="Expiry stock action summary"
       >
         <div
@@ -321,17 +327,23 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           <p className="text-sm font-medium text-semantic-critical-muted-foreground">
             Expired risk
           </p>
-          <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical">
+          <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
             {numberFormatter.format(expirySummary.expired)}
           </p>
           <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
             Remove, reconcile, or confirm these lines before markdown work starts.
           </p>
+          <Link
+            to="/expired-items"
+            className="mt-1 inline-flex min-h-11 items-center rounded-md text-sm font-medium text-semantic-critical-muted-foreground underline underline-offset-4 outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
+          >
+            Open expired items
+          </Link>
         </div>
         <dl className="grid gap-3 rounded-lg border bg-semantic-surface-2 p-4 sm:grid-cols-2">
           <div>
             <dt className="text-sm font-medium text-semantic-text-secondary">Markdown action</dt>
-            <dd className="mt-1 font-heading text-2xl font-bold text-semantic-text-primary">
+            <dd className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-text-primary">
               {numberFormatter.format(expirySummary.markdown)}
             </dd>
           </div>
@@ -339,7 +351,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             <dt className="text-sm font-medium text-semantic-text-secondary">
               Active expiry stock
             </dt>
-            <dd className="mt-1 font-heading text-2xl font-bold text-semantic-text-primary">
+            <dd className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-text-primary">
               {numberFormatter.format(expirySummary.active)}
             </dd>
           </div>
@@ -386,7 +398,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                     >
                       {label}
                     </h3>
-                    <span className="text-sm text-semantic-text-secondary">
+                    <span className="text-sm tabular-nums text-semantic-text-secondary">
                       {numberFormatter.format(items.length)} item{items.length === 1 ? '' : 's'}
                     </span>
                   </div>
@@ -416,8 +428,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                             <div className="min-w-0">
                               <p className="break-words font-medium">{item.productName}</p>
                               <p className="mt-0.5 text-sm text-semantic-text-secondary">
-                                {item.sku} · {item.locationName} ·{' '}
-                                {daysToExpiry === null ? '—' : `${daysToExpiry} days left`}
+                                {item.sku} · {item.locationName} · {formatDaysLeft(daysToExpiry)}
                               </p>
                               <div className="mt-2">
                                 <MarkdownCreditScopeBadge
@@ -430,6 +441,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="tabular-nums text-sm font-medium">
+                                <span className="sr-only">Markdown price: </span>
                                 {markdownPrice == null
                                   ? 'Unavailable'
                                   : formatCurrencyValue(markdownPrice)}

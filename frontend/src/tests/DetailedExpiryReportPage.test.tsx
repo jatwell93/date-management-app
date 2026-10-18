@@ -88,6 +88,48 @@ describe('DetailedExpiryReportPage', () => {
 
     const allEntriesLink = screen.getByRole('link', { name: /Browse all expiry entries/i });
     expect(allEntriesLink).toHaveAttribute('href', '/expiry-entries');
+    // The expired panel points to where write-offs happen instead of dead-ending.
+    expect(screen.getByRole('link', { name: 'Open expired items' })).toHaveAttribute(
+      'href',
+      '/expired-items',
+    );
+  });
+
+  it('labels the markdown price and words near-term expiry precisely', async () => {
+    // Local calendar date (not UTC) so 0/1-day rows do not shift across the date line.
+    const localDaysFromNow = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      const pad = (v: number) => String(v).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    const row = (inventoryId: number, days: number, productName: string) => ({
+      inventoryId,
+      expiryDate: localDaysFromNow(days),
+      status: 'Markdown 3',
+      productId: inventoryId,
+      productName,
+      sku: `SKU-${inventoryId}`,
+      costPrice: 10,
+      locationId: 2,
+      locationName: 'Front Counter',
+      subDepartment: null,
+    });
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([row(1, 1, 'One Day Product'), row(2, 0, 'Today Product')]);
+      }
+      return Promise.resolve([]);
+    });
+
+    renderPage('test-session-value');
+
+    const group = await screen.findByRole('region', { name: /Markdown 3 — urgent/i });
+    expect(group).toHaveTextContent('1 day left');
+    expect(group).not.toHaveTextContent('1 days left');
+    expect(group).toHaveTextContent('Expires today');
+    expect(group).toHaveTextContent(/Markdown price:/);
   });
 
   it('announces missing token and fetch errors', async () => {
