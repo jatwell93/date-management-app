@@ -37,6 +37,51 @@ describe('MarkdownMatrixSettings', () => {
     mockGetToken.mockResolvedValue('token');
   });
 
+  const renderLoaded = async (hasRetailData = false) => {
+    mockedGet.mockResolvedValue({ matrices, matrix: DEFAULT_MARKDOWN_MATRIX, hasRetailData });
+    render(<MarkdownMatrixSettings />);
+    await waitFor(() => expect(screen.getByText('No supplier credit')).toBeInTheDocument());
+  };
+
+  it('announces the loading state', () => {
+    mockedGet.mockReturnValue(new Promise(() => undefined));
+    render(<MarkdownMatrixSettings />);
+    expect(screen.getByRole('status')).toHaveTextContent('Loading markdown settings');
+  });
+
+  it('exposes a level-2 heading and a visible focus ring on basis toggles', async () => {
+    await renderLoaded(true);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Markdown matrices' })).toHaveAttribute(
+      'id',
+      'markdown-matrices-heading',
+    );
+    screen
+      .getAllByRole('button', { name: /^(Cost|Retail)$/ })
+      .forEach((btn) => expect(btn).toHaveClass('focus-visible:ring-[3px]'));
+  });
+
+  it('explains the disabled retail basis to assistive tech', async () => {
+    await renderLoaded(false);
+
+    const [retail] = screen.getAllByRole('button', { name: /^Retail$/ });
+    expect(retail).toHaveAccessibleDescription(/retail \(or selling price\) column/i);
+  });
+
+  it('ties the validation error to the invalid scope inputs', async () => {
+    await renderLoaded();
+
+    const band3 = screen.getByLabelText('No supplier credit Markdown 3 Discount %');
+    expect(band3).not.toHaveAttribute('aria-invalid');
+    fireEvent.change(band3, { target: { value: '10' } });
+
+    expect(band3).toHaveAttribute('aria-invalid', 'true');
+    expect(band3).toHaveAccessibleDescription(/must not decrease/i);
+    expect(screen.getByLabelText('Full supplier credit Markdown 3 Discount %')).not.toHaveAttribute(
+      'aria-invalid',
+    );
+  });
+
   it('loads and renders the org matrix with a disabled retail option when no retail data', async () => {
     mockedGet.mockResolvedValue({
       matrices,
@@ -76,7 +121,7 @@ describe('MarkdownMatrixSettings', () => {
     await waitFor(() => expect(screen.getByText('No supplier credit')).toBeInTheDocument());
 
     // Make band 3 (deepest) less than band 2 -> non-monotonic.
-    fireEvent.change(screen.getByLabelText('No supplier credit Markdown 3 discount %'), {
+    fireEvent.change(screen.getByLabelText('No supplier credit Markdown 3 Discount %'), {
       target: { value: '10' },
     });
 
@@ -104,7 +149,7 @@ describe('MarkdownMatrixSettings', () => {
     const saveButton = screen.getByRole('button', { name: /Save markdown matrices/i });
     expect(saveButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('Full supplier credit Markdown 1 discount %'), {
+    fireEvent.change(screen.getByLabelText('Full supplier credit Markdown 1 Discount %'), {
       target: { value: '19' },
     });
     expect(saveButton).toBeEnabled();

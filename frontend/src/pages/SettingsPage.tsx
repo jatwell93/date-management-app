@@ -56,7 +56,7 @@ export function SettingsPage() {
         </ErrorBoundary>
       </section>
 
-      <section aria-label="Markdown matrix" className="mt-6 min-w-0">
+      <section aria-labelledby="markdown-matrices-heading" className="mt-6 min-w-0">
         <ErrorBoundary fallback={<SettingsControlsFallback />}>
           <MarkdownMatrixSettings />
         </ErrorBoundary>
