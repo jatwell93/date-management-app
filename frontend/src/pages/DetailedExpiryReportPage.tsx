@@ -231,11 +231,11 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       >
         <header className="mb-5">
           <div
-            className="h-7 w-72 motion-safe:animate-pulse rounded bg-semantic-surface-4"
+            className="h-7 w-full max-w-72 motion-safe:animate-pulse rounded bg-semantic-surface-4"
             aria-hidden="true"
           />
           <div
-            className="mt-2 h-4 w-96 motion-safe:animate-pulse rounded bg-semantic-surface-4"
+            className="mt-2 h-4 w-full max-w-96 motion-safe:animate-pulse rounded bg-semantic-surface-4"
             aria-hidden="true"
           />
         </header>
@@ -279,7 +279,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-6 text-center"
         >
           <p className="font-medium text-semantic-critical">{fetchError}</p>
-          <Button onClick={handleRetryFetch} variant="default" className="mt-4">
+          <Button onClick={handleRetryFetch} variant="default" className="mt-4 min-h-11">
             Try again
           </Button>
         </div>
@@ -297,7 +297,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       <header className="mb-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-heading text-2xl font-semibold">Markdown Worklist (Next 90 Days)</h1>
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" className="min-h-11">
             <a href="/expiry-entries">Browse all expiry entries</a>
           </Button>
         </div>
@@ -355,7 +355,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             type="button"
             onClick={() => setActionError(null)}
             aria-label="Dismiss error"
-            className="shrink-0 rounded-md outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
+            className="-my-2 -mr-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md text-lg outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
           >
             &times;
           </button>
@@ -385,11 +385,11 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                     >
                       {label}
                     </h3>
-                    <span className="text-xs text-semantic-text-secondary">
+                    <span className="text-sm text-semantic-text-secondary">
                       {numberFormatter.format(items.length)} item{items.length === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-semantic-text-tertiary">{hint}</p>
+                  <p className="mt-1 text-sm text-semantic-text-tertiary">{hint}</p>
                   {items.length === 0 ? (
                     <p className="mt-3 text-sm text-semantic-text-secondary">
                       Nothing in this group right now.
@@ -414,7 +414,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                           >
                             <div className="min-w-0">
                               <p className="break-words font-medium">{item.productName}</p>
-                              <p className="mt-0.5 text-xs text-semantic-text-secondary">
+                              <p className="mt-0.5 text-sm text-semantic-text-secondary">
                                 {item.sku} · {item.locationName} ·{' '}
                                 {daysToExpiry === null ? '—' : `${daysToExpiry} days left`}
                               </p>
@@ -436,9 +436,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                               <Button
                                 onClick={() => handleSoldThrough(item.inventoryId)}
                                 disabled={isSubmitting || soldThroughId !== null}
-                                size="sm"
                                 variant="success"
-                                className="text-xs font-medium"
+                                className="min-h-11"
                                 aria-busy={isSubmitting}
                               >
                                 {isSubmitting ? 'Recording…' : 'Sold through'}

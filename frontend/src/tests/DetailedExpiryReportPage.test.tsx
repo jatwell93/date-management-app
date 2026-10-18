@@ -171,7 +171,10 @@ describe('DetailedExpiryReportPage', () => {
     expect(
       screen.getByRole('button', { name: /^Sold through\s*:\s*M3 Product$/ }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^Sold through\s*:\s*M1 Product$/ }));
+    const m1Button = screen.getByRole('button', { name: /^Sold through\s*:\s*M1 Product$/ });
+    // Shop-floor action: at least a 44px touch target.
+    expect(m1Button).toHaveClass('min-h-11');
+    fireEvent.click(m1Button);
 
     const postMock = apiService.post as unknown as jest.Mock;
     await waitFor(() => {
