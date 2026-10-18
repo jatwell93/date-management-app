@@ -194,7 +194,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
               <a
                 href="/detailed-expiry-report"
                 aria-label="Open expiry report"
-                className={`${buttonVariants({ variant: 'default', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:min-h-10 sm:flex-none sm:basis-auto`}
+                className={`${buttonVariants({ variant: 'default', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:flex-none sm:basis-auto`}
               >
                 <span className="sm:hidden">Expiry report</span>
                 <span className="hidden sm:inline">Open expiry report</span>
@@ -202,7 +202,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
               <a
                 href="/expired-items"
                 aria-label="View expired items"
-                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:min-h-10 sm:flex-none sm:basis-auto`}
+                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:flex-none sm:basis-auto`}
               >
                 <span className="sm:hidden">Expired items</span>
                 <span className="hidden sm:inline">View expired items</span>

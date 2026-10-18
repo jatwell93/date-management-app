@@ -111,6 +111,10 @@ describe('DashboardPage', () => {
       'min-h-11',
       'min-w-0',
     );
+    // 44px targets at every breakpoint, including dispensary tablets.
+    for (const link of screen.getAllByRole('link')) {
+      expect(link.className).not.toMatch(/sm:min-h-10/);
+    }
     const expectedTimestamp = new Intl.DateTimeFormat('en-AU', {
       dateStyle: 'medium',
       timeStyle: 'short',
