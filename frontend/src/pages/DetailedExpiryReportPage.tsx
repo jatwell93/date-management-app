@@ -278,7 +278,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           role="alert"
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-6 text-center"
         >
-          <p className="font-medium text-semantic-critical">{fetchError}</p>
+          <p className="font-medium text-semantic-critical-muted-foreground">{fetchError}</p>
           <Button onClick={handleRetryFetch} variant="default" className="mt-4 min-h-11">
             Try again
           </Button>
@@ -327,10 +327,10 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             Remove, reconcile, or confirm these lines before markdown work starts.
           </p>
         </div>
-        <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-4 sm:grid-cols-2">
+        <dl className="grid gap-3 rounded-lg border bg-semantic-surface-2 p-4 sm:grid-cols-2">
           <div>
             <dt className="text-sm font-medium text-semantic-text-secondary">Markdown action</dt>
-            <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
+            <dd className="mt-1 font-heading text-2xl font-bold text-semantic-text-primary">
               {numberFormatter.format(expirySummary.markdown)}
             </dd>
           </div>
@@ -338,7 +338,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             <dt className="text-sm font-medium text-semantic-text-secondary">
               Active expiry stock
             </dt>
-            <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
+            <dd className="mt-1 font-heading text-2xl font-bold text-semantic-text-primary">
               {numberFormatter.format(expirySummary.active)}
             </dd>
           </div>
@@ -436,7 +436,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                               <Button
                                 onClick={() => handleSoldThrough(item.inventoryId)}
                                 disabled={isSubmitting || soldThroughId !== null}
-                                variant="success"
+                                variant="default"
                                 className="min-h-11"
                                 aria-busy={isSubmitting}
                               >
