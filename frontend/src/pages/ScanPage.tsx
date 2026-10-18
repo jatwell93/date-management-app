@@ -528,7 +528,7 @@ export function ScanPage({ token }: ScanPageProps) {
             )}
             {scannedBarcode && !productDetails && !successMessage && showNewProductForm && (
               <div className="mt-6 border-t border-border pt-6">
-                <h2 className="font-semibold text-foreground tabular-nums">
+                <h2 className="font-semibold text-lg text-foreground tabular-nums">
                   No catalog match for barcode {scannedBarcode}
                 </h2>
                 <p className="text-sm mb-4 text-muted-foreground">
@@ -587,7 +587,7 @@ export function ScanPage({ token }: ScanPageProps) {
               <div className="mt-6 border-t border-border pt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <h2 className="font-semibold text-foreground">Product details</h2>
+                    <h2 className="font-semibold text-lg text-foreground mb-1">Product details</h2>
                     <p className="text-foreground">
                       <span className="font-medium">Name:</span> {productDetails.name}
                     </p>
@@ -600,7 +600,7 @@ export function ScanPage({ token }: ScanPageProps) {
                   </div>
                   <div>
                     <p className="text-foreground tabular-nums">
-                      <span className="font-medium">Cost Price:</span>{' '}
+                      <span className="font-medium">Cost price:</span>{' '}
                       {typeof productDetails.costPrice === 'number' &&
                       Number.isFinite(productDetails.costPrice)
                         ? currencyFormatter.format(productDetails.costPrice)
@@ -681,7 +681,7 @@ export function ScanPage({ token }: ScanPageProps) {
                     >
                       <div>
                         <p className="text-foreground tabular-nums">
-                          <span className="font-medium">Expiry Date:</span>{' '}
+                          <span className="font-medium">Expiry date:</span>{' '}
                           {formatExpiryDateForCopy(entry.expiryDate)}
                         </p>
                         <p className="text-muted-foreground text-sm tabular-nums">
