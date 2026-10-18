@@ -303,9 +303,19 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
   // The card h2 already titles each chart, so the in-canvas title is hidden (its text lives
   // on as the canvas aria-label). Both charts share one options object.
+  // Chart.js animates on draw regardless of the OS setting; honour reduced motion.
+  const prefersReducedMotion = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
   const lineChartOptions = useMemo(
     () => ({
       responsive: true,
+      ...(prefersReducedMotion ? { animation: false as const } : {}),
       plugins: {
         title: {
           display: false,
@@ -320,7 +330,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         },
       },
     }),
-    [],
+    [prefersReducedMotion],
   );
 
   const barChartOptions = useMemo(
@@ -374,7 +384,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                 <SelectTrigger
                   id="usage-report-timeframe"
                   aria-labelledby="usage-report-timeframe-label usage-report-timeframe"
-                  className="w-full sm:w-[180px]"
+                  className="min-h-11 w-full sm:w-[180px]"
                 >
                   <SelectValue placeholder="Select time frame" />
                 </SelectTrigger>
@@ -398,9 +408,12 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               </p>
             ) : itemsByUser && itemsByUser.length > 0 ? (
               <div className="space-y-4">
-                <div className="aspect-[4/3] w-full sm:aspect-auto">
+                {/* maintainAspectRatio is off, so the container must own the height at every width. */}
+                <div className="aspect-[4/3] w-full sm:aspect-auto sm:h-64">
                   <Suspense
-                    fallback={<div className="h-64 animate-pulse rounded bg-semantic-surface-3" />}
+                    fallback={
+                      <div className="h-64 motion-safe:animate-pulse rounded bg-semantic-surface-3" />
+                    }
                   >
                     <Bar
                       role="img"
@@ -475,7 +488,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
             ) : itemsByDate && itemsByDate.length > 0 ? (
               <div className="space-y-4">
                 <Suspense
-                  fallback={<div className="h-64 animate-pulse rounded bg-semantic-surface-3" />}
+                  fallback={
+                    <div className="h-64 motion-safe:animate-pulse rounded bg-semantic-surface-3" />
+                  }
                 >
                   <Line
                     role="img"

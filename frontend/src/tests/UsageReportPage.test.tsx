@@ -153,6 +153,58 @@ describe('UsageReportPage', () => {
     );
   });
 
+  it('turns off chart animation when the user prefers reduced motion', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      onchange: null,
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    try {
+      // @ts-expect-error — apiService.get is mocked as vi.fn()
+      apiService.get.mockImplementation((url) => {
+        if (url.startsWith('/reports/items-by-user')) {
+          return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
+        }
+        if (url === '/reports/items-by-date') {
+          return Promise.resolve([{ date: '2025-01-30', itemCount: 20 }]);
+        }
+        return Promise.resolve([]);
+      });
+
+      render(<UsageReportPage token="test-session-value" />);
+
+      await screen.findByRole('img', { name: /items added per team member/i });
+      await screen.findByRole('img', { name: /stock additions over time/i });
+      expect(chartProps.bar?.options.animation).toBe(false);
+      expect(chartProps.line?.options.animation).toBe(false);
+      // The time-frame control meets the 44px touch-target floor.
+      expect(screen.getByRole('combobox', { name: /Time frame/i })).toHaveClass('min-h-11');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('keeps chart animation when reduced motion is not requested', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+
+    await screen.findByRole('img', { name: /items added per team member/i });
+    expect(chartProps.bar?.options.animation).toBeUndefined();
+  });
+
   it('displays an error message if token is missing', async () => {
     render(<UsageReportPage token={null} />);
 
