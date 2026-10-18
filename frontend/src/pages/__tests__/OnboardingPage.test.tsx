@@ -49,7 +49,7 @@ describe('OnboardingPage structure', () => {
     mockOrganization.current = null;
     renderOnboarding();
 
-    expect(screen.getByRole('region', { name: /welcome to/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Welcome to PharmIQ' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Step 1 of 3')).toBeInTheDocument();
     expect(screen.getByTestId('clerk-create-organization')).toBeInTheDocument();
@@ -141,8 +141,8 @@ describe('OnboardingPage tour step', () => {
     renderOnboarding('/onboarding?step=2');
 
     await userEvent.click(screen.getByRole('button', { name: /^Slide 3 of 3/ }));
-    const buttons = screen.getAllByRole('button');
-    await userEvent.click(buttons[buttons.length - 1]);
+    expect(screen.queryByRole('button', { name: /go to dashboard/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Start scanning' }));
 
     expect(location()).toBe('/scan');
   });

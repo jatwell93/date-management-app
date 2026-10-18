@@ -4,7 +4,7 @@ import { CreateOrganization, useAuth, useOrganization } from '@clerk/clerk-react
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
-import { FileText, Loader2, Zap } from 'lucide-react';
+import { FileText, LayoutDashboard, Loader2, Package, ScanLine, Zap } from 'lucide-react';
 
 type OnboardingStep = 0 | 1 | 2;
 const MAX_STEP: OnboardingStep = 2;
@@ -53,10 +53,10 @@ function Step0(_props: StepProps) {
   return (
     <Card>
       <CardHeader>
-        <StepHeading className="text-xl font-semibold">Set Up Your Organisation</StepHeading>
+        <StepHeading className="text-xl font-semibold">Create your organisation</StepHeading>
         <CardDescription>
-          Your organisation groups your team and inventory data together. You&apos;ll be the admin
-          and can invite others once it&apos;s created.
+          It holds your team and stock data, and you&apos;ll be its admin. Next, you&apos;ll load
+          your catalog.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -123,7 +123,7 @@ function useSeedDemoData(onNext: () => void) {
       await apiService.post('/api/organization/seed-demo-data', {}, token);
       onNext();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load demo data');
+      setError(err instanceof Error ? err.message : 'Couldn’t load demo data. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -160,8 +160,8 @@ function Step1({ onNext }: StepProps) {
   return (
     <Card>
       <CardHeader>
-        <StepHeading className="text-xl font-semibold">Set Up Your Catalog</StepHeading>
-        <CardDescription>How would you like to load your pharmacy inventory?</CardDescription>
+        <StepHeading className="text-xl font-semibold">Choose a starting point</StepHeading>
+        <CardDescription>After this, a short tour shows you around.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <SeedError message={error} />}
@@ -169,15 +169,15 @@ function Step1({ onNext }: StepProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy={isLoading}>
           <CatalogOption
             icon={<FileText aria-hidden="true" className="size-8 text-semantic-primary" />}
-            title="Upload CSV File"
-            description="Import your existing product catalog from a CSV file"
+            title="Upload a CSV file"
+            description="Import your product list. You come back here when the upload finishes."
             onClick={handleCSVUpload}
             disabled={isLoading}
           />
           <CatalogOption
             icon={<DemoDataIcon isLoading={isLoading} />}
-            title={isLoading ? 'Seeding Data...' : 'Load Demo Data'}
-            description="Get started quickly with sample pharmacy products"
+            title={isLoading ? 'Loading demo data…' : 'Load demo data'}
+            description="Try PharmIQ with sample pharmacy products. You can import your own later."
             onClick={() => void seed()}
             disabled={isLoading}
           />
@@ -187,9 +187,9 @@ function Step1({ onNext }: StepProps) {
           {isLoading ? 'Loading demo data' : ''}
         </p>
 
-        <div className="text-sm text-semantic-text-tertiary text-center mt-6">
-          You can change your catalog settings anytime in Settings
-        </div>
+        <p className="text-sm text-semantic-text-secondary text-center mt-6">
+          You can import more products later from CSV Upload.
+        </p>
       </CardContent>
     </Card>
   );
@@ -198,23 +198,21 @@ function Step1({ onNext }: StepProps) {
 const TOUR_SLIDES = [
   {
     id: 'dashboard',
-    title: 'Welcome to Your Dashboard',
-    description:
-      'This is your command center. See inventory summary, expiry alerts, and team activity at a glance.',
-    icon: '📊',
+    title: 'Your dashboard',
+    description: 'See stock levels, upcoming expiries and team activity in one place.',
+    Icon: LayoutDashboard,
   },
   {
     id: 'catalog',
-    title: 'Manage Your Catalog',
-    description:
-      'View all your products, update pricing and suppliers, and organize your inventory.',
-    icon: '📦',
+    title: 'Your catalog',
+    description: 'View your products and keep prices and suppliers up to date.',
+    Icon: Package,
   },
   {
     id: 'scanning',
-    title: 'Start Scanning',
-    description: 'Add items to inventory by scanning barcodes or manually entering details.',
-    icon: '📱',
+    title: 'Scanning',
+    description: 'Scan a barcode, or enter details by hand, to record stock and expiry dates.',
+    Icon: ScanLine,
   },
 ] as const;
 
@@ -283,9 +281,7 @@ function Step2(_props: StepProps) {
           <p className="sr-only">
             Slide {slideIndex + 1} of {TOUR_SLIDES.length}
           </p>
-          <div aria-hidden="true" className="text-center text-2xl font-semibold">
-            {currentSlide.icon}
-          </div>
+          <currentSlide.Icon aria-hidden="true" className="mx-auto size-8 text-semantic-primary" />
           <StepHeading className="text-center text-xl font-semibold mt-2">
             {currentSlide.title}
           </StepHeading>
@@ -308,7 +304,7 @@ function Step2(_props: StepProps) {
             Back
           </Button>
           <Button onClick={handleNext} className="flex-1 min-h-11">
-            {isLastSlide ? 'Go to Dashboard' : 'Next'}
+            {isLastSlide ? 'Start scanning' : 'Next'}
           </Button>
         </div>
       </CardContent>
@@ -318,19 +314,18 @@ function Step2(_props: StepProps) {
 
 const STEPS: Record<OnboardingStep, StepConfig> = {
   0: {
-    title: 'Welcome to Inventory Manager',
-    description:
-      'Create your organisation to get started. You can invite team members after setup.',
+    title: 'Welcome to PharmIQ',
+    description: 'Three short steps, then you can start scanning.',
     component: Step0,
   },
   1: {
-    title: 'Set Up Your Catalog',
-    description: 'Choose how to load your pharmacy inventory',
+    title: 'Load your catalog',
+    description: 'Add your own products or start with demo data.',
     component: Step1,
   },
   2: {
-    title: 'Quick Tour',
-    description: 'Learn the basics of your new inventory system',
+    title: 'Quick tour',
+    description: 'The three screens you will use most.',
     component: Step2,
   },
 };
