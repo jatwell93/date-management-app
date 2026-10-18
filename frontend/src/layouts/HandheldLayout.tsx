@@ -18,7 +18,9 @@ export const HandheldLayout: React.FC<HandheldLayoutProps> = ({
   const { isHandheld } = useHandheldDetectionContext();
 
   return (
-    <div className={isHandheld ? 'h-dvh min-h-0 flex flex-col overflow-hidden' : ''}>
+    <div
+      className={isHandheld ? 'handheld-layout h-dvh min-h-0 flex flex-col overflow-hidden' : ''}
+    >
       {isHandheld && (
         <HandheldScanToolbar
           userName={userName}

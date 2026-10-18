@@ -29,6 +29,24 @@ describe('phase 2 semantic UI primitives', () => {
     expect(buttonVariants({ variant: 'link' })).not.toMatch(/\btext-semantic-secondary\b/);
   });
 
+  it('keeps desktop density but gives touch pointers a 44px floor', () => {
+    (['default', 'sm', 'lg', 'icon'] as const).forEach((size) => {
+      expect(buttonVariants({ size })).toContain('pointer-coarse:min-h-11');
+    });
+    expect(buttonVariants({ size: 'icon' })).toContain('pointer-coarse:min-w-11');
+    expect(buttonVariants({ size: 'default' })).toContain('h-9');
+
+    render(<Input aria-label="quantity" />);
+    const input = screen.getByLabelText('quantity');
+    expect(input).toHaveClass('text-base', 'pointer-coarse:min-h-11');
+    expect(input).not.toHaveClass('md:text-sm');
+  });
+
+  it('renders badges at 14px', () => {
+    expect(badgeVariants({ variant: 'inactive' })).toContain('text-sm');
+    expect(badgeVariants({ variant: 'inactive' })).not.toContain('text-xs');
+  });
+
   it('uses semantic focus and validation tokens for text inputs', () => {
     render(<Input aria-label="email" />);
 
