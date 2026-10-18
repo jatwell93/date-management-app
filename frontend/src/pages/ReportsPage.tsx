@@ -272,23 +272,21 @@ export function ReportsPage({ token }: ReportsPageProps) {
   if (hasAnyError && !reportData && !overallReportData) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-8">
+        <h1 className="font-heading text-2xl font-semibold">Expiry reporting</h1>
         <div className="flex flex-col items-center gap-4 py-16 text-center">
           <p className="text-semantic-critical font-medium" role="alert">
             {monthlyError || overallError}
           </p>
-          <button
-            onClick={() => navigate(0)}
-            className="rounded-md border border-semantic-primary px-4 py-2 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors"
-          >
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => navigate(0)}>
             Try again
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <main
+    <section
       className="container mx-auto max-w-6xl space-y-6 px-4 py-8"
       aria-label="Expiry reporting workspace"
     >
@@ -304,7 +302,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
       </header>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Expiry action summary</CardTitle>
+          <CardTitle className="text-xl" role="heading" aria-level={2}>
+            Expiry action summary
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {overallLoading ? (
@@ -331,8 +331,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 role="region"
                 aria-label="Primary expiry decision"
               >
-                <p className="text-sm font-medium text-semantic-critical">Expiry risk</p>
-                <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical">
+                <p className="text-sm font-medium text-semantic-critical-muted-foreground">Expiry risk</p>
+                <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical-muted-foreground">
                   {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
@@ -345,7 +345,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     Entering markdown next month
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
+                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning-muted-foreground">
                     {numberFormatter.format(overallReportData.next_month_markdown_count)}
                   </dd>
                   <dd className="mt-1 text-xs text-semantic-text-secondary">
@@ -356,7 +356,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     Active expiry stock
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
+                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-text-primary">
                     {numberFormatter.format(overallReportData.active_expiry_stock_count)}
                   </dd>
                   <dd className="mt-1 text-xs text-semantic-text-secondary">
@@ -376,7 +376,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
       {sellThroughData && sellThroughData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Sell-through by markdown level</CardTitle>
+            <CardTitle className="text-xl" role="heading" aria-level={2}>
+            Sell-through by markdown level
+          </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-semantic-text-secondary">
@@ -404,17 +406,19 @@ export function ReportsPage({ token }: ReportsPageProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Monthly expiry report</CardTitle>
+          <CardTitle className="text-xl" role="heading" aria-level={2}>
+            Monthly expiry report
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row">
-            <Button asChild className="flex-1" size="lg">
+            <Button asChild className="min-h-11 flex-1" size="lg">
               <a href="/detailed-expiry-report">Open next 90 days</a>
             </Button>
-            <Button asChild variant="outline" className="flex-1" size="lg">
+            <Button asChild variant="outline" className="min-h-11 flex-1" size="lg">
               <a href="/expiry-entries">Open all expiry entries</a>
             </Button>
-            <Button asChild variant="destructive" className="flex-1" size="lg">
+            <Button asChild variant="destructive" className="min-h-11 flex-1" size="lg">
               <a href="/expired-items">Review expired items</a>
             </Button>
           </div>
@@ -498,6 +502,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }
