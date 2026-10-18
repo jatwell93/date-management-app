@@ -55,6 +55,7 @@ interface ToastState {
 }
 
 const ALL_LOCATIONS = '__all__';
+const MOBILE_SUMMARY_LIMIT = 50;
 const PAGE_HEADING_ID = 'expiry-entries-page-heading';
 const TABLE_HEADING_ID = 'expiry-entries-table-heading';
 
@@ -356,7 +357,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                       expiryDate: e.target.value,
                     })
                   }
-                  className="w-full"
+                  className="min-h-11 w-full"
                   disabled={saving}
                 />
               </div>
@@ -548,7 +549,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                     disabled={saving || storeAreas.length === 0}
                   >
                     <SelectTrigger
-                      className="w-full"
+                      className="min-h-11 w-full"
                       aria-label={`Location for ${row.original.productName}`}
                     >
                       <SelectValue
@@ -604,7 +605,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={deleting}
                   size="sm"
                   variant="destructive"
-                  className="text-xs shrink-0 min-w-[70px]"
+                  className="min-h-11 min-w-[70px] shrink-0"
                   aria-busy={deleting}
                 >
                   {deleting ? 'Deleting…' : 'Confirm delete'}
@@ -616,7 +617,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={deleting}
                   size="sm"
                   variant="neutral"
-                  className="text-xs shrink-0 min-w-[60px]"
+                  className="min-h-11 min-w-[60px] shrink-0"
                 >
                   Cancel
                 </Button>
@@ -632,7 +633,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={saving}
                   size="sm"
                   variant="default"
-                  className="min-w-[50px] font-medium"
+                  className="min-h-11 min-w-[50px] font-medium"
                   aria-busy={saving}
                 >
                   {saving ? 'Saving…' : 'Save'}
@@ -642,7 +643,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={saving}
                   size="sm"
                   variant="neutral"
-                  className="min-w-[50px] font-medium"
+                  className="min-h-11 min-w-[50px] font-medium"
                 >
                   Cancel
                 </Button>
@@ -658,7 +659,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                 disabled={!!anotherRowEditing || deleting}
                 size="sm"
                 variant="default"
-                className="min-w-[50px] font-medium"
+                className="min-h-11 min-w-[50px] font-medium"
               >
                 Edit<span className="sr-only"> {row.original.productName}</span>
               </Button>
@@ -669,7 +670,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   disabled={!!editingItem || deleting}
                   size="sm"
                   variant="destructive"
-                  className="min-w-[50px] font-medium"
+                  className="min-h-11 min-w-[50px] font-medium"
                 >
                   Delete<span className="sr-only"> {row.original.productName}</span>
                 </Button>
@@ -769,7 +770,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-6 text-center"
         >
           <p className="font-medium text-semantic-critical-muted-foreground">{fetchError}</p>
-          <Button onClick={handleRetryFetch} variant="default" className="mt-4">
+          <Button onClick={handleRetryFetch} variant="default" className="mt-4 min-h-11">
             Try again
           </Button>
         </div>
@@ -790,7 +791,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             type="button"
             variant="outline"
             onClick={() => window.print()}
-            className="no-print hidden md:inline-flex"
+            className="no-print hidden min-h-11 md:inline-flex"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -821,23 +822,29 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       {actionError && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted px-4 py-3 text-sm text-semantic-critical-muted-foreground"
+          className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted py-1 pl-4 pr-1 text-sm text-semantic-critical-muted-foreground"
         >
-          <span>{actionError}</span>
+          <span className="py-2">{actionError}</span>
           <button
             type="button"
             onClick={() => setActionError(null)}
             aria-label="Dismiss error"
-            className="shrink-0 rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-lg transition-colors hover:bg-semantic-surface-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
           >
             &times;
           </button>
         </div>
       )}
 
+      {hasData && filteredData.length > MOBILE_SUMMARY_LIMIT ? (
+        <p className="text-sm text-semantic-text-secondary md:hidden">
+          Showing the first {MOBILE_SUMMARY_LIMIT} of {filteredData.length} entries. Use the table
+          below to see and edit all of them.
+        </p>
+      ) : null}
       {hasData ? (
         <ul className="mb-5 space-y-3 md:hidden" aria-label="Expiry entry summary">
-          {filteredData.slice(0, 50).map((item) => {
+          {filteredData.slice(0, MOBILE_SUMMARY_LIMIT).map((item) => {
             const daysToExpiry = getDaysToExpiry(item.expiryDate);
             const matrix = markdownConfig.matrices?.[item.creditScope ?? 'NO_CREDIT'];
             const markdownPrice = matrix
@@ -909,7 +916,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
               <Select value={locationFilter} onValueChange={setLocationFilter}>
                 <SelectTrigger
                   id="location-filter"
-                  className="w-[200px]"
+                  className="min-h-11 w-[200px]"
                   aria-label="Filter by location"
                 >
                   <SelectValue placeholder="All locations" />

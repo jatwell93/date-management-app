@@ -213,6 +213,39 @@ describe('ExpiryEntriesPage', () => {
     );
   });
 
+  it('gives row actions and the location filter 44px touch targets', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    const edit = await screen.findByRole('button', { name: 'Edit Front Counter Product' });
+    expect(edit.className).toMatch(/min-h-11/);
+    expect(screen.getByRole('button', { name: 'Delete Front Counter Product' }).className).toMatch(
+      /min-h-11/,
+    );
+    expect(screen.getByRole('combobox', { name: /Filter by location/i }).className).toMatch(
+      /min-h-11/,
+    );
+  });
+
+  it('tells phone users when the summary list is truncated', async () => {
+    const manyRows = Array.from({ length: 51 }, (_, i) => ({
+      ...twoLocationRows[0],
+      inventoryId: 100 + i,
+      productName: `Product ${i}`,
+    }));
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) =>
+      Promise.resolve(url === '/reports/expiry-entries' ? manyRows : []),
+    );
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    expect(await screen.findByText(/Showing the first 50 of 51 entries/i)).toBeInTheDocument();
+    const summary = screen.getByRole('list', { name: 'Expiry entry summary' });
+    expect(summary.querySelectorAll(':scope > li')).toHaveLength(50);
+  });
+
   it('announces a missing token', async () => {
     render(<ExpiryEntriesPage token={null} role={ROLES.ADMIN} />);
 
