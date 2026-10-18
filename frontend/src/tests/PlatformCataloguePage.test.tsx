@@ -131,6 +131,18 @@ describe('PlatformCataloguePage', () => {
     expect(screen.getByRole('heading', { name: 'Pending corrections' })).toHaveFocus();
   });
 
+  it('gives every button and checkbox a 44px touch target', async () => {
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(6);
+    for (const button of buttons) expect(button).toHaveClass('min-h-11');
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox.closest('label')).toHaveClass('min-h-11', 'min-w-11');
+    }
+  });
+
   it('marks select-all as indeterminate when only some rows are selected', async () => {
     render(<PlatformCataloguePage token="token" />);
 

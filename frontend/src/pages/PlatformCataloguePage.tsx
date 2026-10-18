@@ -8,6 +8,16 @@ import type {
   CatalogueProvenanceResponse,
   PlatformCatalogueCorrection,
 } from '../types/platformCatalogue';
+import { Button } from '../components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../components/ui/table';
 
 interface PlatformCataloguePageProps {
   token: string | null;
@@ -27,6 +37,13 @@ function describeCorrection(item: PlatformCatalogueCorrection): string {
   return detail ? `correction ${item.id} (${detail})` : `correction ${item.id}`;
 }
 
+// The native box stays visible at 20px; the wrapping label gives it a 44px hit area.
+const CHECKBOX_HIT_AREA =
+  'inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center';
+const CHECKBOX = 'size-5 cursor-pointer accent-semantic-primary';
+// Reject is destructive: dark red text on the outline button (about 8:1 on white), plus the label.
+const REJECT_TEXT = 'text-semantic-critical-muted-foreground';
+
 interface SelectAllCheckboxProps {
   checked: boolean;
   indeterminate: boolean;
@@ -39,13 +56,16 @@ function SelectAllCheckbox({ checked, indeterminate, onChange }: SelectAllCheckb
     if (ref.current) ref.current.indeterminate = indeterminate;
   }, [indeterminate]);
   return (
-    <input
-      ref={ref}
-      type="checkbox"
-      aria-label="Select all corrections"
-      checked={checked}
-      onChange={(event) => onChange(event.target.checked)}
-    />
+    <label className={CHECKBOX_HIT_AREA}>
+      <input
+        ref={ref}
+        type="checkbox"
+        aria-label="Select all corrections"
+        className={CHECKBOX}
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
   );
 }
 
@@ -140,9 +160,9 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
         >
           {error}
         </p>
-        <button type="button" onClick={() => void load()}>
+        <Button type="button" variant="outline" className="min-h-11" onClick={() => void load()}>
           Retry
-        </button>
+        </Button>
       </section>
     );
   }
@@ -238,21 +258,24 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
           >
             Pending corrections
           </h2>
-          <div className="flex gap-2">
-            <button
+          <div className="flex flex-wrap gap-2">
+            <Button
               type="button"
+              className="min-h-11"
               disabled={busy || selected.size === 0}
               onClick={() => void runActions([...selected], 'ACCEPTED', true)}
             >
               Accept selected
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              className={`min-h-11 ${REJECT_TEXT}`}
               disabled={busy || selected.size === 0}
               onClick={() => void runActions([...selected], 'REJECTED', true)}
             >
               Reject selected
-            </button>
+            </Button>
           </div>
         </div>
         <p role="status" aria-live="polite" className="mt-3 empty:hidden">
@@ -275,38 +298,37 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
         {corrections.length === 0 ? (
           <p>No pending catalogue corrections.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <caption className="sr-only">Pending catalogue corrections</caption>
-              <thead>
-                <tr>
-                  <th>
-                    <SelectAllCheckbox
-                      checked={allSelected}
-                      indeterminate={someSelected}
-                      onChange={(checked) =>
-                        setSelected(
-                          checked ? new Set(corrections.map((item) => item.id)) : new Set(),
-                        )
-                      }
-                    />
-                  </th>
-                  <th>Kind</th>
-                  <th>Barcode</th>
-                  <th>Entered brand</th>
-                  <th>Supplier</th>
-                  <th>Organization</th>
-                  <th>Age</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {corrections.map((item) => (
-                  <tr key={item.id}>
-                    <td>
+          <Table className="mt-4">
+            <TableCaption className="sr-only">Pending catalogue corrections</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <SelectAllCheckbox
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onChange={(checked) =>
+                      setSelected(checked ? new Set(corrections.map((item) => item.id)) : new Set())
+                    }
+                  />
+                </TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Barcode</TableHead>
+                <TableHead>Entered brand</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Organization</TableHead>
+                <TableHead>Age</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {corrections.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <label className={CHECKBOX_HIT_AREA}>
                       <input
                         type="checkbox"
                         aria-label={`Select ${describeCorrection(item)}`}
+                        className={CHECKBOX}
                         checked={selected.has(item.id)}
                         onChange={(event) => {
                           const next = new Set(selected);
@@ -315,36 +337,42 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
                           setSelected(next);
                         }}
                       />
-                    </td>
-                    <td>{item.kind}</td>
-                    <td>{item.barcode ?? '—'}</td>
-                    <td>{item.enteredBrandName ?? '—'}</td>
-                    <td>{item.chosenSupplier?.name ?? '—'}</td>
-                    <td>{item.organization.name}</td>
-                    <td>{age(item.createdAt)}</td>
-                    <td>
-                      <button
+                    </label>
+                  </TableCell>
+                  <TableCell>{item.kind}</TableCell>
+                  <TableCell>{item.barcode ?? '—'}</TableCell>
+                  <TableCell>{item.enteredBrandName ?? '—'}</TableCell>
+                  <TableCell>{item.chosenSupplier?.name ?? '—'}</TableCell>
+                  <TableCell>{item.organization.name}</TableCell>
+                  <TableCell>{age(item.createdAt)}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button
                         type="button"
+                        variant="outline"
+                        className="min-h-11"
                         disabled={busy}
                         aria-label={`Accept ${describeCorrection(item)}`}
                         onClick={() => void runActions([item.id], 'ACCEPTED', false)}
                       >
                         Accept
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="outline"
+                        className={`min-h-11 ${REJECT_TEXT}`}
                         disabled={busy}
                         aria-label={`Reject ${describeCorrection(item)}`}
                         onClick={() => void runActions([item.id], 'REJECTED', true)}
                       >
                         Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </section>
     </div>
