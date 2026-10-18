@@ -5,6 +5,7 @@ import ExpiredItemsPage from '../pages/ExpiredItemsPage';
 import { apiService } from '../lib/api.service';
 import { getExpiredItems, processExpiredItem } from '../services/expiredItemService';
 import '@testing-library/jest-dom';
+import { semanticDataViz } from '../theme/semantic-tokens';
 
 vi.mock('../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
@@ -35,8 +36,20 @@ vi.mock('../components/ExpiredLossReport', () => ({
 }));
 
 vi.mock('react-chartjs-2', () => ({
-  Bar: ({ role, 'aria-label': ariaLabel }: { role?: string; 'aria-label'?: string }) => (
-    <canvas role={role} aria-label={ariaLabel} />
+  Bar: ({
+    role,
+    'aria-label': ariaLabel,
+    data,
+  }: {
+    role?: string;
+    'aria-label'?: string;
+    data?: { datasets?: Array<{ backgroundColor?: string }> };
+  }) => (
+    <canvas
+      role={role}
+      aria-label={ariaLabel}
+      data-background={data?.datasets?.[0]?.backgroundColor}
+    />
   ),
 }));
 
@@ -442,6 +455,26 @@ describe('ExpiredItemsPage', () => {
       ).toBeInTheDocument();
       expect(screen.getByRole('region', { name: 'Expired Items' })).toBeInTheDocument();
       expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    });
+
+    it('colours the loss charts from the brand data-viz tokens', async () => {
+      mockedGetExpiredItems.mockResolvedValue([]);
+      mockedApiGet.mockImplementation(async (url: string) =>
+        url === '/reports/loss-by-sku'
+          ? [{ sku: 'SAL-300', productName: 'Saline Ampoule', totalLoss: 12, count: 3 }]
+          : [{ department: 'Dispensary', totalLoss: 30.5, count: 4 }],
+      );
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(await screen.findByRole('img', { name: /loss by SKU/ })).toHaveAttribute(
+        'data-background',
+        semanticDataViz.series5,
+      );
+      expect(await screen.findByRole('img', { name: /loss by department/ })).toHaveAttribute(
+        'data-background',
+        semanticDataViz.series2,
+      );
     });
 
     it('announces a failed write-off inside the dialog with an AA-safe colour', async () => {

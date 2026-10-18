@@ -85,33 +85,35 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Losses by SKU */}
-        <div className="border rounded-lg shadow-xs overflow-hidden">
-          <h3 className="text-xl font-semibold font-heading p-4 bg-muted">Financial Loss by SKU</h3>
+        <div className="border rounded-lg bg-semantic-surface-1 overflow-hidden">
+          <h3 className="text-xl font-semibold font-heading p-4 bg-semantic-surface-2">
+            Financial Loss by SKU
+          </h3>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     SKU
                   </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Product Name
                   </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Total Loss
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {lossesBySKU.map((item) => (
-                  <TableRow key={item.sku} className="hover:bg-muted/50">
-                    <TableCell className="whitespace-nowrap text-sm text-foreground">
+                  <TableRow key={item.sku} className="hover:bg-semantic-surface-2/50">
+                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
                       {item.sku}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
+                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
                       {item.productName}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-foreground">
+                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
                       ${item.totalLoss.toFixed(2)}
                     </TableCell>
                   </TableRow>
@@ -122,18 +124,18 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
         </div>
 
         {/* Losses by Store Area */}
-        <div className="border rounded-lg shadow-xs overflow-hidden">
-          <h3 className="text-xl font-semibold font-heading p-4 bg-muted">
+        <div className="border rounded-lg bg-semantic-surface-1 overflow-hidden">
+          <h3 className="text-xl font-semibold font-heading p-4 bg-semantic-surface-2">
             Financial Loss by Store Area
           </h3>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Location Name
                   </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                     Total Loss
                   </TableHead>
                 </TableRow>
@@ -141,11 +143,11 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
               <TableBody>
                 {withOccurrenceKeys(lossesByStoreArea, (a) => a.locationName).map(
                   ({ item, key }) => (
-                    <TableRow key={key} className="hover:bg-muted/50">
-                      <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
+                    <TableRow key={key} className="hover:bg-semantic-surface-2/50">
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
                         {item.locationName}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-foreground">
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
                         ${item.totalLoss.toFixed(2)}
                       </TableCell>
                     </TableRow>

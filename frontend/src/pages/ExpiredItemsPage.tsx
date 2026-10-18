@@ -36,6 +36,7 @@ import {
   TableRow,
 } from '../components/ui/table';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { semanticDataViz } from '../theme/semantic-tokens';
 
 // Type-only import — no runtime cost. Chart.js itself is loaded on demand via the
 // shared lazy chart module (registration lives inside that lazily-loaded chunk).
@@ -382,8 +383,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         {
           label: 'Total Loss ($)',
           data: lossBySkuData?.map((item) => item.totalLoss) ?? [],
-          backgroundColor: 'rgba(239, 68, 68, 0.5)',
-          borderColor: 'rgba(239, 68, 68, 1)',
+          backgroundColor: semanticDataViz.series5,
+          borderColor: semanticDataViz.series5,
           borderWidth: 1,
         },
       ],
@@ -398,8 +399,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         {
           label: 'Total Loss ($)',
           data: lossByDepartmentData?.map((item) => item.totalLoss) ?? [],
-          backgroundColor: 'rgba(59, 130, 246, 0.5)',
-          borderColor: 'rgba(59, 130, 246, 1)',
+          backgroundColor: semanticDataViz.series2,
+          borderColor: semanticDataViz.series2,
           borderWidth: 1,
         },
       ],
