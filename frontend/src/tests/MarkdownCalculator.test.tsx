@@ -252,7 +252,7 @@ describe('MarkdownCalculator', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
 
-    const productSummary = await screen.findByRole('status', { name: /scanned product/i });
+    const productSummary = await screen.findByRole('region', { name: /scanned product/i });
     expect(productSummary).toHaveClass('min-w-0');
     expect(productSummary).toHaveTextContent(/Long pharmacy product name/i);
     expect(within(productSummary).getAllByText(/SKU/i).length).toBeGreaterThan(0);
@@ -299,7 +299,7 @@ describe('MarkdownCalculator', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
 
-    const productSummary = await screen.findByRole('status', { name: /scanned product/i });
+    const productSummary = await screen.findByRole('region', { name: /scanned product/i });
     expect(productSummary).toHaveTextContent(/Not available/i);
     expect(productSummary).not.toHaveTextContent(/\$NaN/i);
 
@@ -317,6 +317,80 @@ describe('MarkdownCalculator', () => {
 
     expect(screen.getByText(/Markdown 3/i)).toBeInTheDocument();
     expect(screen.getByText(/\$25\.00/i)).toBeInTheDocument();
+  });
+
+  it('exposes the card title as the page heading', async () => {
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: /Expiry markdown calculator/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('ties validation errors to the invalid field and moves focus to it', async () => {
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    const costInput = screen.getByLabelText(/Cost Price/i);
+    const expiryInput = screen.getByLabelText(/Expiry Date/i);
+    expect(costInput).toHaveAttribute('aria-required', 'true');
+    expect(expiryInput).toHaveAttribute('aria-required', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+    expect(costInput).toHaveAttribute('aria-invalid', 'true');
+    expect(costInput).toHaveAccessibleDescription(/Enter a cost price greater than 0/i);
+    expect(costInput).toHaveFocus();
+    expect(expiryInput).not.toHaveAttribute('aria-invalid');
+
+    fireEvent.change(costInput, { target: { value: '12.50' } });
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+    expect(costInput).not.toHaveAttribute('aria-invalid');
+    expect(expiryInput).toHaveAttribute('aria-invalid', 'true');
+    expect(expiryInput).toHaveAccessibleDescription(/Choose an expiry date/i);
+    expect(expiryInput).toHaveFocus();
+    // The entered cost is preserved after a validation error.
+    expect(costInput).toHaveValue(12.5);
+  });
+
+  it('calculates when the form is submitted with Enter', async () => {
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    fireEvent.change(screen.getByLabelText(/Cost Price/i), { target: { value: '100' } });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    const expiryInput = screen.getByLabelText(/Expiry Date/i);
+    fireEvent.change(expiryInput, { target: { value: futureDate.toISOString().split('T')[0] } });
+    fireEvent.submit(expiryInput.closest('form')!);
+
+    expect(screen.getByRole('status', { name: /markdown result/i })).toHaveTextContent(/\$25\.00/i);
+  });
+
+  it('keeps a catalog cost read-only but focusable, with an explanation', async () => {
+    const product = {
+      id: 3,
+      name: 'Catalog Cost Product',
+      sku: 'SKU123',
+      barcode: '9300000000002',
+      costPrice: 42.5,
+    };
+    mockedApiGet.mockImplementation((path: string) =>
+      Promise.resolve(path === '/markdown-config' ? markdownConfigResponse : product),
+    );
+
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+    fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+    await screen.findByRole('region', { name: /scanned product/i });
+
+    const costInput = screen.getByLabelText(/Cost Price/i);
+    expect(costInput).not.toBeDisabled();
+    expect(costInput).toHaveAttribute('readonly');
+    expect(costInput).toHaveValue(42.5);
+    expect(costInput).toHaveAccessibleDescription(/From the product catalog/i);
+    costInput.focus();
+    expect(costInput).toHaveFocus();
   });
 
   it('treats stock expiring today as expired at any local time of day', async () => {

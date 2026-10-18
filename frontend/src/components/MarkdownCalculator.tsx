@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -32,6 +32,14 @@ interface MarkdownResult {
   value: number;
 }
 
+interface ValidationError {
+  field: 'costPrice' | 'expiryDate';
+  message: string;
+}
+
+const VALIDATION_ERROR_ID = 'markdown-validation-error';
+const COST_PRICE_HINT_ID = 'costPrice-hint';
+
 const currencyFormatter = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',
@@ -45,7 +53,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [scannedInput, setScannedInput] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<ValidationError | null>(null);
+  const costPriceRef = useRef<HTMLInputElement>(null);
+  const expiryDateRef = useRef<HTMLInputElement>(null);
   // Load the org's markdown matrix so the calculator honors configured bands and
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
   const markdownConfig = useMarkdownMatrices(token);
@@ -122,7 +132,8 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     }
   };
 
-  const calculateMarkdown = () => {
+  const calculateMarkdown = (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     if (markdownConfig.status !== 'ready' || !markdownConfig.matrices) {
       setMarkdownResult(null);
       return;
@@ -132,14 +143,22 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     setValidationError(null);
 
     if (!Number.isFinite(parsedCostPrice) || parsedCostPrice <= 0) {
-      setValidationError('Enter a cost price greater than 0 before calculating a markdown.');
+      setValidationError({
+        field: 'costPrice',
+        message: 'Enter a cost price greater than 0 before calculating a markdown.',
+      });
       setMarkdownResult(null);
+      costPriceRef.current?.focus();
       return;
     }
 
     if (!expiryDate) {
-      setValidationError('Choose an expiry date before calculating a markdown.');
+      setValidationError({
+        field: 'expiryDate',
+        message: 'Choose an expiry date before calculating a markdown.',
+      });
       setMarkdownResult(null);
+      expiryDateRef.current?.focus();
       return;
     }
 
@@ -176,7 +195,10 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   return (
     <Card className="mx-auto w-full max-w-4xl">
       <CardHeader>
-        <CardTitle>Expiry markdown calculator</CardTitle>
+        {/* CardTitle renders a div; expose it as the page heading. */}
+        <CardTitle role="heading" aria-level={1}>
+          Expiry markdown calculator
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
@@ -211,11 +233,12 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
             {productDetails && (
               <section
-                role="status"
-                aria-label="Scanned product"
+                aria-labelledby="scanned-product-heading"
                 className="min-w-0 rounded-md border bg-semantic-surface-2 p-4"
               >
-                <h2 className="font-heading text-base font-semibold">Scanned product</h2>
+                <h2 id="scanned-product-heading" className="font-heading text-base font-semibold">
+                  Scanned product
+                </h2>
                 <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                   <dt className="font-medium text-muted-foreground">Name</dt>
                   <dd className="min-w-0 break-words">{productDetails.name}</dd>
@@ -247,33 +270,56 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                 Use the current cost price and product expiry date to calculate the markdown action.
               </p>
             </div>
-            <div className="grid gap-4">
+            <form noValidate onSubmit={calculateMarkdown} className="grid gap-4">
               <div className="space-y-2">
                 <Label htmlFor="costPrice">Cost price</Label>
                 <Input
+                  ref={costPriceRef}
                   id="costPrice"
                   type="number"
                   min="0.01"
                   step="0.01"
                   value={costPrice}
                   onChange={(e) => setCostPrice(e.target.value)}
-                  disabled={hasProductCost}
-                  className="min-h-11"
+                  // Read-only (not disabled) keeps the catalog cost focusable and legible.
+                  readOnly={hasProductCost}
+                  aria-required="true"
+                  aria-invalid={validationError?.field === 'costPrice' || undefined}
+                  aria-describedby={
+                    [
+                      hasProductCost ? COST_PRICE_HINT_ID : null,
+                      validationError?.field === 'costPrice' ? VALIDATION_ERROR_ID : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' ') || undefined
+                  }
+                  className="min-h-11 read-only:bg-semantic-surface-2"
                 />
+                {hasProductCost && (
+                  <p id={COST_PRICE_HINT_ID} className="text-sm text-muted-foreground">
+                    From the product catalog. Scan another product to change it.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="expiryDate">Expiry date</Label>
                 <Input
+                  ref={expiryDateRef}
                   id="expiryDate"
                   type="date"
                   value={expiryDate}
                   onChange={(e) => setExpiryDate(e.target.value)}
+                  aria-required="true"
+                  aria-invalid={validationError?.field === 'expiryDate' || undefined}
+                  aria-describedby={
+                    validationError?.field === 'expiryDate' ? VALIDATION_ERROR_ID : undefined
+                  }
                   className="min-h-11"
                 />
               </div>
               <MarkdownMatricesNotice {...markdownConfig} />
               <Button
-                onClick={calculateMarkdown}
+                type="submit"
                 size="lg"
                 className="min-h-11 w-full"
                 disabled={markdownConfig.status !== 'ready'}
@@ -281,8 +327,12 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                 Calculate markdown
               </Button>
               {validationError && (
-                <p role="alert" className="min-w-0 break-words text-sm text-semantic-critical">
-                  {validationError}
+                <p
+                  id={VALIDATION_ERROR_ID}
+                  role="alert"
+                  className="min-w-0 break-words text-sm text-semantic-critical"
+                >
+                  {validationError.message}
                 </p>
               )}
               <section
@@ -306,7 +356,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                   </p>
                 )}
               </section>
-            </div>
+            </form>
           </section>
         </div>
       </CardContent>
