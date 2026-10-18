@@ -199,6 +199,32 @@ describe('DashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Failed to load data/i);
     });
+    expect(screen.getByRole('alert')).toHaveTextContent(/Refresh the page to try again/i);
+  });
+
+  it('uses AA-contrast tokens and readable label sizes', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue({
+      stats: {
+        totalProducts: 3,
+        totalInventoryItems: 4,
+        expiringItems: 11,
+        expiredActionItems: 2,
+      },
+      activity: {
+        lastCatalogueUpload: null,
+        expiredItemsEnteredToday: 0,
+        stockLossLast30Days: 0,
+      },
+    });
+
+    const { container } = renderDashboard('test-session-value');
+
+    const expiringCount = await screen.findByText('11');
+    // #D97706 on the amber tint is 2.86:1; the muted-foreground token is 6.37:1.
+    expect(expiringCount).toHaveClass('text-semantic-warning-muted-foreground');
+    expect(expiringCount).not.toHaveClass('text-semantic-warning');
+    expect(container.querySelector('.text-xs')).toBeNull();
+    expect(container.querySelector('dl[aria-label]')).toBeNull();
   });
 
   it('refreshes the Clerk token before fetching dashboard data', async () => {

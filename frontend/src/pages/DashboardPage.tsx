@@ -121,6 +121,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           Dashboard unavailable
         </h1>
         <p className="mt-2 text-sm">{error}</p>
+        <p className="mt-1 text-sm text-semantic-text-secondary">Refresh the page to try again.</p>
       </section>
     );
   }
@@ -168,10 +169,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
                 <h3 id="dashboard-expiring-soon-heading" className="text-sm font-semibold">
                   Expiring soon
                 </h3>
-                <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-warning sm:mt-2 sm:text-3xl">
+                <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-warning-muted-foreground sm:mt-2 sm:text-3xl">
                   {formatDashboardCount(expiringItems)}
                 </p>
-                <p className="mt-1 text-xs text-semantic-warning-muted-foreground">
+                <p className="mt-1 text-sm text-semantic-warning-muted-foreground">
                   Within 30 days of expiry — plan markdowns.
                 </p>
               </div>
@@ -183,7 +184,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
                 <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical sm:mt-2 sm:text-3xl">
                   {formatDashboardCount(expiredActionItems)}
                 </p>
-                <p className="mt-1 text-xs text-semantic-critical-muted-foreground">
+                <p className="mt-1 text-sm text-semantic-critical-muted-foreground">
                   Mark these as sold-through or expired.
                 </p>
               </div>
@@ -229,7 +230,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
               <div className="min-w-0">
                 <dt
                   id="dashboard-total-products-heading"
-                  className="text-xs text-semantic-text-tertiary"
+                  className="text-sm text-semantic-text-tertiary"
                 >
                   Total products
                 </dt>
@@ -240,7 +241,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
               <div className="min-w-0">
                 <dt
                   id="dashboard-inventory-items-heading"
-                  className="text-xs text-semantic-text-tertiary"
+                  className="text-sm text-semantic-text-tertiary"
                 >
                   Inventory items
                 </dt>
@@ -263,9 +264,9 @@ export function DashboardPage({ token }: DashboardPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">
-            <dl className="space-y-4" aria-label="Recent dashboard activity">
+            <dl className="space-y-4">
               <div className="min-w-0 border-b pb-3">
-                <dt className="text-xs text-semantic-text-tertiary">Catalogue last updated</dt>
+                <dt className="text-sm text-semantic-text-tertiary">Catalogue last updated</dt>
                 {lastCatalogueUpload ? (
                   <dd className="mt-1 min-w-0">
                     <p className="break-words text-sm font-medium">
@@ -274,12 +275,12 @@ export function DashboardPage({ token }: DashboardPageProps) {
                     {lastCatalogueUploadTimestamp ? (
                       <time
                         dateTime={lastCatalogueUpload.uploadedAt}
-                        className="text-xs text-semantic-text-tertiary"
+                        className="text-sm text-semantic-text-tertiary"
                       >
                         {lastCatalogueUploadTimestamp}
                       </time>
                     ) : (
-                      <span className="text-xs text-semantic-text-tertiary">
+                      <span className="text-sm text-semantic-text-tertiary">
                         Time not available
                       </span>
                     )}
@@ -292,14 +293,14 @@ export function DashboardPage({ token }: DashboardPageProps) {
               </div>
 
               <div className="min-w-0 border-b pb-3">
-                <dt className="text-xs text-semantic-text-tertiary">Expired items added today</dt>
+                <dt className="text-sm text-semantic-text-tertiary">Expired items added today</dt>
                 <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
                   {formatDashboardCount(activity?.expiredItemsEnteredToday)}
                 </dd>
               </div>
 
               <div className="min-w-0">
-                <dt className="text-xs text-semantic-text-tertiary">Stock loss (last 30 days)</dt>
+                <dt className="text-sm text-semantic-text-tertiary">Stock loss (last 30 days)</dt>
                 <dd className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
                   {formatCurrency(activity?.stockLossLast30Days)}
                 </dd>
