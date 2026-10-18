@@ -6,9 +6,22 @@ import { buildApiUrl } from '../lib/api.service';
 import type { SubscriptionData, UsageData } from '../types/subscription';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
+/**
+ * Data already loaded by the parent. When supplied, the dashboard does not
+ * fetch on its own, so a parent retry or post-cancel reload refreshes it too.
+ */
+export interface SubscriptionDashboardData {
+  subscription: SubscriptionData | null;
+  usage: UsageData | null;
+  loading: boolean;
+  /** Set when the parent's load failed; the parent renders the error and retry. */
+  error: string | null;
+}
+
 interface SubscriptionDashboardProps {
   token: string | null;
   onUpgrade?: () => void;
+  data?: SubscriptionDashboardData;
 }
 
 interface ProgressBarProps {
@@ -72,14 +85,19 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboardProps) {
+export function SubscriptionDashboard({ token, onUpgrade, data }: SubscriptionDashboardProps) {
   const getFreshApiToken = useFreshApiToken(token);
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [usage, setUsage] = useState<UsageData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchedSubscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [fetchedUsage, setUsage] = useState<UsageData | null>(null);
+  const [fetchLoading, setLoading] = useState(true);
+  const [fetchError, setError] = useState<string | null>(null);
+  const isControlled = data !== undefined;
 
   useEffect(() => {
+    if (isControlled) {
+      return;
+    }
+
     if (!token) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
@@ -118,7 +136,17 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     };
 
     fetchData();
-  }, [token, getFreshApiToken]);
+  }, [token, getFreshApiToken, isControlled]);
+
+  const subscription = isControlled ? data.subscription : fetchedSubscription;
+  const usage = isControlled ? data.usage : fetchedUsage;
+  const loading = isControlled ? data.loading : fetchLoading;
+  const error = isControlled ? data.error : fetchError;
+
+  // The parent already shows its own error card with a retry action.
+  if (isControlled && error && !loading) {
+    return null;
+  }
 
   if (loading) {
     return (

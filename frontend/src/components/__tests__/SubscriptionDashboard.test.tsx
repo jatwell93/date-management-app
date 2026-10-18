@@ -126,6 +126,73 @@ describe('SubscriptionDashboard', () => {
     ).toBeInTheDocument();
   });
 
+  describe('with parent-supplied data', () => {
+    it('renders the supplied data without fetching', () => {
+      render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{
+            subscription: mockSubscriptionData as never,
+            usage: mockUsageData as never,
+            loading: false,
+            error: null,
+          }}
+        />,
+      );
+
+      expect(
+        screen.getByRole('progressbar', { name: 'SKUs (Products) usage' }),
+      ).toBeInTheDocument();
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('shows the loading state while the parent loads', () => {
+      render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{ subscription: null, usage: null, loading: true, error: null }}
+        />,
+      );
+
+      expect(screen.getByRole('status')).toHaveTextContent(/Loading subscription data/);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('defers to the parent error card instead of showing a second error', () => {
+      const { container } = render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{ subscription: null, usage: null, loading: false, error: 'Load failed' }}
+        />,
+      );
+
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    it('re-renders with fresh data after a parent reload', () => {
+      const { rerender } = render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{ subscription: null, usage: null, loading: false, error: 'Load failed' }}
+        />,
+      );
+
+      rerender(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{
+            subscription: mockSubscriptionData as never,
+            usage: mockUsageData as never,
+            loading: false,
+            error: null,
+          }}
+        />,
+      );
+
+      expect(screen.getByText(/1,200/)).toBeInTheDocument();
+    });
+  });
+
   it('displays unlimited for null limits', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({

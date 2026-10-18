@@ -21,7 +21,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
-  const [billingLoading, setBillingLoading] = useState(false);
+  // Starts true when a token exists so the dashboard shows "Loading" rather than
+  // a load failure on the first render, before the fetch effect runs.
+  const [billingLoading, setBillingLoading] = useState(Boolean(token));
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const loadSubscriptionData = useCallback(
@@ -286,7 +288,17 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {/* Main Subscription Dashboard */}
-        <SubscriptionDashboard token={token} onUpgrade={handleUpgrade} />
+        {/* Shares this page's single load, so Retry and post-cancel reloads refresh it. */}
+        <SubscriptionDashboard
+          token={token}
+          onUpgrade={handleUpgrade}
+          data={{
+            subscription,
+            usage,
+            loading: billingLoading,
+            error: billingLoadError,
+          }}
+        />
 
         {/* Usage Warnings */}
         {usage && (
