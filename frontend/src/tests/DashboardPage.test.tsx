@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { BrowserRouter, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DashboardPage } from '../pages/DashboardPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
@@ -204,6 +204,70 @@ describe('DashboardPage', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Failed to load data/i);
     });
     expect(screen.getByRole('alert')).toHaveTextContent(/Refresh the page to try again/i);
+  });
+
+  it('navigates to the expiry report client-side without a page reload', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue({
+      stats: {
+        totalProducts: 0,
+        totalInventoryItems: 0,
+        expiringItems: 0,
+        expiredActionItems: 0,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Routes>
+          <Route path="/dashboard" element={<DashboardPage token="test-session-value" />} />
+          <Route path="/detailed-expiry-report" element={<p>Expiry report route</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('link', { name: /Open expiry report/i }));
+
+    expect(await screen.findByText('Expiry report route')).toBeInTheDocument();
+  });
+
+  it('ignores a stale dashboard response after the token changes', async () => {
+    let resolveStale: (value: unknown) => void = () => {};
+    (apiService.get as jest.Mock)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStale = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({
+        stats: {
+          totalProducts: 222,
+          totalInventoryItems: 0,
+          expiringItems: 0,
+          expiredActionItems: 0,
+        },
+      });
+
+    const { rerender } = renderDashboard('first-token');
+    await waitFor(() => expect(apiService.get).toHaveBeenCalledTimes(1));
+    rerender(
+      <BrowserRouter>
+        <DashboardPage token="second-token" />
+      </BrowserRouter>,
+    );
+    expect(await screen.findByText('222')).toBeInTheDocument();
+
+    resolveStale({
+      stats: {
+        totalProducts: 111,
+        totalInventoryItems: 0,
+        expiringItems: 0,
+        expiredActionItems: 0,
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.getByText('222')).toBeInTheDocument();
+    expect(screen.queryByText('111')).not.toBeInTheDocument();
   });
 
   it('uses AA-contrast tokens and readable label sizes', async () => {

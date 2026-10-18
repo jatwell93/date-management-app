@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { buttonVariants } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
@@ -72,6 +73,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Ignore a response that lands after unmount or after the token changed,
+    // so a stale request cannot overwrite newer state.
+    let cancelled = false;
+
     const fetchDashboardData = async () => {
       if (!token) {
         setError('Authentication token is missing.');
@@ -82,20 +87,26 @@ export function DashboardPage({ token }: DashboardPageProps) {
       try {
         const authToken = await getFreshApiToken('dashboard-fetch');
         const data = await apiService.get<DashboardResponse>('/dashboard', authToken);
+        if (cancelled) return;
         setStats(data?.stats ?? null);
         setActivity(data?.activity ?? null);
       } catch (err: unknown) {
+        if (cancelled) return;
         if (err instanceof Error) {
           setError(err.message);
         } else {
           setError('An unknown error occurred');
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchDashboardData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token, getFreshApiToken]);
 
   if (loading) {
@@ -191,22 +202,22 @@ export function DashboardPage({ token }: DashboardPageProps) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <a
-                href="/detailed-expiry-report"
+              <Link
+                to="/detailed-expiry-report"
                 aria-label="Open expiry report"
                 className={`${buttonVariants({ variant: 'default', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:flex-none sm:basis-auto`}
               >
                 <span className="sm:hidden">Expiry report</span>
                 <span className="hidden sm:inline">Open expiry report</span>
-              </a>
-              <a
-                href="/expired-items"
+              </Link>
+              <Link
+                to="/expired-items"
                 aria-label="View expired items"
                 className={`${buttonVariants({ variant: 'outline', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:flex-none sm:basis-auto`}
               >
                 <span className="sm:hidden">Expired items</span>
                 <span className="hidden sm:inline">View expired items</span>
-              </a>
+              </Link>
             </div>
           </CardContent>
         </Card>
