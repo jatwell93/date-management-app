@@ -95,7 +95,7 @@ function BasisButton({
       className={`${BASIS_BUTTON_CLASS} ${
         selected
           ? 'bg-semantic-primary text-semantic-primary-foreground'
-          : 'bg-transparent hover:bg-semantic-surface-3'
+          : 'bg-transparent hover:bg-semantic-surface-3 disabled:hover:bg-transparent'
       }`}
     >
       {label}
