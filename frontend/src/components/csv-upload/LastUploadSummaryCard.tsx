@@ -25,7 +25,7 @@ export const LastUploadSummaryCard: React.FC<{
   const isExpiry = summary?.importType === 'expiry-list';
   return (
     <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-      <h3 className="text-lg font-medium text-semantic-text-primary mb-2">Last uploaded file</h3>
+      <h2 className="text-lg font-medium text-semantic-text-primary mb-2">Last uploaded file</h2>
       {summary ? (
         <div className="grid gap-1 text-sm text-semantic-text-secondary sm:grid-cols-2">
           <p className="font-medium text-semantic-text-primary">{summary.fileName}</p>

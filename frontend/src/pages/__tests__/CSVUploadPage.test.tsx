@@ -166,7 +166,11 @@ describe('CSVUploadPage expiry import', () => {
     expect(progressbar).toHaveAttribute('aria-valuemin', '0');
     expect(progressbar).toHaveAttribute('aria-valuemax', '100');
     expect(progressbar).toHaveAttribute('aria-valuenow', '0');
-    expect(screen.getByRole('status', { name: 'Upload status' })).toHaveTextContent('Uploading');
+    expect(progressbar).toHaveAttribute('aria-valuetext', expect.stringMatching(/^0% - /));
+    const status = screen.getByRole('status', { name: 'Upload status' });
+    expect(status).toHaveTextContent('Uploading');
+    // The ticking percentage stays out of the live region so it is not re-announced.
+    expect(status).not.toHaveTextContent('%');
 
     resolveUpload(
       new Response(JSON.stringify({ key: 'uploads/org-123/products.csv' }), { status: 200 }),
@@ -184,10 +188,10 @@ describe('CSVUploadPage expiry import', () => {
 
     const activePanel = screen.getByRole('tabpanel', { name: 'Expiry List Import' });
 
-    expect(screen.getByRole('region', { name: 'CSV upload workspace' })).toHaveAttribute(
-      'data-slot',
-      'card',
-    );
+    const workspace = screen.getByRole('region', { name: 'Expiry List Import (CSV/XLSX/XLS)' });
+    expect(workspace.tagName).toBe('SECTION');
+    expect(workspace).not.toHaveClass('px-3');
+    expect(workspace.querySelector('[data-slot="card"]')).not.toBeNull();
     expect(activePanel).toContainElement(
       screen.getByRole('button', { name: 'Download CSV Template' }),
     );
@@ -746,6 +750,80 @@ describe('CSVUploadPage expiry import', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(3);
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(3);
+  });
+
+  describe('accessibility', () => {
+    it('uses a contiguous heading outline under the page h1', () => {
+      render(<CSVUploadPage token="test-token" />);
+
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Product Catalog Upload (CSV/XLSX/XLS)' }),
+      ).toBeInTheDocument();
+      ['Last uploaded file', 'Format Guidelines', 'Download Import Templates'].forEach((name) =>
+        expect(screen.getByRole('heading', { level: 2, name })).toBeInTheDocument(),
+      );
+      expect(screen.queryByRole('heading', { level: 4 })).not.toBeInTheDocument();
+    });
+
+    it('uses AA-contrast muted foreground tokens for validation and large-file notes', async () => {
+      (validateCSVColumns as jest.Mock).mockResolvedValue({
+        ...validColumns,
+        isValid: false,
+        missingColumns: ['usedByDate'],
+      });
+      (estimateRowCount as jest.Mock).mockReturnValue({
+        showWarning: true,
+        warningMessage: 'About 60,000 rows',
+      });
+
+      render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+      fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+        target: { files: [new File(['SKU\nSKU-1'], 'expiry.csv', { type: 'text/csv' })] },
+      });
+
+      expect(
+        await screen.findByText('Upload will be blocked until column names are corrected.'),
+      ).toHaveClass('text-sm', 'text-semantic-warning-muted-foreground');
+      expect(
+        screen.getByText(
+          'The upload will proceed normally, but please be patient during processing.',
+        ),
+      ).toHaveClass('text-sm', 'text-semantic-secondary-muted-foreground');
+    });
+
+    it('renders the continue action with the AA default button and a 44px target', async () => {
+      mockSearchParams.set('return', '/expiry-tracking');
+      try {
+        fetchMock
+          .mockResponseOnce(
+            JSON.stringify({
+              strategy: 'direct',
+              uploadUrl: '/api/upload/direct',
+              method: 'POST',
+              key: 'uploads/org-123/expiry.csv',
+            }),
+          )
+          .mockResponseOnce(
+            JSON.stringify({ key: 'uploads/org-123/expiry.csv', importedCount: 1 }),
+          );
+
+        render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+        fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+          target: {
+            files: [new File(['SKU,Used-By Date\nSKU-1,12/12/26'], 'expiry.csv')],
+          },
+        });
+        userEvent.click(screen.getByRole('button', { name: 'Upload Expiry List' }));
+
+        const continueButton = await screen.findByRole('button', { name: 'Continue to next step' });
+        expect(continueButton).toHaveClass('min-h-11', 'bg-semantic-primary');
+        expect(continueButton.className).not.toMatch(/bg-semantic-success/);
+        await userEvent.click(continueButton);
+        expect(mockNavigate).toHaveBeenCalledWith('/expiry-tracking');
+      } finally {
+        mockSearchParams.delete('return');
+      }
+    });
   });
 
   describe('resilience', () => {

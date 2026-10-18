@@ -25,6 +25,7 @@ import { withOccurrenceKeys } from '../utils/listKeys';
 import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
 import { UploadResultPanel } from '../components/csv-upload/UploadResultPanel';
 import { LastUploadSummaryCard } from '../components/csv-upload/LastUploadSummaryCard';
+import { UploadProgress } from '../components/csv-upload/UploadProgress';
 
 export const CSVUploadPage: React.FC<{
   token: string | null;
@@ -39,6 +40,7 @@ export const CSVUploadPage: React.FC<{
       ? rawReturnUrl
       : null;
 
+  const headingId = 'csv-upload-heading';
   const fileInputId = 'csv-upload-file-input';
   const formatGuidelinesId = 'csv-upload-format-guidelines';
   const productCatalogPanelId = 'csv-upload-product-catalog-panel';
@@ -167,11 +169,11 @@ export const CSVUploadPage: React.FC<{
   const activePanelId = isExpiryImport ? expiryListPanelId : productCatalogPanelId;
 
   return (
-    <div className="mx-auto max-w-4xl px-3 sm:px-0">
-      <Card role="region" aria-label="CSV upload workspace" className="gap-0 overflow-hidden py-0">
+    <section aria-labelledby={headingId} className="mx-auto max-w-4xl">
+      <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="px-4 py-4 sm:px-6 sm:py-6">
           <CardTitle>
-            <h1 className="text-xl font-semibold font-heading sm:text-2xl">
+            <h1 id={headingId} className="text-xl font-semibold font-heading sm:text-2xl">
               {isExpiryImport
                 ? 'Expiry List Import (CSV/XLSX/XLS)'
                 : 'Product Catalog Upload (CSV/XLSX/XLS)'}
@@ -237,9 +239,9 @@ export const CSVUploadPage: React.FC<{
               ref={formatGuidelinesRef}
               className="mb-6 scroll-mt-4 p-4 bg-semantic-primary-muted rounded-md"
             >
-              <h3 className="text-lg font-medium text-semantic-primary-muted-foreground mb-2">
+              <h2 className="text-lg font-medium text-semantic-primary-muted-foreground mb-2">
                 Format Guidelines
-              </h3>
+              </h2>
               {isExpiryImport ? (
                 <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
                   <li>
@@ -301,9 +303,9 @@ export const CSVUploadPage: React.FC<{
             </div>
 
             <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-              <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
+              <h2 className="text-lg font-medium text-semantic-text-primary mb-2">
                 Download Import Templates
-              </h3>
+              </h2>
               <p className="text-sm text-semantic-text-secondary mb-3">
                 {isExpiryImport
                   ? 'Templates include required fields, accepted date examples, and rejected-format guidance.'
@@ -384,7 +386,7 @@ export const CSVUploadPage: React.FC<{
 
               {filePreview.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h3>
+                  <h2 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h2>
                   {/* Keyboard users need a focus target to scroll the wide preview table horizontally. */}
                   {/* eslint-disable jsx-a11y/no-noninteractive-tabindex */}
                   <div
@@ -432,13 +434,13 @@ export const CSVUploadPage: React.FC<{
                   role="alert"
                   className="mb-4 p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-md"
                 >
-                  <h4 className="font-semibold text-semantic-warning-muted-foreground mb-2">
+                  <h3 className="font-semibold text-semantic-warning-muted-foreground mb-2">
                     Column validation warning
-                  </h4>
+                  </h3>
                   <div className="text-sm text-semantic-warning-muted-foreground whitespace-pre-line">
                     {formatColumnValidationError(columnValidation)}
                   </div>
-                  <p className="text-xs text-semantic-warning mt-2">
+                  <p className="text-sm text-semantic-warning-muted-foreground mt-2">
                     Upload will be blocked until column names are corrected.
                   </p>
                 </div>
@@ -463,43 +465,19 @@ export const CSVUploadPage: React.FC<{
                   role="status"
                   className="mb-4 p-4 bg-semantic-secondary-muted border border-semantic-secondary-muted rounded-md"
                 >
-                  <h4 className="font-semibold text-semantic-secondary-muted-foreground mb-1">
+                  <h3 className="font-semibold text-semantic-secondary-muted-foreground mb-1">
                     Large file detected
-                  </h4>
+                  </h3>
                   <p className="text-sm text-semantic-secondary-muted-foreground">
                     {rowEstimate.warningMessage}
                   </p>
-                  <p className="text-xs text-semantic-secondary mt-1">
+                  <p className="text-sm text-semantic-secondary-muted-foreground mt-1">
                     The upload will proceed normally, but please be patient during processing.
                   </p>
                 </div>
               )}
 
-              {isUploading && (
-                <div className="mb-4" role="status" aria-label="Upload status" aria-live="polite">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-semantic-text-secondary">
-                      {progressMessage}
-                    </span>
-                    <span className="text-sm font-medium text-semantic-text-secondary">
-                      {uploadProgress}%
-                    </span>
-                  </div>
-                  <div
-                    role="progressbar"
-                    aria-label="Upload progress"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={uploadProgress}
-                    className="w-full overflow-hidden bg-semantic-surface-3 rounded-full h-2.5"
-                  >
-                    <div
-                      className="h-2.5 w-full origin-left rounded-full bg-semantic-primary transition-transform duration-300 ease-out"
-                      style={{ transform: `scaleX(${uploadProgress / 100})` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
+              {isUploading && <UploadProgress progress={uploadProgress} message={progressMessage} />}
 
               <div className="grid gap-3 sm:flex sm:items-center sm:gap-4">
                 <Button
@@ -540,7 +518,7 @@ export const CSVUploadPage: React.FC<{
           </div>
         </CardContent>
       </Card>
-    </div>
+    </section>
   );
 };
 

@@ -28,7 +28,7 @@ const ErrorReportButton: React.FC<{
       <button
         type="button"
         onClick={() => void handleClick()}
-        className="mt-3 text-sm font-medium underline text-semantic-link"
+        className="mt-3 min-h-11 text-sm font-medium underline underline-offset-2"
       >
         Download full error report
       </button>
@@ -152,7 +152,7 @@ const ErrorDetails: React.FC<{
   onShowGuidelines: () => void;
 }> = ({ errors, formatGuidelinesId, onShowGuidelines }) => (
   <div className="mt-2">
-    <h4 className="font-semibold mt-3">Error details:</h4>
+    <h3 className="font-semibold mt-3">Error details:</h3>
     <ul className="list-disc pl-5 mt-1 space-y-1">
       {withOccurrenceKeys(errors, (e) => e).map(({ item: error, key }) => {
         const linkLabel = guidelineLinkLabel(error);
@@ -163,7 +163,7 @@ const ErrorDetails: React.FC<{
                 {error} -{' '}
                 <button
                   type="button"
-                  className="cursor-pointer text-semantic-primary hover:underline"
+                  className="min-h-11 cursor-pointer font-medium underline underline-offset-2"
                   onClick={onShowGuidelines}
                   aria-controls={formatGuidelinesId}
                 >
@@ -193,9 +193,9 @@ export const UploadResultPanel: React.FC<UploadResultPanelProps> = ({
     role={uploadResult.success ? 'status' : 'alert'}
     className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-semantic-success-muted text-semantic-success-muted-foreground' : 'bg-semantic-critical-muted text-semantic-critical-muted-foreground'}`}
   >
-    <h3 className="font-semibold mb-2">
+    <h2 className="font-semibold mb-2">
       {uploadResult.success ? 'Upload successful' : 'Upload failed'}
-    </h3>
+    </h2>
 
     <p>{uploadResult.message}</p>
 
@@ -232,8 +232,7 @@ export const UploadResultPanel: React.FC<UploadResultPanelProps> = ({
         <Button
           type="button"
           onClick={() => onContinue(returnUrl)}
-          variant="success"
-          className="w-full py-2 font-semibold"
+          className="min-h-11 w-full py-2 font-semibold"
         >
           Continue to next step
         </Button>
