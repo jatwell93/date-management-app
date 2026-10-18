@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PharmIQ — Wordmark Only
+  Use when icon mark is already established nearby, or in text-rich contexts
+  Primary variant: navy "Pharm" + teal "IQ"
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 36" fill="none" aria-label="PharmIQ wordmark">
+  <title>PharmIQ</title>
+  <text
+    x="0"
+    y="28"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="#0F172A"
+  >Pharm</text>
+  <text
+    x="80"
+    y="28"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="#0F766E"
+  >IQ</text>
+</svg>

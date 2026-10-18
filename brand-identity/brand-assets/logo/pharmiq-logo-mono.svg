@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PharmIQ — Monochrome Logo (single colour)
+  Use for: single-colour print, embroidery, embossing, fax, B&W contexts
+  Default: all black. Swap fill="black" to any single colour as needed.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none" aria-label="PharmIQ (monochrome)">
+  <title>PharmIQ</title>
+  <defs>
+    <clipPath id="hex-clip-mono">
+      <polygon points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"/>
+    </clipPath>
+  </defs>
+
+  <polygon
+    points="44,24 34,6.68 14,6.68 4,24 14,41.32 34,41.32"
+    fill="black"
+  />
+  <g clip-path="url(#hex-clip-mono)">
+    <rect x="11" y="29" width="7" height="10" rx="1.5" fill="white"/>
+    <rect x="20.5" y="21" width="7" height="18" rx="1.5" fill="white"/>
+    <rect x="30" y="11" width="7" height="28" rx="1.5" fill="white"/>
+  </g>
+
+  <!-- Full-black wordmark -->
+  <text
+    x="58"
+    y="34"
+    font-family="'Space Grotesk', 'Sora', system-ui, sans-serif"
+    font-size="26"
+    font-weight="700"
+    letter-spacing="-0.3"
+    fill="black"
+  >PharmIQ</text>
+</svg>

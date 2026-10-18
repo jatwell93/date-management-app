@@ -1,0 +1,347 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "meta": {
+    "brand": "PharmIQ",
+    "version": "2.0.0",
+    "description": "PharmIQ design tokens v2 — surface-ladder-first, hairline borders, atmospheric glows, Fraunces + Outfit type system"
+  },
+  "color": {
+    "brand": {
+      "teal": {
+        "$value": "#0F766E",
+        "$type": "color",
+        "$description": "Primary brand teal — CTAs, active states, brand mark, focus rings, chart series 1. Use with restraint."
+      },
+      "teal-light": {
+        "$value": "#14B8A6",
+        "$type": "color",
+        "$description": "Hover state, illustrated highlights"
+      },
+      "teal-dark": {
+        "$value": "#0D5D5A",
+        "$type": "color",
+        "$description": "Pressed/active state, deep teal emphasis"
+      },
+      "teal-50": {
+        "$value": "#F0FDFA",
+        "$type": "color",
+        "$description": "Active nav item background, row hover, selected row"
+      },
+      "teal-100": {
+        "$value": "#CCFBF1",
+        "$type": "color",
+        "$description": "Selected fill backgrounds"
+      },
+      "amber": {
+        "$value": "#D97706",
+        "$type": "color",
+        "$description": "Alert accent — expiry warnings, dead-stock flags, urgency indicators. One instance per viewport at rest."
+      },
+      "amber-light": {
+        "$value": "#FDE68A",
+        "$type": "color",
+        "$description": "Alert card backgrounds"
+      },
+      "amber-50": {
+        "$value": "#FFFBEB",
+        "$type": "color",
+        "$description": "Warning surface backgrounds"
+      },
+      "amber-dark": {
+        "$value": "#92400E",
+        "$type": "color",
+        "$description": "Alert text on light backgrounds — meets AA contrast"
+      }
+    },
+    "surface-light": {
+      "canvas": {
+        "$value": "#FFFFFF",
+        "$type": "color",
+        "$description": "Level 0 — page backgrounds, primary surface"
+      },
+      "surface-1": {
+        "$value": "#F8FAFC",
+        "$type": "color",
+        "$description": "Level 1 — card backgrounds, sidebar fills"
+      },
+      "surface-2": {
+        "$value": "#F1F5F9",
+        "$type": "color",
+        "$description": "Level 2 — elevated cards, hover states, nested panels"
+      },
+      "surface-3": {
+        "$value": "#E2E8F0",
+        "$type": "color",
+        "$description": "Level 3 — deep hierarchy, chips, strong dividers"
+      }
+    },
+    "surface-dark": {
+      "canvas-dark": {
+        "$value": "#070E1A",
+        "$type": "color",
+        "$description": "Level 0 — marketing hero background, dark section anchor. NOT true black — has navy tint."
+      },
+      "dark-surface-1": {
+        "$value": "#0F172A",
+        "$type": "color",
+        "$description": "Level 1 on dark canvas — card backgrounds (this is the existing PharmIQ Navy, repositioned in hierarchy)"
+      },
+      "dark-surface-2": {
+        "$value": "#1E293B",
+        "$type": "color",
+        "$description": "Level 2 — feature cards, pricing tiers on dark"
+      },
+      "dark-surface-3": {
+        "$value": "#273549",
+        "$type": "color",
+        "$description": "Level 3 — further elevated panels on dark canvas"
+      },
+      "dark-surface-4": {
+        "$value": "#334155",
+        "$type": "color",
+        "$description": "Level 4 — highest elevation on dark canvas"
+      }
+    },
+    "hairline": {
+      "hairline": {
+        "$value": "rgba(15,23,42,0.08)",
+        "$type": "color",
+        "$description": "Light mode default dividers, row separators"
+      },
+      "hairline-strong": {
+        "$value": "rgba(15,23,42,0.14)",
+        "$type": "color",
+        "$description": "Light mode card borders, input borders, table rules"
+      },
+      "hairline-focus": {
+        "$value": "#0F766E",
+        "$type": "color",
+        "$description": "Focus rings — always teal"
+      },
+      "dark-hairline": {
+        "$value": "rgba(241,245,249,0.08)",
+        "$type": "color",
+        "$description": "Dark mode dividers, row separators"
+      },
+      "dark-hairline-strong": {
+        "$value": "rgba(241,245,249,0.15)",
+        "$type": "color",
+        "$description": "Dark mode card borders, dark input borders"
+      }
+    },
+    "glow": {
+      "teal-glow": {
+        "$value": "rgba(15,118,110,0.18)",
+        "$type": "color",
+        "$description": "Dark canvas teal section glow — radial gradient color stop only. One per section, never two per viewport."
+      },
+      "amber-glow": {
+        "$value": "rgba(217,119,6,0.14)",
+        "$type": "color",
+        "$description": "Dark canvas amber/urgency section glow — radial gradient color stop only"
+      },
+      "teal-glow-light": {
+        "$value": "rgba(15,118,110,0.06)",
+        "$type": "color",
+        "$description": "Light canvas subtle teal depth — very faint, behind hero panels only"
+      }
+    },
+    "ink": {
+      "ink": {
+        "$value": "#0F172A",
+        "$type": "color",
+        "$description": "All headings, emphasized body type (light mode)"
+      },
+      "ink-muted": {
+        "$value": "#475569",
+        "$type": "color",
+        "$description": "Secondary body copy, descriptions"
+      },
+      "ink-subtle": {
+        "$value": "#94A3B8",
+        "$type": "color",
+        "$description": "Captions, placeholders — DECORATIVE ONLY, never informational body text (fails AA alone)"
+      },
+      "ink-tertiary": {
+        "$value": "#CBD5E1",
+        "$type": "color",
+        "$description": "Disabled states, footnotes"
+      },
+      "ink-on-dark": {
+        "$value": "#F1F5F9",
+        "$type": "color",
+        "$description": "All text on dark canvas"
+      },
+      "ink-on-dark-muted": {
+        "$value": "rgba(241,245,249,0.72)",
+        "$type": "color",
+        "$description": "Secondary text on dark canvas"
+      },
+      "ink-on-dark-subtle": {
+        "$value": "rgba(241,245,249,0.45)",
+        "$type": "color",
+        "$description": "Captions, meta on dark canvas"
+      }
+    },
+    "semantic": {
+      "success": { "$value": "#10B981", "$type": "color", "$description": "Positive trends, in-stock, completions" },
+      "success-bg": { "$value": "#ECFDF5", "$type": "color" },
+      "success-dark": { "$value": "#34D399", "$type": "color", "$description": "Success on dark canvas" },
+      "warning": { "$value": "#D97706", "$type": "color", "$description": "Expiry <30d, low-stock alerts — uses brand amber" },
+      "warning-bg": { "$value": "#FFFBEB", "$type": "color" },
+      "warning-dark": { "$value": "#FBBF24", "$type": "color", "$description": "Warning on dark canvas" },
+      "critical": { "$value": "#EF4444", "$type": "color", "$description": "Expired items, critical errors, stock-outs" },
+      "critical-bg": { "$value": "#FEF2F2", "$type": "color" },
+      "critical-dark": { "$value": "#F87171", "$type": "color", "$description": "Critical on dark canvas" },
+      "info": { "$value": "#0EA5E9", "$type": "color", "$description": "System notifications, informational states" },
+      "info-bg": { "$value": "#F0F9FF", "$type": "color" },
+      "info-dark": { "$value": "#38BDF8", "$type": "color", "$description": "Info on dark canvas" },
+      "dead-stock": { "$value": "#8B5CF6", "$type": "color", "$description": "Dead-stock specific indicator" },
+      "dead-stock-bg": { "$value": "#F5F3FF", "$type": "color" },
+      "dead-stock-dark": { "$value": "#A78BFA", "$type": "color" },
+      "listed": { "$value": "#0EA5E9", "$type": "color", "$description": "Listed on dead-stock marketplace" }
+    },
+    "chart": {
+      "series-1": { "$value": "#0F766E", "$type": "color", "$description": "Primary metric — Teal" },
+      "series-2": { "$value": "#0EA5E9", "$type": "color", "$description": "Secondary metric — Sky" },
+      "series-3": { "$value": "#D97706", "$type": "color", "$description": "Alert metric — Amber" },
+      "series-4": { "$value": "#8B5CF6", "$type": "color", "$description": "Comparison — Violet" },
+      "series-5": { "$value": "#10B981", "$type": "color", "$description": "Growth — Green" },
+      "series-6": { "$value": "#F43F5E", "$type": "color", "$description": "Negative/loss — Rose" },
+      "grid-line": { "$value": "#E2E8F0", "$type": "color", "$description": "Chart grid lines (subtle)" },
+      "axis-label": { "$value": "#94A3B8", "$type": "color", "$description": "Axis tick labels" },
+      "heatmap-0": { "$value": "#F8FAFC", "$type": "color", "$description": "Heat map: no data" },
+      "heatmap-1": { "$value": "#CCFBF1", "$type": "color", "$description": "Heat map: low" },
+      "heatmap-2": { "$value": "#5EEAD4", "$type": "color", "$description": "Heat map: below average" },
+      "heatmap-3": { "$value": "#0F766E", "$type": "color", "$description": "Heat map: average" },
+      "heatmap-4": { "$value": "#D97706", "$type": "color", "$description": "Heat map: above average / hot" },
+      "heatmap-5": { "$value": "#92400E", "$type": "color", "$description": "Heat map: top performer" }
+    }
+  },
+  "typography": {
+    "font-family": {
+      "display": {
+        "$value": "'Fraunces', 'Georgia', 'Times New Roman', serif",
+        "$type": "fontFamily",
+        "$description": "Fraunces variable serif — hero display headlines only (48px+). Editorial authority, zero competitors."
+      },
+      "heading": {
+        "$value": "'Outfit', 'DM Sans', system-ui, sans-serif",
+        "$type": "fontFamily",
+        "$description": "Outfit geometric sans — all headings (h1–h4), navigation, UI labels, eyebrow text, button labels"
+      },
+      "body": {
+        "$value": "'Inter', system-ui, -apple-system, sans-serif",
+        "$type": "fontFamily",
+        "$description": "Inter — all body copy, descriptions, captions, form fields"
+      },
+      "mono": {
+        "$value": "'JetBrains Mono', 'Fira Code', monospace",
+        "$type": "fontFamily",
+        "$description": "JetBrains Mono — PBS codes, batch numbers, inline code, CLI references"
+      },
+      "consumer-heading": {
+        "$value": "'Bricolage Grotesque', system-ui, sans-serif",
+        "$type": "fontFamily",
+        "$description": "Consumer/worker tools only (Pay Checker) — warmer, more approachable than Outfit"
+      },
+      "consumer-body": {
+        "$value": "'DM Sans', system-ui, -apple-system, sans-serif",
+        "$type": "fontFamily",
+        "$description": "Consumer/worker tools only — humanist quality suits mobile worker context"
+      }
+    },
+    "font-size": {
+      "display-xl": { "$value": "64px", "$type": "dimension", "$description": "Fraunces — hero marketing headline. One per page. Scales to ~36px mobile via clamp." },
+      "display-lg": { "$value": "48px", "$type": "dimension", "$description": "Fraunces — section opener headlines" },
+      "display-md": { "$value": "40px", "$type": "dimension", "$description": "Fraunces — hero sub-headlines, large callouts" },
+      "h1": { "$value": "36px", "$type": "dimension", "$description": "Outfit — page titles, dashboard headings" },
+      "h2": { "$value": "28px", "$type": "dimension", "$description": "Outfit — section headings, card group titles" },
+      "h3": { "$value": "22px", "$type": "dimension", "$description": "Outfit — card headings, pricing tier names" },
+      "h4": { "$value": "18px", "$type": "dimension", "$description": "Outfit — sub-sections, sidebar group labels" },
+      "body-lg": { "$value": "18px", "$type": "dimension", "$description": "Inter — lead body copy, hero subheadlines" },
+      "body": { "$value": "16px", "$type": "dimension", "$description": "Inter — standard body. Minimum for mobile (prevents iOS zoom)." },
+      "body-sm": { "$value": "14px", "$type": "dimension", "$description": "Inter — card body, secondary descriptions" },
+      "eyebrow": { "$value": "12px", "$type": "dimension", "$description": "Outfit 600 uppercase — section labels, category tags" },
+      "label": { "$value": "13px", "$type": "dimension", "$description": "Inter 500 — UI labels, navigation" },
+      "caption": { "$value": "12px", "$type": "dimension", "$description": "Inter — timestamps, meta, footnotes" },
+      "button-lg": { "$value": "15px", "$type": "dimension", "$description": "Outfit — hero CTA buttons" },
+      "button": { "$value": "14px", "$type": "dimension", "$description": "Inter 500 — standard buttons" },
+      "data-xl": { "$value": "36px", "$type": "dimension", "$description": "Inter 700 tabular-nums — hero KPI tiles" },
+      "data-lg": { "$value": "28px", "$type": "dimension", "$description": "Inter 600 tabular-nums — module KPIs" },
+      "data": { "$value": "15px", "$type": "dimension", "$description": "Inter tabular-nums — table cells, inline metrics" },
+      "mono": { "$value": "13px", "$type": "dimension", "$description": "JetBrains Mono — PBS codes, batch numbers, code" }
+    },
+    "font-weight": {
+      "regular": { "$value": "400", "$type": "fontWeight" },
+      "medium": { "$value": "500", "$type": "fontWeight" },
+      "semibold": { "$value": "600", "$type": "fontWeight" },
+      "bold": { "$value": "700", "$type": "fontWeight" },
+      "extrabold": { "$value": "800", "$type": "fontWeight" }
+    },
+    "line-height": {
+      "display-xl": { "$value": "1.05", "$type": "number", "$description": "Fraunces hero — tight stacking is structural" },
+      "display-lg": { "$value": "1.08", "$type": "number" },
+      "display-md": { "$value": "1.10", "$type": "number" },
+      "heading": { "$value": "1.25", "$type": "number", "$description": "Outfit headings" },
+      "body": { "$value": "1.60", "$type": "number" },
+      "body-compact": { "$value": "1.45", "$type": "number", "$description": "Data tables, compact UI" },
+      "label": { "$value": "1.30", "$type": "number" }
+    },
+    "letter-spacing": {
+      "display-xl": { "$value": "-0.015em", "$type": "dimension", "$description": "Fraunces 64px — ~-0.96px" },
+      "display-lg": { "$value": "-0.012em", "$type": "dimension", "$description": "Fraunces 48px — ~-0.58px" },
+      "display-md": { "$value": "-0.010em", "$type": "dimension", "$description": "Fraunces 40px — ~-0.40px" },
+      "h1": { "$value": "-0.015em", "$type": "dimension", "$description": "Outfit 36px" },
+      "h2": { "$value": "-0.012em", "$type": "dimension", "$description": "Outfit 28px" },
+      "h3": { "$value": "-0.008em", "$type": "dimension", "$description": "Outfit 22px" },
+      "h4": { "$value": "-0.005em", "$type": "dimension", "$description": "Outfit 18px" },
+      "body": { "$value": "0", "$type": "dimension" },
+      "label": { "$value": "0.01em", "$type": "dimension", "$description": "Slight positive for nav labels" },
+      "eyebrow": { "$value": "0.06em", "$type": "dimension", "$description": "Outfit eyebrow — positive tracking marks it as taxonomy" },
+      "caption": { "$value": "0", "$type": "dimension" }
+    }
+  },
+  "spacing": {
+    "1": { "$value": "4px", "$type": "dimension", "$description": "Tight — icon-to-label" },
+    "2": { "$value": "8px", "$type": "dimension", "$description": "Compact — within components" },
+    "3": { "$value": "12px", "$type": "dimension", "$description": "Small — related elements" },
+    "4": { "$value": "16px", "$type": "dimension", "$description": "Base — standard padding" },
+    "5": { "$value": "20px", "$type": "dimension", "$description": "Medium — card padding" },
+    "6": { "$value": "24px", "$type": "dimension", "$description": "Large — card padding, section spacing" },
+    "8": { "$value": "32px", "$type": "dimension", "$description": "XL — between card groups" },
+    "10": { "$value": "40px", "$type": "dimension", "$description": "2XL — major section gaps" },
+    "12": { "$value": "48px", "$type": "dimension", "$description": "3XL — page-level breathing room" },
+    "16": { "$value": "64px", "$type": "dimension", "$description": "Hero — display section padding" },
+    "24": { "$value": "96px", "$type": "dimension", "$description": "Section — marketing section vertical padding" }
+  },
+  "border-radius": {
+    "sm": { "$value": "4px", "$type": "dimension", "$description": "Badges, tags, status chips" },
+    "md": { "$value": "8px", "$type": "dimension", "$description": "ALL buttons and inputs — strict rule" },
+    "lg": { "$value": "12px", "$type": "dimension", "$description": "ALL cards, panels, modals — strict rule" },
+    "xl": { "$value": "16px", "$type": "dimension", "$description": "Product screenshot panels, large hero frames" },
+    "full": { "$value": "9999px", "$type": "dimension", "$description": "Pills, avatar rings, toggle switches — never for CTA buttons" }
+  },
+  "shadow": {
+    "none": { "$value": "none", "$type": "shadow" },
+    "xs": { "$value": "0 1px 2px rgba(15,23,42,0.06)", "$type": "shadow", "$description": "Subtle lift — use sparingly, prefer hairline borders" },
+    "sm": { "$value": "0 1px 3px rgba(15,23,42,0.10), 0 1px 2px rgba(15,23,42,0.06)", "$type": "shadow", "$description": "Interactive card hover lift — light mode only" },
+    "md": { "$value": "0 4px 6px rgba(15,23,42,0.07), 0 2px 4px rgba(15,23,42,0.06)", "$type": "shadow", "$description": "Dropdowns, tooltips" },
+    "lg": { "$value": "0 10px 15px rgba(15,23,42,0.10), 0 4px 6px rgba(15,23,42,0.05)", "$type": "shadow", "$description": "Modals, overlapping panels" },
+    "xl": { "$value": "0 20px 25px rgba(15,23,42,0.10), 0 8px 10px rgba(15,23,42,0.04)", "$type": "shadow", "$description": "Full-screen overlays" }
+  },
+  "animation": {
+    "duration": {
+      "instant": { "$value": "0ms", "$type": "duration" },
+      "fast": { "$value": "150ms", "$type": "duration", "$description": "Micro-interactions, hover states" },
+      "normal": { "$value": "250ms", "$type": "duration", "$description": "Standard transitions" },
+      "slow": { "$value": "350ms", "$type": "duration", "$description": "Complex state changes" },
+      "chart": { "$value": "300ms", "$type": "duration", "$description": "Chart data updates" }
+    },
+    "easing": {
+      "enter": { "$value": "cubic-bezier(0.0, 0.0, 0.2, 1)", "$type": "cubicBezier", "$description": "ease-out — elements entering" },
+      "exit": { "$value": "cubic-bezier(0.4, 0.0, 1, 1)", "$type": "cubicBezier", "$description": "ease-in — elements exiting" },
+      "standard": { "$value": "cubic-bezier(0.4, 0.0, 0.2, 1)", "$type": "cubicBezier", "$description": "Material standard" }
+    }
+  }
+}
