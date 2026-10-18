@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ExpiryEntriesPage } from '../pages/ExpiryEntriesPage';
 import { apiService } from '../lib/api.service';
 import { ROLES } from '../constants/roles';
@@ -131,6 +131,32 @@ describe('ExpiryEntriesPage', () => {
     await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
 
     expect(screen.getByRole('combobox', { name: /Filter by location/i })).toBeInTheDocument();
+  });
+
+  it('renders urgency text with AA-contrast token pairs', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
+
+    // Base amber (#D97706) is 3.2:1 on white; the muted-foreground shade passes AA.
+    // The table status cell (the print table's <td> carries no colour).
+    const statusCell = screen
+      .getAllByText('Markdown 3')
+      .find((el) => el.tagName === 'DIV' && el.className.includes('min-w-[120px]'));
+    expect(statusCell?.className).toMatch(/text-semantic-warning-muted-foreground/);
+    expect(statusCell?.className).not.toMatch(/text-semantic-warning(\s|$)/);
+    // Mobile "Normal" badge: green-on-mint was ~2.2:1.
+    const normalBadge = screen
+      .getAllByText('Normal')
+      .find((el) => el.className.includes('bg-semantic-success-muted'));
+    expect(normalBadge?.className).toMatch(/text-semantic-success-muted-foreground/);
+    // Save must not use the white-on-green success variant (2.5:1).
+    fireEvent.click(screen.getAllByRole('button', { name: /^Edit/i })[0]);
+    expect(screen.getByRole('button', { name: /^Save$/i }).className).not.toMatch(
+      /bg-semantic-success/,
+    );
   });
 
   it('announces a missing token', async () => {

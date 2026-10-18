@@ -87,9 +87,10 @@ function getMarkdownStatus(daysToExpiry: number | null) {
 
 function getMobileBadgeClass(daysToExpiry: number | null): string {
   if (daysToExpiry === null) return 'bg-semantic-secondary-muted text-semantic-text-secondary';
-  if (daysToExpiry <= 0) return 'bg-semantic-critical-muted text-semantic-critical';
+  if (daysToExpiry <= 0)
+    return 'bg-semantic-critical-muted text-semantic-critical-muted-foreground';
   if (daysToExpiry <= 90) return 'bg-semantic-warning-muted text-semantic-warning-muted-foreground';
-  return 'bg-semantic-success-muted text-semantic-success';
+  return 'bg-semantic-success-muted text-semantic-success-muted-foreground';
 }
 
 function TableSkeleton() {
@@ -390,7 +391,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
               : daysToExpiry <= 0
                 ? 'text-semantic-critical font-bold'
                 : daysToExpiry <= 30
-                  ? 'text-semantic-warning font-semibold'
+                  ? 'text-semantic-warning-muted-foreground font-semibold'
                   : '';
 
           return (
@@ -418,7 +419,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             markdownStatus === 'Expired'
               ? 'text-semantic-critical'
               : markdownStatus.startsWith('Markdown')
-                ? 'text-semantic-warning'
+                ? 'text-semantic-warning-muted-foreground'
                 : 'text-semantic-text-secondary';
 
           return (
@@ -464,7 +465,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             : getDaysToExpiry(row.original.expiryDate);
           const matrix = markdownConfig.matrices?.[row.original.creditScope ?? 'NO_CREDIT'];
           if (!matrix) {
-            return <div className="min-w-[100px] text-sm text-muted-foreground">Unavailable</div>;
+            return (
+              <div className="min-w-[100px] text-sm text-semantic-text-secondary">Unavailable</div>
+            );
           }
           const markdownPrice =
             calculateMarkdownPrice(
@@ -579,7 +582,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   onClick={handleSaveEdit}
                   disabled={saving}
                   size="sm"
-                  variant="success"
+                  variant="default"
                   className="min-w-[50px] font-medium"
                   aria-busy={saving}
                 >
@@ -717,7 +720,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           role="alert"
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-6 text-center"
         >
-          <p className="font-medium text-semantic-critical">{fetchError}</p>
+          <p className="font-medium text-semantic-critical-muted-foreground">{fetchError}</p>
           <Button onClick={handleRetryFetch} variant="default" className="mt-4">
             Try again
           </Button>
@@ -771,7 +774,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         <div
           role="alert"
           aria-live="assertive"
-          className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted px-4 py-3 text-sm text-semantic-critical"
+          className="flex items-center justify-between gap-4 rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted px-4 py-3 text-sm text-semantic-critical-muted-foreground"
         >
           <span>{actionError}</span>
           <button
@@ -823,11 +826,13 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                 <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <dt className="text-semantic-text-secondary">Expiry</dt>
-                    <dd className="font-medium">{formatExpiryDate(item.expiryDate)}</dd>
+                    <dd className="font-medium tabular-nums">
+                      {formatExpiryDate(item.expiryDate)}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-semantic-text-secondary">Markdown price</dt>
-                    <dd className="font-medium">
+                    <dd className="font-medium tabular-nums">
                       {markdownPrice == null ? 'Unavailable' : formatCurrencyValue(markdownPrice)}
                     </dd>
                   </div>
