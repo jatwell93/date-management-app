@@ -56,6 +56,30 @@ export function CameraScanner({
   const [scannerState, setScannerState] = useState<ScannerState>('ready');
   const recentScansRef = useRef<Set<string>>(new Set());
   const detectedHandlerRef = useRef<((data: unknown) => void) | null>(null);
+  const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  // Keep the latest props in refs so a parent re-render (new inline callbacks)
+  // does not tear down and re-initialise the camera stream.
+  const onDetectedRef = useRef(onDetected);
+  const onScannerReadyRef = useRef(onScannerReady);
+  const onScannerResetRef = useRef(onScannerReset);
+  const continuousRef = useRef(continuous);
+  const disabledRef = useRef(disabled);
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+    onScannerReadyRef.current = onScannerReady;
+    onScannerResetRef.current = onScannerReset;
+    continuousRef.current = continuous;
+    disabledRef.current = disabled;
+  });
+
+  const schedule = useCallback((callback: () => void, delay: number) => {
+    const id = setTimeout(() => {
+      timeoutsRef.current.delete(id);
+      callback();
+    }, delay);
+    timeoutsRef.current.add(id);
+  }, []);
 
   // Debounce utility to track recent barcode scans (last 2 seconds)
   const isDuplicateScan = useCallback((barcode: string): boolean => {
@@ -67,12 +91,12 @@ export function CameraScanner({
     recentScansRef.current.add(barcode);
 
     // Remove after 2 seconds (using config constant - fixes 17.9)
-    setTimeout(() => {
+    schedule(() => {
       recentScansRef.current.delete(barcode);
     }, TIMING_CONSTANTS.DEDUP_WINDOW_MS);
 
     return false;
-  }, []);
+  }, [schedule]);
 
   // Extract scanner initialization logic so it can be reused
   const initScanner = useCallback(() => {
@@ -117,12 +141,12 @@ export function CameraScanner({
 
         Quagga.start();
         setScannerState('scanning');
-        onScannerReady?.();
+        onScannerReadyRef.current?.();
       },
     );
 
     const detectedHandler = (data: unknown) => {
-      if (disabled) {
+      if (disabledRef.current) {
         return;
       }
 
@@ -142,13 +166,13 @@ export function CameraScanner({
         return;
       }
 
-      onDetected(barcode);
+      onDetectedRef.current(barcode);
       setScannerState('scanned');
 
       // Only stop the scanner after detection if not in continuous mode
       // Wait 1 second before stopping to allow UI updates (fixes 17.9)
-      if (!continuous) {
-        setTimeout(() => {
+      if (!continuousRef.current) {
+        schedule(() => {
           Quagga.stop();
         }, 1000);
       }
@@ -156,13 +180,16 @@ export function CameraScanner({
 
     detectedHandlerRef.current = detectedHandler;
     Quagga.onDetected(detectedHandler);
-  }, [onDetected, onScannerReady, continuous, disabled, isDuplicateScan]);
+  }, [isDuplicateScan, schedule]);
 
   useEffect(() => {
     initScanner();
+    const pendingTimeouts = timeoutsRef.current;
 
     // Cleanup function
     return () => {
+      pendingTimeouts.forEach((id) => clearTimeout(id));
+      pendingTimeouts.clear();
       if (detectedHandlerRef.current) {
         Quagga.offDetected(detectedHandlerRef.current);
         detectedHandlerRef.current = null;
@@ -185,9 +212,9 @@ export function CameraScanner({
     }
 
     // Small timeout to ensure scanner stops before restarting
-    setTimeout(() => {
+    schedule(() => {
       initScanner(); // Re-initialize scanner instead of just calling start()
-      onScannerReset?.();
+      onScannerResetRef.current?.();
     }, 300);
   };
 
