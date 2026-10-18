@@ -91,11 +91,11 @@ export function AddAreaForm({
           {isAddingArea ? 'Adding location' : 'Add location'}
         </Button>
       </div>
-      <div className="mt-1.5">
-        <FieldError id={ADD_NAME_ERROR_ID} show={nameInvalid}>
-          {AREA_NAME_REQUIRED_MESSAGE}
-        </FieldError>
-      </div>
+      {nameInvalid && (
+        <div className="mt-1.5">
+          <FieldError id={ADD_NAME_ERROR_ID}>{AREA_NAME_REQUIRED_MESSAGE}</FieldError>
+        </div>
+      )}
     </div>
   );
 }

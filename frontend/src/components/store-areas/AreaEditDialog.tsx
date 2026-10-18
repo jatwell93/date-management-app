@@ -116,11 +116,11 @@ export function AreaEditDialog({
               className="min-h-11 sm:col-span-3"
               maxLength={AREA_NAME_MAX_LENGTH}
             />
-            <div className="sm:col-span-3 sm:col-start-2">
-              <FieldError id={EDIT_NAME_ERROR_ID} show={nameInvalid}>
-                {AREA_NAME_REQUIRED_MESSAGE}
-              </FieldError>
-            </div>
+            {nameInvalid && (
+              <div className="sm:col-span-3 sm:col-start-2">
+                <FieldError id={EDIT_NAME_ERROR_ID}>{AREA_NAME_REQUIRED_MESSAGE}</FieldError>
+              </div>
+            )}
           </div>
           <div className="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
             <Label htmlFor="editedSubDepartmentName" className="sm:text-right">
