@@ -428,6 +428,10 @@ describe('ExpiredItemsPage', () => {
         screen.getAllByRole('button', { name: 'Mark Saline Ampoule as sold through' }),
       ).toHaveLength(2);
       expect(screen.getByRole('button', { name: 'Print Report' })).toBeInTheDocument();
+      expect(screen.getByRole('table', { name: 'Expired items' })).toBeInTheDocument();
+      screen
+        .getAllByRole('button', { name: 'Mark Saline Ampoule as expired' })
+        .forEach((button) => expect(button).toHaveClass('hover:text-semantic-critical-active'));
     });
 
     it('gives each loss chart a text alternative and a heading', async () => {

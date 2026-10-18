@@ -581,7 +581,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                     aria-label={`Mark ${item.productName} as expired`}
                     variant="outline"
                     size="sm"
-                    className="min-h-11 flex-1 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                    className="min-h-11 flex-1 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10 hover:text-semantic-critical-active"
                     disabled={isProcessing}
                   >
                     Expired
@@ -593,7 +593,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
           <div className="hidden lg:block overflow-x-auto rounded-md border print-report-target">
             <div className="no-print">
-              <Table>
+              <Table aria-label="Expired items">
                 <TableHeader>
                   <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
                     <TableHead className="text-left text-sm font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
@@ -666,7 +666,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                             aria-label={`Mark ${item.productName} as expired`}
                             variant="outline"
                             size="sm"
-                            className="min-h-11 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                            className="min-h-11 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10 hover:text-semantic-critical-active"
                             disabled={isProcessing}
                           >
                             Expired
@@ -914,7 +914,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 disabled={isProcessing || !!unitsDiscardedError}
                 className={
                   action === 'expired'
-                    ? 'min-h-11 bg-semantic-critical hover:bg-semantic-critical/90'
+                    ? 'min-h-11 bg-semantic-critical hover:bg-semantic-critical-hover'
                     : 'min-h-11'
                 }
               >
