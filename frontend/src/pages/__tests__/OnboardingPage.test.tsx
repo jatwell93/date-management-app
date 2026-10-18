@@ -70,6 +70,8 @@ describe('OnboardingPage structure', () => {
     expect(items[1]).toHaveAttribute('aria-current', 'step');
     expect(items[0]).not.toHaveAttribute('aria-current');
     expect(items[0]).toHaveTextContent('(done)');
+    expect(items[1]).toHaveClass('bg-semantic-primary');
+    expect(items[2]).toHaveClass('bg-semantic-surface-4');
   });
 
   it('exposes card titles as level-2 headings', () => {

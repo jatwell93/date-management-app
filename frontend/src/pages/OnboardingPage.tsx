@@ -77,24 +77,16 @@ interface CatalogOptionProps {
   description: string;
   onClick: () => void;
   disabled: boolean;
-  className: string;
 }
 
 /** A whole-card button so the full padded area is clickable and focusable. */
-function CatalogOption({
-  icon,
-  title,
-  description,
-  onClick,
-  disabled,
-  className,
-}: CatalogOptionProps) {
+function CatalogOption({ icon, title, description, onClick, disabled }: CatalogOptionProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`w-full text-left border-2 border-dashed border-hairline rounded-lg p-6 motion-safe:transition-colors cursor-pointer outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className="w-full text-left border-2 border-dashed border-hairline rounded-lg p-6 motion-safe:transition-colors cursor-pointer outline-hidden focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 hover:border-semantic-primary hover:bg-semantic-surface-3 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <span className="flex items-center justify-center mb-3">{icon}</span>
       <span className="block font-semibold text-semantic-text-primary">{title}</span>
@@ -108,11 +100,11 @@ function DemoDataIcon({ isLoading }: { isLoading: boolean }) {
     return (
       <Loader2
         aria-hidden="true"
-        className="size-8 text-semantic-success motion-safe:animate-spin"
+        className="size-8 text-semantic-primary motion-safe:animate-spin"
       />
     );
   }
-  return <Zap aria-hidden="true" className="size-8 text-semantic-success" />;
+  return <Zap aria-hidden="true" className="size-8 text-semantic-primary" />;
 }
 
 function useSeedDemoData(onNext: () => void) {
@@ -176,12 +168,11 @@ function Step1({ onNext }: StepProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy={isLoading}>
           <CatalogOption
-            icon={<FileText aria-hidden="true" className="size-8 text-semantic-secondary" />}
+            icon={<FileText aria-hidden="true" className="size-8 text-semantic-primary" />}
             title="Upload CSV File"
             description="Import your existing product catalog from a CSV file"
             onClick={handleCSVUpload}
             disabled={isLoading}
-            className="hover:border-semantic-primary hover:bg-semantic-secondary-muted"
           />
           <CatalogOption
             icon={<DemoDataIcon isLoading={isLoading} />}
@@ -189,7 +180,6 @@ function Step1({ onNext }: StepProps) {
             description="Get started quickly with sample pharmacy products"
             onClick={() => void seed()}
             disabled={isLoading}
-            className="hover:border-semantic-success hover:bg-semantic-success-muted"
           />
         </div>
 
@@ -250,7 +240,7 @@ function TourDots({ slideIndex, onSelect }: TourDotsProps) {
             <span
               aria-hidden="true"
               className={`block h-2 rounded-full motion-safe:transition-colors ${
-                isCurrent ? 'bg-semantic-secondary w-8' : 'bg-semantic-surface-4 w-2'
+                isCurrent ? 'bg-semantic-primary w-8' : 'bg-semantic-surface-4 w-2'
               }`}
             />
           </button>
@@ -355,7 +345,7 @@ function StepProgress({ currentStep }: { currentStep: OnboardingStep }) {
           key={step}
           aria-current={step === currentStep ? 'step' : undefined}
           className={`h-2 flex-1 rounded-full motion-safe:transition-colors ${
-            step <= currentStep ? 'bg-semantic-secondary' : 'bg-semantic-surface-4'
+            step <= currentStep ? 'bg-semantic-primary' : 'bg-semantic-surface-4'
           }`}
         >
           <span className="sr-only">
