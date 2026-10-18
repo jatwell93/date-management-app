@@ -328,7 +328,7 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
         <p className="text-2xl font-semibold tabular-nums">
           {currency.format(report.outstandingValue)}
         </p>
-        <p className="mt-1 text-xs text-semantic-text-tertiary">Owed on sent, unsettled claims</p>
+        <p className="mt-1 text-sm text-semantic-text-tertiary">Owed on sent, unsettled claims</p>
       </CardContent>
     </Card>
     <Card>
@@ -341,7 +341,7 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
         <p className="text-2xl font-semibold tabular-nums text-semantic-critical">
           {currency.format(report.unclaimedValue)}
         </p>
-        <p className="mt-1 text-xs text-semantic-text-tertiary">
+        <p className="mt-1 text-sm text-semantic-text-tertiary">
           Eligible write-offs never claimed
         </p>
       </CardContent>
@@ -358,8 +358,8 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
         ) : (
           <ul className="space-y-1 text-sm">
             {report.suppliers.slice(0, 4).map((s) => (
-              <li key={s.supplierId} className="flex justify-between">
-                <span className="truncate">{s.supplierName}</span>
+              <li key={s.supplierId} className="flex justify-between gap-2">
+                <span className="min-w-0 truncate">{s.supplierName}</span>
                 <span className="tabular-nums text-semantic-text-secondary">
                   {s.recoveryRate == null ? '—' : `${Math.round(s.recoveryRate * 100)}%`}
                 </span>
@@ -542,7 +542,7 @@ const ClaimList: React.FC<{
           >
             <span>
               <span className="font-medium">Claim #{claim.id}</span> · {claim.supplier.name}
-              <span className="ml-2 text-sm text-semantic-text-secondary">
+              <span className="ml-2 text-sm tabular-nums text-semantic-text-secondary">
                 {claim.lines.length} line{claim.lines.length === 1 ? '' : 's'} ·{' '}
                 {claim.expectedCreditValue != null
                   ? `~${currency.format(claim.expectedCreditValue)}`
@@ -611,14 +611,12 @@ const BuildClaimModal: React.FC<{
                 {item.productName}{' '}
                 <span className="font-mono text-semantic-text-secondary">{item.sku}</span>
               </p>
-              <p className="text-xs text-semantic-text-secondary">
+              <p className="text-sm text-semantic-text-secondary">
                 {item.unitsDiscarded} units · expect{' '}
                 {item.expectedCreditUnits == null ? '—' : `${item.expectedCreditUnits} unit(s)`}
               </p>
               <div className="mt-2">
-                <Label htmlFor={`batch-${item.transactionId}`} className="text-xs">
-                  Batch number
-                </Label>
+                <Label htmlFor={`batch-${item.transactionId}`}>Batch number</Label>
                 <Input
                   id={`batch-${item.transactionId}`}
                   value={batches[item.transactionId] ?? ''}
@@ -844,7 +842,7 @@ const AssignSupplierModal: React.FC<{
                 onChange={(event) => setName(event.target.value)}
               />
               {fieldErrors.name && (
-                <p id="supplier-name-error" className="mt-1 text-xs text-semantic-critical">
+                <p id="supplier-name-error" className="mt-1 text-sm text-semantic-critical">
                   {fieldErrors.name}
                 </p>
               )}
@@ -943,7 +941,7 @@ const ClaimDetailModal: React.FC<{
           <p>
             Status: <span className="font-medium">{formatClaimLabel(claim.status)}</span>
           </p>
-          <p className="text-semantic-text-secondary">
+          <p className="tabular-nums text-semantic-text-secondary">
             Expected{' '}
             {claim.expectedCreditValue != null ? currency.format(claim.expectedCreditValue) : 'TBC'}
             {claim.creditedValue != null && ` · credited ${currency.format(claim.creditedValue)}`}
@@ -952,12 +950,12 @@ const ClaimDetailModal: React.FC<{
 
         {claim.status === 'DRAFT' && claim.lines.length > 0 && (
           <div className="my-3 rounded-md border p-2">
-            <p className="mb-1 text-xs font-semibold uppercase text-semantic-text-secondary">
+            <h3 className="mb-1 text-sm font-semibold text-semantic-text-secondary">
               Photos (attach before sending)
-            </p>
+            </h3>
             <ul className="space-y-2">
               {claim.lines.map((line) => (
-                <li key={line.id} className="flex items-center justify-between text-xs">
+                <li key={line.id} className="flex items-center justify-between text-sm">
                   <span>
                     Batch {line.batchNumber ?? '—'} · {line.unitsClaimed} units ·{' '}
                     {line.photos.length} photo(s)
@@ -983,10 +981,8 @@ const ClaimDetailModal: React.FC<{
         )}
 
         <div className="my-3 max-h-40 overflow-y-auto rounded-md border p-2">
-          <p className="mb-1 text-xs font-semibold uppercase text-semantic-text-secondary">
-            Timeline
-          </p>
-          <ul className="space-y-1 text-xs">
+          <h3 className="mb-1 text-sm font-semibold text-semantic-text-secondary">Timeline</h3>
+          <ul className="space-y-1 text-sm">
             {claim.events.map((ev) => (
               <li key={ev.id} className="flex justify-between">
                 <span>
@@ -1027,9 +1023,7 @@ const ClaimDetailModal: React.FC<{
               </Button>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <Label htmlFor="credited" className="text-xs">
-                    Credited value
-                  </Label>
+                  <Label htmlFor="credited">Credited value (AUD)</Label>
                   <Input
                     id="credited"
                     type="number"

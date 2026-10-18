@@ -78,7 +78,7 @@ interface Props {
 
 const FieldError: React.FC<{ id?: string; message?: string }> = ({ id, message }) =>
   message ? (
-    <p id={id} className="mt-1 text-xs text-semantic-critical">
+    <p id={id} className="mt-1 text-sm text-semantic-critical">
       {message}
     </p>
   ) : null;
@@ -311,7 +311,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
           />
         </div>
       </div>
-      <p className="text-xs text-semantic-text-tertiary">
+      <p className="text-sm text-semantic-text-tertiary">
         Ratio example: write off 3 for a credit of 1. Leave both blank if there is no fixed ratio.
       </p>
     </>

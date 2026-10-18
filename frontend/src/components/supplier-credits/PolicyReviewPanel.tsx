@@ -378,7 +378,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             >
               Attach policy to {selected.size} {selected.size === 1 ? 'brand' : 'brands'}
             </Button>
-            <p className="text-xs text-semantic-text-secondary">Maximum 500 brands per request.</p>
+            <p className="text-sm text-semantic-text-secondary">Maximum 500 brands per request.</p>
           </CardContent>
         </Card>
       )}
@@ -571,7 +571,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             {createFieldErrors.name && (
               <p
                 id="policy-review-create-name-error"
-                className="mt-1 text-xs text-semantic-critical"
+                className="mt-1 text-sm text-semantic-critical"
               >
                 {createFieldErrors.name}
               </p>

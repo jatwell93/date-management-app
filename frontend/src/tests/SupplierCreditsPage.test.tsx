@@ -985,6 +985,19 @@ describe('SupplierCreditsPage accessibility', () => {
   });
 });
 
+describe('SupplierCreditsPage typography', () => {
+  it('marks claim detail sections as headings at body-readable size', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+
+    const timeline = await screen.findByRole('heading', { level: 3, name: 'Timeline' });
+    expect(timeline).toHaveClass('text-sm');
+    expect(timeline).not.toHaveClass('text-xs');
+    expect(screen.getByText('FOLLOW UP SENT').closest('ul')).toHaveClass('text-sm');
+  });
+});
+
 describe('SupplierCreditsPage resilience', () => {
   it('announces a failed inline brand add instead of swallowing it', async () => {
     mocked.getBrandReview.mockResolvedValue({
