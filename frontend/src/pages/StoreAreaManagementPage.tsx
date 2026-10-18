@@ -39,12 +39,18 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
         </CardHeader>
         <CardContent className="px-4 sm:px-6">
           {view.error && (
-            <p role="alert" className="text-semantic-critical text-sm text-center mt-4">
+            <p
+              role="alert"
+              className="text-semantic-critical-muted-foreground text-sm text-center mt-4"
+            >
               Error: {view.error}
             </p>
           )}
           {view.successMessage && (
-            <p role="status" className="text-semantic-success text-sm text-center mt-4">
+            <p
+              role="status"
+              className="text-semantic-success-muted-foreground text-sm text-center mt-4"
+            >
               {view.successMessage}
             </p>
           )}

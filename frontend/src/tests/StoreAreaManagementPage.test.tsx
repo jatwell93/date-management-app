@@ -538,3 +538,81 @@ describe('StoreAreaManagementPage', () => {
     expect(await screen.findByText(/Aisle 1 deleted/i)).toBeInTheDocument();
   });
 });
+
+const progressSummary = (coveragePercent: number) => ({
+  totalBays: 2,
+  checkedBays: 1,
+  notCheckedBays: 0,
+  overdueBays: 1,
+  uncheckedBays: 1,
+  coveragePercent,
+});
+
+function mockAreasAndProgress(areas: unknown[], progress: unknown = null) {
+  // @ts-expect-error — apiService.get is mocked as vi.fn()
+  apiService.get.mockImplementation((url: string) =>
+    Promise.resolve(url === '/store-areas/floor-progress' ? progress : areas),
+  );
+}
+
+const activeProgress = {
+  activeCycle: { id: 31, name: 'July walk', status: 'active' },
+  summary: progressSummary(50),
+  departments: [
+    {
+      department: { id: 10, name: 'Hair' },
+      summary: progressSummary(50),
+      bays: [
+        {
+          id: 11,
+          name: 'Hair Bay 1',
+          parentId: 10,
+          state: 'checked',
+          checkedAt: null,
+          checkedBy: null,
+        },
+        {
+          id: 12,
+          name: 'Hair Bay 2',
+          parentId: 10,
+          state: 'overdue',
+          checkedAt: null,
+          checkedBy: null,
+        },
+      ],
+    },
+  ],
+};
+
+describe('StoreAreaManagementPage UI audit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetToken.mockResolvedValue(undefined);
+  });
+
+  it('uses AA-contrast tokens for messages and a calm row delete trigger', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    (apiService.post as jest.Mock).mockResolvedValue({ id: 2, name: 'Shelf', last_checked: null });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    const [deleteTrigger] = screen.getAllByRole('button', { name: 'Delete Aisle 1' });
+    expect(deleteTrigger).toHaveClass('text-semantic-critical-muted-foreground');
+    expect(deleteTrigger).not.toHaveClass('bg-semantic-critical');
+
+    fireEvent.change(screen.getByLabelText(/^Area name$/i), { target: { value: 'Shelf' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
+
+    expect(await screen.findByRole('status')).toHaveClass('text-semantic-success-muted-foreground');
+  });
+
+  it('emphasises overdue bays with text, not colour alone', async () => {
+    mockAreasAndProgress([], activeProgress);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    const overdue = await screen.findByText('Overdue');
+    expect(overdue).toHaveClass('text-semantic-warning-muted-foreground');
+  });
+});

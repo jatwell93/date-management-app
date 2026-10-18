@@ -1,3 +1,4 @@
+import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import {
   AlertDialog,
@@ -41,8 +42,8 @@ export function AreaDeleteDialog({
     >
       <AlertDialogTrigger asChild>
         <Button
-          variant="destructive"
-          className={triggerClassName}
+          variant="outline"
+          className={cn('text-semantic-critical-muted-foreground', triggerClassName)}
           aria-label={`Delete ${area.name}`}
           disabled={deletingAreaId !== null}
         >

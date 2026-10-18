@@ -113,7 +113,7 @@ function FloorProgressDepartments({
         </div>
         <div className="h-2 rounded bg-semantic-surface-3">
           <div
-            className="h-2 rounded bg-semantic-success"
+            className="h-2 rounded bg-semantic-primary"
             style={{ width: `${floorProgress.summary.coveragePercent}%` }}
           />
         </div>
@@ -147,7 +147,13 @@ function FloorProgressDepartments({
                   >
                     <div>
                       <p className="font-medium text-semantic-text-primary">{bay.name}</p>
-                      <p className="text-sm text-semantic-text-secondary">
+                      <p
+                        className={
+                          bay.state === 'overdue'
+                            ? 'text-sm font-medium text-semantic-warning-muted-foreground'
+                            : 'text-sm text-semantic-text-secondary'
+                        }
+                      >
                         {renderBayState(bay)}
                         {bay.checkedBy?.name ? ` by ${bay.checkedBy.name}` : ''}
                         {bay.checkedAt ? ` at ${formatLastChecked(bay.checkedAt)}` : ''}
