@@ -205,6 +205,43 @@ describe('UsageReportPage', () => {
     expect(chartProps.bar?.options.animation).toBeUndefined();
   });
 
+  it('keeps a team-member chart error after the daily chart loads successfully later', async () => {
+    let resolveItemsByDate: (value: Array<{ date: string; itemCount: number }>) => void = () => {};
+    const itemsByDatePromise = new Promise<Array<{ date: string; itemCount: number }>>(
+      (resolve) => {
+        resolveItemsByDate = resolve;
+      },
+    );
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.reject(new Error('Team member chart unavailable'));
+      }
+      if (url === '/reports/items-by-date') {
+        return itemsByDatePromise;
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+    await screen.findByRole('heading', { name: /Stock Added by Team Member/i, level: 2 });
+
+    // items-by-date succeeds AFTER items-by-user failed: it must not wipe that error.
+    await act(async () => {
+      resolveItemsByDate([{ date: '2025-01-30', itemCount: 20 }]);
+      await itemsByDatePromise;
+    });
+
+    expect(
+      await screen.findByRole('table', { name: /Items added per day summary/i }),
+    ).toBeInTheDocument();
+    const byUser = screen.getByRole('region', { name: /Stock Added by Team Member/i });
+    expect(within(byUser).getByRole('alert')).toHaveTextContent(/Team member chart unavailable/i);
+    // The error belongs to the team-member card only.
+    const byDate = screen.getByRole('region', { name: /Daily Stock Additions/i });
+    expect(within(byDate).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('displays an error message if token is missing', async () => {
     render(<UsageReportPage token={null} />);
 

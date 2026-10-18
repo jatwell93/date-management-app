@@ -164,7 +164,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   const [itemsByUserLoading, setItemsByUserLoading] = useState(true);
   const [itemsByDateLoading, setItemsByDateLoading] = useState(true);
   const [storeWalkAuditLoading, setStoreWalkAuditLoading] = useState(true);
-  const [chartsError, setChartsError] = useState<string | null>(null);
+  // Separate error per chart fetch: a shared flag let one fetch's success clear the other's error.
+  const [itemsByUserError, setItemsByUserError] = useState<string | null>(null);
+  const [itemsByDateError, setItemsByDateError] = useState<string | null>(null);
   const [storeWalkAuditError, setStoreWalkAuditError] = useState<string | null>(null);
   const [timeFrame, setTimeFrame] = useState('all-time');
   const chartsLoading = itemsByUserLoading || itemsByDateLoading;
@@ -202,14 +204,14 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       unknownErrorMessage: 'An unknown error occurred when fetching chart data',
       onStart: () => {
         setItemsByDateLoading(true);
-        setChartsError(null);
+        setItemsByDateError(null);
       },
       onMissingToken: () => setItemsByDateLoading(false),
       onData: (data) => {
         setItemsByDate(data);
-        setChartsError(null);
+        setItemsByDateError(null);
       },
-      onError: (message) => setChartsError(message),
+      onError: (message) => setItemsByDateError(message),
       onSettled: () => setItemsByDateLoading(false),
     });
     return () => controller.abort();
@@ -227,17 +229,17 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       unknownErrorMessage: 'An unknown error occurred when fetching chart data',
       onStart: () => {
         setItemsByUserLoading(true);
-        setChartsError(null);
+        setItemsByUserError(null);
       },
       onMissingToken: () => {
-        setChartsError('Authentication token is missing.');
+        setItemsByUserError('Authentication token is missing.');
         setItemsByUserLoading(false);
       },
       onData: (data) => {
         setItemsByUser(data);
-        setChartsError(null);
+        setItemsByUserError(null);
       },
-      onError: (message) => setChartsError(message),
+      onError: (message) => setItemsByUserError(message),
       onSettled: () => setItemsByUserLoading(false),
     });
     return () => controller.abort();
@@ -402,9 +404,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               <div className="text-center py-8" role="status" aria-live="polite">
                 Loading chart data…
               </div>
-            ) : chartsError ? (
+            ) : itemsByUserError ? (
               <p className="text-semantic-critical text-sm" role="alert">
-                {chartsError}
+                {itemsByUserError}
               </p>
             ) : itemsByUser && itemsByUser.length > 0 ? (
               <div className="space-y-4">
@@ -477,13 +479,13 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Loading is shared with the card above (charts appear together), which already
+                announces it, so no live role here. */}
             {chartsLoading ? (
-              <div className="text-center py-8" role="status" aria-live="polite">
-                Loading chart data…
-              </div>
-            ) : chartsError ? (
+              <div className="text-center py-8">Loading chart data…</div>
+            ) : itemsByDateError ? (
               <p className="text-semantic-critical text-sm" role="alert">
-                {chartsError}
+                {itemsByDateError}
               </p>
             ) : itemsByDate && itemsByDate.length > 0 ? (
               <div className="space-y-4">
