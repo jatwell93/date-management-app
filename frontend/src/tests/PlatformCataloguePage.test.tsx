@@ -131,6 +131,26 @@ describe('PlatformCataloguePage', () => {
     expect(screen.getByRole('heading', { name: 'Pending corrections' })).toHaveFocus();
   });
 
+  it('shows correction kinds as words, not enum names', async () => {
+    render(<PlatformCataloguePage token="token" />);
+
+    expect(await screen.findByText('Unmatched')).toBeInTheDocument();
+    expect(screen.getByText('Brand added')).toBeInTheDocument();
+    expect(screen.queryByText('BRAND_ADDED')).not.toBeInTheDocument();
+  });
+
+  it('labels each seed count and states when nothing was retired', async () => {
+    vi.mocked(service.getCatalogueProvenance).mockResolvedValue({
+      ...provenance,
+      latest: { ...provenance.latest, retired: 0 },
+    });
+    render(<PlatformCataloguePage token="token" />);
+
+    expect(await screen.findByText('No entries retired')).toBeInTheDocument();
+    expect(screen.getByText('Unchanged').nextElementSibling).toHaveTextContent('90');
+    expect(screen.getByText('Reinstated').nextElementSibling).toHaveTextContent('1');
+  });
+
   it('gives every button and checkbox a 44px touch target', async () => {
     render(<PlatformCataloguePage token="token" />);
 

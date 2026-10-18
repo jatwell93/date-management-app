@@ -28,6 +28,17 @@ function age(createdAt: string): string {
   return days === 0 ? 'Today' : `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+const SEEDED_AT_FORMAT = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+/** `BRAND_ADDED` -> `Brand added`; the API sends enum names. */
+function humanizeKind(kind: string): string {
+  const words = kind.toLowerCase().replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
@@ -189,37 +200,35 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
         ) : (
           <>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div>
-                <strong>Version {latest.version}</strong>
-                <div>{latest.sourceFileName}</div>
-                <time dateTime={latest.seededAt}>{new Date(latest.seededAt).toLocaleString()}</time>
+              <div className="space-y-1">
+                <p className="text-lg font-semibold tabular-nums">Version {latest.version}</p>
+                <p className="break-all">{latest.sourceFileName}</p>
+                <p className="tabular-nums">
+                  <time dateTime={latest.seededAt}>
+                    {SEEDED_AT_FORMAT.format(new Date(latest.seededAt))}
+                  </time>
+                </p>
               </div>
-              <dl className="grid grid-cols-2 gap-x-4">
-                <div>
-                  <dt>Inserted</dt>
-                  <dd>{latest.inserted}</dd>
-                </div>
-                <div>
-                  <dt>Updated</dt>
-                  <dd>{latest.updated}</dd>
-                </div>
-                <div>
-                  <dt>Unchanged</dt>
-                  <dd>{latest.unchanged}</dd>
-                </div>
-                <div>
-                  <dt>Reinstated</dt>
-                  <dd>{latest.reinstated}</dd>
-                </div>
-                <div>
-                  <dt>Errors</dt>
-                  <dd>{latest.errorCount}</dd>
-                </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {(
+                  [
+                    ['Inserted', latest.inserted],
+                    ['Updated', latest.updated],
+                    ['Unchanged', latest.unchanged],
+                    ['Reinstated', latest.reinstated],
+                    ['Errors', latest.errorCount],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-sm font-medium">{label}</dt>
+                    <dd className="text-lg font-semibold tabular-nums">{value}</dd>
+                  </div>
+                ))}
               </dl>
               <div
                 className={
                   latest.retired > 0
-                    ? 'rounded-md border border-semantic-warning-muted bg-semantic-warning-hover p-3 text-semantic-warning-foreground'
+                    ? 'self-start rounded-md border border-semantic-warning bg-semantic-warning-muted p-3 font-medium text-semantic-warning-muted-foreground'
                     : ''
                 }
               >
@@ -232,9 +241,9 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
             {provenance.history.length === 0 ? (
               <p>No prior runs.</p>
             ) : (
-              <ul>
+              <ul className="mt-2 space-y-1">
                 {provenance.history.map((run) => (
-                  <li key={run.id}>
+                  <li key={run.id} className="break-words tabular-nums">
                     Version {run.version} · {run.sourceFileName} · {run.retired} retired
                   </li>
                 ))}
@@ -339,12 +348,12 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
                       />
                     </label>
                   </TableCell>
-                  <TableCell>{item.kind}</TableCell>
-                  <TableCell>{item.barcode ?? '—'}</TableCell>
+                  <TableCell>{humanizeKind(item.kind)}</TableCell>
+                  <TableCell className="tabular-nums">{item.barcode ?? '—'}</TableCell>
                   <TableCell>{item.enteredBrandName ?? '—'}</TableCell>
                   <TableCell>{item.chosenSupplier?.name ?? '—'}</TableCell>
                   <TableCell>{item.organization.name}</TableCell>
-                  <TableCell>{age(item.createdAt)}</TableCell>
+                  <TableCell className="tabular-nums">{age(item.createdAt)}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button
