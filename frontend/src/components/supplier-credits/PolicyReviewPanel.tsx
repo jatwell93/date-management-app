@@ -341,7 +341,9 @@ export const PolicyReviewPanel: React.FC<Props> = ({
       {isAdmin && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Bulk attach policy</CardTitle>
+            <CardTitle role="heading" aria-level={3} className="text-base">
+              Bulk attach policy
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
@@ -387,7 +389,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
         </p>
       )}
       {summary && (
-        <p role="status" className="text-sm text-semantic-success">
+        <p role="status" className="text-sm text-semantic-success-muted-foreground">
           {summary}
         </p>
       )}
@@ -556,6 +558,10 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             <Input
               id="policy-review-create-name"
               maxLength={120}
+              aria-invalid={createFieldErrors.name ? true : undefined}
+              aria-describedby={
+                createFieldErrors.name ? 'policy-review-create-name-error' : undefined
+              }
               value={createName}
               onChange={(event) => {
                 setCreateName(event.target.value);
@@ -563,7 +569,12 @@ export const PolicyReviewPanel: React.FC<Props> = ({
               }}
             />
             {createFieldErrors.name && (
-              <p className="mt-1 text-xs text-semantic-critical">{createFieldErrors.name}</p>
+              <p
+                id="policy-review-create-name-error"
+                className="mt-1 text-xs text-semantic-critical"
+              >
+                {createFieldErrors.name}
+              </p>
             )}
           </div>
           <SupplierPolicyFields

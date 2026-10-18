@@ -66,9 +66,9 @@ const STATUS_TONE: Record<string, string> = {
   SENDING: 'bg-semantic-primary/10 text-semantic-primary',
   SENT: 'bg-semantic-primary/10 text-semantic-primary',
   ACKNOWLEDGED: 'bg-semantic-primary/10 text-semantic-primary',
-  CREDITED: 'bg-semantic-success-muted text-semantic-success',
-  PARTIALLY_CREDITED: 'bg-semantic-success-muted text-semantic-success',
-  REJECTED: 'bg-semantic-critical-muted text-semantic-critical',
+  CREDITED: 'bg-semantic-success-muted text-semantic-success-muted-foreground',
+  PARTIALLY_CREDITED: 'bg-semantic-success-muted text-semantic-success-muted-foreground',
+  REJECTED: 'bg-semantic-critical-muted text-semantic-critical-muted-foreground',
   CANCELLED: 'bg-semantic-surface-3 text-semantic-text-secondary',
 };
 
@@ -162,8 +162,8 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
         role="status"
         aria-label="Loading supplier credits"
       >
-        <div className="h-8 w-56 rounded bg-semantic-surface-3 animate-pulse" />
-        <div className="mt-6 h-40 w-full rounded bg-semantic-surface-3 animate-pulse" />
+        <div className="h-8 w-56 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+        <div className="mt-6 h-40 w-full rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
       </div>
     );
   }
@@ -182,9 +182,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <section className="container mx-auto px-4 py-8" aria-labelledby="supplier-credits-heading">
       <header className="mb-6">
-        <h1 className="text-3xl font-semibold font-heading">Supplier Credits</h1>
+        <h1 id="supplier-credits-heading" className="text-3xl font-semibold font-heading">
+          Supplier Credits
+        </h1>
         <p className="mt-2 max-w-2xl text-sm text-semantic-text-secondary">
           Turn written-off stock back into supplier credits. Build a claim, attach photos, send it,
           and let the app chase the follow-up.
@@ -292,7 +294,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           }}
         />
       )}
-    </div>
+    </section>
   );
 };
 
@@ -318,7 +320,9 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-semantic-text-secondary">Outstanding credit</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-sm text-semantic-text-secondary">
+          Outstanding credit
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-2xl font-semibold tabular-nums">
@@ -329,7 +333,9 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
     </Card>
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-semantic-text-secondary">Money on the table</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-sm text-semantic-text-secondary">
+          Money on the table
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-2xl font-semibold tabular-nums text-semantic-critical">
@@ -342,7 +348,9 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
     </Card>
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-semantic-text-secondary">Recovery by supplier</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-sm text-semantic-text-secondary">
+          Recovery by supplier
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {report.suppliers.length === 0 ? (
@@ -387,8 +395,12 @@ const ToClaimBoard: React.FC<{
       {pool.map((group) => (
         <Card key={group.supplierId ?? 'needs-supplier'}>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">
-              {group.supplierName ?? '⚠ Needs supplier'}
+            <CardTitle role="heading" aria-level={2} className="text-lg">
+              {group.supplierName ?? (
+                <>
+                  <span aria-hidden="true">⚠ </span>Needs supplier
+                </>
+              )}
               {group.state === 'PENDING_CONFIRMATION' && (
                 <Badge className="ml-2">Pending confirmation</Badge>
               )}
@@ -539,7 +551,7 @@ const ClaimList: React.FC<{
             </span>
             <span className="flex items-center gap-2">
               {isFollowUpDue(claim) && (
-                <Badge className="bg-semantic-critical-muted text-semantic-critical">
+                <Badge className="bg-semantic-critical-muted text-semantic-critical-muted-foreground">
                   Follow-up due
                 </Badge>
               )}
@@ -768,6 +780,7 @@ const AssignSupplierModal: React.FC<{
             <Button
               variant={mode === 'existing' ? 'default' : 'outline'}
               size="sm"
+              aria-pressed={mode === 'existing'}
               onClick={() => selectMode('existing')}
             >
               Existing
@@ -775,6 +788,7 @@ const AssignSupplierModal: React.FC<{
             <Button
               variant={mode === 'new' ? 'default' : 'outline'}
               size="sm"
+              aria-pressed={mode === 'new'}
               onClick={() => selectMode('new')}
             >
               New supplier
@@ -824,11 +838,15 @@ const AssignSupplierModal: React.FC<{
               <Input
                 id="supplier-name"
                 maxLength={255}
+                aria-invalid={fieldErrors.name ? true : undefined}
+                aria-describedby={fieldErrors.name ? 'supplier-name-error' : undefined}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
               {fieldErrors.name && (
-                <p className="mt-1 text-xs text-semantic-critical">{fieldErrors.name}</p>
+                <p id="supplier-name-error" className="mt-1 text-xs text-semantic-critical">
+                  {fieldErrors.name}
+                </p>
               )}
             </div>
             <SupplierPolicyFields
@@ -944,12 +962,13 @@ const ClaimDetailModal: React.FC<{
                     Batch {line.batchNumber ?? '—'} · {line.unitsClaimed} units ·{' '}
                     {line.photos.length} photo(s)
                   </span>
-                  <label className="cursor-pointer text-semantic-primary">
+                  <label className="inline-flex cursor-pointer items-center rounded-md px-2 font-medium text-semantic-primary underline-offset-4 hover:underline focus-within:ring-[3px] focus-within:ring-semantic-primary/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
                     {uploadingLine === line.id ? 'Uploading…' : 'Add photo'}
+                    <span className="sr-only"> for batch {line.batchNumber ?? 'unknown'}</span>
                     <input
                       type="file"
                       accept="image/*"
-                      className="hidden"
+                      className="sr-only"
                       disabled={uploadingLine != null}
                       onChange={(e) => {
                         const file = e.target.files?.[0];

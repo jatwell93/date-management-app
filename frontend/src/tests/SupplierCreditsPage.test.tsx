@@ -378,7 +378,7 @@ describe('SupplierCreditsPage', () => {
     expect(screen.getByText('$200.00')).toBeInTheDocument();
     // Blackmores appears in both the recovery panel and the pool group.
     expect(screen.getAllByText('Blackmores').length).toBeGreaterThan(0);
-    expect(screen.getByText('⚠ Needs supplier')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Needs supplier/ })).toBeInTheDocument();
     // Supplier group offers a build action; needs-supplier offers assign.
     expect(screen.getByRole('button', { name: 'Begin claim' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assign supplier' })).toBeInTheDocument();
@@ -905,6 +905,83 @@ describe('supplier policy role plumbing', () => {
       'You no longer have permission to change supplier policy',
     );
     expect(screen.queryByText('Only admins can change supplier policy')).not.toBeInTheDocument();
+  });
+});
+
+describe('SupplierCreditsPage accessibility', () => {
+  const draftClaim = {
+    ...openClaim,
+    id: 6,
+    status: 'DRAFT',
+    nextFollowUpAt: null,
+    lines: [{ id: 61, batchNumber: 'B-77', unitsClaimed: 2, photos: [] }],
+  };
+  const creditedClaim = { ...openClaim, id: 7, status: 'CREDITED', nextFollowUpAt: null };
+
+  it('labels the page as a section with its heading, not a nested main', async () => {
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Supplier Credits' })).toBeInTheDocument();
+    expect(screen.queryByRole('main')).toBeNull();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Money on the table' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the claim photo input reachable by keyboard', async () => {
+    mocked.listClaims.mockImplementation((view: string) =>
+      Promise.resolve(view === 'open' ? [draftClaim] : []),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #6/ }));
+
+    const photo = await screen.findByLabelText('Add photo for batch B-77');
+    expect(photo).toHaveAttribute('type', 'file');
+    expect(photo).not.toHaveClass('hidden');
+    expect(photo).toHaveClass('sr-only');
+  });
+
+  it('pairs status and follow-up badges with AA muted-foreground ink', async () => {
+    mocked.listClaims.mockImplementation((view: string) =>
+      Promise.resolve(view === 'open' ? [openClaim] : [creditedClaim]),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    expect(screen.getByText('Follow-up due')).toHaveClass(
+      'text-semantic-critical-muted-foreground',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Settled' }));
+    expect(screen.getByText('CREDITED')).toHaveClass('text-semantic-success-muted-foreground');
+  });
+
+  it('exposes catalogue view toggles as pressed buttons', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    expect(await screen.findByRole('button', { name: 'Brand setup' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Needs brand' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Needs brand' }));
+    expect(screen.getByRole('button', { name: 'Needs brand' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('ties inline policy errors to their inputs', async () => {
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign supplier' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Invalid Supplier');
+    await userEvent.type(screen.getByLabelText('Write off'), '3');
+    await userEvent.click(screen.getByRole('button', { name: 'Assign' }));
+
+    const instructions = screen.getByLabelText('Store instructions');
+    expect(instructions).toHaveAttribute('aria-invalid', 'true');
+    expect(instructions).toHaveAccessibleDescription('Store instructions are required');
   });
 });
 

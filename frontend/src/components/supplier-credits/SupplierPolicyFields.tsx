@@ -76,8 +76,19 @@ interface Props {
   idPrefix: string;
 }
 
-const FieldError: React.FC<{ message?: string }> = ({ message }) =>
-  message ? <p className="mt-1 text-xs text-semantic-critical">{message}</p> : null;
+const FieldError: React.FC<{ id?: string; message?: string }> = ({ id, message }) =>
+  message ? (
+    <p id={id} className="mt-1 text-xs text-semantic-critical">
+      {message}
+    </p>
+  ) : null;
+
+/** aria-invalid + aria-describedby for an input whose error renders as `${id}-error`. */
+function errorProps(id: string, message?: string) {
+  return message
+    ? { 'aria-invalid': true as const, 'aria-describedby': `${id}-error` }
+    : { 'aria-invalid': undefined, 'aria-describedby': undefined };
+}
 
 type ContactsProps = Pick<
   Props,
@@ -112,22 +123,24 @@ const ContactFields: React.FC<ContactsProps> = ({
         <Label htmlFor={fieldId('contactEmail')}>Contact email</Label>
         <Input
           id={fieldId('contactEmail')}
+          {...errorProps(fieldId('contactEmail'), fieldErrors.contactEmail)}
           type="email"
           maxLength={255}
           value={value.contactEmail}
           onChange={(event) => onChange('contactEmail', event.target.value)}
         />
-        <FieldError message={fieldErrors.contactEmail} />
+        <FieldError id={`${fieldId('contactEmail')}-error`} message={fieldErrors.contactEmail} />
       </div>
       <div>
         <Label htmlFor={fieldId('contactPhone')}>Contact phone</Label>
         <Input
           id={fieldId('contactPhone')}
+          {...errorProps(fieldId('contactPhone'), fieldErrors.contactPhone)}
           maxLength={80}
           value={value.contactPhone}
           onChange={(event) => onChange('contactPhone', event.target.value)}
         />
-        <FieldError message={fieldErrors.contactPhone} />
+        <FieldError id={`${fieldId('contactPhone')}-error`} message={fieldErrors.contactPhone} />
       </div>
       <FieldError message={fieldErrors.contact} />
     </div>
@@ -221,6 +234,7 @@ const PolicySection: React.FC<PolicySectionProps> = ({
         ) : (
           <textarea
             id={fieldId('creditPolicyNote')}
+            {...errorProps(fieldId('creditPolicyNote'), fieldErrors.creditPolicyNote)}
             maxLength={10000}
             rows={6}
             className="mt-1 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm outline-hidden focus-visible:border-semantic-primary focus-visible:ring-2 focus-visible:ring-semantic-primary/30"
@@ -228,29 +242,40 @@ const PolicySection: React.FC<PolicySectionProps> = ({
             onChange={(event) => onChange('creditPolicyNote', event.target.value)}
           />
         )}
-        <FieldError message={fieldErrors.creditPolicyNote} />
+        <FieldError
+          id={`${fieldId('creditPolicyNote')}-error`}
+          message={fieldErrors.creditPolicyNote}
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor={fieldId('representativeName')}>Representative name</Label>
           <Input
             id={fieldId('representativeName')}
+            {...errorProps(fieldId('representativeName'), fieldErrors.representativeName)}
             maxLength={120}
             value={value.representativeName}
             onChange={(event) => onChange('representativeName', event.target.value)}
           />
-          <FieldError message={fieldErrors.representativeName} />
+          <FieldError
+            id={`${fieldId('representativeName')}-error`}
+            message={fieldErrors.representativeName}
+          />
         </div>
         <div>
           <Label htmlFor={fieldId('representativeEmail')}>Representative email</Label>
           <Input
             id={fieldId('representativeEmail')}
+            {...errorProps(fieldId('representativeEmail'), fieldErrors.representativeEmail)}
             type="email"
             maxLength={255}
             value={value.representativeEmail}
             onChange={(event) => onChange('representativeEmail', event.target.value)}
           />
-          <FieldError message={fieldErrors.representativeEmail} />
+          <FieldError
+            id={`${fieldId('representativeEmail')}-error`}
+            message={fieldErrors.representativeEmail}
+          />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">

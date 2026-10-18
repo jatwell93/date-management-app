@@ -181,10 +181,17 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setMode('BRAND_REVIEW')}>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={false}
+              onClick={() => setMode('BRAND_REVIEW')}
+            >
               Brand setup
             </Button>
-            <Button size="sm">SKU matching</Button>
+            <Button size="sm" aria-pressed>
+              SKU matching
+            </Button>
           </div>
         </div>
         {controls}
@@ -215,13 +222,21 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm">Brand setup</Button>
-          <Button variant="outline" size="sm" onClick={() => setMode('SKU_MATCHING')}>
+          <Button size="sm" aria-pressed>
+            Brand setup
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={false}
+            onClick={() => setMode('SKU_MATCHING')}
+          >
             SKU matching
           </Button>
           <Button
             variant={filter === 'ALL' ? 'default' : 'outline'}
             size="sm"
+            aria-pressed={filter === 'ALL'}
             onClick={() => changeFilter('ALL')}
           >
             All matches
@@ -229,6 +244,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
           <Button
             variant={filter === 'NEEDS_BRAND' ? 'default' : 'outline'}
             size="sm"
+            aria-pressed={filter === 'NEEDS_BRAND'}
             onClick={() => changeFilter('NEEDS_BRAND')}
           >
             Needs brand
@@ -249,7 +265,9 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
       {groups.map(([label, groupItems]) => (
         <Card key={label}>
           <CardHeader>
-            <CardTitle className="text-lg">{label}</CardTitle>
+            <CardTitle role="heading" aria-level={3} className="text-lg">
+              {label}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="divide-y">
@@ -481,14 +499,14 @@ const SkuMatchingView: React.FC<{
         </p>
       )}
       {summary && (
-        <p role="status" className="text-sm text-semantic-success">
+        <p role="status" className="text-sm text-semantic-success-muted-foreground">
           {summary}
         </p>
       )}
       {groups.map(([label, groupItems]) => (
         <Card key={label}>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle role="heading" aria-level={3} className="text-base">
               {label} · {groupItems.length} {groupItems.length === 1 ? 'SKU' : 'SKUs'}
             </CardTitle>
           </CardHeader>
