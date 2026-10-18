@@ -239,10 +239,6 @@ export function DashboardPage({ token }: DashboardPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 px-4 sm:px-6">
-            <p className="text-sm text-semantic-text-secondary">
-              {formatDashboardCount(stats?.totalProducts)} products with{' '}
-              {formatDashboardCount(stats?.totalInventoryItems)} inventory records
-            </p>
             <dl className="grid grid-cols-2 gap-3 md:grid-cols-1 xl:grid-cols-2">
               <div className="min-w-0">
                 <dt
@@ -251,7 +247,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
                 >
                   Total products
                 </dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums">
                   {formatDashboardCount(stats?.totalProducts)}
                 </dd>
               </div>
@@ -262,7 +258,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
                 >
                   Inventory items
                 </dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums">
                   {formatDashboardCount(stats?.totalInventoryItems)}
                 </dd>
               </div>
@@ -311,14 +307,14 @@ export function DashboardPage({ token }: DashboardPageProps) {
 
               <div className="min-w-0 border-b pb-3">
                 <dt className="text-sm text-semantic-text-tertiary">Expired items added today</dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums">
                   {formatDashboardCount(activity?.expiredItemsEnteredToday)}
                 </dd>
               </div>
 
               <div className="min-w-0">
                 <dt className="text-sm text-semantic-text-tertiary">Stock loss (last 30 days)</dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums text-semantic-critical">
                   {formatCurrency(activity?.stockLossLast30Days)}
                 </dd>
               </div>

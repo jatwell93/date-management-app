@@ -86,7 +86,12 @@ describe('DashboardPage', () => {
     expect(screen.getByText(/Within 30 days of expiry/i)).toBeInTheDocument();
     expect(screen.getByText(/Mark these as sold-through or expired/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Inventory covered/i })).toBeInTheDocument();
-    expect(screen.getByText(/100 products with 42 inventory records/i)).toBeInTheDocument();
+    // Totals appear once, as metrics; no sentence restating them.
+    expect(screen.queryByText(/100 products with 42 inventory records/i)).not.toBeInTheDocument();
+    // Only the two urgent counts get display-size type; supporting values stay calm.
+    expect(screen.getByText('100')).toHaveClass('font-body', 'text-xl', 'font-semibold');
+    expect(screen.getByText('100')).not.toHaveClass('text-2xl');
+    expect(screen.getByText('10')).toHaveClass('text-2xl', 'font-bold');
     expect(screen.queryByText(/stock signals/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/stock pressure/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tracked records/i)).not.toBeInTheDocument();
