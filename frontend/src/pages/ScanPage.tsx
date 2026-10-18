@@ -78,10 +78,23 @@ interface RecentInventoryItem {
   updatedAt: string;
 }
 
+const expiryDateFormatter = new Intl.DateTimeFormat('en-AU', {
+  timeZone: 'Australia/Sydney',
+});
+
+const addedAtFormatter = new Intl.DateTimeFormat('en-AU', {
+  timeZone: 'Australia/Sydney',
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+const currencyFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+});
+
 function formatExpiryDateForCopy(expiryDate: string): string {
-  return new Date(expiryDate).toLocaleDateString('en-AU', {
-    timeZone: 'Australia/Sydney',
-  });
+  return expiryDateFormatter.format(new Date(expiryDate));
 }
 
 export function ScanPage({ token }: ScanPageProps) {
@@ -477,7 +490,7 @@ export function ScanPage({ token }: ScanPageProps) {
         className={
           isHandheld
             ? 'w-full h-full border-0 rounded-none shadow-none bg-card text-card-foreground'
-            : 'w-full mx-auto border border-border bg-card text-card-foreground shadow-lg'
+            : 'w-full mx-auto border border-border bg-card text-card-foreground'
         }
       >
         {!isHandheld && (
@@ -514,11 +527,11 @@ export function ScanPage({ token }: ScanPageProps) {
               </div>
             )}
             {scannedBarcode && !productDetails && !successMessage && showNewProductForm && (
-              <div className="mt-6 p-4 border rounded-md bg-muted">
-                <p className="text-center font-semibold text-foreground">
+              <div className="mt-6 border-t border-border pt-6">
+                <h2 className="font-semibold text-foreground tabular-nums">
                   No catalog match for barcode {scannedBarcode}
-                </p>
-                <p className="text-center text-sm mb-4 text-muted-foreground">
+                </h2>
+                <p className="text-sm mb-4 text-muted-foreground">
                   Create a product record before adding expiry stock.
                 </p>
                 <div className="space-y-4">
@@ -571,26 +584,26 @@ export function ScanPage({ token }: ScanPageProps) {
               </div>
             )}
             {productDetails && (
-              <div className="mt-6 p-4 border rounded-md bg-muted">
+              <div className="mt-6 border-t border-border pt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p className="font-semibold text-foreground">Product Details:</p>
+                    <h2 className="font-semibold text-foreground">Product details</h2>
                     <p className="text-foreground">
                       <span className="font-medium">Name:</span> {productDetails.name}
                     </p>
-                    <p className="text-foreground">
+                    <p className="text-foreground tabular-nums">
                       <span className="font-medium">SKU:</span> {productDetails.sku}
                     </p>
-                    <p className="text-foreground">
+                    <p className="text-foreground tabular-nums">
                       <span className="font-medium">Barcode:</span> {productDetails.barcode}
                     </p>
                   </div>
                   <div>
-                    <p className="text-foreground">
+                    <p className="text-foreground tabular-nums">
                       <span className="font-medium">Cost Price:</span>{' '}
                       {typeof productDetails.costPrice === 'number' &&
                       Number.isFinite(productDetails.costPrice)
-                        ? `$${productDetails.costPrice.toFixed(2)}`
+                        ? currencyFormatter.format(productDetails.costPrice)
                         : 'Not available'}
                     </p>
                     <div className="mt-2">
@@ -604,8 +617,9 @@ export function ScanPage({ token }: ScanPageProps) {
 
                     <MarkdownMatricesNotice {...markdownConfig} />
                     {markdownPrice !== null && markdownPercentage !== null && (
-                      <p className="text-semantic-warning font-semibold mt-1">
-                        Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}
+                      <p className="text-semantic-warning-muted-foreground font-semibold mt-1 tabular-nums">
+                        Markdown Price ({markdownPercentage}% off):{' '}
+                        {currencyFormatter.format(markdownPrice)}
                       </p>
                     )}
                     {isExpiredStock && (
@@ -657,26 +671,21 @@ export function ScanPage({ token }: ScanPageProps) {
               </div>
             )}
             {productDetails && recentEntries && recentEntries.length > 0 && (
-              <div className="mt-8 p-4 border rounded-md bg-muted">
+              <div className="mt-8 border-t border-border pt-6">
                 <h2 className="font-semibold text-lg text-foreground mb-4">Recent entries</h2>
                 <div className="space-y-3">
                   {recentEntries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex flex-wrap items-center justify-between gap-3 p-3 bg-background border rounded-md"
+                      className="flex flex-wrap items-center justify-between gap-3 p-3 border border-border rounded-md"
                     >
                       <div>
-                        <p className="text-foreground">
+                        <p className="text-foreground tabular-nums">
                           <span className="font-medium">Expiry Date:</span>{' '}
-                          {new Date(entry.expiryDate).toLocaleDateString('en-AU', {
-                            timeZone: 'Australia/Sydney',
-                          })}
+                          {formatExpiryDateForCopy(entry.expiryDate)}
                         </p>
-                        <p className="text-muted-foreground text-sm">
-                          Added:{' '}
-                          {new Date(entry.createdAt).toLocaleString('en-AU', {
-                            timeZone: 'Australia/Sydney',
-                          })}
+                        <p className="text-muted-foreground text-sm tabular-nums">
+                          Added: {addedAtFormatter.format(new Date(entry.createdAt))}
                         </p>
                       </div>
                       <AlertDialog

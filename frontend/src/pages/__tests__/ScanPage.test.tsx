@@ -312,11 +312,16 @@ describe('ScanPage Integration', () => {
         target: { value: expiryValue },
       });
 
-      expect(
-        await screen.findByText((_content, element) =>
-          Boolean(element?.textContent === `Markdown Price (${percentage}% off): $${price}`),
+      const markdownLine = await screen.findByText((_content, element) =>
+        Boolean(
+          element?.tagName === 'P' &&
+          element.textContent === `Markdown Price (${percentage}% off): $${price}`,
         ),
-      ).toBeInTheDocument();
+      );
+      expect(markdownLine).toBeInTheDocument();
+      // Amber body text fails AA on light surfaces; the muted-foreground shade passes.
+      expect(markdownLine).toHaveClass('text-semantic-warning-muted-foreground');
+      expect(markdownLine).not.toHaveClass('text-semantic-warning');
       expect(screen.queryByText(/\$NaN/i)).not.toBeInTheDocument();
     },
   );
