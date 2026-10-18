@@ -32,8 +32,8 @@ vi.mock('../components/ui/card', () => ({
       {children}
     </div>
   ),
-  CardTitle: ({ children, className }: MockCardProps) => (
-    <div className={className} data-testid="card-title">
+  CardTitle: ({ children, ...props }: React.ComponentProps<'div'>) => (
+    <div data-testid="card-title" {...props}>
       {children}
     </div>
   ),
@@ -282,7 +282,7 @@ describe('UserManagementPage', () => {
     render(<UserManagementPage />);
 
     const summaries = await screen.findByRole('list', { name: /team member summaries/i });
-    const summary = within(summaries).getByRole('listitem', { name: new RegExp(longName) });
+    const [summary] = within(summaries).getAllByRole('listitem');
 
     expect(within(summary).getByText(longName)).toHaveClass('break-words');
     expect(within(summary).getByText(longEmail)).toHaveClass('break-all');
@@ -308,8 +308,13 @@ describe('UserManagementPage', () => {
 
     render(<UserManagementPage />);
 
-    const page = screen.getByRole('main', { name: /team members/i });
-    expect(page).toHaveClass('px-3', 'sm:px-4', 'lg:px-6');
+    // The shell <main> owns the gutter; the page is a labelled region, not a second main.
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    const page = screen.getByRole('region', { name: /team members/i });
+    expect(page).not.toHaveClass('px-3');
+    expect(
+      screen.getByRole('heading', { level: 2, name: /organization members/i }),
+    ).toBeInTheDocument();
 
     const summaries = await screen.findByRole('list', { name: /team member summaries/i });
     expect(summaries).toHaveClass('md:hidden');
@@ -327,5 +332,17 @@ describe('UserManagementPage', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try again/i })).toHaveClass('min-h-11', 'w-full');
+  });
+
+  test('renders the load error with the AA-contrast muted critical pair', async () => {
+    mockGetMemberships.mockRejectedValue(new Error('Network unavailable'));
+
+    render(<UserManagementPage />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveClass('bg-semantic-critical-muted');
+    const message = within(alert).getByText(/check the connection/i);
+    expect(message).toHaveClass('text-semantic-critical-muted-foreground');
+    expect(message).not.toHaveClass('text-semantic-critical');
   });
 });
