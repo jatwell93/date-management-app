@@ -107,7 +107,7 @@ describe('OnboardingPage catalog step', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Server unavailable');
-    expect(alert.className).toContain('text-semantic-critical-muted-foreground');
+    expect(alert).toHaveClass('text-semantic-critical-muted-foreground', 'text-base');
     expect(demoButton).toBeEnabled();
   });
 });

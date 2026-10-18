@@ -90,7 +90,7 @@ function CatalogOption({ icon, title, description, onClick, disabled }: CatalogO
     >
       <span className="flex items-center justify-center mb-3">{icon}</span>
       <span className="block font-semibold text-semantic-text-primary">{title}</span>
-      <span className="block text-sm text-semantic-text-secondary mt-2">{description}</span>
+      <span className="block text-base text-semantic-text-secondary mt-2">{description}</span>
     </button>
   );
 }
@@ -136,7 +136,7 @@ function SeedError({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="bg-semantic-critical-muted border border-semantic-critical-muted-foreground/20 text-semantic-critical-muted-foreground px-4 py-3 rounded-md text-sm mb-4"
+      className="bg-semantic-critical-muted border border-semantic-critical-muted-foreground/20 text-semantic-critical-muted-foreground px-4 py-3 rounded-md text-base mb-4"
     >
       {message}
     </div>
@@ -424,7 +424,7 @@ export function OnboardingPage() {
     <section aria-labelledby="onboarding-title" className="flex justify-center py-6">
       <div className="w-full max-w-2xl">
         <div className="mb-6 text-center">
-          <p className="text-sm font-medium text-semantic-text-secondary">
+          <p className="text-sm font-medium tabular-nums text-semantic-text-secondary">
             Step {currentStep + 1} of {STEP_COUNT}
           </p>
           <h1
