@@ -23,6 +23,7 @@ import * as XLSX from 'xlsx';
 import { downloadExpiryTemplate, downloadCatalogTemplate } from '../utils/uploadUtils';
 import { withOccurrenceKeys } from '../utils/listKeys';
 import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
+import { UploadResultPanel } from '../components/csv-upload/UploadResultPanel';
 
 export const CSVUploadPage: React.FC<{
   token: string | null;
@@ -554,167 +555,15 @@ export const CSVUploadPage: React.FC<{
             </form>
 
             {uploadResult && (
-              <div
-                role={uploadResult.success ? 'status' : 'alert'}
-                className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-semantic-success-muted text-semantic-success-muted-foreground' : 'bg-semantic-critical-muted text-semantic-critical-muted-foreground'}`}
-              >
-                <h3 className="font-semibold mb-2">
-                  {uploadResult.success ? 'Upload successful' : 'Upload failed'}
-                </h3>
-
-                <p>{uploadResult.message}</p>
-
-                {(uploadResult.importedCount !== undefined ||
-                  uploadResult.processedCount !== undefined) && (
-                  <div className="mt-2">
-                    {uploadResult.importedCount !== undefined && (
-                      <p>
-                        {isExpiryImport ? 'Rows imported' : 'Products imported'}:{' '}
-                        {uploadResult.importedCount}
-                      </p>
-                    )}
-                    {isExpiryImport ? (
-                      <p>
-                        Rows merged: {uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0}
-                      </p>
-                    ) : (
-                      <>
-                        {uploadResult.updatedCount !== undefined && (
-                          <p>Products updated: {uploadResult.updatedCount}</p>
-                        )}
-                        {uploadResult.unchangedCount !== undefined && (
-                          <p>Products unchanged: {uploadResult.unchangedCount}</p>
-                        )}
-                      </>
-                    )}
-                    {uploadResult.errorCount !== undefined && (
-                      <p>Errors: {uploadResult.errorCount}</p>
-                    )}
-                    {(uploadResult.rejectedCount !== undefined ||
-                      uploadResult.skippedCount !== undefined) && (
-                      <p>
-                        {isExpiryImport ? 'Rows rejected' : 'Rows skipped'}:{' '}
-                        {uploadResult.rejectedCount ?? uploadResult.skippedCount ?? 0}
-                      </p>
-                    )}
-                    {uploadResult.processedCount !== undefined && (
-                      <p>
-                        Rows processed: {uploadResult.processedCount}
-                        {uploadResult.totalCount !== undefined
-                          ? ` / ${uploadResult.totalCount}`
-                          : ''}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {uploadResult.errorReportUrl && (
-                  <button
-                    type="button"
-                    onClick={() => downloadErrorReport(uploadResult.errorReportUrl as string)}
-                    className="mt-3 text-sm font-medium underline text-semantic-link"
-                  >
-                    Download full error report
-                  </button>
-                )}
-
-                {isExpiryImport &&
-                  uploadResult.rejectedRows &&
-                  uploadResult.rejectedRows.length > 0 && (
-                    <div className="mt-3 p-3 bg-semantic-surface-1 rounded border border-semantic-critical-muted">
-                      <p className="text-sm font-medium mb-2">Rejected rows</p>
-                      <div className="space-y-2">
-                        {uploadResult.rejectedRows.map((row) => (
-                          <div key={`${row.rowNumber}-${row.reason}`} className="text-sm">
-                            <p className="font-medium">
-                              Row {row.rowNumber}: {row.reason}
-                            </p>
-                            <p className="text-xs opacity-90">
-                              SKU: {row.rawValues.sku || '-'} | Item Description:{' '}
-                              {row.rawValues.itemDescription || '-'} | Used-By Date:{' '}
-                              {row.rawValues.usedByDate || '-'}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Column Usage Summary */}
-                {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
-                  <div className="mt-3 p-3 bg-semantic-surface-1 rounded border border-semantic-success-muted">
-                    <p className="text-sm font-medium">Column summary</p>
-                    <p className="text-sm">
-                      Used: <span className="font-mono">{uploadResult.columnsUsed.join(', ')}</span>
-                    </p>
-                    {uploadResult.columnsIgnored !== undefined &&
-                      uploadResult.columnsIgnored > 0 && (
-                        <p className="text-sm text-semantic-success-muted-foreground">
-                          Ignored {uploadResult.columnsIgnored} extra column
-                          {uploadResult.columnsIgnored > 1 ? 's' : ''}
-                        </p>
-                      )}
-                  </div>
-                )}
-
-                {uploadResult.errors && uploadResult.errors.length > 0 && (
-                  <div className="mt-2">
-                    <h4 className="font-semibold mt-3">Error details:</h4>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                      {withOccurrenceKeys(uploadResult.errors, (e) => e).map(
-                        ({ item: error, key }) => (
-                          <li key={key} className="text-sm">
-                            {error.includes('column') && error.toLowerCase().includes('name') ? (
-                              <span>
-                                {error} -{' '}
-                                <button
-                                  type="button"
-                                  className="cursor-pointer text-semantic-primary hover:underline"
-                                  onClick={scrollToFormatGuidelines}
-                                  aria-controls={formatGuidelinesId}
-                                >
-                                  See format guidelines
-                                </button>
-                              </span>
-                            ) : error.includes('cost') && error.toLowerCase().includes('format') ? (
-                              <span>
-                                {error} -{' '}
-                                <button
-                                  type="button"
-                                  className="cursor-pointer text-semantic-primary hover:underline"
-                                  onClick={scrollToFormatGuidelines}
-                                  aria-controls={formatGuidelinesId}
-                                >
-                                  See cost format guidelines
-                                </button>
-                              </span>
-                            ) : (
-                              <span>{error}</span>
-                            )}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  </div>
-                )}
-
-                {uploadResult.success &&
-                  typeof returnUrl === 'string' &&
-                  returnUrl.startsWith('/') &&
-                  !returnUrl.startsWith('//') &&
-                  !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl) && (
-                    <div className="mt-6 pt-4 border-t border-semantic-success-muted">
-                      <Button
-                        type="button"
-                        onClick={() => navigate(returnUrl)}
-                        variant="success"
-                        className="w-full py-2 font-semibold"
-                      >
-                        Continue to next step
-                      </Button>
-                    </div>
-                  )}
-              </div>
+              <UploadResultPanel
+                uploadResult={uploadResult}
+                isExpiryImport={isExpiryImport}
+                returnUrl={returnUrl}
+                formatGuidelinesId={formatGuidelinesId}
+                onShowGuidelines={scrollToFormatGuidelines}
+                onDownloadErrorReport={(reportUrl) => void downloadErrorReport(reportUrl)}
+                onContinue={(url) => navigate(url)}
+              />
             )}
           </div>
         </CardContent>
