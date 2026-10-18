@@ -40,15 +40,18 @@ vi.mock('react-chartjs-2', () => ({
     role,
     'aria-label': ariaLabel,
     data,
+    options,
   }: {
     role?: string;
     'aria-label'?: string;
     data?: { datasets?: Array<{ backgroundColor?: string }> };
+    options?: { plugins?: { title?: { display?: boolean } } };
   }) => (
     <canvas
       role={role}
       aria-label={ariaLabel}
       data-background={data?.datasets?.[0]?.backgroundColor}
+      data-title-display={String(options?.plugins?.title?.display)}
     />
   ),
 }));
@@ -475,6 +478,23 @@ describe('ExpiredItemsPage', () => {
         'data-background',
         semanticDataViz.series2,
       );
+    });
+
+    it('does not repeat the card heading as a canvas title', async () => {
+      mockedGetExpiredItems.mockResolvedValue([]);
+      mockedApiGet.mockImplementation(async (url: string) =>
+        url === '/reports/loss-by-sku'
+          ? [{ sku: 'SAL-300', productName: 'Saline Ampoule', totalLoss: 12, count: 3 }]
+          : [{ department: 'Dispensary', totalLoss: 30.5, count: 4 }],
+      );
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      const charts = [
+        await screen.findByRole('img', { name: /loss by SKU/ }),
+        await screen.findByRole('img', { name: /loss by department/ }),
+      ];
+      charts.forEach((chart) => expect(chart).toHaveAttribute('data-title-display', 'false'));
     });
 
     it('announces a failed write-off inside the dialog with an AA-safe colour', async () => {

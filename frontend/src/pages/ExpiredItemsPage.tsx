@@ -66,6 +66,12 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
   currency: 'AUD',
 });
 
+const axisCurrencyFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+  maximumFractionDigits: 0,
+});
+
 const dateFormatter = new Intl.DateTimeFormat('en-AU', {
   day: '2-digit',
   month: 'short',
@@ -429,7 +435,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     () => ({
       responsive: true,
       plugins: {
-        title: { display: true },
+        // The card heading already names each chart; a canvas title would repeat it.
+        title: { display: false },
         legend: { display: false },
       },
       scales: {
@@ -438,35 +445,13 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           ticks: {
             callback: (value) => {
               const num = typeof value === 'number' ? value : Number(value);
-              return Number.isFinite(num) ? `$${num}` : `${value}`;
+              return Number.isFinite(num) ? axisCurrencyFormatter.format(num) : `${value}`;
             },
           },
         },
       },
     }),
     [],
-  );
-
-  const skuChartOptions = useMemo<ChartOptions<'bar'>>(
-    () => ({
-      ...chartOptions,
-      plugins: {
-        ...chartOptions.plugins,
-        title: { display: true, text: '5 Worst Performing SKUs' },
-      },
-    }),
-    [chartOptions],
-  );
-
-  const deptChartOptions = useMemo<ChartOptions<'bar'>>(
-    () => ({
-      ...chartOptions,
-      plugins: {
-        ...chartOptions.plugins,
-        title: { display: true, text: '5 Worst Performing Departments' },
-      },
-    }),
-    [chartOptions],
   );
 
   if (loading) {
@@ -785,7 +770,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 >
                   <Bar
                     data={lossBySkuChartData}
-                    options={skuChartOptions}
+                    options={chartOptions}
                     role="img"
                     aria-label={lossBySkuChartLabel}
                   />
@@ -825,7 +810,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 >
                   <Bar
                     data={lossByDepartmentChartData}
-                    options={deptChartOptions}
+                    options={chartOptions}
                     role="img"
                     aria-label={lossByDepartmentChartLabel}
                   />
