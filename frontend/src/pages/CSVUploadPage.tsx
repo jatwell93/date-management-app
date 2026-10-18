@@ -26,6 +26,7 @@ import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
 import { UploadResultPanel } from '../components/csv-upload/UploadResultPanel';
 import { LastUploadSummaryCard } from '../components/csv-upload/LastUploadSummaryCard';
 import { UploadProgress } from '../components/csv-upload/UploadProgress';
+import { FormatGuidelines } from '../components/csv-upload/FormatGuidelines';
 
 export const CSVUploadPage: React.FC<{
   token: string | null;
@@ -233,74 +234,11 @@ export const CSVUploadPage: React.FC<{
               onReviewBrandMatches={() => navigate('/supplier-credits?view=catalogue-review')}
             />
 
-            {/* Column name and format guidelines */}
-            <div
+            <FormatGuidelines
               id={formatGuidelinesId}
               ref={formatGuidelinesRef}
-              className="mb-6 scroll-mt-4 p-4 bg-semantic-primary-muted rounded-md"
-            >
-              <h2 className="text-lg font-medium text-semantic-primary-muted-foreground mb-2">
-                Format Guidelines
-              </h2>
-              {isExpiryImport ? (
-                <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
-                  <li>
-                    Required columns:{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">SKU</code>,{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">Used-By Date</code>
-                  </li>
-                  <li>
-                    Optional columns:{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">Item Description</code>
-                    , <code className="bg-semantic-primary-muted px-1 rounded">Department</code>
-                  </li>
-                  <li>
-                    Accepted date formats:{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">dd/mm/yy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">dd/mm/yyyy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm/yy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm/yyyy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm-yy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm-yyyy</code>
-                  </li>
-                  <li>
-                    Rejected examples:{' '}
-                    <code className="bg-semantic-critical-muted px-1 rounded">12/12</code>{' '}
-                    (ambiguous),{' '}
-                    <code className="bg-semantic-critical-muted px-1 rounded">Dec/2026</code> (month
-                    names unsupported)
-                  </li>
-                </ul>
-              ) : (
-                <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
-                  <li>
-                    Required columns: SKU, Name, Cost, Barcode{' '}
-                    <span className="text-xs">
-                      (<code className="bg-semantic-primary-muted px-1 rounded">SKU</code>,{' '}
-                      <code className="bg-semantic-primary-muted px-1 rounded">Name</code>,{' '}
-                      <code className="bg-semantic-primary-muted px-1 rounded">Cost</code>,{' '}
-                      <code className="bg-semantic-primary-muted px-1 rounded">Barcode</code>)
-                    </span>
-                  </li>
-                  <li>
-                    Optional column:{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">Retail Price</code>{' '}
-                    (also accepts "Selling Price", "Sell Price", "RRP", "Sale Price") — enables
-                    retail-based markdown bands
-                  </li>
-                  <li>
-                    Column names are case-insensitive and can include common variations (e.g.,
-                    "Product Name", "Item Name", "Item Cost", "Unit Cost")
-                  </li>
-                  <li>
-                    Cost and Retail format: Use decimal numbers like{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">1.99</code> or{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">19.99</code> (no
-                    currency symbols)
-                  </li>
-                </ul>
-              )}
-            </div>
+              isExpiryImport={isExpiryImport}
+            />
 
             <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
               <h2 className="text-lg font-medium text-semantic-text-primary mb-2">
@@ -401,7 +339,7 @@ export const CSVUploadPage: React.FC<{
                           {previewColumns.map(({ key, header }, index) => (
                             <TableHead
                               key={key}
-                              className="text-left text-xs font-medium text-semantic-text-secondary uppercase tracking-wider"
+                              className="text-left text-sm font-medium text-semantic-text-secondary"
                             >
                               {header || `Column ${index + 1}`}
                             </TableHead>
@@ -477,7 +415,9 @@ export const CSVUploadPage: React.FC<{
                 </div>
               )}
 
-              {isUploading && <UploadProgress progress={uploadProgress} message={progressMessage} />}
+              {isUploading && (
+                <UploadProgress progress={uploadProgress} message={progressMessage} />
+              )}
 
               <div className="grid gap-3 sm:flex sm:items-center sm:gap-4">
                 <Button

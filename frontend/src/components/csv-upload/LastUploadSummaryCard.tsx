@@ -11,7 +11,7 @@ const ReviewBrandMatchesAction: React.FC<{
   if (importType !== 'product-catalog') return null;
   return (
     <div className="mt-3 sm:col-span-2">
-      <Button type="button" onClick={onReview}>
+      <Button type="button" onClick={onReview} className="min-h-11">
         Review brand matches
       </Button>
     </div>

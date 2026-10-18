@@ -34,7 +34,7 @@ export const UploadProgress: React.FC<{ progress: number; message: string }> = (
       className="w-full overflow-hidden bg-semantic-surface-3 rounded-full h-2.5"
     >
       <div
-        className="h-2.5 w-full origin-left rounded-full bg-semantic-primary transition-transform duration-300 ease-out"
+        className="h-2.5 w-full origin-left rounded-full bg-semantic-primary motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out"
         style={{ transform: `scaleX(${progress / 100})` }}
       ></div>
     </div>

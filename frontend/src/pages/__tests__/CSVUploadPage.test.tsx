@@ -826,6 +826,40 @@ describe('CSVUploadPage expiry import', () => {
     });
   });
 
+  describe('typography and touch targets', () => {
+    it('keeps preview headers at 14px sentence case and guideline chips neutral', async () => {
+      render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+
+      expect(screen.getByText('12/12').tagName).toBe('CODE');
+      expect(screen.getByText('12/12')).toHaveClass('bg-semantic-surface-1', 'border-hairline');
+      expect(screen.getByText('12/12').className).not.toMatch(/critical/);
+
+      fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+        target: { files: [new File(['SKU,Used-By Date\nSKU-1,12/12/26'], 'expiry.csv')] },
+      });
+      const header = await screen.findByRole('columnheader', { name: 'SKU' });
+      expect(header).toHaveClass('text-sm');
+      expect(header).not.toHaveClass('text-xs', 'uppercase');
+    });
+
+    it('gives the brand-review action a 44px target', () => {
+      localStorage.setItem(
+        'csvUpload:lastUploadSummary',
+        JSON.stringify({
+          fileName: 'p.csv',
+          importType: 'product-catalog',
+          status: 'completed',
+          importedCount: 1,
+          updatedCount: 0,
+          rejectedCount: 0,
+          processedCount: 1,
+        }),
+      );
+      render(<CSVUploadPage token="test-token" />);
+      expect(screen.getByRole('button', { name: 'Review brand matches' })).toHaveClass('min-h-11');
+    });
+  });
+
   describe('resilience', () => {
     const directInitiate = JSON.stringify({
       strategy: 'direct',

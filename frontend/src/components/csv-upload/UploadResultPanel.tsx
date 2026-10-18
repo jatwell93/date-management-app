@@ -108,7 +108,7 @@ const RejectedRows: React.FC<{ rows: NonNullable<UploadResponse['rejectedRows']>
           <p className="font-medium">
             Row {row.rowNumber}: {row.reason}
           </p>
-          <p className="text-xs opacity-90">
+          <p className="text-sm">
             SKU: {row.rawValues.sku || '-'} | Item Description:{' '}
             {row.rawValues.itemDescription || '-'} | Used-By Date: {row.rawValues.usedByDate || '-'}
           </p>
