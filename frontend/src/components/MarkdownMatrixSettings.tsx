@@ -50,6 +50,17 @@ function isValidMatrix(matrix: MarkdownMatrixConfig): boolean {
   );
 }
 
+const SAVE_ERROR_FALLBACK =
+  'We could not save your markdown settings. Check your connection and try again.';
+
+// Keep server-provided messages, but never show raw transport text such as
+// "HTTP error! status: 502" (non-JSON body) or "Failed to fetch".
+function saveErrorMessage(cause: unknown): string {
+  if (!(cause instanceof Error) || cause instanceof TypeError) return SAVE_ERROR_FALLBACK;
+  if (!cause.message || cause.message.startsWith('HTTP error!')) return SAVE_ERROR_FALLBACK;
+  return cause.message;
+}
+
 const RETAIL_HINT_ID = 'markdown-retail-hint';
 const MARKDOWN_MATRICES_HEADING_ID = 'markdown-matrices-heading';
 
@@ -287,9 +298,7 @@ export function MarkdownMatrixSettings() {
       setHasRetailData(config.hasRetailData);
       setSuccess('Markdown matrices saved.');
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : 'We could not save your markdown settings.',
-      );
+      setError(saveErrorMessage(cause));
     } finally {
       setSaving(false);
       setConfirming(false);

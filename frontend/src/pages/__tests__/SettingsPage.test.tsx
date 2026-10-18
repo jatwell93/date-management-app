@@ -27,15 +27,40 @@ vi.mock('@sentry/react', () => ({
 
 // The markdown matrix section is exercised by its own test; stub it here so this
 // suite stays focused on the Clerk workspace surface and its error boundary.
+let mockShouldThrowMarkdownSettings = false;
 vi.mock('../../components/MarkdownMatrixSettings', () => ({
-  MarkdownMatrixSettings: () => <div data-testid="markdown-matrix-settings" />,
+  MarkdownMatrixSettings: () => {
+    if (mockShouldThrowMarkdownSettings) throw new Error('Markdown settings failed to render');
+    return <div data-testid="markdown-matrix-settings" />;
+  },
 }));
+
+const renderSuppressingErrors = () => {
+  const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    render(<SettingsPage />);
+  } finally {
+    consoleErrorSpy.mockRestore();
+  }
+};
 
 describe('SettingsPage', () => {
   beforeEach(() => {
     mockOrganizationProfile.mockClear();
     mockCaptureException.mockClear();
     mockShouldThrowOrganizationProfile = false;
+    mockShouldThrowMarkdownSettings = false;
+  });
+
+  it('shows markdown-specific fallback copy when the matrix section fails', () => {
+    mockShouldThrowMarkdownSettings = true;
+    renderSuppressingErrors();
+
+    expect(screen.getByTestId('clerk-organization-profile')).toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Markdown matrices could not be loaded.');
+    expect(alert).toHaveTextContent('Reload settings before changing markdown discounts.');
+    expect(alert).not.toHaveTextContent(/team members or roles/);
   });
 
   it('uses a single un-nested Clerk surface for workspace settings', () => {
@@ -73,13 +98,7 @@ describe('SettingsPage', () => {
 
   it('adapts organization controls for touch and narrow settings viewports', () => {
     mockShouldThrowOrganizationProfile = true;
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    try {
-      render(<SettingsPage />);
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    renderSuppressingErrors();
 
     expect(screen.getByLabelText('Pharmacy workspace controls')).toHaveClass(
       'settings-clerk-adapter',
@@ -117,13 +136,7 @@ describe('SettingsPage', () => {
 
   it('shows a recoverable settings fallback when Clerk organization controls fail', () => {
     mockShouldThrowOrganizationProfile = true;
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    try {
-      render(<SettingsPage />);
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
+    renderSuppressingErrors();
 
     expect(screen.queryByTestId('clerk-organization-profile')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Workspace settings could not be loaded.');

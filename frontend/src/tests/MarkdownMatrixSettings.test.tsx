@@ -85,6 +85,33 @@ describe('MarkdownMatrixSettings', () => {
     );
   });
 
+  const saveWithError = async (cause: Error) => {
+    await renderLoaded();
+    mockedPut.mockRejectedValue(cause);
+    const input = screen.getByLabelText('Full supplier credit Markdown 1 Discount %');
+    fireEvent.change(input, { target: { value: '19' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save markdown matrices/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save and reprice/i }));
+    return { input, alert: await screen.findByRole('alert') };
+  };
+
+  it.each([
+    ['a non-JSON HTTP error', new Error('HTTP error! status: 502')],
+    ['a network failure', new TypeError('Failed to fetch')],
+  ])('replaces %s with friendly copy and keeps the edit', async (_label, cause) => {
+    const { input, alert } = await saveWithError(cause);
+
+    expect(alert).toHaveTextContent(
+      'We could not save your markdown settings. Check your connection and try again.',
+    );
+    expect(input).toHaveValue(19);
+  });
+
+  it('shows the server-provided save error message', async () => {
+    const { alert } = await saveWithError(new Error('Markdown percentages must be whole numbers'));
+    expect(alert).toHaveTextContent('Markdown percentages must be whole numbers');
+  });
+
   it('loads and renders the org matrix with a disabled retail option when no retail data', async () => {
     mockedGet.mockResolvedValue({
       matrices,
