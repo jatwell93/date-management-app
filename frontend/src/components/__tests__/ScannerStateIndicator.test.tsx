@@ -5,9 +5,9 @@ import { ScannerStateIndicator } from '../ScannerStateIndicator';
 describe('ScannerStateIndicator', () => {
   it.each([
     ['ready', 'Ready to scan', 'scanner-state-ready'],
-    ['scanning', 'Scanning...', 'scanner-state-scanning'],
+    ['scanning', 'Scanning…', 'scanner-state-scanning'],
     ['scanned', 'Item scanned', 'scanner-state-scanned'],
-    ['warning', 'Warning: duplicate scan', 'scanner-state-warning'],
+    ['warning', 'Duplicate scan ignored', 'scanner-state-warning'],
     ['error', 'Scan failed. Try again.', 'scanner-state-error'],
   ] as const)('renders the %s state', (state, label, testId) => {
     render(<ScannerStateIndicator state={state} />);
