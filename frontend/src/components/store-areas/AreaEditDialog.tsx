@@ -42,20 +42,30 @@ interface AreaEditDialogProps {
 /**
  * The page-level error sits behind the modal overlay (and outside the dialog's
  * accessible tree), so a save failure is repeated inside the dialog. Errors that
- * were already showing when the dialog opened belong to another action and stay out,
- * and so does the validation message, which the inline field error already covers.
+ * were already showing when the dialog opened belong to another action and stay out
+ * until a save is attempted (a repeat of the same failure text must still show), and so
+ * does the validation message, which the inline field error already covers.
  */
-function useErrorRaisedWhileOpen(
+function useSaveErrorWhileOpen(
   open: boolean,
   error: string | null,
+  isSaving: boolean,
   ignoreCurrent: boolean,
 ): string | null {
-  const [snapshot, setSnapshot] = useState({ open, error });
-  if (snapshot.open !== open || (ignoreCurrent && snapshot.error !== error)) {
-    setSnapshot({ open, error });
+  const [snapshot, setSnapshot] = useState({ open, error, saveAttempted: false });
+  const reset =
+    snapshot.open !== open ||
+    (ignoreCurrent && (snapshot.error !== error || snapshot.saveAttempted));
+  if (reset) {
+    setSnapshot({ open, error, saveAttempted: false });
     return null;
   }
-  return open && error !== snapshot.error ? error : null;
+  if (isSaving) {
+    if (!snapshot.saveAttempted) setSnapshot({ ...snapshot, saveAttempted: true });
+    return null;
+  }
+  const raised = snapshot.saveAttempted || error !== snapshot.error;
+  return open && raised ? error : null;
 }
 
 export function AreaEditDialog({
@@ -73,7 +83,7 @@ export function AreaEditDialog({
 }: AreaEditDialogProps) {
   const open = editingDialogKey === dialogKey;
   const nameInvalid = invalidField === 'editAreaName';
-  const saveError = useErrorRaisedWhileOpen(open, error, nameInvalid);
+  const saveError = useSaveErrorWhileOpen(open, error, isEditingArea, nameInvalid);
 
   return (
     <Dialog

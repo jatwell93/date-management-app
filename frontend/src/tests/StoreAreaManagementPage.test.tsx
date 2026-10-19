@@ -751,6 +751,27 @@ describe('StoreAreaManagementPage UI audit', () => {
     expect(within(screen.getByRole('dialog')).queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('shows a repeated save error after the edit dialog is reopened', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    (apiService.put as jest.Mock).mockRejectedValue(new Error('Server unavailable'));
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    const saveAndExpectError = async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0]);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save location' }));
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Server unavailable');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await _waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    };
+
+    await saveAndExpectError();
+    await saveAndExpectError();
+    expect(apiService.put).toHaveBeenCalledTimes(2);
+  });
+
   it('closes the edit dialog from Cancel and returns focus to its trigger', async () => {
     mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
 
