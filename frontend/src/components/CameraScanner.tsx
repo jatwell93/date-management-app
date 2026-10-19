@@ -36,7 +36,7 @@ function ResetScannerButton({
       disabled={disabled}
       onClick={onClick}
       size={isHandheld ? 'lg' : 'default'}
-      className={isHandheld ? 'min-h-[48px] text-lg' : ''}
+      className={isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}
     >
       {label}
     </Button>
@@ -56,23 +56,50 @@ export function CameraScanner({
   const [scannerState, setScannerState] = useState<ScannerState>('ready');
   const recentScansRef = useRef<Set<string>>(new Set());
   const detectedHandlerRef = useRef<((data: unknown) => void) | null>(null);
+  const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  // Keep the latest props in refs so a parent re-render (new inline callbacks)
+  // does not tear down and re-initialise the camera stream.
+  const onDetectedRef = useRef(onDetected);
+  const onScannerReadyRef = useRef(onScannerReady);
+  const onScannerResetRef = useRef(onScannerReset);
+  const continuousRef = useRef(continuous);
+  const disabledRef = useRef(disabled);
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+    onScannerReadyRef.current = onScannerReady;
+    onScannerResetRef.current = onScannerReset;
+    continuousRef.current = continuous;
+    disabledRef.current = disabled;
+  });
+
+  const schedule = useCallback((callback: () => void, delay: number) => {
+    const id = setTimeout(() => {
+      timeoutsRef.current.delete(id);
+      callback();
+    }, delay);
+    timeoutsRef.current.add(id);
+  }, []);
 
   // Debounce utility to track recent barcode scans (last 2 seconds)
-  const isDuplicateScan = useCallback((barcode: string): boolean => {
-    if (recentScansRef.current.has(barcode)) {
-      return true;
-    }
+  const isDuplicateScan = useCallback(
+    (barcode: string): boolean => {
+      if (recentScansRef.current.has(barcode)) {
+        return true;
+      }
 
-    // Add to recent scans
-    recentScansRef.current.add(barcode);
+      // Add to recent scans
+      recentScansRef.current.add(barcode);
 
-    // Remove after 2 seconds (using config constant - fixes 17.9)
-    setTimeout(() => {
-      recentScansRef.current.delete(barcode);
-    }, TIMING_CONSTANTS.DEDUP_WINDOW_MS);
+      // Remove after 2 seconds (using config constant - fixes 17.9)
+      schedule(() => {
+        recentScansRef.current.delete(barcode);
+      }, TIMING_CONSTANTS.DEDUP_WINDOW_MS);
 
-    return false;
-  }, []);
+      return false;
+    },
+    [schedule],
+  );
 
   // Extract scanner initialization logic so it can be reused
   const initScanner = useCallback(() => {
@@ -110,19 +137,19 @@ export function CameraScanner({
           Sentry.captureException(initError, {
             tags: { feature: 'camera-scanner' },
           });
-          setError('Error accessing camera. Please ensure you have granted camera permissions.');
+          setError('Camera access failed. Allow camera permission for this site, then try again.');
           setScannerState('error');
           return;
         }
 
         Quagga.start();
         setScannerState('scanning');
-        onScannerReady?.();
+        onScannerReadyRef.current?.();
       },
     );
 
     const detectedHandler = (data: unknown) => {
-      if (disabled) {
+      if (disabledRef.current) {
         return;
       }
 
@@ -142,13 +169,13 @@ export function CameraScanner({
         return;
       }
 
-      onDetected(barcode);
+      onDetectedRef.current(barcode);
       setScannerState('scanned');
 
       // Only stop the scanner after detection if not in continuous mode
       // Wait 1 second before stopping to allow UI updates (fixes 17.9)
-      if (!continuous) {
-        setTimeout(() => {
+      if (!continuousRef.current) {
+        schedule(() => {
           Quagga.stop();
         }, 1000);
       }
@@ -156,13 +183,16 @@ export function CameraScanner({
 
     detectedHandlerRef.current = detectedHandler;
     Quagga.onDetected(detectedHandler);
-  }, [onDetected, onScannerReady, continuous, disabled, isDuplicateScan]);
+  }, [isDuplicateScan, schedule]);
 
   useEffect(() => {
     initScanner();
+    const pendingTimeouts = timeoutsRef.current;
 
     // Cleanup function
     return () => {
+      pendingTimeouts.forEach((id) => clearTimeout(id));
+      pendingTimeouts.clear();
       if (detectedHandlerRef.current) {
         Quagga.offDetected(detectedHandlerRef.current);
         detectedHandlerRef.current = null;
@@ -185,9 +215,9 @@ export function CameraScanner({
     }
 
     // Small timeout to ensure scanner stops before restarting
-    setTimeout(() => {
+    schedule(() => {
       initScanner(); // Re-initialize scanner instead of just calling start()
-      onScannerReset?.();
+      onScannerResetRef.current?.();
     }, 300);
   };
 
@@ -200,9 +230,9 @@ export function CameraScanner({
             isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
           }`}
         >
-          <div className="text-center p-4">
+          <div className="text-center p-4" role="alert">
             <p className={`text-semantic-critical font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
-              Camera Error
+              Camera error
             </p>
             <p className={`text-semantic-text-secondary ${isHandheld ? 'text-base' : 'text-sm'}`}>
               {error}
@@ -210,7 +240,7 @@ export function CameraScanner({
             <div className="mt-4">
               <ResetScannerButton
                 isHandheld={isHandheld}
-                label="Try Again"
+                label="Try again"
                 disabled={disabled}
                 onClick={handleResetScanner}
               />
@@ -236,7 +266,9 @@ export function CameraScanner({
             Aim at the product barcode
           </p>
           {continuous && (
-            <p className={`mt-1 text-semantic-warning-muted ${isHandheld ? 'text-sm' : 'text-xs'}`}>
+            <p
+              className={`mt-1 text-semantic-warning-muted ${isHandheld ? 'text-base' : 'text-sm'}`}
+            >
               Continuous scan mode
             </p>
           )}
@@ -245,7 +277,7 @@ export function CameraScanner({
       <div className="mt-2">
         <ResetScannerButton
           isHandheld={isHandheld}
-          label="Reset Scanner"
+          label="Reset scanner"
           disabled={disabled}
           onClick={handleResetScanner}
         />
