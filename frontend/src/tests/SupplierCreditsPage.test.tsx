@@ -997,6 +997,15 @@ describe('SupplierCreditsPage touch targets and narrow screens', () => {
     const row = within(nav).getByTestId('supplier-credit-tab-row');
     expect(row).toHaveClass('border-b', 'min-w-full', 'w-max');
     expect(within(row).getByRole('button', { name: 'To Claim' })).toHaveClass('-mb-px');
+    // The nav clips overflow, so focus must be drawn inside each tab, not as an outline.
+    for (const tab of within(row).getAllByRole('button')) {
+      expect(tab).toHaveClass(
+        'outline-hidden',
+        'focus-visible:ring-2',
+        'focus-visible:ring-inset',
+        'focus-visible:ring-semantic-primary',
+      );
+    }
     for (const tab of screen.getAllByRole('button', { name: /To Claim|Settled|Review/ })) {
       expect(tab).toHaveClass('min-h-11');
     }

@@ -313,7 +313,8 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 }) => (
   <button
     onClick={onClick}
-    className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+    // Inset ring: the scrolling tab row clips anything drawn outside the button box.
+    className={`-mb-px min-h-11 shrink-0 whitespace-nowrap rounded-t-md border-b-2 px-4 py-2 text-sm font-medium transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-semantic-primary ${
       active
         ? 'border-semantic-primary text-semantic-primary'
         : 'border-transparent text-semantic-text-secondary hover:text-semantic-text-primary'
