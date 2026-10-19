@@ -20,7 +20,7 @@ const stateConfig: Record<
     icon: <span aria-hidden="true">○</span>,
   },
   scanning: {
-    label: 'Scanning...',
+    label: 'Scanning…',
     className:
       'scanner-state-scanning bg-semantic-primary-muted text-semantic-primary-muted-foreground',
     icon: <span aria-hidden="true">◌</span>,
@@ -31,7 +31,7 @@ const stateConfig: Record<
     icon: <span aria-hidden="true">✓</span>,
   },
   warning: {
-    label: 'Warning: duplicate scan',
+    label: 'Duplicate scan ignored',
     className: 'bg-semantic-warning-muted text-semantic-warning-muted-foreground',
     icon: <span aria-hidden="true">⚠</span>,
   },
