@@ -22,6 +22,7 @@ import type {
 } from '../types/supplierCredit';
 import { CatalogueReviewPanel } from '../components/supplier-credits/CatalogueReviewPanel';
 import { PolicyReviewPanel } from '../components/supplier-credits/PolicyReviewPanel';
+import { RejectClaimDialog } from '../components/supplier-credits/RejectClaimDialog';
 import {
   SupplierPolicyFields,
   supplierPolicyDraft,
@@ -1079,18 +1080,16 @@ const ClaimDetailModal: React.FC<{
                 >
                   Mark credited
                 </Button>
-                <Button
-                  variant="outline"
-                  className="text-semantic-critical border-semantic-critical min-h-11"
+                <RejectClaimDialog
+                  claimId={claim.id}
+                  supplierName={claim.supplier.name}
                   disabled={busy}
-                  onClick={() =>
+                  onConfirm={() =>
                     void run(async () =>
                       svc.recordOutcome(claim.id, 'REJECTED', null, null, await getToken()),
                     )
                   }
-                >
-                  Rejected
-                </Button>
+                />
               </div>
             </>
           )}

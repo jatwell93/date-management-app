@@ -31,6 +31,7 @@ vi.mock('../services/supplierCreditService', () => ({
   clearSupplierPolicy: vi.fn(),
   bulkLinkProducts: vi.fn(),
   disposeClaimableWriteOff: vi.fn(),
+  recordOutcome: vi.fn(),
 }));
 
 const mocked = svc as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -1015,6 +1016,56 @@ describe('SupplierCreditsPage touch targets and narrow screens', () => {
     expect(checkbox.closest('label')).toHaveClass('size-11');
     await userEvent.click(checkbox.closest('label') as HTMLElement);
     expect(checkbox).toBeChecked();
+  });
+});
+
+describe('SupplierCreditsPage reject confirmation', () => {
+  async function openSentClaim() {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+    return screen.findByRole('button', { name: 'Rejected' });
+  }
+
+  beforeEach(() => {
+    mocked.recordOutcome.mockReset();
+    mocked.recordOutcome.mockResolvedValue({ id: 5, status: 'REJECTED' });
+  });
+
+  it('asks for confirmation naming the claim and supplier before rejecting', async () => {
+    await userEvent.click(await openSentClaim());
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Reject claim #5 from Blackmores?');
+    expect(dialog).toHaveTextContent('cannot be changed later');
+    expect(mocked.recordOutcome).not.toHaveBeenCalled();
+  });
+
+  it('does not record anything on Cancel and returns focus to the trigger', async () => {
+    const trigger = await openSentClaim();
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(mocked.recordOutcome).not.toHaveBeenCalled();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('records REJECTED exactly once on Confirm', async () => {
+    await userEvent.click(await openSentClaim());
+    await userEvent.click(await screen.findByRole('button', { name: 'Reject claim' }));
+
+    await waitFor(() => expect(mocked.recordOutcome).toHaveBeenCalledTimes(1));
+    expect(mocked.recordOutcome).toHaveBeenCalledWith(5, 'REJECTED', null, null, 'tkn');
+  });
+
+  it('keeps Mark credited one click', async () => {
+    await openSentClaim();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark credited' }));
+
+    await waitFor(() => expect(mocked.recordOutcome).toHaveBeenCalledTimes(1));
+    expect(mocked.recordOutcome).toHaveBeenCalledWith(5, 'CREDITED', null, null, 'tkn');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });
 
