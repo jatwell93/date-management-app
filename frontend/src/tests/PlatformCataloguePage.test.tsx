@@ -197,6 +197,28 @@ describe('PlatformCataloguePage', () => {
     sink.remove();
   });
 
+  it('falls back to the heading when a failed row disappears on refresh', async () => {
+    // e.g. a 409 because another admin reviewed it: the action fails, the refresh drops the row.
+    vi.mocked(service.reviewCatalogueCorrection).mockRejectedValue(new Error('conflict'));
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    vi.mocked(service.getPendingCatalogueCorrections).mockResolvedValue({
+      items: [corrections.items[1]],
+      nextCursor: null,
+    });
+    const accept = screen.getByRole('button', { name: /accept correction 11/i });
+    accept.focus();
+    fireEvent.click(accept);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1 correction failed');
+    await waitFor(() => expect(screen.queryByText('Store A')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Pending corrections' })).toHaveFocus(),
+    );
+    expect(document.body).not.toHaveFocus();
+  });
+
   it('keeps focus on the bulk button when every selected action fails', async () => {
     vi.mocked(service.reviewCatalogueCorrection).mockRejectedValue(new Error('network'));
     render(<PlatformCataloguePage token="token" />);

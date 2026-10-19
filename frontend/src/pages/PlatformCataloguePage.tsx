@@ -118,13 +118,15 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
     return () => window.clearTimeout(initialLoad);
   }, [load]);
 
-  // Focus is applied after the re-render that re-enables the controls; a disabled button
-  // cannot take focus.
+  // Focus is applied after the re-render that re-enables the controls (a disabled button cannot
+  // take focus) and after the refreshed queue is committed: if the refresh removed the target's
+  // row, fall back to the heading instead of losing focus to <body>.
   useEffect(() => {
     if (busy) return;
     const target = focusAfterSaveRef.current;
     focusAfterSaveRef.current = null;
-    target?.focus();
+    if (!target) return;
+    (target.isConnected ? target : correctionsHeadingRef.current)?.focus();
   }, [busy]);
 
   const runActions = async (
@@ -164,9 +166,9 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
     await load();
     // When something saved, the acted-on row is gone, so move focus to a stable point instead of
     // <body>. When everything failed, the rows are still there: return focus to the control the
-    // user acted from (the role="alert" message is announced without moving focus).
-    focusAfterSaveRef.current =
-      succeeded > 0 ? correctionsHeadingRef.current : trigger?.isConnected ? trigger : null;
+    // user acted from (the role="alert" message is announced without moving focus). Whether the
+    // trigger survived the refresh is checked in the focus effect, after React commits.
+    focusAfterSaveRef.current = succeeded > 0 ? correctionsHeadingRef.current : trigger;
     setBusy(false);
   };
 
