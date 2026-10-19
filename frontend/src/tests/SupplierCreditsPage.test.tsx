@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SupplierCreditsPage from '../pages/SupplierCreditsPage';
 import * as svc from '../services/supplierCreditService';
@@ -990,7 +990,13 @@ describe('SupplierCreditsPage touch targets and narrow screens', () => {
   it('gives view tabs and claim actions 44px targets and lets the tab bar scroll', async () => {
     renderPage();
     const nav = await screen.findByRole('navigation', { name: 'Supplier credit views' });
-    expect(nav).toHaveClass('overflow-x-auto');
+    // Scroll box clips only the stray y-axis; the border sits on the unclipped inner row
+    // the tabs overlap with -mb-px, so the active underline is not truncated.
+    expect(nav).toHaveClass('overflow-x-auto', 'overflow-y-hidden');
+    expect(nav).not.toHaveClass('border-b');
+    const row = within(nav).getByTestId('supplier-credit-tab-row');
+    expect(row).toHaveClass('border-b', 'min-w-full', 'w-max');
+    expect(within(row).getByRole('button', { name: 'To Claim' })).toHaveClass('-mb-px');
     for (const tab of screen.getAllByRole('button', { name: /To Claim|Settled|Review/ })) {
       expect(tab).toHaveClass('min-h-11');
     }

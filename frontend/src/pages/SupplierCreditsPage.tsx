@@ -196,25 +196,29 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
 
       {report && <RecoveryPanel report={report} />}
 
+      {/* The nav scrolls; the hairline lives on the inner row so the active tab's
+          -mb-px underline overlaps it inside the scroll box instead of being clipped. */}
       <nav
-        className="mt-8 mb-4 flex gap-2 overflow-x-auto border-b"
+        className="mt-8 mb-4 overflow-x-auto overflow-y-hidden"
         aria-label="Supplier credit views"
       >
-        <TabButton active={tab === 'to-claim'} onClick={() => setTab('to-claim')}>
-          To Claim
-        </TabButton>
-        <TabButton active={tab === 'catalogue-review'} onClick={() => setTab('catalogue-review')}>
-          Catalogue Review
-        </TabButton>
-        <TabButton active={tab === 'policy-review'} onClick={() => setTab('policy-review')}>
-          Policy Review
-        </TabButton>
-        <TabButton active={tab === 'open'} onClick={() => setTab('open')}>
-          Open Claims{followUpDueCount > 0 ? ` (${followUpDueCount} due)` : ''}
-        </TabButton>
-        <TabButton active={tab === 'settled'} onClick={() => setTab('settled')}>
-          Settled
-        </TabButton>
+        <div data-testid="supplier-credit-tab-row" className="flex w-max min-w-full gap-2 border-b">
+          <TabButton active={tab === 'to-claim'} onClick={() => setTab('to-claim')}>
+            To Claim
+          </TabButton>
+          <TabButton active={tab === 'catalogue-review'} onClick={() => setTab('catalogue-review')}>
+            Catalogue Review
+          </TabButton>
+          <TabButton active={tab === 'policy-review'} onClick={() => setTab('policy-review')}>
+            Policy Review
+          </TabButton>
+          <TabButton active={tab === 'open'} onClick={() => setTab('open')}>
+            Open Claims{followUpDueCount > 0 ? ` (${followUpDueCount} due)` : ''}
+          </TabButton>
+          <TabButton active={tab === 'settled'} onClick={() => setTab('settled')}>
+            Settled
+          </TabButton>
+        </div>
       </nav>
 
       {tab === 'to-claim' && (
