@@ -79,7 +79,7 @@ describe('ReportsPage', () => {
     expect(
       screen.getByRole('heading', { name: /Expiry reporting/i, level: 1 }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('main', { name: /Expiry reporting workspace/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Expiry reporting workspace/i })).toBeInTheDocument();
     expect(screen.getByText(/Expiry action summary/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Primary expiry decision/i })).toHaveTextContent(
       /Expiry risk/i,
