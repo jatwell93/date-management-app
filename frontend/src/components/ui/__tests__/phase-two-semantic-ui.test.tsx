@@ -40,6 +40,8 @@ describe('phase 2 semantic UI primitives', () => {
     const input = screen.getByLabelText('quantity');
     expect(input).toHaveClass('text-base', 'pointer-coarse:min-h-11');
     expect(input).not.toHaveClass('md:text-sm');
+    // text-muted (#94A3B8) is 2.6:1; tertiary (#64748B) is 4.8:1.
+    expect(input).toHaveClass('placeholder:text-semantic-text-tertiary');
   });
 
   it('renders badges at 14px', () => {

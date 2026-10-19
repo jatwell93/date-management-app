@@ -20,4 +20,11 @@ describe('reduced motion', () => {
     expect(quotaCss).not.toMatch(/infinite/);
     expect(quotaCss).not.toMatch(/translateY\(-1px\)/);
   });
+
+  it('styles the storage quota modal from design tokens, not hard-coded hex', () => {
+    const quotaCss = readCss('../StorageQuotaWarning.css');
+
+    expect(quotaCss).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(quotaCss).toContain('var(--surface-1)');
+  });
 });
