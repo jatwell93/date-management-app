@@ -24,6 +24,7 @@ import {
 } from '../../components/ui/alert-dialog';
 import { MarkdownCreditScopeBadge } from '../../components/MarkdownCreditScopeBadge';
 import { MarkdownMatricesNotice } from '../../components/MarkdownMatricesNotice';
+import { formatTimestampSafe } from '../../lib/pg-timestamp';
 
 /** Sections of the Scan page (`/scan`). Used only by `pages/ScanPage.tsx`. */
 
@@ -68,7 +69,7 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
 });
 
 export function formatExpiryDateForCopy(expiryDate: string): string {
-  return expiryDateFormatter.format(new Date(expiryDate));
+  return formatTimestampSafe(expiryDateFormatter, expiryDate);
 }
 
 function formatCostPrice(costPrice: number | null | undefined): string {
@@ -370,7 +371,7 @@ export function RecentEntriesList({
                 {formatExpiryDateForCopy(entry.expiryDate)}
               </p>
               <p className="text-muted-foreground text-sm tabular-nums">
-                Added: {addedAtFormatter.format(new Date(entry.createdAt))}
+                Added: {formatTimestampSafe(addedAtFormatter, entry.createdAt)}
               </p>
             </div>
             <AlertDialog

@@ -501,7 +501,7 @@ describe('ScanPage Integration', () => {
     });
   };
 
-  const mockProductWithRecentEntry = () => {
+  const mockProductWithRecentEntry = (createdAt = '2025-01-01T00:00:00.000Z') => {
     (apiService.get as jest.Mock).mockImplementation((url) => {
       if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
       if (url.includes('/products/by-barcode/1234567890')) {
@@ -515,7 +515,7 @@ describe('ScanPage Integration', () => {
             expiryDate: '2025-12-31T00:00:00.000Z',
             locationId: 1,
             status: 'active',
-            createdAt: '2025-01-01T00:00:00.000Z',
+            createdAt,
             updatedAt: '2025-01-01T00:00:00.000Z',
           },
         ]);
@@ -564,6 +564,23 @@ describe('ScanPage Integration', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: /Inventory scan/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: /Recent entries/i })).toBeInTheDocument();
+  });
+
+  it('renders a recent entry with an unparseable createdAt without crashing', async () => {
+    mockProductWithRecentEntry('not-a-timestamp');
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
+
+    expect(await screen.findByText('Added: not-a-timestamp')).toBeInTheDocument();
+    expect(screen.getByTestId('scan-page-main')).toBeInTheDocument();
+  });
+
+  it('formats a Postgres text createdAt from the recent-entries API', async () => {
+    mockProductWithRecentEntry('2026-10-19 03:12:45.123+00');
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
+
+    expect(await screen.findByText(/^Added: 19 Oct 2026, 2:12/)).toBeInTheDocument();
   });
 
   it('gives page-level controls 44px touch targets', async () => {
