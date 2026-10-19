@@ -10,7 +10,11 @@ import { HardwareScanResult } from '../types/handheld';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
 import { calendarDaysUntil } from '../lib/utils';
-import { raceAbort, useLatestScanLookup } from '../hooks/useLatestScanLookup';
+import {
+  raceAbort,
+  ScanLookupTimeoutError,
+  useLatestScanLookup,
+} from '../hooks/useLatestScanLookup';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
 import { MarkdownCreditScopeBadge } from './MarkdownCreditScopeBadge';
 import { MarkdownMatricesNotice } from './MarkdownMatricesNotice';
@@ -62,6 +66,9 @@ async function findProduct(
 }
 
 function lookupErrorMessage(err: unknown): string {
+  if (err instanceof ScanLookupTimeoutError) {
+    return 'The product lookup took too long. Scan again, or enter the cost price and expiry date manually.';
+  }
   const message = err instanceof Error ? err.message : '';
   return message.includes('404')
     ? NO_MATCH_MESSAGE
@@ -85,7 +92,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const costPriceRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
   // Only the latest scan may update the view; see useLatestScanLookup.
-  const { start: startScan, inFlightRef: scanInFlightRef } = useLatestScanLookup();
+  const { start: startScan, isLookingUp, inFlightRef: scanInFlightRef } = useLatestScanLookup();
   // Load the org's markdown matrix so the calculator honors configured bands and
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
   const markdownConfig = useMarkdownMatrices(token);
@@ -341,9 +348,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                 type="submit"
                 size="lg"
                 className="min-h-11 w-full"
-                disabled={markdownConfig.status !== 'ready'}
+                disabled={markdownConfig.status !== 'ready' || isLookingUp}
               >
-                Calculate markdown
+                {isLookingUp ? 'Looking up product…' : 'Calculate markdown'}
               </Button>
               {validationError && (
                 <p

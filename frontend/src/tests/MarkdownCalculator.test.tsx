@@ -6,6 +6,7 @@ import { MarkdownCalculator } from '../components/MarkdownCalculator';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 import { DEFAULT_MARKDOWN_MATRIX_SET } from '@shared/markdown';
+import { SCAN_LOOKUP_TIMEOUT_MS } from '../hooks/useLatestScanLookup';
 
 const mockGetToken = vi.fn();
 
@@ -502,6 +503,35 @@ describe('MarkdownCalculator', () => {
       fireEvent.submit(form);
       expect(result).toHaveTextContent(/\$10\.00/i);
     });
+  });
+
+  it('disables Calculate during a lookup and unlocks it when the lookup hangs', async () => {
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config'
+        ? Promise.resolve(markdownConfigResponse)
+        : new Promise(() => undefined),
+    );
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+      const busyButton = screen.getByRole('button', { name: /Looking up product/i });
+      expect(busyButton).toBeDisabled();
+      expect(busyButton).toHaveAttribute('type', 'submit');
+
+      await act(async () => {
+        vi.advanceTimersByTime(SCAN_LOOKUP_TIMEOUT_MS);
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /The product lookup took too long/i,
+      );
+      expect(screen.getByRole('button', { name: /Calculate Markdown/i })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('calculates when the form is submitted with Enter', async () => {
