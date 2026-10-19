@@ -473,6 +473,38 @@ describe('MarkdownCalculator', () => {
     expect(costInput).toHaveFocus();
   });
 
+  it('keeps the cost editable when the catalog cost is zero', async () => {
+    const product = {
+      id: 4,
+      name: 'Zero Cost Product',
+      sku: 'SKU123',
+      barcode: '9300000000003',
+      costPrice: 0,
+    };
+    mockedApiGet.mockImplementation((path: string) =>
+      Promise.resolve(path === '/markdown-config' ? markdownConfigResponse : product),
+    );
+
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+    fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+    await screen.findByRole('region', { name: /scanned product/i });
+
+    const costInput = screen.getByLabelText(/Cost Price/i);
+    expect(costInput).not.toHaveAttribute('readonly');
+    expect(costInput).toHaveValue(null);
+    expect(screen.queryByText(/Scan another product to change it/i)).not.toBeInTheDocument();
+
+    fireEvent.change(costInput, { target: { value: '100' } });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: { value: futureDate.toISOString().split('T')[0] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+    expect(screen.getByRole('status', { name: /markdown result/i })).toHaveTextContent(/\$25\.00/i);
+  });
+
   it('treats stock expiring today as expired at any local time of day', async () => {
     // Only Date is faked so promises and waitFor keep running on real timers.
     vi.useFakeTimers({ toFake: ['Date'] });

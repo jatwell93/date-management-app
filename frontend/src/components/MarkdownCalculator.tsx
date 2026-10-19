@@ -40,6 +40,10 @@ interface ValidationError {
 const VALIDATION_ERROR_ID = 'markdown-validation-error';
 const COST_PRICE_HINT_ID = 'costPrice-hint';
 
+function isUsableCost(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 const currencyFormatter = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',
@@ -68,8 +72,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
   const markdownConfig = useMarkdownMatrices(token);
 
-  const hasProductCost =
-    typeof productDetails?.costPrice === 'number' && Number.isFinite(productDetails.costPrice);
+  // Only a positive catalog cost is a usable preset; 0 would lock the field on a value
+  // that validation rejects, so it stays editable.
+  const hasProductCost = isUsableCost(productDetails?.costPrice);
 
   const formattedProductCost = useMemo(
     () =>
@@ -126,7 +131,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       }
 
       setProductDetails(product);
-      if (typeof product.costPrice === 'number' && Number.isFinite(product.costPrice)) {
+      if (isUsableCost(product.costPrice)) {
         setCostPrice(String(product.costPrice));
       } else {
         setCostPrice('');
