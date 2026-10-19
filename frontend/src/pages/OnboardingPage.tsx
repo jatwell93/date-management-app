@@ -252,12 +252,14 @@ function TourDots({ slideIndex, onSelect }: TourDotsProps) {
  * Step 2: Orientation Carousel
  * - 3-slide carousel explaining Dashboard > Catalog > Scans
  * - Final button redirects to /scan
+ * - Back on the first slide returns to the catalog step
  */
-function Step2(_props: StepProps) {
+function Step2({ onBack }: StepProps) {
   const navigate = useNavigate();
   const [slideIndex, setSlideIndex] = useState(0);
 
   const currentSlide = TOUR_SLIDES[slideIndex];
+  const isFirstSlide = slideIndex === 0;
   const isLastSlide = slideIndex === TOUR_SLIDES.length - 1;
 
   const handleNext = () => {
@@ -268,8 +270,11 @@ function Step2(_props: StepProps) {
     }
   };
 
+  // First slide: back to the catalog step; later slides: previous slide.
   const handleBack = () => {
-    if (slideIndex > 0) {
+    if (isFirstSlide) {
+      onBack?.();
+    } else {
       setSlideIndex(slideIndex - 1);
     }
   };
@@ -295,13 +300,8 @@ function Step2(_props: StepProps) {
         <TourDots slideIndex={slideIndex} onSelect={setSlideIndex} />
 
         <div className="flex justify-between gap-3 pt-4">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            disabled={slideIndex === 0}
-            className="flex-1 min-h-11"
-          >
-            Back
+          <Button variant="outline" onClick={handleBack} className="flex-1 min-h-11">
+            {isFirstSlide ? 'Back to catalog' : 'Back'}
           </Button>
           <Button onClick={handleNext} className="flex-1 min-h-11">
             {isLastSlide ? 'Start scanning' : 'Next'}

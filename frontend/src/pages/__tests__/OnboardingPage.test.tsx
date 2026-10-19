@@ -135,8 +135,29 @@ describe('OnboardingPage tour step', () => {
     renderOnboarding('/onboarding?step=2');
 
     expect(screen.getByRole('button', { name: 'Next' })).toHaveClass('min-h-11');
-    expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('min-h-11');
+    expect(screen.getByRole('button', { name: 'Back to catalog' })).toHaveClass('min-h-11');
     expect(screen.getByRole('button', { name: /^Slide 1 of 3/ })).toHaveClass('size-11');
+  });
+
+  it('goes back one slide from a later slide', async () => {
+    renderOnboarding('/onboarding?step=2');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.getByText('Slide 1 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
+  });
+
+  it('returns to the catalog step from the first slide and focuses its heading', async () => {
+    renderOnboarding('/onboarding?step=2');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to catalog' }));
+
+    expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
+    expect(location()).toBe('/onboarding?step=1');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /demo data/i })).toBeInTheDocument();
   });
 
   it('sends the user to the scan page from the last slide', async () => {
