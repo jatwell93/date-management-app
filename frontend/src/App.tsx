@@ -611,7 +611,7 @@ function AppContent({
           }}
           queueLength={pendingQueueCount}
         >
-          <div className="h-full min-h-0" data-testid="handheld-route-shell">
+          <div className="h-full min-h-0" data-testid="handheld-route-shell" data-shell-route>
             <ErrorBoundary>
               <AppRoutes
                 isLoggedIn={isLoggedIn}
