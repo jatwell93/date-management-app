@@ -9,6 +9,34 @@ interface ToastProps {
   onClose: () => void;
 }
 
+// -strong fills keep the white message at AA (sky, green and amber DEFAULTs fail).
+const TOAST_STYLES: Record<ToastType, string> = {
+  success: 'bg-semantic-success-strong text-semantic-success-foreground',
+  error: 'bg-semantic-critical text-semantic-critical-foreground',
+  warning: 'bg-semantic-warning-strong text-semantic-warning-foreground',
+  info: 'bg-semantic-secondary-strong text-semantic-secondary-foreground',
+};
+
+function ToastCard({ message, type, onClose }: Omit<ToastProps, 'isVisible'>) {
+  return (
+    <div className="pointer-events-auto transform transition-transform duration-300 ease-in-out translate-y-0 opacity-100">
+      <div
+        className={`${TOAST_STYLES[type] ?? TOAST_STYLES.info} pl-4 pr-1 py-1 rounded-md shadow-lg flex items-center gap-2`}
+      >
+        <span className="py-2">{message}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Dismiss notification"
+          className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-xl leading-none transition-opacity hover:opacity-80 outline-hidden focus-visible:ring-2 focus-visible:ring-current"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
   const [show, setShow] = useState(false);
 
@@ -26,63 +54,34 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
     }
   }, [isVisible, message, onClose, type]);
 
-  // -strong fills keep the white message at AA (sky, green and amber DEFAULTs fail).
-  const getToastStyle = () => {
-    switch (type) {
-      case 'success':
-        return 'bg-semantic-success-strong';
-      case 'error':
-        return 'bg-semantic-critical';
-      case 'warning':
-        return 'bg-semantic-warning-strong';
-      case 'info':
-      default:
-        return 'bg-semantic-secondary-strong';
-    }
-  };
-
-  const getToastTextStyle = () => {
-    switch (type) {
-      case 'success':
-        return 'text-semantic-success-foreground';
-      case 'error':
-        return 'text-semantic-critical-foreground';
-      case 'warning':
-        return 'text-semantic-warning-foreground';
-      case 'info':
-      default:
-        return 'text-semantic-secondary-foreground';
-    }
-  };
-
-  if (!show) return null;
-
-  // Errors interrupt (role="alert"); everything else waits its turn (role="status").
+  // Both live regions (aria-live) stay mounted and empty while hidden: screen readers
+  // announce text added to an existing region, but can miss a region inserted already
+  // filled. Errors interrupt (assertive, role="alert"); everything else waits its turn
+  // (polite, role="status"). The role is only set while the region holds a message, so
+  // an idle empty region never answers getByRole('alert'/'status') for page content.
   const isError = type === 'error';
+  const card = show ? <ToastCard message={message} type={type} onClose={onClose} /> : null;
+  const statusCard = isError ? null : card;
+  const alertCard = isError ? card : null;
 
+  // pointer-events-none: the empty fixed container never blocks clicks beneath it.
   return (
-    <div className="fixed bottom-4 right-4 z-50">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50">
       <div
-        className={`transform transition-transform duration-300 ease-in-out ${
-          show ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
-        }`}
+        role={statusCard ? 'status' : undefined}
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="toast-status-region"
       >
-        <div
-          role={isError ? 'alert' : 'status'}
-          aria-live={isError ? 'assertive' : 'polite'}
-          aria-atomic="true"
-          className={`${getToastStyle()} ${getToastTextStyle()} pl-4 pr-1 py-1 rounded-md shadow-lg flex items-center gap-2`}
-        >
-          <span className="py-2">{message}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Dismiss notification"
-            className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-xl leading-none transition-opacity hover:opacity-80 outline-hidden focus-visible:ring-2 focus-visible:ring-current"
-          >
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
+        {statusCard}
+      </div>
+      <div
+        role={alertCard ? 'alert' : undefined}
+        aria-live="assertive"
+        aria-atomic="true"
+        data-testid="toast-alert-region"
+      >
+        {alertCard}
       </div>
     </div>
   );

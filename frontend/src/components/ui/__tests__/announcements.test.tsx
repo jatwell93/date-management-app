@@ -1,25 +1,61 @@
 import { render, screen } from '@testing-library/react';
 
 import Toast from '../toast';
+import { ToastProvider } from '../toast-provider';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../dialog';
 
 describe('toast announcements', () => {
   it.each(['success', 'info', 'warning'] as const)(
-    'announces %s toasts politely through a status region',
+    'fills an already-mounted polite status region for %s toasts',
     (type) => {
-      render(<Toast message="Saved" type={type} isVisible onClose={() => undefined} />);
+      const { rerender } = render(
+        <Toast message="Saved" type={type} isVisible={false} onClose={() => undefined} />,
+      );
 
-      const region = screen.getByRole('status');
+      const region = screen.getByTestId('toast-status-region');
       expect(region).toHaveAttribute('aria-live', 'polite');
+      expect(region).toBeEmptyDOMElement();
+      // An idle region does not answer role queries meant for page content.
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+      rerender(<Toast message="Saved" type={type} isVisible onClose={() => undefined} />);
+
+      // Same node, now holding the message: announced as a change, not an insertion.
+      expect(screen.getByRole('status')).toBe(region);
       expect(region).toHaveTextContent('Saved');
+      expect(screen.getByTestId('toast-alert-region')).toBeEmptyDOMElement();
     },
   );
 
-  it('announces error toasts through an alert region', () => {
-    render(<Toast message="Save failed" type="error" isVisible onClose={() => undefined} />);
+  it('fills an already-mounted assertive alert region for error toasts', () => {
+    const { rerender } = render(
+      <Toast message="Save failed" type="error" isVisible={false} onClose={() => undefined} />,
+    );
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Save failed');
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    const region = screen.getByTestId('toast-alert-region');
+    expect(region).toHaveAttribute('aria-live', 'assertive');
+    expect(region).toBeEmptyDOMElement();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    rerender(<Toast message="Save failed" type="error" isVisible onClose={() => undefined} />);
+
+    expect(screen.getByRole('alert')).toBe(region);
+    expect(region).toHaveTextContent('Save failed');
+    expect(screen.getByTestId('toast-status-region')).toBeEmptyDOMElement();
+  });
+
+  it('keeps the regions mounted from ToastProvider start-up and never blocks clicks', () => {
+    render(
+      <ToastProvider>
+        <p>Page</p>
+      </ToastProvider>,
+    );
+
+    const status = screen.getByTestId('toast-status-region');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toBeEmptyDOMElement();
+    expect(screen.getByTestId('toast-alert-region')).toHaveAttribute('aria-live', 'assertive');
+    expect(status.parentElement).toHaveClass('pointer-events-none');
   });
 
   it('names the dismiss control and gives it a 44px target', () => {
