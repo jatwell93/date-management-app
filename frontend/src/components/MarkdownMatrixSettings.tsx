@@ -103,6 +103,61 @@ function BasisButton({
   );
 }
 
+// An empty or whitespace-only field is NaN (invalid), never a silent 0.
+function parsePercentage(raw: string): number {
+  return raw.trim() === '' ? Number.NaN : Number(raw);
+}
+
+interface PercentageFieldProps {
+  inputId: string;
+  srPrefix: string;
+  percentage: number;
+  matrixErrorId?: string;
+  onChange: (percentage: number) => void;
+}
+
+function PercentageField({
+  inputId,
+  srPrefix,
+  percentage,
+  matrixErrorId,
+  onChange,
+}: PercentageFieldProps) {
+  const empty = Number.isNaN(percentage);
+  const fieldErrorId = empty ? `${inputId}-error` : undefined;
+  const describedBy = [fieldErrorId, matrixErrorId].filter(Boolean).join(' ') || undefined;
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={inputId}>
+        <span className="sr-only">{srPrefix} </span>
+        Discount %
+      </Label>
+      <Input
+        id={inputId}
+        type="number"
+        min="0"
+        max="100"
+        step="1"
+        inputMode="decimal"
+        className="min-h-11 w-28"
+        aria-invalid={describedBy ? true : undefined}
+        aria-describedby={describedBy}
+        value={empty ? '' : String(percentage)}
+        onChange={(event) => onChange(parsePercentage(event.target.value))}
+      />
+      {fieldErrorId && (
+        <p
+          id={fieldErrorId}
+          role="alert"
+          className="text-sm text-semantic-critical-muted-foreground"
+        >
+          Enter a discount from 0 to 100.
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface BandRowProps {
   scope: CreditScope;
   band: (typeof BANDS)[number];
@@ -123,27 +178,13 @@ function BandRow({ scope, band, value, hasRetailData, errorId, onUpdate }: BandR
         <p className="text-sm text-semantic-text-secondary">{window}</p>
       </div>
       <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <Label htmlFor={inputId}>
-            <span className="sr-only">
-              {scopeLabel} {title}{' '}
-            </span>
-            Discount %
-          </Label>
-          <Input
-            id={inputId}
-            type="number"
-            min="0"
-            max="100"
-            step="1"
-            inputMode="decimal"
-            className="min-h-11 w-28"
-            aria-invalid={errorId ? true : undefined}
-            aria-describedby={errorId}
-            value={String(value.percentage)}
-            onChange={(event) => onUpdate(key, { percentage: Number(event.target.value) })}
-          />
-        </div>
+        <PercentageField
+          inputId={inputId}
+          srPrefix={`${scopeLabel} ${title}`}
+          percentage={value.percentage}
+          matrixErrorId={errorId}
+          onChange={(percentage) => onUpdate(key, { percentage })}
+        />
         <div className="space-y-1">
           <span className="block text-sm font-medium" aria-hidden="true">
             Basis
@@ -195,7 +236,10 @@ export function MarkdownMatrixEditor({
     },
     [matrix, onChange],
   );
-  const errorId = isValidMatrix(matrix) ? undefined : `${scope}-matrix-error`;
+  // Empty fields carry their own inline error; the matrix-level rule message
+  // waits until every field has a value.
+  const hasEmptyField = BANDS.some(({ key }) => Number.isNaN(matrix[key].percentage));
+  const errorId = hasEmptyField || isValidMatrix(matrix) ? undefined : `${scope}-matrix-error`;
 
   return (
     <section

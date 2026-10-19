@@ -84,6 +84,49 @@ describe('MarkdownMatrixSettings', () => {
     );
   });
 
+  it.each([
+    ['empty', ''],
+    ['whitespace-only', '   '],
+  ])('rejects an %s discount instead of saving 0', async (_label, raw) => {
+    await renderLoaded();
+
+    const band2 = screen.getByLabelText('No supplier credit Markdown 2 Discount %');
+    const band1 = screen.getByLabelText('No supplier credit Markdown 1 Discount %');
+    fireEvent.change(band1, { target: { value: '7' } });
+    fireEvent.change(band2, { target: { value: raw } });
+
+    expect(band2).toHaveAttribute('aria-invalid', 'true');
+    expect(band2).toHaveAccessibleDescription('Enter a discount from 0 to 100.');
+    expect(band1).not.toHaveAttribute('aria-invalid');
+    expect(band1).toHaveValue(7);
+    const saveButton = screen.getByRole('button', { name: /Save markdown matrices/i });
+    expect(saveButton).toBeDisabled();
+    fireEvent.click(saveButton);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(mockedPut).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicitly typed 0 valid and saves it', async () => {
+    await renderLoaded();
+    mockedPut.mockResolvedValue({
+      matrices,
+      matrix: DEFAULT_MARKDOWN_MATRIX,
+      hasRetailData: false,
+    });
+
+    const band1 = screen.getByLabelText('Full supplier credit Markdown 1 Discount %');
+    fireEvent.change(band1, { target: { value: '0' } });
+
+    expect(band1).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Save markdown matrices/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save and reprice/i }));
+
+    await waitFor(() => expect(mockedPut).toHaveBeenCalledOnce());
+    const sent = mockedPut.mock.calls[0][1] as { matrices: MarkdownMatrixSet };
+    expect(sent.matrices.FULL_CREDIT.band1.percentage).toBe(0);
+  });
+
   it('ties the validation error to the invalid scope inputs', async () => {
     await renderLoaded();
 
