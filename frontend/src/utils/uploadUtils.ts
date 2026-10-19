@@ -124,7 +124,8 @@ export const uploadWithRetry = async (url: string, options: RequestInit, retries
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url, options);
-      if (res.ok) return res;
+      // 409: an import is already running; retrying cannot succeed, so let the caller explain it.
+      if (res.ok || res.status === 409) return res;
       Sentry.captureMessage('Upload attempt failed with status', {
         level: 'warning',
         extra: { attempt: i + 1, status: res.status },
@@ -137,6 +138,8 @@ export const uploadWithRetry = async (url: string, options: RequestInit, retries
         });
       }
     } catch (err) {
+      // A cancelled upload is not a failure to report or retry.
+      if (options.signal?.aborted) throw err;
       if (err instanceof Error) {
         Sentry.captureException(err, {
           tags: { feature: 'csv-upload' },

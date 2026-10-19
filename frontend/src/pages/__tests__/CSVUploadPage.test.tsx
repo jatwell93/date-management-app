@@ -957,7 +957,10 @@ describe('CSVUploadPage expiry import', () => {
 
       userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('Upload cancelled');
+      // The direct upload was already queued server-side, so cancel says it keeps importing.
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Stopped waiting for this upload. The server already accepted the file',
+      );
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Cancel upload' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
@@ -968,8 +971,51 @@ describe('CSVUploadPage expiry import', () => {
       // or overwriting the cancelled state.
       await wait(1300);
       expect(statusCalls()).toBe(1);
-      expect(screen.getByRole('alert')).toHaveTextContent('Upload cancelled');
+      expect(screen.getByRole('alert')).toHaveTextContent('Stopped waiting for this upload');
       expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    });
+
+    const directUploadCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/upload/direct'));
+
+    const startPendingDirectUpload = async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockImplementationOnce(() => new Promise<Response>(() => {}));
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(directUploadCalls()).toHaveLength(1));
+    };
+
+    it('aborts the in-flight request when cancelled before the server accepts the file', async () => {
+      render(<CSVUploadPage token="test-token" />);
+      await startPendingDirectUpload();
+      const { signal } = directUploadCalls()[0][1] as RequestInit;
+      expect(signal?.aborted).toBe(false);
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Upload cancelled before the server accepted the file',
+      );
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('explains a 409 from an import that is still running instead of retrying', async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ error: 'An active catalogue import already exists' }), {
+          status: 409,
+        });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Another catalogue import is still running for this store',
+      );
+      expect(directUploadCalls()).toHaveLength(1);
     });
 
     it('still renders when browser storage is blocked', async () => {
