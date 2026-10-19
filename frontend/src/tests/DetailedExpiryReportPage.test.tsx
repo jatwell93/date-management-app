@@ -40,6 +40,27 @@ const daysFromNow = (n: number) => {
   return d.toISOString().split('T')[0];
 };
 
+// Local calendar date (not UTC) so 0/±1-day rows do not shift across the date line.
+const localDaysFromNow = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const pad = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const row = (inventoryId: number, days: number, productName: string) => ({
+  inventoryId,
+  expiryDate: localDaysFromNow(days),
+  status: 'Markdown 3',
+  productId: inventoryId,
+  productName,
+  sku: `SKU-${inventoryId}`,
+  costPrice: 10,
+  locationId: 2,
+  locationName: 'Front Counter',
+  subDepartment: null,
+});
+
 describe('DetailedExpiryReportPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,39 +103,48 @@ describe('DetailedExpiryReportPage', () => {
     expect(screen.getByRole('region', { name: /Expiry stock action summary/i })).toHaveTextContent(
       /Markdown action/i,
     );
-    expect(screen.getByRole('region', { name: /Primary shelf decision/i })).toHaveTextContent(
-      /Expired risk/i,
+    expect(screen.getByRole('region', { name: 'Expired stock to write off' })).toHaveTextContent(
+      'Expired — write off',
     );
 
     const allEntriesLink = screen.getByRole('link', { name: /Browse all expiry entries/i });
     expect(allEntriesLink).toHaveAttribute('href', '/expiry-entries');
     // The expired panel points to where write-offs happen instead of dead-ending.
-    expect(screen.getByRole('link', { name: 'Open expired items' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Write off on Expired items' })).toHaveAttribute(
       'href',
       '/expired-items',
     );
   });
 
-  it('labels the markdown price and words near-term expiry precisely', async () => {
-    // Local calendar date (not UTC) so 0/1-day rows do not shift across the date line.
-    const localDaysFromNow = (n: number) => {
-      const d = new Date();
-      d.setDate(d.getDate() + n);
-      const pad = (v: number) => String(v).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    };
-    const row = (inventoryId: number, days: number, productName: string) => ({
-      inventoryId,
-      expiryDate: localDaysFromNow(days),
-      status: 'Markdown 3',
-      productId: inventoryId,
-      productName,
-      sku: `SKU-${inventoryId}`,
-      costPrice: 10,
-      locationId: 2,
-      locationName: 'Front Counter',
-      subDepartment: null,
+  it('counts only past-expiry stock in the expired tile; today stays in Markdown 3', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([row(1, 0, 'Today Product'), row(2, -1, 'Yesterday Product')]);
+      }
+      return Promise.resolve([]);
     });
+
+    renderPage('test-session-value');
+
+    const tile = await screen.findByRole('region', { name: 'Expired stock to write off' });
+    expect(tile).toHaveTextContent(/write off\s*1\s*These lines are past expiry/);
+    const link = screen.getByRole('link', { name: 'Write off on Expired items' });
+    expect(link).toHaveAttribute('href', '/expired-items');
+    expect(link).toHaveClass('min-h-11');
+
+    // 0 days: Markdown 3 work, counted under markdown action, not expired.
+    const markdown3 = screen.getByRole('region', { name: /Markdown 3 — urgent/i });
+    expect(markdown3).toHaveTextContent('Today Product');
+    expect(screen.getByText('Markdown action').nextElementSibling).toHaveTextContent(/^1$/);
+
+    // -1 days: in the tile only, never in a worklist group.
+    for (const name of [/Apply Markdown 1/i, /Markdown 2 — review/i, /Markdown 3 — urgent/i]) {
+      expect(screen.getByRole('region', { name })).not.toHaveTextContent('Yesterday Product');
+    }
+  });
+
+  it('labels the markdown price and words near-term expiry precisely', async () => {
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {

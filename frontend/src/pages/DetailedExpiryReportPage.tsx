@@ -216,7 +216,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       (reportData || []).reduce(
         (summary, item) => {
           const daysToExpiry = getDaysToExpiry(item.expiryDate);
-          if (daysToExpiry !== null && daysToExpiry <= 0) {
+          // Expiring today (0 days) is still Markdown 3 work; only past-expiry stock is written off.
+          if (daysToExpiry !== null && daysToExpiry < 0) {
             summary.expired += 1;
           } else if (daysToExpiry !== null && daysToExpiry <= 90) {
             summary.markdown += 1;
@@ -322,22 +323,22 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         <div
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-4"
           role="region"
-          aria-label="Primary shelf decision"
+          aria-label="Expired stock to write off"
         >
           <p className="text-sm font-medium text-semantic-critical-muted-foreground">
-            Expired risk
+            Expired — write off
           </p>
           <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
             {numberFormatter.format(expirySummary.expired)}
           </p>
           <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
-            Remove, reconcile, or confirm these lines before markdown work starts.
+            These lines are past expiry. Write them off on the Expired items page.
           </p>
           <Link
             to="/expired-items"
             className="mt-1 inline-flex min-h-11 items-center rounded-md text-sm font-medium text-semantic-critical-muted-foreground underline underline-offset-4 outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
           >
-            Open expired items
+            Write off on Expired items
           </Link>
         </div>
         <dl className="grid gap-3 rounded-lg border bg-semantic-surface-2 p-4 sm:grid-cols-2">
