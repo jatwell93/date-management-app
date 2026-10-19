@@ -173,6 +173,46 @@ describe('PlatformCataloguePage', () => {
     }
   });
 
+  it('keeps focus on the row button when its action fails', async () => {
+    vi.mocked(service.reviewCatalogueCorrection).mockRejectedValue(new Error('network'));
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    const accept = screen.getByRole('button', { name: /accept correction 11/i });
+    accept.focus();
+    fireEvent.click(accept);
+    // Browsers can drop focus from a button while it is disabled; jsdom does not (and ignores
+    // blur() on a disabled element), so simulate the loss by focusing a sink outside the page.
+    expect(accept).toBeDisabled();
+    const sink = document.createElement('button');
+    document.body.append(sink);
+    sink.focus();
+    expect(accept).not.toHaveFocus();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1 correction failed');
+    await waitFor(() => expect(accept).toBeEnabled());
+    expect(screen.getByText('Store A')).toBeInTheDocument();
+    expect(accept).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Pending corrections' })).not.toHaveFocus();
+    sink.remove();
+  });
+
+  it('keeps focus on the bulk button when every selected action fails', async () => {
+    vi.mocked(service.reviewCatalogueCorrection).mockRejectedValue(new Error('network'));
+    render(<PlatformCataloguePage token="token" />);
+
+    await screen.findByText('Store A');
+    fireEvent.click(screen.getByRole('checkbox', { name: /select all/i }));
+    const rejectSelected = screen.getByRole('button', { name: /reject selected/i });
+    rejectSelected.focus();
+    fireEvent.click(rejectSelected);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('2 corrections failed');
+    await waitFor(() => expect(rejectSelected).toBeEnabled());
+    expect(rejectSelected).toHaveFocus();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
   it('marks select-all as indeterminate when only some rows are selected', async () => {
     render(<PlatformCataloguePage token="token" />);
 

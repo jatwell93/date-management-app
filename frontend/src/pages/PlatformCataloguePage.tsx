@@ -92,6 +92,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
   const [hasMore, setHasMore] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const correctionsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusAfterSaveRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,6 +118,15 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
     return () => window.clearTimeout(initialLoad);
   }, [load]);
 
+  // Focus is applied after the re-render that re-enables the controls; a disabled button
+  // cannot take focus.
+  useEffect(() => {
+    if (busy) return;
+    const target = focusAfterSaveRef.current;
+    focusAfterSaveRef.current = null;
+    target?.focus();
+  }, [busy]);
+
   const runActions = async (
     ids: number[],
     status: 'ACCEPTED' | 'REJECTED',
@@ -131,6 +141,7 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
     ) {
       return;
     }
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setBusy(true);
     setActionError(null);
     setStatusMessage('Saving…');
@@ -151,9 +162,12 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
         : '',
     );
     await load();
+    // When something saved, the acted-on row is gone, so move focus to a stable point instead of
+    // <body>. When everything failed, the rows are still there: return focus to the control the
+    // user acted from (the role="alert" message is announced without moving focus).
+    focusAfterSaveRef.current =
+      succeeded > 0 ? correctionsHeadingRef.current : trigger?.isConnected ? trigger : null;
     setBusy(false);
-    // The acted-on row is removed, so return focus to a stable point instead of <body>.
-    correctionsHeadingRef.current?.focus();
   };
 
   if (loading && !hasLoaded) {
