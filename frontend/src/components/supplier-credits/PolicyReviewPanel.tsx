@@ -304,6 +304,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
         <div className="space-y-1">
           <Label htmlFor="policy-brand-filter">Brand</Label>
           <Input
+            className="min-h-11"
             id="policy-brand-filter"
             aria-label="Filter by brand"
             value={brandFilter}
@@ -313,6 +314,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
         <div className="space-y-1">
           <Label htmlFor="policy-supplier-filter">Supplier</Label>
           <Input
+            className="min-h-11"
             id="policy-supplier-filter"
             aria-label="Filter by supplier"
             value={supplierFilter}
@@ -324,7 +326,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
           <select
             id="policy-status-filter"
             aria-label="Filter by policy status"
-            className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+            className="h-11 rounded-md border bg-semantic-surface-1 px-3 text-sm"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as PolicyStatus | '')}
           >
@@ -333,7 +335,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             <option value="MISSING">Missing</option>
           </select>
         </div>
-        <Button type="submit" variant="outline">
+        <Button className="min-h-11" type="submit" variant="outline">
           Apply filters
         </Button>
       </form>
@@ -341,7 +343,9 @@ export const PolicyReviewPanel: React.FC<Props> = ({
       {isAdmin && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Bulk attach policy</CardTitle>
+            <CardTitle role="heading" aria-level={3} className="text-base">
+              Bulk attach policy
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
@@ -349,7 +353,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
               <select
                 id="bulk-policy-supplier"
                 aria-label="Policy supplier"
-                className="h-9 min-w-52 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+                className="h-11 min-w-52 rounded-md border bg-semantic-surface-1 px-3 text-sm"
                 value={supplierId ?? ''}
                 onChange={(event) =>
                   setSupplierId(event.target.value ? Number(event.target.value) : null)
@@ -367,16 +371,23 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                 ))}
               </select>
             </div>
-            <Button type="button" variant="outline" onClick={beginCreate} disabled={saving}>
+            <Button
+              className="min-h-11"
+              type="button"
+              variant="outline"
+              onClick={beginCreate}
+              disabled={saving}
+            >
               Create new supplier
             </Button>
             <Button
+              className="min-h-11"
               onClick={() => void attach()}
               disabled={saving || supplierId == null || selected.size === 0}
             >
               Attach policy to {selected.size} {selected.size === 1 ? 'brand' : 'brands'}
             </Button>
-            <p className="text-xs text-semantic-text-secondary">Maximum 500 brands per request.</p>
+            <p className="text-sm text-semantic-text-secondary">Maximum 500 brands per request.</p>
           </CardContent>
         </Card>
       )}
@@ -387,7 +398,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
         </p>
       )}
       {summary && (
-        <p role="status" className="text-sm text-semantic-success">
+        <p role="status" className="text-sm text-semantic-success-muted-foreground">
           {summary}
         </p>
       )}
@@ -413,15 +424,18 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                   <TableRow>
                     {isAdmin && (
                       <TableCell>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${item.brandName}`}
-                          checked={selected.has(item.brandId)}
-                          disabled={
-                            !selected.has(item.brandId) && selected.size >= MAX_BULK_SELECTION
-                          }
-                          onChange={() => toggleSelected(item.brandId)}
-                        />
+                        <label className="inline-flex size-11 cursor-pointer items-center justify-center">
+                          <input
+                            type="checkbox"
+                            className="size-5"
+                            aria-label={`Select ${item.brandName}`}
+                            checked={selected.has(item.brandId)}
+                            disabled={
+                              !selected.has(item.brandId) && selected.size >= MAX_BULK_SELECTION
+                            }
+                            onChange={() => toggleSelected(item.brandId)}
+                          />
+                        </label>
                       </TableCell>
                     )}
                     <TableCell className="font-medium">{item.brandName}</TableCell>
@@ -437,6 +451,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                       <div className="flex justify-end gap-2">
                         {item.supplier?.creditPolicyNote.trim() && (
                           <Button
+                            className="min-h-11"
                             size="sm"
                             variant="outline"
                             aria-expanded={expanded}
@@ -449,6 +464,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                         )}
                         {isAdmin && item.supplier?.creditPolicyNote.trim() && (
                           <Button
+                            className="min-h-11"
                             size="sm"
                             variant="outline"
                             aria-label={`Edit ${item.supplier.name} policy`}
@@ -459,6 +475,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                         )}
                         {isAdmin && item.supplier?.creditPolicyNote.trim() && (
                           <Button
+                            className="min-h-11"
                             size="sm"
                             variant="outline"
                             aria-label={`Clear ${item.supplier.name} policy`}
@@ -512,8 +529,8 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void clear()} disabled={saving}>
+            <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="min-h-11" onClick={() => void clear()} disabled={saving}>
               Clear policy
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -536,10 +553,15 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             idPrefix="policy-review-edit"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditSupplier(null)} disabled={saving}>
+            <Button
+              className="min-h-11"
+              variant="outline"
+              onClick={() => setEditSupplier(null)}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button onClick={() => void saveEdit()} disabled={saving}>
+            <Button className="min-h-11" onClick={() => void saveEdit()} disabled={saving}>
               Save policy
             </Button>
           </DialogFooter>
@@ -554,8 +576,13 @@ export const PolicyReviewPanel: React.FC<Props> = ({
           <div>
             <Label htmlFor="policy-review-create-name">Supplier name</Label>
             <Input
+              className="min-h-11"
               id="policy-review-create-name"
               maxLength={120}
+              aria-invalid={createFieldErrors.name ? true : undefined}
+              aria-describedby={
+                createFieldErrors.name ? 'policy-review-create-name-error' : undefined
+              }
               value={createName}
               onChange={(event) => {
                 setCreateName(event.target.value);
@@ -563,7 +590,12 @@ export const PolicyReviewPanel: React.FC<Props> = ({
               }}
             />
             {createFieldErrors.name && (
-              <p className="mt-1 text-xs text-semantic-critical">{createFieldErrors.name}</p>
+              <p
+                id="policy-review-create-name-error"
+                className="mt-1 text-sm text-semantic-critical"
+              >
+                {createFieldErrors.name}
+              </p>
             )}
           </div>
           <SupplierPolicyFields
@@ -577,10 +609,19 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             idPrefix="policy-review-create"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>
+            <Button
+              className="min-h-11"
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button onClick={() => void createAndAttach()} disabled={saving || selected.size === 0}>
+            <Button
+              className="min-h-11"
+              onClick={() => void createAndAttach()}
+              disabled={saving || selected.size === 0}
+            >
               Create and attach
             </Button>
           </DialogFooter>
