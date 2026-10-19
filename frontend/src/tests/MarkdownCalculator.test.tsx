@@ -278,7 +278,11 @@ describe('MarkdownCalculator', () => {
 
     await waitFor(() => {
       expect(mockGetToken).toHaveBeenCalled();
-      expect(apiService.get).toHaveBeenCalledWith('/products/by-sku/SKU123', 'fresh-clerk-token');
+      expect(apiService.get).toHaveBeenCalledWith(
+        '/products/by-sku/SKU123',
+        'fresh-clerk-token',
+        expect.any(AbortSignal),
+      );
     });
   });
 
@@ -429,6 +433,73 @@ describe('MarkdownCalculator', () => {
     await screen.findByRole('region', { name: /scanned product/i });
     await waitFor(() => {
       fireEvent.submit(costInput.closest('form')!);
+      expect(result).toHaveTextContent(/\$10\.00/i);
+    });
+  });
+
+  it('lets only the latest of two overlapping scans update the calculator', async () => {
+    const pending = new Map<string, (product: unknown) => void>();
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config'
+        ? Promise.resolve(markdownConfigResponse)
+        : new Promise((resolve) => {
+            pending.set(path, resolve);
+          }),
+    );
+    const scan = (barcode: string) =>
+      act(() => {
+        mockScannerProps[mockScannerProps.length - 1].onScan({
+          barcode,
+          timestamp: Date.now(),
+          source: 'manual',
+        });
+      });
+
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: { value: futureDate.toISOString().split('T')[0] },
+    });
+
+    // A manually entered cost: a submit that slips through would calculate with it.
+    fireEvent.change(screen.getByLabelText(/Cost Price/i), { target: { value: '100' } });
+
+    scan('SKUA');
+    await waitFor(() => expect(pending.has('/products/by-sku/SKUA')).toBe(true));
+    scan('SKUB');
+    await waitFor(() => expect(pending.has('/products/by-sku/SKUB')).toBe(true));
+
+    // The older scan settles first: it must not show its product or unlock Calculate.
+    pending.get('/products/by-sku/SKUA')!({
+      id: 1,
+      name: 'Product A',
+      sku: 'SKUA',
+      barcode: '1',
+      costPrice: 100,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole('region', { name: /scanned product/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const form = screen.getByLabelText(/Expiry Date/i).closest('form')!;
+    fireEvent.submit(form);
+    const result = screen.getByRole('status', { name: /markdown result/i });
+    expect(result).toHaveTextContent(/No markdown calculated yet/i);
+
+    pending.get('/products/by-sku/SKUB')!({
+      id: 2,
+      name: 'Product B',
+      sku: 'SKUB',
+      barcode: '2',
+      costPrice: 40,
+    });
+    const productSummary = await screen.findByRole('region', { name: /scanned product/i });
+    expect(productSummary).toHaveTextContent(/Product B/);
+    expect(screen.getByLabelText(/Cost Price/i)).toHaveValue(40);
+    expect(result).toHaveTextContent(/No markdown calculated yet/i);
+    await waitFor(() => {
+      fireEvent.submit(form);
       expect(result).toHaveTextContent(/\$10\.00/i);
     });
   });

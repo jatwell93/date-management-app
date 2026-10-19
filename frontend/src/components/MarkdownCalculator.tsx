@@ -10,6 +10,7 @@ import { HardwareScanResult } from '../types/handheld';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
 import { calendarDaysUntil } from '../lib/utils';
+import { raceAbort, useLatestScanLookup } from '../hooks/useLatestScanLookup';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
 import { MarkdownCreditScopeBadge } from './MarkdownCreditScopeBadge';
 import { MarkdownMatricesNotice } from './MarkdownMatricesNotice';
@@ -44,6 +45,29 @@ function isUsableCost(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+const NO_MATCH_MESSAGE =
+  'No product matched that barcode or SKU. Enter the cost price and expiry date manually.';
+
+/** Looks a scanned code up by SKU or barcode (short codes try SKU first). */
+async function findProduct(
+  input: string,
+  apiToken: string | undefined,
+  signal: AbortSignal,
+): Promise<ProductDetails | null> {
+  const bySku = `/products/by-sku/${input}`;
+  const byBarcode = `/products/by-barcode/${input}`;
+  const [first, second] = input.length <= 8 ? [bySku, byBarcode] : [byBarcode, bySku];
+  const product = await apiService.get<ProductDetails | null>(first, apiToken, signal);
+  return product ?? apiService.get<ProductDetails | null>(second, apiToken, signal);
+}
+
+function lookupErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : '';
+  return message.includes('404')
+    ? NO_MATCH_MESSAGE
+    : 'We could not look up that product. Enter the cost price and expiry date manually.';
+}
+
 const currencyFormatter = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',
@@ -60,14 +84,8 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [validationError, setValidationError] = useState<ValidationError | null>(null);
   const costPriceRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
-  const scanInFlightRef = useRef(false);
-  // Clear on a later task: the scanner's Enter submits the form after the keydown
-  // listeners (and their microtasks) finish but within the same task.
-  const endScan = () => {
-    setTimeout(() => {
-      scanInFlightRef.current = false;
-    }, 0);
-  };
+  // Only the latest scan may update the view; see useLatestScanLookup.
+  const { start: startScan, inFlightRef: scanInFlightRef } = useLatestScanLookup();
   // Load the org's markdown matrix so the calculator honors configured bands and
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
   const markdownConfig = useMarkdownMatrices(token);
@@ -89,9 +107,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const handleBarcodeScan = async (result: HardwareScanResult) => {
     const input = result.barcode;
     // A keyboard-wedge scanner ends its burst with Enter. When a form input has focus
-    // that Enter also submits the form, right after this handler runs; mark the scan
-    // so calculateMarkdown ignores that submit instead of using pre-scan values.
-    scanInFlightRef.current = true;
+    // that Enter also submits the form, right after this handler runs; the scan stays
+    // in flight so calculateMarkdown ignores that submit. A newer scan supersedes it.
+    const scan = startScan();
     setScannedInput(input);
     setProductDetails(null);
     setMarkdownResult(null);
@@ -99,56 +117,28 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     setValidationError(null);
 
     if (!token) {
-      endScan();
+      scan.finish();
       setError('Sign in again before scanning a product, then retry the barcode or SKU.');
       return;
     }
 
     try {
-      let product: ProductDetails | null = null;
-      const isSkuSearch = input.length <= 8;
-      const apiToken = await getFreshApiToken('markdown-product-lookup');
-
-      if (isSkuSearch) {
-        product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, apiToken);
-      } else {
-        product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, apiToken);
-      }
-
+      const lookup = async () => {
+        const apiToken = await getFreshApiToken('markdown-product-lookup');
+        return findProduct(input, apiToken, scan.signal);
+      };
+      const product = await raceAbort(lookup(), scan.signal);
+      if (!scan.isCurrent()) return;
       if (!product) {
-        if (isSkuSearch) {
-          product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, apiToken);
-        } else {
-          product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, apiToken);
-        }
-      }
-
-      if (!product) {
-        setError(
-          'No product matched that barcode or SKU. Enter the cost price and expiry date manually.',
-        );
+        setError(NO_MATCH_MESSAGE);
         return;
       }
-
       setProductDetails(product);
-      if (isUsableCost(product.costPrice)) {
-        setCostPrice(String(product.costPrice));
-      } else {
-        setCostPrice('');
-      }
+      setCostPrice(isUsableCost(product.costPrice) ? String(product.costPrice) : '');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      if (message.includes('404')) {
-        setError(
-          'No product matched that barcode or SKU. Enter the cost price and expiry date manually.',
-        );
-      } else {
-        setError(
-          'We could not look up that product. Enter the cost price and expiry date manually.',
-        );
-      }
+      if (scan.isCurrent()) setError(lookupErrorMessage(err));
     } finally {
-      endScan();
+      scan.finish();
     }
   };
 
