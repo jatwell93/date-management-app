@@ -791,39 +791,54 @@ describe('CSVUploadPage expiry import', () => {
       ).toHaveClass('text-sm', 'text-semantic-secondary-muted-foreground');
     });
 
-    it('renders the continue action with the AA default button and a 44px target', async () => {
-      mockSearchParams.set('return', '/expiry-tracking');
-      try {
-        fetchMock
-          .mockResponseOnce(
-            JSON.stringify({
-              strategy: 'direct',
-              uploadUrl: '/api/upload/direct',
-              method: 'POST',
-              key: 'uploads/org-123/expiry.csv',
-            }),
-          )
-          .mockResponseOnce(
-            JSON.stringify({ key: 'uploads/org-123/expiry.csv', importedCount: 1 }),
-          );
+    const uploadExpiryWithReturn = async (returnValue: string) => {
+      mockSearchParams.set('return', returnValue);
+      fetchMock
+        .mockResponseOnce(
+          JSON.stringify({
+            strategy: 'direct',
+            uploadUrl: '/api/upload/direct',
+            method: 'POST',
+            key: 'uploads/org-123/expiry.csv',
+          }),
+        )
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/expiry.csv', importedCount: 1 }));
 
-        render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
-        fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
-          target: {
-            files: [new File(['SKU,Used-By Date\nSKU-1,12/12/26'], 'expiry.csv')],
-          },
-        });
-        userEvent.click(screen.getByRole('button', { name: 'Upload Expiry List' }));
+      render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+      fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+        target: {
+          files: [new File(['SKU,Used-By Date\nSKU-1,12/12/26'], 'expiry.csv')],
+        },
+      });
+      userEvent.click(screen.getByRole('button', { name: 'Upload Expiry List' }));
+      await screen.findByText('Upload successful');
+    };
 
-        const continueButton = await screen.findByRole('button', { name: 'Continue to next step' });
-        expect(continueButton).toHaveClass('min-h-11', 'bg-semantic-primary');
-        expect(continueButton.className).not.toMatch(/bg-semantic-success/);
-        await userEvent.click(continueButton);
-        expect(mockNavigate).toHaveBeenCalledWith('/expiry-tracking');
-      } finally {
-        mockSearchParams.delete('return');
-      }
+    afterEach(() => {
+      mockSearchParams.delete('return');
     });
+
+    it('renders the continue action with the AA default button and a 44px target', async () => {
+      await uploadExpiryWithReturn('/expiry-tracking');
+
+      const continueButton = screen.getByRole('button', { name: 'Continue to next step' });
+      expect(continueButton).toHaveClass('min-h-11', 'bg-semantic-primary');
+      expect(continueButton.className).not.toMatch(/bg-semantic-success/);
+      await userEvent.click(continueButton);
+      expect(mockNavigate).toHaveBeenCalledWith('/expiry-tracking');
+    });
+
+    it.each(['/\\evil.com', '//evil.com', 'https://evil.com', '/\t/evil.com'])(
+      'never offers to continue to the unsafe return target %j',
+      async (returnValue) => {
+        await uploadExpiryWithReturn(returnValue);
+
+        expect(
+          screen.queryByRole('button', { name: 'Continue to next step' }),
+        ).not.toBeInTheDocument();
+        expect(mockNavigate).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('typography and touch targets', () => {

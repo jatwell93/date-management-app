@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import type { UploadResponse } from '../../types/upload';
 import { withOccurrenceKeys } from '../../utils/listKeys';
 import { formatCount } from './formatCount';
+import { toSafeReturnPath } from './safeReturnUrl';
 
 interface UploadResultPanelProps {
   uploadResult: UploadResponse;
@@ -40,12 +41,6 @@ const ErrorReportButton: React.FC<{
     </>
   );
 };
-
-const isSafeReturnUrl = (returnUrl: string | null): returnUrl is string =>
-  typeof returnUrl === 'string' &&
-  returnUrl.startsWith('/') &&
-  !returnUrl.startsWith('//') &&
-  !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl);
 
 type CountRow = { label: string; value: string };
 
@@ -232,18 +227,21 @@ const ContinueSection: React.FC<{
   show: boolean;
   returnUrl: string | null;
   onContinue: (returnUrl: string) => void;
-}> = ({ show, returnUrl, onContinue }) =>
-  show && isSafeReturnUrl(returnUrl) ? (
+}> = ({ show, returnUrl, onContinue }) => {
+  // Re-checked here so the panel never navigates to an unsafe target, whatever the caller passes.
+  const safePath = toSafeReturnPath(returnUrl);
+  return show && safePath ? (
     <div className="mt-6 pt-4 border-t border-semantic-success-muted">
       <Button
         type="button"
-        onClick={() => onContinue(returnUrl)}
+        onClick={() => onContinue(safePath)}
         className="min-h-11 w-full py-2 font-semibold"
       >
         Continue to next step
       </Button>
     </div>
   ) : null;
+};
 
 export const UploadResultPanel: React.FC<UploadResultPanelProps> = ({
   uploadResult,

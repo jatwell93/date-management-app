@@ -24,6 +24,7 @@ import { downloadExpiryTemplate, downloadCatalogTemplate } from '../utils/upload
 import { withOccurrenceKeys } from '../utils/listKeys';
 import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
 import { UploadResultPanel } from '../components/csv-upload/UploadResultPanel';
+import { toSafeReturnPath } from '../components/csv-upload/safeReturnUrl';
 import { LastUploadSummaryCard } from '../components/csv-upload/LastUploadSummaryCard';
 import { UploadProgress } from '../components/csv-upload/UploadProgress';
 import { FormatGuidelines } from '../components/csv-upload/FormatGuidelines';
@@ -34,12 +35,8 @@ export const CSVUploadPage: React.FC<{
 }> = ({ token, defaultImportType = 'product-catalog' }) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const rawReturnUrl = searchParams.get('return');
-  // Only allow safe in-app paths: must start with a single '/' and must not contain a protocol or '//'
-  const returnUrl =
-    rawReturnUrl && /^\/[^/]/.test(rawReturnUrl) && !rawReturnUrl.includes('://')
-      ? rawReturnUrl
-      : null;
+  // Only same-origin in-app paths survive; see toSafeReturnPath for the rejected forms.
+  const returnUrl = toSafeReturnPath(searchParams.get('return'));
 
   const headingId = 'csv-upload-heading';
   const fileInputId = 'csv-upload-file-input';
