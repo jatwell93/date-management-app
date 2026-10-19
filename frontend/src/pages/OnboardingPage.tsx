@@ -177,7 +177,7 @@ function Step1({ onNext }: StepProps) {
           <CatalogOption
             icon={<DemoDataIcon isLoading={isLoading} />}
             title={isLoading ? 'Loading demo data…' : 'Load demo data'}
-            description="Try PharmIQ with sample pharmacy products. You can import your own later."
+            description="Try Expiry Mate with sample pharmacy products. You can import your own later."
             onClick={() => void seed()}
             disabled={isLoading}
           />
@@ -314,7 +314,7 @@ function Step2(_props: StepProps) {
 
 const STEPS: Record<OnboardingStep, StepConfig> = {
   0: {
-    title: 'Welcome to PharmIQ',
+    title: 'Welcome to Expiry Mate by PharmIQ',
     description: 'Three short steps, then you can start scanning.',
     component: Step0,
   },

@@ -49,7 +49,9 @@ describe('OnboardingPage structure', () => {
     mockOrganization.current = null;
     renderOnboarding();
 
-    expect(screen.getByRole('region', { name: 'Welcome to PharmIQ' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Welcome to Expiry Mate by PharmIQ' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Step 1 of 3')).toBeInTheDocument();
     expect(screen.getByTestId('clerk-create-organization')).toBeInTheDocument();
