@@ -49,6 +49,25 @@ export function DataTable<TData, TValue>({
     pageSize: 10,
   });
 
+  const goToFirstPage = React.useCallback(
+    () => setPaginationState((current) => ({ ...current, pageIndex: 0 })),
+    [],
+  );
+  const handleSortingChange = React.useCallback<React.Dispatch<React.SetStateAction<SortingState>>>(
+    (updater) => {
+      setSortingState(updater);
+      goToFirstPage();
+    },
+    [goToFirstPage],
+  );
+  const handleGlobalFilterChange = React.useCallback(
+    (value: string) => {
+      setGlobalFilter(value);
+      goToFirstPage();
+    },
+    [goToFirstPage],
+  );
+
   // eslint-disable-next-line react-hooks/incompatible-library -- @tanstack/react-table is intentionally used here; React Compiler simply skips optimizing this component
   const table = useReactTable({
     data,
@@ -58,8 +77,11 @@ export function DataTable<TData, TValue>({
       globalFilter,
       pagination: paginationState,
     },
-    onSortingChange: setSortingState,
-    onGlobalFilterChange: setGlobalFilter,
+    // Editing a row replaces `data`; the default reset would jump the user back to page 1
+    // (and drop focus from the row they just saved). Sort and search still go to page 1.
+    autoResetPageIndex: false,
+    onSortingChange: handleSortingChange,
+    onGlobalFilterChange: handleGlobalFilterChange,
     onPaginationChange: setPaginationState,
     globalFilterFn: fuzzyFilter,
     getCoreRowModel: getCoreRowModel(),
@@ -68,6 +90,14 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: filtering ? getFilteredRowModel() : undefined,
   });
 
+  // With the auto reset off, deleting the last row of the last page would leave an empty page.
+  const pageCount = table.getPageCount();
+  React.useEffect(() => {
+    if (pageCount > 0 && paginationState.pageIndex >= pageCount) {
+      setPaginationState((current) => ({ ...current, pageIndex: pageCount - 1 }));
+    }
+  }, [pageCount, paginationState.pageIndex]);
+
   return (
     <div className="w-full space-y-4 overflow-x-auto">
       {filtering && (
@@ -75,7 +105,7 @@ export function DataTable<TData, TValue>({
           <Input
             placeholder="Search all columns..."
             value={globalFilter ?? ''}
-            onChange={(event) => setGlobalFilter(event.target.value)}
+            onChange={(event) => handleGlobalFilterChange(event.target.value)}
             className="max-w-sm"
           />
         </div>
