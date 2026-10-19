@@ -2,6 +2,7 @@ import React from 'react';
 import { useHandheldDetectionContext } from '../contexts/HandheldContext';
 import { HandheldScanToolbar } from '../components/HandheldScanToolbar';
 import { HandheldLayoutProps } from '../types/handheld';
+import { SHELL_MAIN_CLASS, SHELL_MAIN_ID } from './shellMain';
 
 export const HandheldLayout: React.FC<HandheldLayoutProps> = ({
   children,
@@ -30,7 +31,11 @@ export const HandheldLayout: React.FC<HandheldLayoutProps> = ({
           queueLength={queueLength}
         />
       )}
-      <main className={isHandheld ? 'flex-1 min-h-0 overflow-auto' : 'p-4 max-w-7xl mx-auto'}>
+      <main
+        id={SHELL_MAIN_ID}
+        tabIndex={-1}
+        className={isHandheld ? 'flex-1 min-h-0 overflow-auto outline-hidden' : SHELL_MAIN_CLASS}
+      >
         {children}
       </main>
     </div>

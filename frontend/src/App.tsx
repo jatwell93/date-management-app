@@ -31,6 +31,7 @@ import { useOrgBootstrap } from './hooks/useOrgBootstrap';
 import { useFreshApiToken } from './hooks/useFreshApiToken';
 import { hasPermission, PERMISSIONS, RoleValue } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
+import { SHELL_MAIN_CLASS, SHELL_MAIN_ID, SkipToContent } from './layouts/shellMain';
 import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import { AppNav } from './components/AppNav';
 import { useSyncStatus } from './hooks/useSyncStatus';
@@ -102,7 +103,7 @@ const checkForceHandheldQueryParam = () => {
 function ExpiryLoadingState({ message }: { message: string }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
-      <div className="text-center max-w-sm">
+      <div role="status" className="text-center max-w-sm">
         <div
           aria-hidden="true"
           className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary"
@@ -118,7 +119,7 @@ function ExpiryLoadingState({ message }: { message: string }) {
 
 function BootstrapErrorState({ error }: { error: string }) {
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+    <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
       <div className="text-center max-w-md">
         <h1 className="text-2xl font-semibold text-destructive mb-2">Setup Required</h1>
         <p className="text-muted-foreground mb-4">
@@ -133,13 +134,14 @@ function BootstrapErrorState({ error }: { error: string }) {
           </details>
         )}
         <button
+          type="button"
           onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          className="inline-flex min-h-11 items-center px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
         >
           Retry Setup
         </button>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -572,6 +574,7 @@ function AppContent({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SkipToContent />
       {isLoggedIn && userId && <StorageQuotaWarning userId={userId} token={token} />}
       {isLoggedIn && token && <TrialBanner token={token} />}
       <ExpectQaStatus
@@ -620,7 +623,7 @@ function AppContent({
           </div>
         </HandheldLayout>
       ) : (
-        <main className="p-4 max-w-7xl mx-auto">
+        <main id={SHELL_MAIN_ID} tabIndex={-1} className={SHELL_MAIN_CLASS}>
           <ErrorBoundary>
             <AppRoutes
               isLoggedIn={isLoggedIn}

@@ -53,17 +53,23 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
             {userName && (
               <span className="text-sm font-medium text-semantic-text-primary">{userName}</span>
             )}
-            <div className={`text-sm font-medium ${getSyncStatusColor()}`}>
+            <div role="status" className={`text-sm font-medium ${getSyncStatusColor()}`}>
               {getSyncStatusText()}
             </div>
           </div>
           <button
             type="button"
             onClick={onSettingsClick}
-            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center focus-visible:outline-hidden"
+            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center"
             aria-label="Settings"
           >
-            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

@@ -22,6 +22,8 @@ interface NavItem {
   label: string;
 }
 
+const MOBILE_MENU_ID = 'app-nav-mobile-menu';
+
 const FOCUS_RING =
   'outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary-foreground/70';
 
@@ -30,7 +32,7 @@ const DESKTOP_ITEM_CLASS = `inline-flex items-center rounded-md px-3 py-2 text-s
 
 const DESKTOP_TRIGGER_CLASS = `${DESKTOP_ITEM_CLASS} cursor-pointer gap-1 hover:bg-semantic-primary-hover`;
 
-const MOBILE_LINK_CLASS = `flex min-h-11 items-center rounded-md px-3 text-base font-medium transition-colors hover:bg-semantic-primary-hover ${FOCUS_RING}`;
+const MOBILE_LINK_CLASS = `flex min-h-11 items-center rounded-md px-3 text-base font-medium transition-colors hover:bg-semantic-primary-hover aria-[current=page]:bg-semantic-primary-hover aria-[current=page]:font-semibold ${FOCUS_RING}`;
 
 const MOBILE_SECTION_LABEL_CLASS =
   'mt-2 border-t border-semantic-primary-foreground/20 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-semantic-primary-foreground';
@@ -84,6 +86,7 @@ function DesktopLink({ item, pathname }: { item: NavItem; pathname: string }) {
   return (
     <Link
       to={item.to}
+      aria-current={isActive ? 'page' : undefined}
       className={`${DESKTOP_ITEM_CLASS} ${
         isActive
           ? 'bg-semantic-primary-foreground text-semantic-primary'
@@ -95,9 +98,21 @@ function DesktopLink({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-function MobileLinks({ items, onNavigate }: { items: NavItem[]; onNavigate: () => void }) {
+interface MobileLinksProps {
+  items: NavItem[];
+  pathname: string;
+  onNavigate: () => void;
+}
+
+function MobileLinks({ items, pathname, onNavigate }: MobileLinksProps) {
   return items.map((item) => (
-    <Link key={item.to} to={item.to} className={MOBILE_LINK_CLASS} onClick={onNavigate}>
+    <Link
+      key={item.to}
+      to={item.to}
+      aria-current={pathname === item.to ? 'page' : undefined}
+      className={MOBILE_LINK_CLASS}
+      onClick={onNavigate}
+    >
       {item.label}
     </Link>
   ));
@@ -114,9 +129,13 @@ export function AppNav({
   const hasAdminAccess =
     !!effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
+  const mobileLinkProps = { pathname, onNavigate: closeMobileMenu };
 
   return (
-    <nav className="border-b border-semantic-primary-hover/30 bg-semantic-primary text-semantic-primary-foreground shadow-xs">
+    <nav
+      aria-label="Main"
+      className="border-b border-semantic-primary-hover/30 bg-semantic-primary text-semantic-primary-foreground shadow-xs"
+    >
       <div className="mx-auto max-w-7xl px-4">
         <div
           className="flex min-h-20 items-center justify-between gap-4"
@@ -192,6 +211,7 @@ export function AppNav({
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={isMobileMenuOpen}
+            aria-controls={MOBILE_MENU_ID}
           >
             {isMobileMenuOpen ? (
               <X className="size-5" aria-hidden="true" />
@@ -202,20 +222,21 @@ export function AppNav({
         </div>
 
         {isMobileMenuOpen && (
-          <div className="border-t border-semantic-primary-foreground/20 py-3 lg:hidden">
+          <div
+            id={MOBILE_MENU_ID}
+            className="border-t border-semantic-primary-foreground/20 py-3 lg:hidden"
+          >
             <div className="grid gap-1">
-              <MobileLinks items={MOBILE_PRIMARY_ITEMS} onNavigate={closeMobileMenu} />
+              <MobileLinks items={MOBILE_PRIMARY_ITEMS} {...mobileLinkProps} />
               {hasAdminAccess && (
                 <>
                   <div className={MOBILE_SECTION_LABEL_CLASS}>Manage</div>
-                  <MobileLinks items={MOBILE_ADMIN_ITEMS} onNavigate={closeMobileMenu} />
+                  <MobileLinks items={MOBILE_ADMIN_ITEMS} {...mobileLinkProps} />
                 </>
               )}
-              {isPlatformAdmin && (
-                <MobileLinks items={[PLATFORM_ITEM]} onNavigate={closeMobileMenu} />
-              )}
+              {isPlatformAdmin && <MobileLinks items={[PLATFORM_ITEM]} {...mobileLinkProps} />}
               <div className={MOBILE_SECTION_LABEL_CLASS}>Account</div>
-              <MobileLinks items={ACCOUNT_ITEMS} onNavigate={closeMobileMenu} />
+              <MobileLinks items={ACCOUNT_ITEMS} {...mobileLinkProps} />
               <button
                 type="button"
                 onClick={() => {
