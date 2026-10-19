@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SupplierCreditsPage from '../pages/SupplierCreditsPage';
 import * as svc from '../services/supplierCreditService';
@@ -31,6 +31,7 @@ vi.mock('../services/supplierCreditService', () => ({
   clearSupplierPolicy: vi.fn(),
   bulkLinkProducts: vi.fn(),
   disposeClaimableWriteOff: vi.fn(),
+  recordOutcome: vi.fn(),
 }));
 
 const mocked = svc as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -378,7 +379,7 @@ describe('SupplierCreditsPage', () => {
     expect(screen.getByText('$200.00')).toBeInTheDocument();
     // Blackmores appears in both the recovery panel and the pool group.
     expect(screen.getAllByText('Blackmores').length).toBeGreaterThan(0);
-    expect(screen.getByText('⚠ Needs supplier')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Needs supplier/ })).toBeInTheDocument();
     // Supplier group offers a build action; needs-supplier offers assign.
     expect(screen.getByRole('button', { name: 'Begin claim' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assign supplier' })).toBeInTheDocument();
@@ -901,9 +902,242 @@ describe('supplier policy role plumbing', () => {
     await userEvent.type(screen.getByLabelText('Store instructions'), 'Return stock');
     await userEvent.click(screen.getByRole('button', { name: 'Assign' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'You no longer have permission to change supplier policy',
-    );
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('You no longer have permission to change supplier policy');
+    expect(notice).toHaveClass('text-semantic-critical-muted-foreground');
     expect(screen.queryByText('Only admins can change supplier policy')).not.toBeInTheDocument();
+  });
+});
+
+describe('SupplierCreditsPage accessibility', () => {
+  const draftClaim = {
+    ...openClaim,
+    id: 6,
+    status: 'DRAFT',
+    nextFollowUpAt: null,
+    lines: [{ id: 61, batchNumber: 'B-77', unitsClaimed: 2, photos: [] }],
+  };
+  const creditedClaim = { ...openClaim, id: 7, status: 'CREDITED', nextFollowUpAt: null };
+
+  it('labels the page as a section with its heading, not a nested main', async () => {
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Supplier Credits' })).toBeInTheDocument();
+    expect(screen.queryByRole('main')).toBeNull();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Money on the table' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the claim photo input reachable by keyboard', async () => {
+    mocked.listClaims.mockImplementation((view: string) =>
+      Promise.resolve(view === 'open' ? [draftClaim] : []),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #6/ }));
+
+    const photo = await screen.findByLabelText('Add photo for batch B-77');
+    expect(photo).toHaveAttribute('type', 'file');
+    expect(photo).not.toHaveClass('hidden');
+    expect(photo).toHaveClass('sr-only');
+  });
+
+  it('pairs status and follow-up badges with AA muted-foreground ink', async () => {
+    mocked.listClaims.mockImplementation((view: string) =>
+      Promise.resolve(view === 'open' ? [openClaim] : [creditedClaim]),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    expect(screen.getByText('Follow-up due')).toHaveClass(
+      'text-semantic-critical-muted-foreground',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Settled' }));
+    expect(screen.getByText('CREDITED')).toHaveClass('text-semantic-success-muted-foreground');
+  });
+
+  it('exposes catalogue view toggles as pressed buttons', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    expect(await screen.findByRole('button', { name: 'Brand setup' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Needs brand' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Needs brand' }));
+    expect(screen.getByRole('button', { name: 'Needs brand' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('ties inline policy errors to their inputs', async () => {
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign supplier' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Invalid Supplier');
+    await userEvent.type(screen.getByLabelText('Write off'), '3');
+    await userEvent.click(screen.getByRole('button', { name: 'Assign' }));
+
+    const instructions = screen.getByLabelText('Store instructions');
+    expect(instructions).toHaveAttribute('aria-invalid', 'true');
+    expect(instructions).toHaveAccessibleDescription('Store instructions are required');
+  });
+});
+
+describe('SupplierCreditsPage touch targets and narrow screens', () => {
+  it('gives view tabs and claim actions 44px targets and lets the tab bar scroll', async () => {
+    renderPage();
+    const nav = await screen.findByRole('navigation', { name: 'Supplier credit views' });
+    // Scroll box clips only the stray y-axis; the border sits on the unclipped inner row
+    // the tabs overlap with -mb-px, so the active underline is not truncated.
+    expect(nav).toHaveClass('overflow-x-auto', 'overflow-y-hidden');
+    expect(nav).not.toHaveClass('border-b');
+    const row = within(nav).getByTestId('supplier-credit-tab-row');
+    expect(row).toHaveClass('border-b', 'min-w-full', 'w-max');
+    expect(within(row).getByRole('button', { name: 'To Claim' })).toHaveClass('-mb-px');
+    // The nav clips overflow, so focus must be drawn inside each tab, not as an outline.
+    for (const tab of within(row).getAllByRole('button')) {
+      expect(tab).toHaveClass(
+        'outline-hidden',
+        'focus-visible:ring-2',
+        'focus-visible:ring-inset',
+        'focus-visible:ring-semantic-primary',
+      );
+    }
+    for (const tab of screen.getAllByRole('button', { name: /To Claim|Settled|Review/ })) {
+      expect(tab).toHaveClass('min-h-11');
+    }
+    expect(screen.getByRole('button', { name: 'Begin claim' })).toHaveClass('min-h-11');
+    expect(screen.getByRole('button', { name: 'Assign supplier' })).toHaveClass('min-h-11');
+  });
+
+  it('wraps bulk-select checkboxes in a 44px hit area', async () => {
+    mocked.getPolicyReview.mockResolvedValue([
+      {
+        brandId: 41,
+        brandName: 'Nature Brand',
+        supplier,
+        status: 'ATTACHED',
+        policyUpdatedAt: supplier.policyUpdatedAt,
+        representativeName: supplier.representativeName,
+      },
+    ]);
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+
+    const checkbox = await screen.findByRole('checkbox', { name: 'Select Nature Brand' });
+    expect(checkbox.closest('label')).toHaveClass('size-11');
+    await userEvent.click(checkbox.closest('label') as HTMLElement);
+    expect(checkbox).toBeChecked();
+  });
+});
+
+describe('SupplierCreditsPage reject confirmation', () => {
+  async function openSentClaim() {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+    return screen.findByRole('button', { name: 'Rejected' });
+  }
+
+  beforeEach(() => {
+    mocked.recordOutcome.mockReset();
+    mocked.recordOutcome.mockResolvedValue({ id: 5, status: 'REJECTED' });
+  });
+
+  it('asks for confirmation naming the claim and supplier before rejecting', async () => {
+    await userEvent.click(await openSentClaim());
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Reject claim #5 from Blackmores?');
+    expect(dialog).toHaveTextContent('cannot be changed later');
+    expect(mocked.recordOutcome).not.toHaveBeenCalled();
+  });
+
+  it('does not record anything on Cancel and returns focus to the trigger', async () => {
+    const trigger = await openSentClaim();
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(mocked.recordOutcome).not.toHaveBeenCalled();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('records REJECTED exactly once on Confirm', async () => {
+    await userEvent.click(await openSentClaim());
+    await userEvent.click(await screen.findByRole('button', { name: 'Reject claim' }));
+
+    await waitFor(() => expect(mocked.recordOutcome).toHaveBeenCalledTimes(1));
+    expect(mocked.recordOutcome).toHaveBeenCalledWith(5, 'REJECTED', null, null, 'tkn');
+  });
+
+  it('keeps Mark credited one click', async () => {
+    await openSentClaim();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark credited' }));
+
+    await waitFor(() => expect(mocked.recordOutcome).toHaveBeenCalledTimes(1));
+    expect(mocked.recordOutcome).toHaveBeenCalledWith(5, 'CREDITED', null, null, 'tkn');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+});
+
+describe('SupplierCreditsPage typography', () => {
+  it('marks claim detail sections as headings at body-readable size', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+
+    const timeline = await screen.findByRole('heading', { level: 3, name: 'Timeline' });
+    expect(timeline).toHaveClass('text-sm');
+    expect(timeline).not.toHaveClass('text-xs');
+    expect(screen.getByText('FOLLOW UP SENT').closest('ul')).toHaveClass('text-sm');
+  });
+});
+
+describe('SupplierCreditsPage resilience', () => {
+  it('announces a failed inline brand add instead of swallowing it', async () => {
+    mocked.getBrandReview.mockResolvedValue({
+      items: [
+        { productId: 301, sku: 'MISSING', barcode: '', productName: 'Needs a brand', brand: null },
+      ],
+      nextCursor: null,
+    });
+    mocked.addBrand.mockRejectedValueOnce(new Error('Brand service unavailable'));
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    await screen.findByText('Needs a brand');
+    await userEvent.type(screen.getByLabelText('Brand name for Needs a brand'), 'Added Brand');
+    await userEvent.click(screen.getByRole('button', { name: 'Add brand' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Brand service unavailable');
+    expect(screen.getByRole('button', { name: 'Add brand' })).toBeEnabled();
+    expect(mocked.getClaimablePool).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes in the background after building a claim instead of blanking the page', async () => {
+    mocked.buildClaim.mockResolvedValue({ id: 9 });
+    renderPage();
+    // The same heading node must survive the refresh: a skeleton swap would unmount it.
+    const heading = await screen.findByRole('heading', { name: 'Supplier Credits' });
+    await userEvent.click(screen.getByRole('button', { name: 'Begin claim' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Create draft claim' }));
+
+    await waitFor(() => expect(mocked.getClaimablePool).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText(/New claim/)).toBeNull());
+    expect(heading).toBeInTheDocument();
+  });
+
+  it('accepts cents in the credited value field', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+
+    const credited = await screen.findByLabelText(/Credited value/);
+    expect(credited).toHaveAttribute('step', '0.01');
+    expect(credited).toHaveAttribute('inputmode', 'decimal');
   });
 });
