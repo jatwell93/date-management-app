@@ -925,6 +925,53 @@ describe('CSVUploadPage expiry import', () => {
       expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
     });
 
+    const statusCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/upload/status/')).length;
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const startStuckUpload = async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }));
+      // Every status poll after that fails with a swallowed, retryable error.
+      fetchMock.mockResponse('rate limited', { status: 429 });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(statusCalls()).toBe(1));
+    };
+
+    it('backs off between polling retries after a status error', async () => {
+      await startStuckUpload();
+
+      await wait(400);
+      expect(statusCalls()).toBe(1);
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+    });
+
+    it('lets staff cancel a stuck upload, unlocking the form and stopping polling', async () => {
+      await startStuckUpload();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Upload cancelled');
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Cancel upload' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+      expect(screen.getByLabelText('CSV/XLSX/XLS File')).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' })).toBeEnabled();
+
+      // The superseded run wakes from its backoff and stops without polling again
+      // or overwriting the cancelled state.
+      await wait(1300);
+      expect(statusCalls()).toBe(1);
+      expect(screen.getByRole('alert')).toHaveTextContent('Upload cancelled');
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    });
+
     it('still renders when browser storage is blocked', async () => {
       vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
         throw new DOMException('blocked', 'SecurityError');

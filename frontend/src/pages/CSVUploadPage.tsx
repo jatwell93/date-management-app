@@ -59,6 +59,7 @@ export const CSVUploadPage: React.FC<{
     lastUploadSummary,
     submitUpload,
     resetUploadState,
+    cancelUpload,
     downloadErrorReport,
   } = useUploadOrchestrator({ token, importType });
 
@@ -438,6 +439,17 @@ export const CSVUploadPage: React.FC<{
                 >
                   Reset
                 </Button>
+
+                {isUploading && (
+                  <Button
+                    type="button"
+                    onClick={cancelUpload}
+                    variant="outline"
+                    className="min-h-11 w-full px-4 py-2 sm:w-auto"
+                  >
+                    Cancel upload
+                  </Button>
+                )}
               </div>
             </form>
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import * as Sentry from '@sentry/react';
 import {
   type ColumnValidationResult,
@@ -20,6 +20,18 @@ import {
   validateSelectedFile,
 } from '../utils/uploadUtils';
 import { useFreshApiToken } from './useFreshApiToken';
+
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
+const POLL_INITIAL_INTERVAL_MS = 1000;
+const POLL_MAX_INTERVAL_MS = 15000;
+export const UPLOAD_CANCELLED_MESSAGE =
+  'Upload cancelled. The file may still finish processing on the server; check the last uploaded file before uploading it again.';
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const nextPollInterval = (interval: number) =>
+  Math.min(Math.ceil(interval * 1.5), POLL_MAX_INTERVAL_MS);
+
+class CancelledRunError extends Error {}
 
 const TERMINAL_STATUSES = new Set(['complete', 'completed', 'completed_with_errors']);
 const NON_RETRYABLE_STATUS_CODES = new Set([400, 401, 403, 404]);
@@ -104,6 +116,14 @@ export function useUploadOrchestrator({
     readStoredSummary,
   );
 
+  // Each upload run gets an id; cancel/reset bump it so a stale run stops polling and
+  // never writes results or unlocks the form under a newer run.
+  const runIdRef = useRef(0);
+  const startRun = useCallback(() => {
+    const runId = ++runIdRef.current;
+    return () => runIdRef.current === runId;
+  }, []);
+
   const getFreshToken = useFreshApiToken(token);
   const getUploadAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const authToken = await getFreshToken('csv-upload');
@@ -130,59 +150,81 @@ export function useUploadOrchestrator({
     [],
   );
 
+  // One status request. Resolves true when polling should stop (terminal state or a
+  // cancelled run), false to keep polling; throws on errors.
+  const pollOnce = useCallback(
+    async (
+      key: string,
+      completedFileName: string,
+      completedImportType: UploadImportType,
+      isCurrent: () => boolean,
+    ): Promise<boolean> => {
+      const authHeaders = await getUploadAuthHeaders();
+      const statusRes = await fetch(buildApiUrl(`/upload/status/${encodeURIComponent(key)}`), {
+        headers: authHeaders,
+      });
+      if (!isCurrent()) return true;
+      if (!statusRes.ok) await throwForPollError(statusRes);
+
+      const statusData = await statusRes.json();
+      if (!isCurrent()) return true;
+
+      if (TERMINAL_STATUSES.has(statusData.status)) {
+        recordCompletedUpload(
+          toUploadResultFromSummary(statusData),
+          completedFileName,
+          completedImportType,
+        );
+        return true;
+      }
+
+      if (statusData.status === 'failed') {
+        setUploadResult({
+          success: false,
+          message: statusData.message || statusData.error || 'Processing failed',
+        });
+        return true;
+      }
+
+      setUploadProgress(statusData.progress || 0);
+      setProgressMessage(statusData.message || 'Processing file');
+      return false;
+    },
+    [getUploadAuthHeaders, recordCompletedUpload],
+  );
+
   const pollUploadStatus = useCallback(
-    async (key: string, completedFileName: string, completedImportType: UploadImportType) => {
-      const timeoutAt = Date.now() + 30 * 60 * 1000;
-      let pollInterval = 1000;
+    async (
+      key: string,
+      completedFileName: string,
+      completedImportType: UploadImportType,
+      isCurrent: () => boolean,
+    ) => {
+      const timeoutAt = Date.now() + POLL_TIMEOUT_MS;
+      let pollInterval = POLL_INITIAL_INTERVAL_MS;
 
       while (Date.now() < timeoutAt) {
+        if (!isCurrent()) return;
         try {
-          const encodedKey = encodeURIComponent(key);
-          const authHeaders = await getUploadAuthHeaders();
-          const statusRes = await fetch(buildApiUrl(`/upload/status/${encodedKey}`), {
-            headers: authHeaders,
-          });
-
-          if (!statusRes.ok) await throwForPollError(statusRes);
-
-          const statusData = await statusRes.json();
-
-          if (TERMINAL_STATUSES.has(statusData.status)) {
-            recordCompletedUpload(
-              toUploadResultFromSummary(statusData),
-              completedFileName,
-              completedImportType,
-            );
-            return;
-          }
-
-          if (statusData.status === 'failed') {
-            setUploadResult({
-              success: false,
-              message: statusData.message || statusData.error || 'Processing failed',
-            });
-            return;
-          }
-
-          setUploadProgress(statusData.progress || 0);
-          setProgressMessage(statusData.message || 'Processing file');
-
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-          pollInterval = Math.min(Math.ceil(pollInterval * 1.5), 15000);
+          if (await pollOnce(key, completedFileName, completedImportType, isCurrent)) return;
         } catch (error) {
           if (error instanceof Error && error.message.startsWith('Processing failed')) {
             throw error;
           }
-          // Continue polling on transient errors.
+          // Transient error (network, 5xx, 429): back off below instead of retrying at once.
         }
+        await sleep(pollInterval);
+        pollInterval = nextPollInterval(pollInterval);
       }
 
-      setUploadResult({
-        success: false,
-        message: 'Processing timed out. Please check your uploads.',
-      });
+      if (isCurrent()) {
+        setUploadResult({
+          success: false,
+          message: 'Processing timed out. Please check your uploads.',
+        });
+      }
     },
-    [getUploadAuthHeaders, recordCompletedUpload],
+    [pollOnce],
   );
 
   const initiateUpload = useCallback(
@@ -318,6 +360,11 @@ export function useUploadOrchestrator({
 
       if (!file) return;
 
+      const isCurrent = startRun();
+      const assertCurrent = () => {
+        if (!isCurrent()) throw new CancelledRunError();
+      };
+
       setIsUploading(true);
       setUploadProgress(0);
       setProgressMessage('Preparing file');
@@ -331,6 +378,7 @@ export function useUploadOrchestrator({
           file,
           setProgressMessage,
         );
+        assertCurrent();
 
         setProgressMessage('Starting upload');
         const { strategy, uploadUrl, method, key } = await initiateUpload(
@@ -339,6 +387,7 @@ export function useUploadOrchestrator({
           importType,
           uploadBaseUrl,
         );
+        assertCurrent();
 
         setProgressMessage('Uploading file');
         const { uploadKey, directCompletionData } = await executeUpload(
@@ -350,6 +399,7 @@ export function useUploadOrchestrator({
           uploadBaseUrl,
           key,
         );
+        assertCurrent();
 
         setUploadProgress(100);
 
@@ -375,6 +425,7 @@ export function useUploadOrchestrator({
         if (strategy === 'presigned') {
           setProgressMessage('Processing file');
           const completeData = await completeUpload(uploadKey, importType, uploadBaseUrl);
+          assertCurrent();
 
           if (hasImmediateExpiryResult(importType, completeData)) {
             recordCompletedUpload(toUploadResultFromSummary(completeData), file.name, importType);
@@ -392,7 +443,8 @@ export function useUploadOrchestrator({
           }
         }
 
-        await pollUploadStatus(uploadKey, file.name, importType);
+        await pollUploadStatus(uploadKey, file.name, importType, isCurrent);
+        assertCurrent();
 
         logUploadMetric('upload_complete', {
           fileSize: fileToUpload.size,
@@ -405,6 +457,8 @@ export function useUploadOrchestrator({
         setUploadProgress(0);
         setProgressMessage('');
       } catch (error) {
+        // A cancelled or reset run ends quietly; the newer state already owns the UI.
+        if (error instanceof CancelledRunError || !isCurrent()) return;
         if (error instanceof Error) {
           Sentry.captureException(error, {
             tags: { feature: 'csv-upload' },
@@ -428,11 +482,12 @@ export function useUploadOrchestrator({
           importType,
         });
       } finally {
-        setIsUploading(false);
+        if (isCurrent()) setIsUploading(false);
       }
     },
     [
       importType,
+      startRun,
       initiateUpload,
       executeUpload,
       completeUpload,
@@ -441,12 +496,25 @@ export function useUploadOrchestrator({
     ],
   );
 
-  const resetUploadState = useCallback(() => {
-    setIsUploading(false);
-    setUploadResult(null);
-    setUploadProgress(0);
-    setProgressMessage('');
-  }, []);
+  const clearRunState = useCallback(
+    (result: UploadResponse | null) => {
+      startRun(); // supersedes any in-flight run
+      setIsUploading(false);
+      setUploadResult(result);
+      setUploadProgress(0);
+      setProgressMessage('');
+    },
+    [startRun],
+  );
+
+  const resetUploadState = useCallback(() => clearRunState(null), [clearRunState]);
+
+  // Stops polling and unlocks the form. The superseded run can no longer write results,
+  // so a later submit starts a fresh upload rather than racing the old one.
+  const cancelUpload = useCallback(
+    () => clearRunState({ success: false, message: UPLOAD_CANCELLED_MESSAGE }),
+    [clearRunState],
+  );
 
   const downloadErrorReport = useCallback(
     async (reportUrl: string): Promise<boolean> => {
@@ -482,6 +550,7 @@ export function useUploadOrchestrator({
     lastUploadSummary,
     submitUpload,
     resetUploadState,
+    cancelUpload,
     downloadErrorReport,
   };
 }
