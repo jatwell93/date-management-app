@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrganization } from '@clerk/clerk-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -35,8 +36,29 @@ function getMemberEmail(member: MemberRecord): string {
   return member.publicUserData?.identifier?.trim() || 'Email unavailable';
 }
 
+// Display only: Clerk role keys are namespaced (`org:admin`), staff should read "admin".
 function getMemberRole(member: MemberRecord): string {
-  return member.role?.trim() || 'Role unavailable';
+  return member.role?.trim().replace(/^org:/, '') || 'Role unavailable';
+}
+
+function SettingsLink() {
+  return (
+    <Link
+      to="/settings"
+      className="rounded-sm font-medium text-semantic-primary underline underline-offset-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary"
+    >
+      Settings
+    </Link>
+  );
+}
+
+function MemberCountNotice({ shown, total }: { shown: number; total: number }) {
+  if (total <= shown) return null;
+  return (
+    <p className="mt-3 text-sm text-semantic-text-secondary">
+      Showing the first {shown} of {total} members.
+    </p>
+  );
 }
 
 function getMemberStatus(member: MemberRecord): string {
@@ -47,9 +69,147 @@ function getMemberStatusVariant(member: MemberRecord): 'active' | 'pending' {
   return member.createdAt ? 'active' : 'pending';
 }
 
+function StatusMessage({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <p role="status" aria-label={label} className="text-center text-semantic-text-tertiary">
+      {children}
+    </p>
+  );
+}
+
+function MemberField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm font-medium text-semantic-text-secondary">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function MemberSummaryList({ members }: { members: MemberRecord[] }) {
+  return (
+    <ul aria-label="Team member summaries" className="grid gap-3 md:hidden">
+      {members.map((membership) => (
+        <li
+          key={membership.id}
+          className="grid gap-3 rounded-md border border-hairline bg-semantic-surface-1 p-3"
+        >
+          <MemberField label="Member">
+            <p className="break-words text-sm font-medium text-semantic-text-primary">
+              {getMemberName(membership)}
+            </p>
+          </MemberField>
+          <MemberField label="Email">
+            <p className="break-all text-sm text-semantic-text-primary">
+              {getMemberEmail(membership)}
+            </p>
+          </MemberField>
+          <div className="grid grid-cols-2 gap-3">
+            <MemberField label="Role">
+              <p className="break-words text-sm capitalize text-semantic-text-primary">
+                {getMemberRole(membership)}
+              </p>
+            </MemberField>
+            <MemberField label="Status">
+              <Badge variant={getMemberStatusVariant(membership)}>
+                {getMemberStatus(membership)}
+              </Badge>
+            </MemberField>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function MemberTable({ members }: { members: MemberRecord[] }) {
+  return (
+    <div className="hidden md:block">
+      <Table aria-label="Organization member details">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {members.map((membership) => (
+            <TableRow key={membership.id}>
+              <TableCell className="max-w-56 whitespace-normal break-words">
+                {getMemberName(membership)}
+              </TableCell>
+              <TableCell className="max-w-64 break-all">{getMemberEmail(membership)}</TableCell>
+              <TableCell className="max-w-52 whitespace-normal break-words capitalize">
+                {getMemberRole(membership)}
+              </TableCell>
+              <TableCell>
+                <Badge variant={getMemberStatusVariant(membership)}>
+                  {getMemberStatus(membership)}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function MembersError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      aria-label="We could not load team members"
+      className="grid gap-3 rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-4 text-center"
+    >
+      <p className="text-sm text-semantic-critical-muted-foreground">{message}</p>
+      <div>
+        <Button onClick={onRetry} className="min-h-11 w-full sm:w-auto">
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface MembersBodyProps {
+  members: MemberRecord[];
+  totalMembers: number;
+  isFetching: boolean;
+  error: string | null;
+  onRetry: () => void;
+}
+
+function MembersBody({ members, totalMembers, isFetching, error, onRetry }: MembersBodyProps) {
+  if (isFetching) {
+    return <StatusMessage label="Loading team members">Loading team members...</StatusMessage>;
+  }
+  if (error) {
+    return <MembersError message={error} onRetry={onRetry} />;
+  }
+  if (members.length === 0) {
+    return (
+      <StatusMessage label="No team members found">
+        No team members found in this organization. Use <SettingsLink /> to invite the first team
+        member.
+      </StatusMessage>
+    );
+  }
+  return (
+    <>
+      <MemberSummaryList members={members} />
+      <MemberTable members={members} />
+      <MemberCountNotice shown={members.length} total={totalMembers} />
+    </>
+  );
+}
+
 export function UserManagementPage() {
   const { organization, isLoaded } = useOrganization();
   const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [totalMembers, setTotalMembers] = useState(0);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
   const latestRequestIdRef = useRef(0);
@@ -77,9 +237,11 @@ export function UserManagementPage() {
       const result = await organization.getMemberships({ pageSize: 50 });
       if (!canUpdate()) return;
       setMembers(result.data as MemberRecord[]);
+      setTotalMembers(result.total_count ?? result.data.length);
     } catch {
       if (!canUpdate()) return;
       setMembers([]);
+      setTotalMembers(0);
       setMembersError('We could not load team members. Check the connection and try again.');
     } finally {
       if (canUpdate()) {
@@ -93,6 +255,7 @@ export function UserManagementPage() {
       latestRequestIdRef.current += 1;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: resets member state when the organization becomes absent
       setMembers([]);
+      setTotalMembers(0);
       setMembersError(null);
       setIsFetchingMembers(false);
       return undefined;
@@ -110,10 +273,7 @@ export function UserManagementPage() {
   }, [fetchMembers]);
 
   return (
-    <main
-      className="mx-auto w-full max-w-5xl px-3 py-4 sm:px-4 sm:py-6 lg:px-6 lg:py-8"
-      aria-labelledby="team-members-heading"
-    >
+    <section className="mx-auto w-full max-w-5xl" aria-labelledby="team-members-heading">
       <div className="mb-4 sm:mb-6">
         <h1
           id="team-members-heading"
@@ -129,143 +289,30 @@ export function UserManagementPage() {
       {!isLoaded || !organization ? (
         <Card>
           <CardContent className="pt-6">
-            <p
-              role="status"
-              aria-label="Loading organization"
-              className="text-center text-semantic-text-tertiary"
-            >
-              Loading organization...
-            </p>
+            <StatusMessage label="Loading organization">Loading organization...</StatusMessage>
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardHeader className="px-4 sm:px-6">
-            <CardTitle className="text-lg font-semibold">Organization members</CardTitle>
+            <CardTitle role="heading" aria-level={2} className="text-lg font-semibold">
+              Organization members
+            </CardTitle>
             <CardDescription className="max-w-3xl">
-              Members in {organization.name}. To invite new team members, use the Settings tab.
+              Members in {organization.name}. To invite new team members, go to <SettingsLink />.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">
-            {isFetchingMembers ? (
-              <p
-                role="status"
-                aria-label="Loading team members"
-                className="text-center text-semantic-text-tertiary"
-              >
-                Loading team members...
-              </p>
-            ) : membersError ? (
-              <div
-                role="alert"
-                aria-label="We could not load team members"
-                className="grid gap-3 rounded-md border border-semantic-critical/30 bg-semantic-critical/10 p-4 text-center"
-              >
-                <p className="text-sm text-semantic-critical">{membersError}</p>
-                <div>
-                  <Button onClick={handleRetryMembers} className="min-h-11 w-full sm:w-auto">
-                    Try again
-                  </Button>
-                </div>
-              </div>
-            ) : members.length > 0 ? (
-              <>
-                <ul aria-label="Team member summaries" className="grid gap-3 md:hidden">
-                  {members.map((membership) => {
-                    const name = getMemberName(membership);
-                    const email = getMemberEmail(membership);
-                    const role = getMemberRole(membership);
-                    const status = getMemberStatus(membership);
-
-                    return (
-                      <li
-                        key={membership.id}
-                        aria-label={`${name}, ${role}, ${status}`}
-                        className="rounded-md border border-hairline bg-semantic-surface-1 p-3"
-                      >
-                        <div className="grid gap-3">
-                          <div>
-                            <p className="text-xs font-medium uppercase text-semantic-text-secondary">
-                              Member
-                            </p>
-                            <p className="break-words text-sm font-medium text-semantic-text-primary">
-                              {name}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium uppercase text-semantic-text-secondary">
-                              Email
-                            </p>
-                            <p className="break-all text-sm text-semantic-text-primary">{email}</p>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium uppercase text-semantic-text-secondary">
-                                Role
-                              </p>
-                              <p className="break-words text-sm capitalize text-semantic-text-primary">
-                                {role}
-                              </p>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium uppercase text-semantic-text-secondary">
-                                Status
-                              </p>
-                              <Badge variant={getMemberStatusVariant(membership)}>{status}</Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <div className="hidden md:block">
-                  <Table aria-label="Organization member details">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {members.map((membership) => (
-                        <TableRow key={membership.id}>
-                          <TableCell className="max-w-56 whitespace-normal break-words">
-                            {getMemberName(membership)}
-                          </TableCell>
-                          <TableCell className="max-w-64 break-all">
-                            {getMemberEmail(membership)}
-                          </TableCell>
-                          <TableCell className="max-w-52 whitespace-normal break-words capitalize">
-                            {getMemberRole(membership)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={getMemberStatusVariant(membership)}>
-                              {getMemberStatus(membership)}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            ) : (
-              <p
-                role="status"
-                aria-label="No team members found"
-                className="text-center text-semantic-text-tertiary"
-              >
-                No team members found in this organization. Use Settings to invite the first team
-                member.
-              </p>
-            )}
+            <MembersBody
+              members={members}
+              totalMembers={totalMembers}
+              isFetching={isFetchingMembers}
+              error={membersError}
+              onRetry={handleRetryMembers}
+            />
           </CardContent>
         </Card>
       )}
-    </main>
+    </section>
   );
 }
