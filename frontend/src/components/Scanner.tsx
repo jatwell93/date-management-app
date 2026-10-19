@@ -113,15 +113,20 @@ export function Scanner({
             value={input}
             onChange={handleInputChange}
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            enterKeyHint="go"
             placeholder="Scan or type barcode/SKU"
-            className={`mb-3 ${isHandheld ? 'h-12 text-lg' : ''}`}
+            className={`mb-3 ${isHandheld ? 'h-12 text-lg' : 'h-11'}`}
           />
           <div className={`flex gap-2 ${isHandheld ? 'mt-auto' : ''}`}>
             <Button
               type="submit"
               disabled={disabled}
               size={isHandheld ? 'lg' : 'default'}
-              className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : ''}`}
+              className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}`}
             >
               Use barcode
             </Button>
@@ -131,9 +136,9 @@ export function Scanner({
               onClick={() => setUseCamera(true)}
               variant="secondary"
               size={isHandheld ? 'lg' : 'default'}
-              className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : ''}`}
+              className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}`}
             >
-              Use Camera
+              Use camera
             </Button>
           </div>
         </form>
@@ -145,7 +150,7 @@ export function Scanner({
             <h3
               className={`text-lg font-semibold font-heading text-foreground ${isHandheld ? 'text-xl' : ''}`}
             >
-              Camera Scanner
+              Camera scanner
             </h3>
             <Button
               type="button"
@@ -153,9 +158,9 @@ export function Scanner({
               onClick={() => setUseCamera(false)}
               variant="secondary"
               size={isHandheld ? 'lg' : 'default'}
-              className={isHandheld ? 'min-h-[48px] text-lg' : ''}
+              className={isHandheld ? 'min-h-[48px] text-lg' : 'min-h-11'}
             >
-              Use Text Input
+              Use text input
             </Button>
           </div>
           <div className={isHandheld ? 'flex-1 camera-scanner-fullscreen' : ''}>
