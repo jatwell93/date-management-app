@@ -158,6 +158,84 @@ describe('ExpiryEntriesPage', () => {
     );
   });
 
+  it('keeps the edit input mounted and focused while the user types', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Front Counter Product' }));
+    const dateInput = await screen.findByLabelText('Expiry date for Front Counter Product');
+    await waitFor(() => expect(dateInput).toHaveFocus());
+
+    // Each change updates editing state. If the column definitions were rebuilt on
+    // every change, TanStack's flexRender would see a new cell component type and
+    // remount the input, losing focus mid-entry.
+    for (const value of [daysFromNow(40), daysFromNow(41), daysFromNow(42)]) {
+      fireEvent.change(screen.getByLabelText('Expiry date for Front Counter Product'), {
+        target: { value },
+      });
+      const current = screen.getByLabelText('Expiry date for Front Counter Product');
+      expect(current).toBe(dateInput);
+      expect(current).toHaveValue(value);
+      expect(current).toHaveFocus();
+    }
+  });
+
+  it('returns focus to the table heading when a saved row leaves the page', async () => {
+    mockApi();
+    // @ts-expect-error — apiService.put is mocked as vi.fn()
+    apiService.put.mockResolvedValue({});
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Front Counter Product' }));
+    await screen.findByLabelText('Expiry date for Front Counter Product');
+
+    // After the save, the refetch no longer contains the edited row (moved/filtered).
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) =>
+      Promise.resolve(url === '/reports/expiry-entries' ? [twoLocationRows[1]] : []),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Expiry entries', level: 2 })).toHaveFocus(),
+    );
+  });
+
+  it('restores focus to Save when the save fails', async () => {
+    mockApi();
+    // @ts-expect-error — apiService.put is mocked as vi.fn()
+    apiService.put.mockRejectedValue(new Error('Save failed'));
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Front Counter Product' }));
+    await screen.findByLabelText('Expiry date for Front Counter Product');
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Save$/i })).toHaveFocus());
+  });
+
+  it('restores focus to Confirm delete when the delete fails', async () => {
+    mockApi();
+    // @ts-expect-error — apiService.delete is mocked as vi.fn()
+    apiService.delete.mockRejectedValue(new Error('Delete failed'));
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Aisle One Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete Aisle One Product' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Delete failed');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Confirm delete Aisle One Product' }),
+      ).toHaveFocus(),
+    );
+  });
+
   it('focuses Cancel when a delete is pending and returns focus on cancel', async () => {
     mockApi();
 

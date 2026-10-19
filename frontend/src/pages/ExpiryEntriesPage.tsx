@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -63,6 +63,8 @@ const editButtonId = (inventoryId: number) => `expiry-entry-edit-${inventoryId}`
 const editDateInputId = (inventoryId: number) => `expiry-entry-edit-date-${inventoryId}`;
 const deleteButtonId = (inventoryId: number) => `expiry-entry-delete-${inventoryId}`;
 const deleteCancelButtonId = (inventoryId: number) => `expiry-entry-delete-cancel-${inventoryId}`;
+const deleteConfirmButtonId = (inventoryId: number) => `expiry-entry-delete-confirm-${inventoryId}`;
+const saveButtonId = (inventoryId: number) => `expiry-entry-save-${inventoryId}`;
 
 const currencyFormatter = new Intl.NumberFormat('en-AU', {
   style: 'currency',
@@ -117,6 +119,281 @@ function TableSkeleton() {
   );
 }
 
+interface RowActionsContextValue {
+  editingItem: EditableInventoryItem | null;
+  setEditingItem: React.Dispatch<React.SetStateAction<EditableInventoryItem | null>>;
+  saving: boolean;
+  deleting: boolean;
+  deleteConfirmation: number | null;
+  canDelete: boolean;
+  matrices: ReturnType<typeof useMarkdownMatrices>['matrices'];
+  storeAreas: { id: number; name: string }[];
+  storeAreasError: string | null;
+  onSave: () => Promise<boolean>;
+  onCancelEdit: () => void;
+  onEdit: (item: ExpiryEntryItem) => void;
+  onDelete: (inventoryId: number) => void;
+  onConfirmDelete: (inventoryId: number) => void;
+  onCancelDelete: (inventoryId: number) => void;
+}
+
+// Carries edit/action state to the table cells so the column definitions can stay
+// stable (see the `columns` memo in ExpiryEntriesPage).
+const RowActionsContext = React.createContext<RowActionsContextValue | null>(null);
+
+function useRowActions(): RowActionsContextValue {
+  const ctx = useContext(RowActionsContext);
+  if (!ctx) throw new Error('Expiry entry cells must render inside RowActionsContext.');
+  return ctx;
+}
+
+interface RowCellProps {
+  item: ExpiryEntryItem;
+}
+
+/** Day count for a row, reflecting the unsaved date while that row is being edited. */
+function useLiveDaysToExpiry(item: ExpiryEntryItem): number | null {
+  const { editingItem } = useRowActions();
+  const isEditing = editingItem?.inventoryId === item.inventoryId;
+  return getDaysToExpiry(isEditing ? editingItem.expiryDate : item.expiryDate);
+}
+
+function ExpiryDateCell({ item }: RowCellProps) {
+  const { editingItem, setEditingItem, saving } = useRowActions();
+
+  if (editingItem?.inventoryId === item.inventoryId) {
+    return (
+      <div className="min-w-[140px]">
+        <Input
+          id={editDateInputId(item.inventoryId)}
+          type="date"
+          aria-label={`Expiry date for ${item.productName}`}
+          value={editingItem.expiryDate}
+          onChange={(e) => {
+            const expiryDate = e.target.value;
+            setEditingItem((current) => (current ? { ...current, expiryDate } : current));
+          }}
+          className="min-h-11 w-full"
+          disabled={saving}
+        />
+      </div>
+    );
+  }
+
+  const daysToExpiry = getDaysToExpiry(item.expiryDate);
+  return (
+    <div
+      className={`min-w-[140px] ${daysToExpiry !== null && daysToExpiry <= 0 ? 'text-semantic-critical font-bold' : ''}`}
+    >
+      {formatExpiryDate(item.expiryDate)}
+      <div className="text-xs text-semantic-text-tertiary">
+        {daysToExpiry === null ? '' : daysToExpiry > 0 ? `${daysToExpiry} days left` : 'Expired'}
+      </div>
+    </div>
+  );
+}
+
+function DaysToExpiryCell({ item }: RowCellProps) {
+  const daysToExpiry = useLiveDaysToExpiry(item);
+
+  const urgencyClass =
+    daysToExpiry === null
+      ? ''
+      : daysToExpiry <= 0
+        ? 'text-semantic-critical font-bold'
+        : daysToExpiry <= 30
+          ? 'text-semantic-warning-muted-foreground font-semibold'
+          : '';
+
+  return (
+    <div className={`min-w-[100px] tabular-nums ${urgencyClass}`}>
+      {daysToExpiry === null ? (
+        <>
+          <span aria-hidden="true">—</span>
+          <span className="sr-only">Date not available</span>
+        </>
+      ) : (
+        daysToExpiry
+      )}
+    </div>
+  );
+}
+
+function MarkdownStatusCell({ item }: RowCellProps) {
+  const markdownStatus = getMarkdownStatus(useLiveDaysToExpiry(item));
+
+  const statusClass =
+    markdownStatus === 'Expired'
+      ? 'text-semantic-critical'
+      : markdownStatus.startsWith('Markdown')
+        ? 'text-semantic-warning-muted-foreground'
+        : 'text-semantic-text-secondary';
+
+  return <div className={`min-w-[120px] text-sm font-medium ${statusClass}`}>{markdownStatus}</div>;
+}
+
+function MarkdownPriceCell({ item }: RowCellProps) {
+  const { matrices } = useRowActions();
+  const daysToExpiry = useLiveDaysToExpiry(item);
+  const matrix = matrices?.[item.creditScope ?? 'NO_CREDIT'];
+  if (!matrix) {
+    return <div className="min-w-[100px] text-sm text-semantic-text-secondary">Unavailable</div>;
+  }
+  const markdownPrice =
+    calculateMarkdownPrice(
+      { costPrice: item.costPrice, retailPrice: item.retailPrice },
+      daysToExpiry,
+      matrix,
+    ) ?? item.costPrice;
+
+  return <div className="min-w-[100px] tabular-nums">{formatCurrencyValue(markdownPrice)}</div>;
+}
+
+function LocationCell({ item }: RowCellProps) {
+  const { editingItem, setEditingItem, saving, storeAreas, storeAreasError } = useRowActions();
+
+  if (editingItem?.inventoryId === item.inventoryId) {
+    return (
+      <div className="min-w-[120px]">
+        {storeAreasError ? (
+          <p className="text-xs text-semantic-critical">{storeAreasError}</p>
+        ) : (
+          <Select
+            value={editingItem.locationId.toString()}
+            onValueChange={(value) => {
+              const locationId = parseInt(value, 10);
+              setEditingItem((current) => (current ? { ...current, locationId } : current));
+            }}
+            disabled={saving || storeAreas.length === 0}
+          >
+            <SelectTrigger
+              className="min-h-11 w-full"
+              aria-label={`Location for ${item.productName}`}
+            >
+              <SelectValue placeholder={storeAreas.length === 0 ? 'Loading…' : 'Location'} />
+            </SelectTrigger>
+            <SelectContent>
+              {storeAreas.map((area) => (
+                <SelectItem key={area.id} value={area.id.toString()}>
+                  {area.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-[120px] max-w-[160px] truncate" title={item.locationName}>
+      {item.locationName}
+    </div>
+  );
+}
+
+function ActionsCell({ item }: RowCellProps) {
+  const {
+    editingItem,
+    saving,
+    deleting,
+    deleteConfirmation,
+    canDelete,
+    onSave,
+    onCancelEdit,
+    onEdit,
+    onDelete,
+    onConfirmDelete,
+    onCancelDelete,
+  } = useRowActions();
+  const rowId = item.inventoryId;
+  const isEditing = editingItem?.inventoryId === rowId;
+  const anotherRowEditing = !!editingItem && editingItem.inventoryId !== rowId;
+
+  if (deleteConfirmation === rowId && canDelete) {
+    return (
+      <div className="flex gap-2 justify-start min-w-[140px]">
+        <Button
+          id={deleteConfirmButtonId(rowId)}
+          onClick={() => onDelete(rowId)}
+          disabled={deleting}
+          size="sm"
+          variant="destructive"
+          className="min-h-11 min-w-[70px] shrink-0"
+          aria-busy={deleting}
+        >
+          {deleting ? 'Deleting…' : 'Confirm delete'}
+          <span className="sr-only"> {item.productName}</span>
+        </Button>
+        <Button
+          id={deleteCancelButtonId(rowId)}
+          onClick={() => onCancelDelete(rowId)}
+          disabled={deleting}
+          size="sm"
+          variant="neutral"
+          className="min-h-11 min-w-[60px] shrink-0"
+        >
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex gap-2 justify-start min-w-[140px]">
+        <Button
+          id={saveButtonId(rowId)}
+          onClick={onSave}
+          disabled={saving}
+          size="sm"
+          variant="default"
+          className="min-h-11 min-w-[50px] font-medium"
+          aria-busy={saving}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
+          onClick={onCancelEdit}
+          disabled={saving}
+          size="sm"
+          variant="neutral"
+          className="min-h-11 min-w-[50px] font-medium"
+        >
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-2 justify-start min-w-[140px]">
+      <Button
+        id={editButtonId(rowId)}
+        onClick={() => onEdit(item)}
+        disabled={anotherRowEditing || deleting}
+        size="sm"
+        variant="default"
+        className="min-h-11 min-w-[50px] font-medium"
+      >
+        Edit<span className="sr-only"> {item.productName}</span>
+      </Button>
+      {canDelete && (
+        <Button
+          id={deleteButtonId(rowId)}
+          onClick={() => onConfirmDelete(rowId)}
+          disabled={!!editingItem || deleting}
+          size="sm"
+          variant="destructive"
+          className="min-h-11 min-w-[50px] font-medium"
+        >
+          Delete<span className="sr-only"> {item.productName}</span>
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
   const markdownConfig = useMarkdownMatrices(token);
@@ -141,16 +418,23 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
 
   // Row actions swap their buttons out (Edit -> Save/Cancel, Delete -> Confirm/Cancel),
   // which would otherwise drop keyboard focus to <body>. Queue the element id to focus
-  // once the next render has mounted it.
-  const pendingFocusIdRef = useRef<string | null>(null);
-  const queueFocus = useCallback((id: string) => {
-    pendingFocusIdRef.current = id;
+  // once the next render has mounted it. Later ids are fallbacks, tried in order when
+  // an earlier one is not rendered (e.g. the row sorted onto another page).
+  const pendingFocusIdsRef = useRef<string[]>([]);
+  const queueFocus = useCallback((...ids: string[]) => {
+    pendingFocusIdsRef.current = ids;
   }, []);
   useEffect(() => {
-    const id = pendingFocusIdRef.current;
-    if (!id) return;
-    pendingFocusIdRef.current = null;
-    document.getElementById(id)?.focus();
+    const ids = pendingFocusIdsRef.current;
+    if (ids.length === 0) return;
+    pendingFocusIdsRef.current = [];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.focus();
+        return;
+      }
+    }
   });
 
   const fetchReportData = useCallback(
@@ -246,7 +530,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         authToken,
       );
       setReportData(updatedData);
-      queueFocus(editButtonId(editingItem.inventoryId));
+      // The row may have sorted onto another page or out of the data; fall back to
+      // the table heading rather than letting focus drop to <body>.
+      queueFocus(editButtonId(editingItem.inventoryId), TABLE_HEADING_ID);
       setEditingItem(null);
       showToast('Item updated successfully.', 'success');
       return true;
@@ -254,6 +540,8 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       setActionError(
         err instanceof Error ? err.message : 'Failed to update item. Please try again.',
       );
+      // Save was disabled while in flight, which blurs it; put focus back on it.
+      queueFocus(saveButtonId(editingItem.inventoryId), TABLE_HEADING_ID);
       return false;
     } finally {
       setSaving(false);
@@ -280,7 +568,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   );
 
   const handleCancelEdit = useCallback(() => {
-    if (editingItem) queueFocus(editButtonId(editingItem.inventoryId));
+    if (editingItem) queueFocus(editButtonId(editingItem.inventoryId), TABLE_HEADING_ID);
     setEditingItem(null);
     setActionError(null);
   }, [editingItem, queueFocus]);
@@ -309,6 +597,8 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         setActionError(
           err instanceof Error ? err.message : 'Failed to delete item. Please try again.',
         );
+        // Confirm was disabled while in flight, which blurs it; put focus back on it.
+        queueFocus(deleteConfirmButtonId(inventoryId), TABLE_HEADING_ID);
       } finally {
         setDeleting(false);
       }
@@ -328,58 +618,59 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
 
   const cancelDelete = useCallback(
     (inventoryId: number) => {
-      queueFocus(deleteButtonId(inventoryId));
+      queueFocus(deleteButtonId(inventoryId), TABLE_HEADING_ID);
       setDeleteConfirmation(null);
     },
     [queueFocus],
   );
 
-  // Define columns for the data table
+  const rowActions = useMemo<RowActionsContextValue>(
+    () => ({
+      editingItem,
+      setEditingItem,
+      saving,
+      deleting,
+      deleteConfirmation,
+      canDelete,
+      matrices: markdownConfig.matrices,
+      storeAreas,
+      storeAreasError,
+      onSave: handleSaveEdit,
+      onCancelEdit: handleCancelEdit,
+      onEdit: handleEdit,
+      onDelete: handleDelete,
+      onConfirmDelete: confirmDelete,
+      onCancelDelete: cancelDelete,
+    }),
+    [
+      editingItem,
+      saving,
+      deleting,
+      deleteConfirmation,
+      canDelete,
+      markdownConfig.matrices,
+      storeAreas,
+      storeAreasError,
+      handleSaveEdit,
+      handleCancelEdit,
+      handleEdit,
+      handleDelete,
+      confirmDelete,
+      cancelDelete,
+    ],
+  );
+
+  // Column definitions must keep a stable identity while a row is being edited:
+  // TanStack's flexRender treats each `cell` function as a component type, so a
+  // new array on every keystroke would remount the edit inputs and drop focus.
+  // Edit and action state reaches the cells through RowActionsContext instead.
+  // Only the markdown matrices (loaded once) feed an accessor, so they stay a dep.
   const columns: ColumnDef<ExpiryEntryItem>[] = useMemo(
     () => [
       {
         accessorKey: 'expiryDate',
         header: ({ column }) => <DataTableColumnHeader column={column} title="Expiry Date" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-
-          if (isEditing) {
-            return (
-              <div className="min-w-[140px]">
-                <Input
-                  id={editDateInputId(row.original.inventoryId)}
-                  type="date"
-                  aria-label={`Expiry date for ${row.original.productName}`}
-                  value={editingItem.expiryDate}
-                  onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      expiryDate: e.target.value,
-                    })
-                  }
-                  className="min-h-11 w-full"
-                  disabled={saving}
-                />
-              </div>
-            );
-          }
-
-          const daysToExpiry = getDaysToExpiry(row.original.expiryDate);
-          return (
-            <div
-              className={`min-w-[140px] ${daysToExpiry !== null && daysToExpiry <= 0 ? 'text-semantic-critical font-bold' : ''}`}
-            >
-              {formatExpiryDate(row.original.expiryDate)}
-              <div className="text-xs text-semantic-text-tertiary">
-                {daysToExpiry === null
-                  ? ''
-                  : daysToExpiry > 0
-                    ? `${daysToExpiry} days left`
-                    : 'Expired'}
-              </div>
-            </div>
-          );
-        },
+        cell: ({ row }) => <ExpiryDateCell item={row.original} />,
       },
       {
         accessorKey: 'productName',
@@ -417,34 +708,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         // the derived day count instead of a non-existent `daysToExpiry` field.
         accessorFn: (row) => getDaysToExpiry(row.expiryDate) ?? Number.POSITIVE_INFINITY,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Days to Expiry" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-          const daysToExpiry = isEditing
-            ? getDaysToExpiry(editingItem.expiryDate)
-            : getDaysToExpiry(row.original.expiryDate);
-
-          const urgencyClass =
-            daysToExpiry === null
-              ? ''
-              : daysToExpiry <= 0
-                ? 'text-semantic-critical font-bold'
-                : daysToExpiry <= 30
-                  ? 'text-semantic-warning-muted-foreground font-semibold'
-                  : '';
-
-          return (
-            <div className={`min-w-[100px] tabular-nums ${urgencyClass}`}>
-              {daysToExpiry === null ? (
-                <>
-                  <span aria-hidden="true">—</span>
-                  <span className="sr-only">Date not available</span>
-                </>
-              ) : (
-                daysToExpiry
-              )}
-            </div>
-          );
-        },
+        cell: ({ row }) => <DaysToExpiryCell item={row.original} />,
       },
       {
         id: 'status',
@@ -453,26 +717,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         // derived value rather than the stored status (typically 'Normal').
         accessorFn: (row) => getMarkdownStatus(getDaysToExpiry(row.expiryDate)),
         header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Status" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-          const daysToExpiry = isEditing
-            ? getDaysToExpiry(editingItem.expiryDate)
-            : getDaysToExpiry(row.original.expiryDate);
-          const markdownStatus = getMarkdownStatus(daysToExpiry);
-
-          const statusClass =
-            markdownStatus === 'Expired'
-              ? 'text-semantic-critical'
-              : markdownStatus.startsWith('Markdown')
-                ? 'text-semantic-warning-muted-foreground'
-                : 'text-semantic-text-secondary';
-
-          return (
-            <div className={`min-w-[120px] text-sm font-medium ${statusClass}`}>
-              {markdownStatus}
-            </div>
-          );
-        },
+        cell: ({ row }) => <MarkdownStatusCell item={row.original} />,
       },
       {
         id: 'creditScope',
@@ -503,78 +748,12 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           );
         },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-          const daysToExpiry = isEditing
-            ? getDaysToExpiry(editingItem.expiryDate)
-            : getDaysToExpiry(row.original.expiryDate);
-          const matrix = markdownConfig.matrices?.[row.original.creditScope ?? 'NO_CREDIT'];
-          if (!matrix) {
-            return (
-              <div className="min-w-[100px] text-sm text-semantic-text-secondary">Unavailable</div>
-            );
-          }
-          const markdownPrice =
-            calculateMarkdownPrice(
-              { costPrice: row.original.costPrice, retailPrice: row.original.retailPrice },
-              daysToExpiry,
-              matrix,
-            ) ?? row.original.costPrice;
-
-          return (
-            <div className="min-w-[100px] tabular-nums">{formatCurrencyValue(markdownPrice)}</div>
-          );
-        },
+        cell: ({ row }) => <MarkdownPriceCell item={row.original} />,
       },
       {
         accessorKey: 'locationName',
         header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-
-          if (isEditing) {
-            return (
-              <div className="min-w-[120px]">
-                {storeAreasError ? (
-                  <p className="text-xs text-semantic-critical">{storeAreasError}</p>
-                ) : (
-                  <Select
-                    value={editingItem.locationId.toString()}
-                    onValueChange={(value) =>
-                      setEditingItem({
-                        ...editingItem,
-                        locationId: parseInt(value, 10),
-                      })
-                    }
-                    disabled={saving || storeAreas.length === 0}
-                  >
-                    <SelectTrigger
-                      className="min-h-11 w-full"
-                      aria-label={`Location for ${row.original.productName}`}
-                    >
-                      <SelectValue
-                        placeholder={storeAreas.length === 0 ? 'Loading…' : 'Location'}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storeAreas.map((area) => (
-                        <SelectItem key={area.id} value={area.id.toString()}>
-                          {area.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            );
-          }
-
-          return (
-            <div className="min-w-[120px] max-w-[160px] truncate" title={row.original.locationName}>
-              {row.original.locationName}
-            </div>
-          );
-        },
+        cell: ({ row }) => <LocationCell item={row.original} />,
       },
       {
         accessorKey: 'subDepartment',
@@ -591,111 +770,10 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       {
         id: 'actions',
         header: () => <div className="min-w-[140px]">Actions</div>,
-        cell: ({ row }) => {
-          const rowId = row.original.inventoryId;
-          const isEditing = editingItem && editingItem.inventoryId === rowId;
-          const isPendingDelete = deleteConfirmation === rowId;
-          const anotherRowEditing = editingItem && editingItem.inventoryId !== rowId;
-
-          if (isPendingDelete && canDelete) {
-            return (
-              <div className="flex gap-2 justify-start min-w-[140px]">
-                <Button
-                  onClick={() => handleDelete(rowId)}
-                  disabled={deleting}
-                  size="sm"
-                  variant="destructive"
-                  className="min-h-11 min-w-[70px] shrink-0"
-                  aria-busy={deleting}
-                >
-                  {deleting ? 'Deleting…' : 'Confirm delete'}
-                  <span className="sr-only"> {row.original.productName}</span>
-                </Button>
-                <Button
-                  id={deleteCancelButtonId(rowId)}
-                  onClick={() => cancelDelete(rowId)}
-                  disabled={deleting}
-                  size="sm"
-                  variant="neutral"
-                  className="min-h-11 min-w-[60px] shrink-0"
-                >
-                  Cancel
-                </Button>
-              </div>
-            );
-          }
-
-          if (isEditing) {
-            return (
-              <div className="flex gap-2 justify-start min-w-[140px]">
-                <Button
-                  onClick={handleSaveEdit}
-                  disabled={saving}
-                  size="sm"
-                  variant="default"
-                  className="min-h-11 min-w-[50px] font-medium"
-                  aria-busy={saving}
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </Button>
-                <Button
-                  onClick={handleCancelEdit}
-                  disabled={saving}
-                  size="sm"
-                  variant="neutral"
-                  className="min-h-11 min-w-[50px] font-medium"
-                >
-                  Cancel
-                </Button>
-              </div>
-            );
-          }
-
-          return (
-            <div className="flex gap-2 justify-start min-w-[140px]">
-              <Button
-                id={editButtonId(rowId)}
-                onClick={() => handleEdit(row.original)}
-                disabled={!!anotherRowEditing || deleting}
-                size="sm"
-                variant="default"
-                className="min-h-11 min-w-[50px] font-medium"
-              >
-                Edit<span className="sr-only"> {row.original.productName}</span>
-              </Button>
-              {canDelete && (
-                <Button
-                  id={deleteButtonId(rowId)}
-                  onClick={() => confirmDelete(rowId)}
-                  disabled={!!editingItem || deleting}
-                  size="sm"
-                  variant="destructive"
-                  className="min-h-11 min-w-[50px] font-medium"
-                >
-                  Delete<span className="sr-only"> {row.original.productName}</span>
-                </Button>
-              )}
-            </div>
-          );
-        },
+        cell: ({ row }) => <ActionsCell item={row.original} />,
       },
     ],
-    [
-      editingItem,
-      saving,
-      deleting,
-      deleteConfirmation,
-      canDelete,
-      markdownConfig.matrices,
-      storeAreas,
-      storeAreasError,
-      handleSaveEdit,
-      handleCancelEdit,
-      handleEdit,
-      handleDelete,
-      confirmDelete,
-      cancelDelete,
-    ],
+    [markdownConfig.matrices],
   );
 
   const retryControllerRef = useRef<AbortController | null>(null);
@@ -938,13 +1016,15 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             <>
               <div className="overflow-x-auto pb-4 no-print">
                 <div className="min-w-[1000px] px-4 sm:px-0">
-                  <DataTable
-                    columns={columns}
-                    data={filteredData}
-                    filtering={true}
-                    pagination={true}
-                    sorting={true}
-                  />
+                  <RowActionsContext.Provider value={rowActions}>
+                    <DataTable
+                      columns={columns}
+                      data={filteredData}
+                      filtering={true}
+                      pagination={true}
+                      sorting={true}
+                    />
+                  </RowActionsContext.Provider>
                 </div>
               </div>
               <div className="print-only">
