@@ -116,11 +116,15 @@ describe('DetailedExpiryReportPage', () => {
     );
   });
 
-  it('counts only past-expiry stock in the expired tile; today stays in Markdown 3', async () => {
+  it('counts the expired tile from the Expired items worklist; today stays in Markdown 3', async () => {
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
-        return Promise.resolve([row(1, 0, 'Today Product'), row(2, -1, 'Yesterday Product')]);
+        // The report endpoint only returns stock expiring today or later.
+        return Promise.resolve([row(1, 0, 'Today Product')]);
+      }
+      if (url === '/expired-items') {
+        return Promise.resolve([{ id: 11 }, { id: 12 }, { id: 13 }]);
       }
       return Promise.resolve([]);
     });
@@ -128,7 +132,7 @@ describe('DetailedExpiryReportPage', () => {
     renderPage('test-session-value');
 
     const tile = await screen.findByRole('region', { name: 'Expired stock to write off' });
-    expect(tile).toHaveTextContent(/write off\s*1\s*These lines are past expiry/);
+    expect(tile).toHaveTextContent(/write off\s*3\s*These lines are past expiry/);
     const link = screen.getByRole('link', { name: 'Write off on Expired items' });
     expect(link).toHaveAttribute('href', '/expired-items');
     expect(link).toHaveClass('min-h-11');
@@ -137,11 +141,32 @@ describe('DetailedExpiryReportPage', () => {
     const markdown3 = screen.getByRole('region', { name: /Markdown 3 — urgent/i });
     expect(markdown3).toHaveTextContent('Today Product');
     expect(screen.getByText('Markdown action').nextElementSibling).toHaveTextContent(/^1$/);
+  });
 
-    // -1 days: in the tile only, never in a worklist group.
-    for (const name of [/Apply Markdown 1/i, /Markdown 2 — review/i, /Markdown 3 — urgent/i]) {
-      expect(screen.getByRole('region', { name })).not.toHaveTextContent('Yesterday Product');
-    }
+  it('still renders the report when the Expired items count cannot be loaded', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([row(1, 10, 'Report Product')]);
+      }
+      if (url === '/expired-items') {
+        return Promise.reject(new Error('Expired items unavailable'));
+      }
+      return Promise.resolve([]);
+    });
+
+    renderPage('test-session-value');
+
+    const tile = await screen.findByRole('region', { name: 'Expired stock to write off' });
+    expect(tile).toHaveTextContent('Count unavailable');
+    expect(screen.getByRole('link', { name: 'Write off on Expired items' })).toHaveAttribute(
+      'href',
+      '/expired-items',
+    );
+    expect(screen.getByRole('region', { name: /Markdown 3 — urgent/i })).toHaveTextContent(
+      'Report Product',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('labels the markdown price and words near-term expiry precisely', async () => {

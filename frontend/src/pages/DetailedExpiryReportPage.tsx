@@ -51,6 +51,32 @@ function getDaysToExpiry(expiryDate: string) {
   return Number.isNaN(days) ? null : days;
 }
 
+// The expired tile mirrors the Expired items worklist exactly. A failure here must
+// not block the markdown report, so it resolves to null ("count unavailable").
+async function fetchExpiredItemCount(
+  authToken: string | undefined,
+  signal?: AbortSignal,
+): Promise<number | null> {
+  try {
+    const items = await apiService.get<unknown[]>('/expired-items', authToken, signal);
+    return Array.isArray(items) ? items.length : null;
+  } catch {
+    return null;
+  }
+}
+
+function ExpiredCountValue({ count }: { count: number | null }) {
+  if (count === null) {
+    return (
+      <>
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Count unavailable</span>
+      </>
+    );
+  }
+  return <>{numberFormatter.format(count)}</>;
+}
+
 function formatDaysLeft(daysToExpiry: number | null): string {
   if (daysToExpiry === null) return 'Expiry date unknown';
   if (daysToExpiry === 0) return 'Expires today';
@@ -92,6 +118,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
   const getFreshApiToken = useFreshApiToken(token);
   const markdownConfig = useMarkdownMatrices(token);
   const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
+  const [expiredCount, setExpiredCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -111,13 +138,13 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       }
       try {
         const authToken = await getFreshApiToken('detailed-expiry-report-fetch');
-        const data = await apiService.get<DetailedExpiryReportItem[]>(
-          '/reports/expiry-details',
-          authToken,
-          signal,
-        );
+        const [data, expiredItems] = await Promise.all([
+          apiService.get<DetailedExpiryReportItem[]>('/reports/expiry-details', authToken, signal),
+          fetchExpiredItemCount(authToken, signal),
+        ]);
         if (!signal?.aborted) {
           setReportData(data);
+          setExpiredCount(expiredItems);
           setFetchError(null);
         }
       } catch (err: unknown) {
@@ -215,18 +242,17 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     () =>
       (reportData || []).reduce(
         (summary, item) => {
+          // The report only returns stock expiring today or later, so 0-day items
+          // stay Markdown 3 work. Past-expiry stock is counted from /expired-items.
           const daysToExpiry = getDaysToExpiry(item.expiryDate);
-          // Expiring today (0 days) is still Markdown 3 work; only past-expiry stock is written off.
-          if (daysToExpiry !== null && daysToExpiry < 0) {
-            summary.expired += 1;
-          } else if (daysToExpiry !== null && daysToExpiry <= 90) {
+          if (daysToExpiry !== null && daysToExpiry <= 90) {
             summary.markdown += 1;
           } else {
             summary.active += 1;
           }
           return summary;
         },
-        { expired: 0, markdown: 0, active: 0 },
+        { markdown: 0, active: 0 },
       ),
     [reportData],
   );
@@ -329,7 +355,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
             Expired — write off
           </p>
           <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
-            {numberFormatter.format(expirySummary.expired)}
+            <ExpiredCountValue count={expiredCount} />
           </p>
           <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
             These lines are past expiry. Write them off on the Expired items page.
