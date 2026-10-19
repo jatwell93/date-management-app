@@ -18,12 +18,9 @@ import {
   PageLoadingSkeleton,
   ProcessItemDialog,
   currencyFormatter,
+  lossChartOptions,
   parseUnitsDiscardedInput,
 } from '../components/expired-items/ExpiredItemsParts';
-
-// Type-only import — no runtime cost. Chart.js itself is loaded on demand via the
-// shared lazy chart module (registration lives inside that lazily-loaded chunk).
-import type { ChartOptions } from 'chart.js';
 
 interface ExpiredItemsPageProps {
   token: string | null;
@@ -41,12 +38,6 @@ interface LossByDepartmentReportItem {
   totalLoss: number;
   count: number;
 }
-
-const axisCurrencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-  maximumFractionDigits: 0,
-});
 
 function buildLossChartData(labels: string[], values: number[], color: string) {
   return {
@@ -377,29 +368,6 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     [lossByDepartmentData],
   );
 
-  const chartOptions = useMemo<ChartOptions<'bar'>>(
-    () => ({
-      responsive: true,
-      plugins: {
-        // The card heading already names each chart; a canvas title would repeat it.
-        title: { display: false },
-        legend: { display: false },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: (value) => {
-              const num = typeof value === 'number' ? value : Number(value);
-              return Number.isFinite(num) ? axisCurrencyFormatter.format(num) : `${value}`;
-            },
-          },
-        },
-      },
-    }),
-    [],
-  );
-
   const cancelConfirm = useCallback(() => {
     setIsConfirmDialogOpen(false);
     setIsModalOpen(true); // Reopen the main modal if user cancels
@@ -414,7 +382,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   }
 
   return (
-    <section className="print-report-root py-8" aria-labelledby="expired-items-heading">
+    <section
+      className="print-report-root py-8 print:break-inside-auto!"
+      aria-labelledby="expired-items-heading"
+    >
       <PageHeader />
 
       {expiredItems.length === 0 ? (
@@ -443,7 +414,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           emptyText="No loss data available"
           chartLabel={lossBySkuChartLabel}
           data={lossBySkuChartData}
-          options={chartOptions}
+          options={lossChartOptions}
         />
         <LossChartCard
           title="5 Worst Performing Departments"
@@ -452,7 +423,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           emptyText="No department loss data available"
           chartLabel={lossByDepartmentChartLabel}
           data={lossByDepartmentChartData}
-          options={chartOptions}
+          options={lossChartOptions}
         />
       </section>
 

@@ -36,6 +36,36 @@ export const currencyFormatter = new Intl.NumberFormat('en-AU', {
   currency: 'AUD',
 });
 
+const axisCurrencyFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+  maximumFractionDigits: 0,
+});
+
+// Shared by both loss charts. Ticks are whole dollars (precision: 0) so small
+// totals cannot produce fractional ticks that the formatter rounds into
+// duplicate labels ($0, $1, $1, ...).
+export const lossChartOptions: ChartOptions<'bar'> = {
+  responsive: true,
+  plugins: {
+    // The card heading already names each chart; a canvas title would repeat it.
+    title: { display: false },
+    legend: { display: false },
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      ticks: {
+        precision: 0,
+        callback: (value) => {
+          const num = typeof value === 'number' ? value : Number(value);
+          return Number.isFinite(num) ? axisCurrencyFormatter.format(num) : `${value}`;
+        },
+      },
+    },
+  },
+};
+
 const dateFormatter = new Intl.DateTimeFormat('en-AU', {
   day: '2-digit',
   month: 'short',

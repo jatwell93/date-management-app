@@ -460,7 +460,11 @@ describe('ExpiredItemsPage', () => {
       expect(
         screen.getByRole('heading', { level: 2, name: '5 Worst Performing Departments' }),
       ).toBeInTheDocument();
-      expect(screen.getByRole('region', { name: 'Expired Items' })).toBeInTheDocument();
+      // print-reports.css sets `section { page-break-inside: avoid !important }`;
+      // the report root must override it or a long report is pushed off page 1.
+      expect(screen.getByRole('region', { name: 'Expired Items' })).toHaveClass(
+        'print:break-inside-auto!',
+      );
       expect(screen.queryByRole('main')).not.toBeInTheDocument();
     });
 
