@@ -56,6 +56,14 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [validationError, setValidationError] = useState<ValidationError | null>(null);
   const costPriceRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
+  const scanInFlightRef = useRef(false);
+  // Clear on a later task: the scanner's Enter submits the form after the keydown
+  // listeners (and their microtasks) finish but within the same task.
+  const endScan = () => {
+    setTimeout(() => {
+      scanInFlightRef.current = false;
+    }, 0);
+  };
   // Load the org's markdown matrix so the calculator honors configured bands and
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
   const markdownConfig = useMarkdownMatrices(token);
@@ -75,6 +83,10 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
   const handleBarcodeScan = async (result: HardwareScanResult) => {
     const input = result.barcode;
+    // A keyboard-wedge scanner ends its burst with Enter. When a form input has focus
+    // that Enter also submits the form, right after this handler runs; mark the scan
+    // so calculateMarkdown ignores that submit instead of using pre-scan values.
+    scanInFlightRef.current = true;
     setScannedInput(input);
     setProductDetails(null);
     setMarkdownResult(null);
@@ -82,6 +94,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     setValidationError(null);
 
     if (!token) {
+      endScan();
       setError('Sign in again before scanning a product, then retry the barcode or SKU.');
       return;
     }
@@ -129,11 +142,17 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
           'We could not look up that product. Enter the cost price and expiry date manually.',
         );
       }
+    } finally {
+      endScan();
     }
   };
 
   const calculateMarkdown = (event?: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
+    if (scanInFlightRef.current) {
+      // Scanner's trailing Enter, or a submit while the scanned product is loading.
+      return;
+    }
     if (markdownConfig.status !== 'ready' || !markdownConfig.matrices) {
       setMarkdownResult(null);
       return;

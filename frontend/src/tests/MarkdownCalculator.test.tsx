@@ -1,7 +1,7 @@
 import React from 'react';
 import fs from 'fs';
 import path from 'path';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MarkdownCalculator } from '../components/MarkdownCalculator';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
@@ -383,6 +383,54 @@ describe('MarkdownCalculator', () => {
     fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
     expect(screen.getByRole('status', { name: /last scanned code/i })).toBe(lastScanned);
     expect(lastScanned).toHaveTextContent('Last scanned: SKU123');
+  });
+
+  it("ignores the hardware scanner's trailing Enter while the scanned product loads", async () => {
+    let resolveLookup: (product: unknown) => void = () => undefined;
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config'
+        ? Promise.resolve(markdownConfigResponse)
+        : new Promise((resolve) => {
+            resolveLookup = resolve;
+          }),
+    );
+
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    // Stale values from a previous product are in the form and an input has focus.
+    const costInput = screen.getByLabelText(/Cost Price/i);
+    fireEvent.change(costInput, { target: { value: '100' } });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: { value: futureDate.toISOString().split('T')[0] },
+    });
+    costInput.focus();
+
+    // A keyboard-wedge burst ends in Enter: the scan callback runs, then the
+    // same Enter submits the focused form.
+    act(() => {
+      mockScannerProps[mockScannerProps.length - 1].onScan({
+        barcode: 'SKU123',
+        timestamp: Date.now(),
+        source: 'manual',
+      });
+      fireEvent.submit(costInput.closest('form')!);
+    });
+
+    const result = screen.getByRole('status', { name: /markdown result/i });
+    expect(result).toHaveTextContent(/No markdown calculated yet/i);
+
+    await waitFor(() => {
+      expect(mockedApiGet.mock.calls.map(([path]) => path)).toContain('/products/by-sku/SKU123');
+    });
+    resolveLookup({ id: 9, name: 'Scanned', sku: 'SKU123', barcode: '930', costPrice: 40 });
+    await screen.findByRole('region', { name: /scanned product/i });
+    await waitFor(() => {
+      fireEvent.submit(costInput.closest('form')!);
+      expect(result).toHaveTextContent(/\$10\.00/i);
+    });
   });
 
   it('calculates when the form is submitted with Enter', async () => {
