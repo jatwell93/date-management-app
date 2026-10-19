@@ -551,12 +551,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
 
   const handleEdit = useCallback(
     async (item: ExpiryEntryItem) => {
-      if (editingItem && editingItem.inventoryId !== item.inventoryId) {
-        const saved = await handleSaveEdit();
-        if (!saved) {
-          return;
-        }
-      }
+      // Switching rows saves the open edit first; stay put if that save fails.
+      const switchingRows = !!editingItem && editingItem.inventoryId !== item.inventoryId;
+      if (switchingRows && !(await handleSaveEdit())) return;
       setActionError(null);
       queueFocus(editDateInputId(item.inventoryId));
       setEditingItem({
@@ -797,10 +794,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   // Distinct location names present in the data — drives the location filter so
   // users can narrow a large list to a single store area.
   const locationOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const item of reportData || []) {
-      if (item.locationName) names.add(item.locationName);
-    }
+    const names = new Set(
+      (reportData ?? []).map((item) => item.locationName).filter((name) => !!name),
+    );
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [reportData]);
 
