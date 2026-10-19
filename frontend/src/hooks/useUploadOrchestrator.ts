@@ -282,6 +282,9 @@ export function useUploadOrchestrator({
           return prev + 5;
         });
       }, 500);
+      // Stop ticking the moment the run is cancelled; otherwise a stale timer (e.g. during a
+      // retry backoff) keeps bumping the progress of the next upload.
+      signal.addEventListener('abort', () => clearInterval(progressInterval), { once: true });
 
       try {
         if (strategy === 'direct') {

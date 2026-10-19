@@ -982,9 +982,10 @@ describe('CSVUploadPage expiry import', () => {
       fetchMock
         .mockResponseOnce(directInitiate)
         .mockImplementationOnce(() => new Promise<Response>(() => {}));
+      const before = directUploadCalls().length;
       selectProductFile();
       submitProductUpload();
-      await waitFor(() => expect(directUploadCalls()).toHaveLength(1));
+      await waitFor(() => expect(directUploadCalls()).toHaveLength(before + 1));
     };
 
     it('aborts the in-flight request when cancelled before the server accepts the file', async () => {
@@ -999,6 +1000,26 @@ describe('CSVUploadPage expiry import', () => {
         'Upload cancelled before the server accepted the file',
       );
       expect(signal?.aborted).toBe(true);
+    });
+
+    it('stops the cancelled upload progress timer so a new upload is not bumped by it', async () => {
+      render(<CSVUploadPage token="test-token" />);
+      await startPendingDirectUpload();
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+      await screen.findByText(/Upload cancelled before the server accepted the file/);
+
+      await startPendingDirectUpload();
+      await wait(1600);
+
+      // Only the new run's timer ticks (+5 per 500 ms, so at most 15 here); a leaked timer
+      // from the cancelled run would double that.
+      const progress = Number(
+        screen.getByRole('progressbar', { name: 'Upload progress' }).getAttribute('aria-valuenow'),
+      );
+      expect(progress).toBeGreaterThan(0);
+      expect(progress).toBeLessThanOrEqual(15);
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
     });
 
     it('explains a 409 from an import that is still running instead of retrying', async () => {
