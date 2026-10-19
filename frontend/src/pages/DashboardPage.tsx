@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { buttonVariants } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
@@ -72,6 +73,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Ignore a response that lands after unmount or after the token changed,
+    // so a stale request cannot overwrite newer state.
+    let cancelled = false;
+
     const fetchDashboardData = async () => {
       if (!token) {
         setError('Authentication token is missing.');
@@ -82,20 +87,26 @@ export function DashboardPage({ token }: DashboardPageProps) {
       try {
         const authToken = await getFreshApiToken('dashboard-fetch');
         const data = await apiService.get<DashboardResponse>('/dashboard', authToken);
+        if (cancelled) return;
         setStats(data?.stats ?? null);
         setActivity(data?.activity ?? null);
       } catch (err: unknown) {
+        if (cancelled) return;
         if (err instanceof Error) {
           setError(err.message);
         } else {
           setError('An unknown error occurred');
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchDashboardData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token, getFreshApiToken]);
 
   if (loading) {
@@ -121,6 +132,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           Dashboard unavailable
         </h1>
         <p className="mt-2 text-sm">{error}</p>
+        <p className="mt-1 text-sm text-semantic-text-secondary">Refresh the page to try again.</p>
       </section>
     );
   }
@@ -165,47 +177,53 @@ export function DashboardPage({ token }: DashboardPageProps) {
 
             <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-1 xl:grid-cols-2">
               <div className="rounded-md border border-semantic-warning/20 bg-semantic-warning-muted p-3 sm:p-4">
-                <h3 id="dashboard-expiring-soon-heading" className="text-sm font-semibold">
+                <h3
+                  id="dashboard-expiring-soon-heading"
+                  className="text-sm font-semibold text-semantic-warning-muted-foreground"
+                >
                   Expiring soon
                 </h3>
-                <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-warning sm:mt-2 sm:text-3xl">
+                <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-warning-muted-foreground sm:mt-2 sm:text-3xl">
                   {formatDashboardCount(expiringItems)}
                 </p>
-                <p className="mt-1 text-xs text-semantic-warning-muted-foreground">
+                <p className="mt-1 text-sm text-semantic-warning-muted-foreground">
                   Within 30 days of expiry — plan markdowns.
                 </p>
               </div>
 
               <div className="rounded-md border border-semantic-critical/20 bg-semantic-critical-muted p-3 sm:p-4">
-                <h3 id="dashboard-expired-action-heading" className="text-sm font-semibold">
+                <h3
+                  id="dashboard-expired-action-heading"
+                  className="text-sm font-semibold text-semantic-critical-muted-foreground"
+                >
                   Expired — needs action
                 </h3>
                 <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical sm:mt-2 sm:text-3xl">
                   {formatDashboardCount(expiredActionItems)}
                 </p>
-                <p className="mt-1 text-xs text-semantic-critical-muted-foreground">
+                <p className="mt-1 text-sm text-semantic-critical-muted-foreground">
                   Mark these as sold-through or expired.
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <a
-                href="/detailed-expiry-report"
+              <Link
+                to="/detailed-expiry-report"
                 aria-label="Open expiry report"
-                className={`${buttonVariants({ variant: 'default', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:min-h-10 sm:flex-none sm:basis-auto`}
+                className={`${buttonVariants({ variant: 'default', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:flex-none sm:basis-auto`}
               >
                 <span className="sm:hidden">Expiry report</span>
                 <span className="hidden sm:inline">Open expiry report</span>
-              </a>
-              <a
-                href="/expired-items"
+              </Link>
+              <Link
+                to="/expired-items"
                 aria-label="View expired items"
-                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:min-h-10 sm:flex-none sm:basis-auto`}
+                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} dashboard-action-link min-h-11 min-w-0 basis-0 flex-1 sm:flex-none sm:basis-auto`}
               >
                 <span className="sm:hidden">Expired items</span>
                 <span className="hidden sm:inline">View expired items</span>
-              </a>
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -221,30 +239,26 @@ export function DashboardPage({ token }: DashboardPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 px-4 sm:px-6">
-            <p className="text-sm text-semantic-text-secondary">
-              {formatDashboardCount(stats?.totalProducts)} products with{' '}
-              {formatDashboardCount(stats?.totalInventoryItems)} inventory records
-            </p>
             <dl className="grid grid-cols-2 gap-3 md:grid-cols-1 xl:grid-cols-2">
               <div className="min-w-0">
                 <dt
                   id="dashboard-total-products-heading"
-                  className="text-xs text-semantic-text-tertiary"
+                  className="text-sm text-semantic-text-tertiary"
                 >
                   Total products
                 </dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums">
                   {formatDashboardCount(stats?.totalProducts)}
                 </dd>
               </div>
               <div className="min-w-0">
                 <dt
                   id="dashboard-inventory-items-heading"
-                  className="text-xs text-semantic-text-tertiary"
+                  className="text-sm text-semantic-text-tertiary"
                 >
                   Inventory items
                 </dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums">
                   {formatDashboardCount(stats?.totalInventoryItems)}
                 </dd>
               </div>
@@ -263,9 +277,9 @@ export function DashboardPage({ token }: DashboardPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">
-            <dl className="space-y-4" aria-label="Recent dashboard activity">
+            <dl className="space-y-4">
               <div className="min-w-0 border-b pb-3">
-                <dt className="text-xs text-semantic-text-tertiary">Catalogue last updated</dt>
+                <dt className="text-sm text-semantic-text-tertiary">Catalogue last updated</dt>
                 {lastCatalogueUpload ? (
                   <dd className="mt-1 min-w-0">
                     <p className="break-words text-sm font-medium">
@@ -274,12 +288,12 @@ export function DashboardPage({ token }: DashboardPageProps) {
                     {lastCatalogueUploadTimestamp ? (
                       <time
                         dateTime={lastCatalogueUpload.uploadedAt}
-                        className="text-xs text-semantic-text-tertiary"
+                        className="text-sm text-semantic-text-tertiary"
                       >
                         {lastCatalogueUploadTimestamp}
                       </time>
                     ) : (
-                      <span className="text-xs text-semantic-text-tertiary">
+                      <span className="text-sm text-semantic-text-tertiary">
                         Time not available
                       </span>
                     )}
@@ -292,15 +306,15 @@ export function DashboardPage({ token }: DashboardPageProps) {
               </div>
 
               <div className="min-w-0 border-b pb-3">
-                <dt className="text-xs text-semantic-text-tertiary">Expired items added today</dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                <dt className="text-sm text-semantic-text-tertiary">Expired items added today</dt>
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums">
                   {formatDashboardCount(activity?.expiredItemsEnteredToday)}
                 </dd>
               </div>
 
               <div className="min-w-0">
-                <dt className="text-xs text-semantic-text-tertiary">Stock loss (last 30 days)</dt>
-                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
+                <dt className="text-sm text-semantic-text-tertiary">Stock loss (last 30 days)</dt>
+                <dd className="mt-1 font-body text-xl font-semibold tabular-nums text-semantic-critical">
                   {formatCurrency(activity?.stockLossLast30Days)}
                 </dd>
               </div>
