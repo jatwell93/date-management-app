@@ -352,26 +352,32 @@ function StepProgress({ currentStep }: { currentStep: OnboardingStep }) {
   );
 }
 
-/** Moves focus to the step heading whenever the step changes (not on first render). */
+/** Moves focus to the step heading after a step change the user asked for. */
 function useFocusOnStepChange(currentStep: OnboardingStep) {
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const previousStep = useRef(currentStep);
+  // Only user-driven step changes move focus; landing on a step (deep link,
+  // org state resolving) must not.
+  const focusRequested = useRef(false);
 
   useEffect(() => {
-    if (previousStep.current !== currentStep) {
-      previousStep.current = currentStep;
+    if (focusRequested.current) {
+      focusRequested.current = false;
       headingRef.current?.focus();
     }
   }, [currentStep]);
 
-  return headingRef;
+  const requestFocus = () => {
+    focusRequested.current = true;
+  };
+
+  return { headingRef, requestFocus };
 }
 
 export function OnboardingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
-  const headingRef = useFocusOnStepChange(currentStep);
+  const { headingRef, requestFocus } = useFocusOnStepChange(currentStep);
 
   // Initialize step from URL query param or organization state
   useEffect(() => {
@@ -398,6 +404,7 @@ export function OnboardingPage() {
   const handleNext = () => {
     if (currentStep < MAX_STEP) {
       const nextStep = (currentStep + 1) as OnboardingStep;
+      requestFocus();
       setCurrentStep(nextStep);
       setSearchParams({ step: String(nextStep) });
     }
@@ -409,6 +416,7 @@ export function OnboardingPage() {
       const normalized = normalizeStep(prevStep, !!organization);
       if (normalized === prevStep) {
         // Only go back if not blocked by org check
+        requestFocus();
         setCurrentStep(normalized);
         setSearchParams({ step: String(normalized) });
       }

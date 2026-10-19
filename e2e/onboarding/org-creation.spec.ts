@@ -29,8 +29,16 @@ test.describe('Onboarding - Organisation creation', () => {
     }
 
     // Otherwise the CreateOrganization component should be visible
-    await expect(page.getByText(/set up your organisation/i)).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText(/create.*org|organisation name/i)).toBeVisible({ timeout: 8000 });
+    await expect(
+      page.getByRole('heading', { level: 1, name: /welcome to expiry mate/i }),
+    ).toBeVisible({ timeout: 8000 });
+    await expect(
+      page.getByRole('heading', { level: 2, name: /create your organisation/i }),
+    ).toBeVisible({ timeout: 8000 });
+    // Clerk's own widget text; "create organi" skips our "Create your organisation" heading.
+    await expect(
+      page.getByText(/create organi[sz]ation|organi[sz]ation name/i).first(),
+    ).toBeVisible({ timeout: 8000 });
   });
 
   test('user with existing org is redirected from /onboarding to /scan', async ({ page }) => {

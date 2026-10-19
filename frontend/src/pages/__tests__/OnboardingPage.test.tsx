@@ -76,6 +76,14 @@ describe('OnboardingPage structure', () => {
     expect(items[2]).toHaveClass('bg-semantic-surface-4');
   });
 
+  it.each(['/onboarding?step=1', '/onboarding?step=2', '/onboarding'])(
+    'does not move focus when landing directly on %s',
+    (entry) => {
+      renderOnboarding(entry);
+      expect(screen.getByRole('heading', { level: 1 })).not.toHaveFocus();
+    },
+  );
+
   it('exposes card titles as level-2 headings', () => {
     renderOnboarding('/onboarding?step=1');
     expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument();
