@@ -119,6 +119,14 @@ function TableSkeleton() {
   );
 }
 
+/** Focus the first element whose id is currently rendered; later ids are fallbacks. */
+function focusFirstRendered(ids: string[]) {
+  const target = ids
+    .map((id) => document.getElementById(id))
+    .find((el): el is HTMLElement => el !== null);
+  target?.focus();
+}
+
 interface RowActionsContextValue {
   editingItem: EditableInventoryItem | null;
   setEditingItem: React.Dispatch<React.SetStateAction<EditableInventoryItem | null>>;
@@ -426,15 +434,8 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   }, []);
   useEffect(() => {
     const ids = pendingFocusIdsRef.current;
-    if (ids.length === 0) return;
     pendingFocusIdsRef.current = [];
-    for (const id of ids) {
-      const el = document.getElementById(id);
-      if (el) {
-        el.focus();
-        return;
-      }
-    }
+    focusFirstRendered(ids);
   });
 
   const fetchReportData = useCallback(
