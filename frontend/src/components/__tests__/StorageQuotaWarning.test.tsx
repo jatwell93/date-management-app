@@ -61,12 +61,29 @@ describe('StorageQuotaWarning', () => {
 
       const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
       expect(dialog).toHaveAttribute('aria-modal', 'true');
-      expect(screen.getByRole('button', { name: 'Remind Me Later' })).toHaveFocus();
+      // The dialog itself takes focus, not an action button.
+      expect(dialog).toHaveFocus();
 
       await userEvent.keyboard('{Escape}');
 
       expect(onDismiss).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('ignores a barcode scanner Enter that lands as the dialog opens', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
+      const onDismiss = vi.fn();
+
+      renderWarning({ onDismiss });
+
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      // A keyboard-wedge scanner ends every scan with Enter.
+      await userEvent.keyboard('{Enter}');
+
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(localStorage.getItem(`storage-quota-dismissed-${mockUserId}`)).toBeNull();
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveFocus();
     });
 
     it('keeps Tab inside the dialog', async () => {
@@ -80,18 +97,22 @@ describe('StorageQuotaWarning', () => {
       );
 
       const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      const close = screen.getByRole('button', { name: 'Close warning' });
       const remind = screen.getByRole('button', { name: 'Remind Me Later' });
-      expect(remind).toHaveFocus();
+      expect(dialog).toHaveFocus();
 
-      // Remind Me Later is the last tabbable element: Tab wraps to the first.
       await userEvent.tab();
-      expect(screen.getByRole('button', { name: 'Close warning' })).toHaveFocus();
+      expect(close).toHaveFocus();
       await userEvent.tab();
       expect(screen.getByRole('button', { name: 'Upgrade Plan' })).toHaveFocus();
       await userEvent.tab();
       expect(remind).toHaveFocus();
+      // Remind Me Later is the last tabbable element: Tab wraps to the first...
+      await userEvent.tab();
+      expect(close).toHaveFocus();
+      // ...and Shift+Tab from the first wraps to the last.
       await userEvent.tab({ shift: true });
-      expect(screen.getByRole('button', { name: 'Upgrade Plan' })).toHaveFocus();
+      expect(remind).toHaveFocus();
       expect(dialog).toContainElement(document.activeElement as HTMLElement);
 
       // The trap pulls focus back if anything tries to move it behind the modal.
@@ -112,8 +133,8 @@ describe('StorageQuotaWarning', () => {
       // Focus the page control before the quota response opens the dialog.
       screen.getByRole('button', { name: 'Scan item' }).focus();
 
-      await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
-      expect(screen.getByRole('button', { name: 'Remind Me Later' })).toHaveFocus();
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      expect(dialog).toHaveFocus();
 
       await userEvent.click(screen.getByRole('button', { name: 'Remind Me Later' }));
 

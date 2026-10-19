@@ -35,18 +35,20 @@ interface StorageQuotaWarningProps {
 }
 
 /**
- * Focus handling for the Radix dialog below: start on "Remind Me Later" (the safe
- * choice) and, on close, return focus to whatever was focused before the dialog
- * opened. Radix would otherwise send focus to a trigger, and this dialog has none.
+ * Focus handling for the Radix dialog below. On open, focus the dialog itself, not an
+ * action button: staff use keyboard-wedge barcode scanners, and a scan's trailing
+ * Enter landing on "Remind Me Later" would silently snooze the warning for days.
+ * On close, return focus to whatever was focused before the dialog opened (Radix
+ * would otherwise send it to a trigger, and this dialog has none).
  */
-function useQuotaDialogFocus(initialFocusRef: React.RefObject<HTMLButtonElement | null>) {
+function useQuotaDialogFocus(dialogRef: React.RefObject<HTMLDivElement | null>) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const onOpenAutoFocus = (event: Event) => {
     const active = document.activeElement;
     returnFocusRef.current = active instanceof HTMLElement ? active : null;
     event.preventDefault();
-    initialFocusRef.current?.focus();
+    dialogRef.current?.focus();
   };
 
   const onCloseAutoFocus = (event: Event) => {
@@ -69,7 +71,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const dismissButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Fetch storage quota on component mount
   useEffect(() => {
@@ -139,7 +141,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   };
 
   const isOpen = !dismissed && !loading && !error && !!quota?.isWarning;
-  const focusHandlers = useQuotaDialogFocus(dismissButtonRef);
+  const focusHandlers = useQuotaDialogFocus(dialogRef);
 
   // Don't show if dismissed, loading, error, or no warning
   if (!isOpen || !quota) {
@@ -171,6 +173,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
           />
 
           <DialogPrimitive.Content
+            ref={dialogRef}
             className="storage-quota-warning__modal"
             aria-modal="true"
             onOpenAutoFocus={focusHandlers.onOpenAutoFocus}
@@ -244,7 +247,6 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
               )}
 
               <button
-                ref={dismissButtonRef}
                 type="button"
                 className="storage-quota-warning__button storage-quota-warning__button--secondary"
                 onClick={handleDismiss}

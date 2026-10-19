@@ -47,6 +47,11 @@
   animation: slideUp 0.3s ease-out;
 }
 
+/* The dialog itself takes focus on open (not a button); no ring on the container. */
+.storage-quota-warning__modal:focus {
+  outline: none;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(20px);
