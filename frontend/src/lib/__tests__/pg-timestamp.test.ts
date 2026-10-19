@@ -8,6 +8,10 @@ describe('normalisePgTimestamp', () => {
     ['2026-10-19 03:12:45+10:30', '2026-10-19T03:12:45+10:30'],
     ['2026-10-19 03:12:45-05', '2026-10-19T03:12:45-05:00'],
     ['2026-10-19T03:12:45.123Z', '2026-10-19T03:12:45.123Z'],
+    // TIMESTAMP without time zone holds UTC; without the Z, browsers parse it as local time.
+    ['2026-10-19 03:12:45.123', '2026-10-19T03:12:45.123Z'],
+    ['2026-10-19 03:12:45', '2026-10-19T03:12:45Z'],
+    ['2026-10-19T03:12', '2026-10-19T03:12Z'],
     ['2025-12-31', '2025-12-31'],
     ['not a date', 'not a date'],
   ])('rewrites %s as %s', (input, expected) => {
@@ -38,6 +42,13 @@ describe('formatTimestampSafe', () => {
 
   it('formats a Postgres text timestamp', () => {
     expect(formatTimestampSafe(formatter, '2026-10-19 03:12:45.123+00')).toBe(
+      formatter.format(new Date('2026-10-19T03:12:45.123Z')),
+    );
+  });
+
+  it('formats an offset-less TIMESTAMP as UTC, not device-local time', () => {
+    // 03:12 UTC is 14:12 in Sydney (AEDT), whatever the device time zone is.
+    expect(formatTimestampSafe(formatter, '2026-10-19 03:12:45.123')).toBe(
       formatter.format(new Date('2026-10-19T03:12:45.123Z')),
     );
   });
