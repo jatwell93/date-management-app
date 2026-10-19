@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   Table,
@@ -237,30 +237,30 @@ export function ReportsPage({ token }: ReportsPageProps) {
         aria-label="Loading expiry reports"
       >
         <div className="mb-6">
-          <div className="h-8 w-56 rounded-md bg-semantic-surface-3 animate-pulse" />
-          <div className="mt-2 h-4 w-96 rounded bg-semantic-surface-3 animate-pulse" />
+          <div className="h-8 w-56 rounded-md bg-semantic-surface-3 motion-safe:animate-pulse" />
+          <div className="mt-2 h-4 w-full max-w-96 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
         </div>
         <div className="mb-6 rounded-xl border overflow-hidden">
           <div className="px-6 py-4 border-b">
-            <div className="h-5 w-44 rounded bg-semantic-surface-3 animate-pulse" />
+            <div className="h-5 w-44 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
           </div>
           <div className="px-6 py-5 grid gap-4 md:grid-cols-[1.2fr_1fr]">
-            <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
-            <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
+            <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
+            <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
           </div>
         </div>
         <div className="rounded-xl border overflow-hidden">
           <div className="px-6 py-4 border-b">
-            <div className="h-5 w-44 rounded bg-semantic-surface-3 animate-pulse" />
+            <div className="h-5 w-44 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
           </div>
           <div className="px-6 py-5">
             {SKELETON_ROWS.map((i) => (
               <div key={i} className="flex gap-6 py-3 border-b last:border-0">
-                <div className="h-4 w-20 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse ml-auto" />
-                <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-24 rounded bg-semantic-surface-3 animate-pulse" />
+                <div className="h-4 w-20 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                <div className="h-4 w-16 rounded bg-semantic-surface-3 motion-safe:animate-pulse ml-auto" />
+                <div className="h-4 w-16 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                <div className="h-4 w-16 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+                <div className="h-4 w-24 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
               </div>
             ))}
           </div>
@@ -272,39 +272,35 @@ export function ReportsPage({ token }: ReportsPageProps) {
   if (hasAnyError && !reportData && !overallReportData) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-8">
+        <h1 className="font-heading text-2xl font-semibold">Expiry reporting</h1>
         <div className="flex flex-col items-center gap-4 py-16 text-center">
           <p className="text-semantic-critical font-medium" role="alert">
             {monthlyError || overallError}
           </p>
-          <button
-            onClick={() => navigate(0)}
-            className="rounded-md border border-semantic-primary px-4 py-2 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors"
-          >
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => navigate(0)}>
             Try again
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <main
+    <section
       className="container mx-auto max-w-6xl space-y-6 px-4 py-8"
       aria-label="Expiry reporting workspace"
     >
       <header>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-2xl font-semibold">Expiry reporting</h1>
-            <p className="mt-1.5 max-w-xl text-sm text-semantic-text-secondary">
-              Start with expired stock and markdown pressure, then review month-by-month movement.
-            </p>
-          </div>
-        </div>
+        <h1 className="font-heading text-2xl font-semibold">Expiry reporting</h1>
+        <p className="mt-1.5 max-w-xl text-base text-semantic-text-secondary">
+          Start with expired stock and markdown pressure, then review month-by-month movement.
+        </p>
       </header>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Expiry action summary</CardTitle>
+          <CardTitle className="text-xl" role="heading" aria-level={2}>
+            Expiry action summary
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {overallLoading ? (
@@ -314,8 +310,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
               aria-live="polite"
               aria-label="Loading expiry summary"
             >
-              <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
-              <div className="rounded-lg border bg-semantic-surface-3 h-28 animate-pulse" />
+              <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
+              <div className="rounded-lg border bg-semantic-surface-3 h-28 motion-safe:animate-pulse" />
             </div>
           ) : overallError ? (
             <p className="text-semantic-critical text-sm" role="alert">
@@ -331,8 +327,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 role="region"
                 aria-label="Primary expiry decision"
               >
-                <p className="text-sm font-medium text-semantic-critical">Expiry risk</p>
-                <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical">
+                <p className="text-sm font-medium text-semantic-critical-muted-foreground">
+                  Expiry risk
+                </p>
+                <p className="mt-2 text-2xl font-bold tabular-nums text-semantic-critical-muted-foreground">
                   {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
@@ -345,10 +343,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     Entering markdown next month
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
+                  <dd className="mt-1 text-2xl font-bold tabular-nums text-semantic-warning-muted-foreground">
                     {numberFormatter.format(overallReportData.next_month_markdown_count)}
                   </dd>
-                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                  <dd className="mt-1 text-sm text-semantic-text-secondary">
                     Next batch crossing into Markdown 1 (≈3 months out) — line up first reductions.
                   </dd>
                 </div>
@@ -356,10 +354,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     Active expiry stock
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
+                  <dd className="mt-1 text-2xl font-bold tabular-nums text-semantic-text-primary">
                     {numberFormatter.format(overallReportData.active_expiry_stock_count)}
                   </dd>
-                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                  <dd className="mt-1 text-sm text-semantic-text-secondary">
                     All stock not yet expired — your live markdown pipeline.
                   </dd>
                 </div>
@@ -376,10 +374,12 @@ export function ReportsPage({ token }: ReportsPageProps) {
       {sellThroughData && sellThroughData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Sell-through by markdown level</CardTitle>
+            <CardTitle className="text-xl" role="heading" aria-level={2}>
+              Sell-through by markdown level
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-4 text-sm text-semantic-text-secondary">
+            <p className="mb-4 text-base text-semantic-text-secondary">
               How many items sold at each reduction depth — stock that only moves at deeper
               markdowns is a candidate for range or ordering review.
             </p>
@@ -392,7 +392,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dt className="text-sm font-medium text-semantic-text-secondary">
                     {markdownLevelLabel(row.markdownLevel)}
                   </dt>
-                  <dd className="mt-1 font-heading text-2xl font-bold">
+                  <dd className="mt-1 text-2xl font-bold tabular-nums">
                     {numberFormatter.format(row.soldCount)}
                   </dd>
                 </div>
@@ -404,18 +404,20 @@ export function ReportsPage({ token }: ReportsPageProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Monthly expiry report</CardTitle>
+          <CardTitle className="text-xl" role="heading" aria-level={2}>
+            Monthly expiry report
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row">
-            <Button asChild className="flex-1" size="lg">
-              <a href="/detailed-expiry-report">Open next 90 days</a>
+            <Button asChild className="min-h-11 flex-1" size="lg">
+              <Link to="/detailed-expiry-report">Open next 90 days</Link>
             </Button>
-            <Button asChild variant="outline" className="flex-1" size="lg">
-              <a href="/expiry-entries">Open all expiry entries</a>
+            <Button asChild variant="outline" className="min-h-11 flex-1" size="lg">
+              <Link to="/expiry-entries">Open all expiry entries</Link>
             </Button>
-            <Button asChild variant="destructive" className="flex-1" size="lg">
-              <a href="/expired-items">Review expired items</a>
+            <Button asChild variant="outline" className="min-h-11 flex-1" size="lg">
+              <Link to="/expired-items">Review expired items</Link>
             </Button>
           </div>
           {loading ? (
@@ -430,24 +432,29 @@ export function ReportsPage({ token }: ReportsPageProps) {
             <>
               {/* Mobile row summary */}
               <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile monthly expiry summary">
-                {reportData.map((row) => (
-                  <li key={row.month} className="rounded-lg border bg-semantic-surface-1 p-4">
+                {reportData.map((row, index) => (
+                  <li
+                    key={`${row.month}-${index}`}
+                    className="rounded-lg border bg-semantic-surface-1 p-4"
+                  >
                     <div className="flex items-center justify-between border-b pb-2 mb-3">
                       <span className="font-heading font-bold text-lg">{row.month}</span>
-                      <span className="rounded-md bg-semantic-secondary-muted px-2 py-1 text-xs font-medium text-semantic-text-secondary">
+                      <span className="rounded-md bg-semantic-secondary-muted px-2 py-1 text-sm font-medium tabular-nums text-semantic-text-secondary">
                         Total: {numberFormatter.format(row.total_expiring)}
                       </span>
                     </div>
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
                       <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Expired</dt>
-                        <dd className="font-bold text-semantic-critical">
+                        <dd className="font-bold tabular-nums text-semantic-critical">
                           {numberFormatter.format(row.expired_count)}
                         </dd>
                       </div>
                       <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Latest Expiry</dt>
-                        <dd className="font-medium">{formatReportDate(row.latest_expiry_date)}</dd>
+                        <dt className="text-semantic-text-secondary">Latest expiry</dt>
+                        <dd className="font-medium tabular-nums">
+                          {formatReportDate(row.latest_expiry_date)}
+                        </dd>
                       </div>
                     </dl>
                   </li>
@@ -462,19 +469,19 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         Month
                       </TableHead>
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Total Expiring
+                        Total expiring
                       </TableHead>
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Expired Items
+                        Expired items
                       </TableHead>
                       <TableHead className="text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Latest Expiry
+                        Latest expiry
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.map((row) => (
-                      <TableRow key={row.month}>
+                    {reportData.map((row, index) => (
+                      <TableRow key={`${row.month}-${index}`}>
                         <TableCell className="font-medium">{row.month}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {numberFormatter.format(row.total_expiring)}
@@ -498,6 +505,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }
