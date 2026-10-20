@@ -62,6 +62,14 @@ export function useHardwareScan(
 
         lastEnterTimeRef.current = now;
 
+        // A scanner sends Enter straight after its last character. A late Enter belongs to
+        // the user, so a fast burst typed earlier (key repeat, quick typing) is dropped.
+        if (now - lastKeystrokeTimeRef.current > timingThreshold) {
+          accumulatorRef.current = '';
+          isHardwareScanRef.current = false;
+          return;
+        }
+
         // If we accumulated characters in hardware scan mode, submit the barcode
         if (accumulatorRef.current.length > 0 && isHardwareScanRef.current) {
           const barcode = accumulatorRef.current;

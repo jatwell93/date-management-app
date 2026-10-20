@@ -78,6 +78,22 @@ describe('useHardwareScan', () => {
     expect(onScan).not.toHaveBeenCalled();
   });
 
+  it('should NOT submit a fast burst when Enter comes long after it', () => {
+    const onScan = vi.fn();
+    renderHook(() => useHardwareScan(onScan));
+
+    // Key auto-repeat or quick typing looks like a scan burst...
+    ['7', '7', '7'].forEach((key) => {
+      dispatchKey(key);
+      mockNow += 5;
+    });
+    // ...but the user presses Enter a second later to submit a form.
+    mockNow += 1000;
+    dispatchKey('Enter');
+
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
   it('should accumulate characters correctly across Enter boundary', () => {
     const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
