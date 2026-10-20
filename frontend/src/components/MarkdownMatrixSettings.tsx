@@ -50,6 +50,172 @@ function isValidMatrix(matrix: MarkdownMatrixConfig): boolean {
   );
 }
 
+const SAVE_ERROR_FALLBACK =
+  'We could not save your markdown settings. Check your connection and try again.';
+
+// Keep server-provided messages, but never show raw transport text such as
+// "HTTP error! status: 502" (non-JSON body) or "Failed to fetch".
+function saveErrorMessage(cause: unknown): string {
+  if (!(cause instanceof Error) || cause instanceof TypeError) return SAVE_ERROR_FALLBACK;
+  if (!cause.message || cause.message.startsWith('HTTP error!')) return SAVE_ERROR_FALLBACK;
+  return cause.message;
+}
+
+const RETAIL_HINT_ID = 'markdown-retail-hint';
+const MARKDOWN_MATRICES_HEADING_ID = 'markdown-matrices-heading';
+
+const BASIS_BUTTON_CLASS =
+  'min-h-11 px-4 text-sm font-medium outline-hidden focus-visible:relative focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 disabled:cursor-not-allowed disabled:opacity-50';
+
+interface BasisButtonProps {
+  label: string;
+  selected: boolean;
+  disabled?: boolean;
+  describedBy?: string;
+  title?: string;
+  onSelect: () => void;
+}
+
+function BasisButton({
+  label,
+  selected,
+  disabled,
+  describedBy,
+  title,
+  onSelect,
+}: BasisButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-describedby={describedBy}
+      disabled={disabled}
+      title={title}
+      onClick={onSelect}
+      className={`${BASIS_BUTTON_CLASS} ${
+        selected
+          ? 'bg-semantic-primary text-semantic-primary-foreground'
+          : 'bg-transparent hover:bg-semantic-surface-3 disabled:hover:bg-transparent'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+// An empty or whitespace-only field is NaN (invalid), never a silent 0.
+function parsePercentage(raw: string): number {
+  return raw.trim() === '' ? Number.NaN : Number(raw);
+}
+
+interface PercentageFieldProps {
+  inputId: string;
+  srPrefix: string;
+  percentage: number;
+  matrixErrorId?: string;
+  onChange: (percentage: number) => void;
+}
+
+function PercentageField({
+  inputId,
+  srPrefix,
+  percentage,
+  matrixErrorId,
+  onChange,
+}: PercentageFieldProps) {
+  const empty = Number.isNaN(percentage);
+  const fieldErrorId = empty ? `${inputId}-error` : undefined;
+  const describedBy = [fieldErrorId, matrixErrorId].filter(Boolean).join(' ') || undefined;
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={inputId}>
+        <span className="sr-only">{srPrefix} </span>
+        Discount %
+      </Label>
+      <Input
+        id={inputId}
+        type="number"
+        min="0"
+        max="100"
+        step="1"
+        inputMode="decimal"
+        className="min-h-11 w-28"
+        aria-invalid={describedBy ? true : undefined}
+        aria-describedby={describedBy}
+        value={empty ? '' : String(percentage)}
+        onChange={(event) => onChange(parsePercentage(event.target.value))}
+      />
+      {fieldErrorId && (
+        <p
+          id={fieldErrorId}
+          role="alert"
+          className="text-sm text-semantic-critical-muted-foreground"
+        >
+          Enter a discount from 0 to 100.
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface BandRowProps {
+  scope: CreditScope;
+  band: (typeof BANDS)[number];
+  value: MarkdownMatrixConfig[BandKey];
+  hasRetailData: boolean;
+  errorId?: string;
+  onUpdate: (key: BandKey, patch: Partial<{ percentage: number; basis: MarkdownBasis }>) => void;
+}
+
+function BandRow({ scope, band, value, hasRetailData, errorId, onUpdate }: BandRowProps) {
+  const { key, title, window } = band;
+  const scopeLabel = SCOPE_LABELS[scope];
+  const inputId = `${scope}-${key}-percentage`;
+  return (
+    <div className="grid gap-3 rounded-md bg-semantic-surface-2 p-4 sm:grid-cols-[1fr_auto]">
+      <div className="min-w-0">
+        <h4 className="font-heading text-base font-semibold">{title}</h4>
+        <p className="text-sm text-semantic-text-secondary">{window}</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-4">
+        <PercentageField
+          inputId={inputId}
+          srPrefix={`${scopeLabel} ${title}`}
+          percentage={value.percentage}
+          matrixErrorId={errorId}
+          onChange={(percentage) => onUpdate(key, { percentage })}
+        />
+        <div className="space-y-1">
+          <span className="block text-sm font-medium" aria-hidden="true">
+            Basis
+          </span>
+          <div
+            className="inline-flex rounded-md border border-hairline"
+            role="group"
+            aria-label={`${scopeLabel} ${title} basis`}
+          >
+            <BasisButton
+              label="Cost"
+              selected={value.basis === 'cost'}
+              onSelect={() => onUpdate(key, { basis: 'cost' })}
+            />
+            <BasisButton
+              label="Retail"
+              selected={value.basis === 'retail'}
+              disabled={!hasRetailData}
+              describedBy={hasRetailData ? undefined : RETAIL_HINT_ID}
+              title={
+                hasRetailData ? undefined : 'Upload retail prices to enable retail-based markdowns'
+              }
+              onSelect={() => onUpdate(key, { basis: 'retail' })}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface MatrixEditorProps {
   scope: CreditScope;
   matrix: MarkdownMatrixConfig;
@@ -70,88 +236,39 @@ export function MarkdownMatrixEditor({
     },
     [matrix, onChange],
   );
+  // Empty fields carry their own inline error; the matrix-level rule message
+  // waits until every field has a value.
+  const hasEmptyField = BANDS.some(({ key }) => Number.isNaN(matrix[key].percentage));
+  const errorId = hasEmptyField || isValidMatrix(matrix) ? undefined : `${scope}-matrix-error`;
 
   return (
-    <section aria-labelledby={`${scope}-heading`} className="space-y-3 rounded-lg border p-4">
+    <section
+      aria-labelledby={`${scope}-heading`}
+      className="space-y-3 rounded-lg border border-hairline p-4"
+    >
       <div>
         <h3 id={`${scope}-heading`} className="font-heading text-lg font-semibold">
           {scopeLabel}
         </h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-semantic-text-secondary">
           {scope === 'FULL_CREDIT'
             ? 'Pricing for stock eligible for full supplier credit.'
             : 'Pricing for stock without confirmed full supplier credit.'}
         </p>
       </div>
-      {BANDS.map(({ key, title, window }) => (
-        <div
-          key={key}
-          className="grid gap-3 rounded-md bg-semantic-surface-2 p-4 sm:grid-cols-[1fr_auto]"
-        >
-          <div className="min-w-0">
-            <h4 className="font-heading text-base font-semibold">{title}</h4>
-            <p className="text-sm text-muted-foreground">{window}</p>
-          </div>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-              <Label htmlFor={`${scope}-${key}-percentage`}>
-                {scopeLabel} {title} discount %
-              </Label>
-              <Input
-                id={`${scope}-${key}-percentage`}
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                className="min-h-11 w-28"
-                value={String(matrix[key].percentage)}
-                onChange={(event) => updateBand(key, { percentage: Number(event.target.value) })}
-              />
-            </div>
-            <div className="space-y-1">
-              <span className="block text-sm font-medium">Basis</span>
-              <div
-                className="inline-flex rounded-md border"
-                role="group"
-                aria-label={`${scopeLabel} ${title} basis`}
-              >
-                <button
-                  type="button"
-                  aria-pressed={matrix[key].basis === 'cost'}
-                  onClick={() => updateBand(key, { basis: 'cost' })}
-                  className={`min-h-11 px-4 text-sm font-medium ${
-                    matrix[key].basis === 'cost'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-transparent'
-                  }`}
-                >
-                  Cost
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={matrix[key].basis === 'retail'}
-                  disabled={!hasRetailData}
-                  title={
-                    hasRetailData
-                      ? undefined
-                      : 'Upload retail prices to enable retail-based markdowns'
-                  }
-                  onClick={() => updateBand(key, { basis: 'retail' })}
-                  className={`min-h-11 px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
-                    matrix[key].basis === 'retail'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-transparent'
-                  }`}
-                >
-                  Retail
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {BANDS.map((band) => (
+        <BandRow
+          key={band.key}
+          scope={scope}
+          band={band}
+          value={matrix[band.key]}
+          hasRetailData={hasRetailData}
+          errorId={errorId}
+          onUpdate={updateBand}
+        />
       ))}
-      {!isValidMatrix(matrix) && (
-        <p role="alert" className="text-sm text-semantic-critical">
+      {errorId && (
+        <p id={errorId} role="alert" className="text-sm text-semantic-critical-muted-foreground">
           {scopeLabel} discounts must be between 0 and 100 and must not decrease as expiry nears.
         </p>
       )}
@@ -226,9 +343,7 @@ export function MarkdownMatrixSettings() {
       setHasRetailData(config.hasRetailData);
       setSuccess('Markdown matrices saved.');
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : 'We could not save your markdown settings.',
-      );
+      setError(saveErrorMessage(cause));
     } finally {
       setSaving(false);
       setConfirming(false);
@@ -238,16 +353,25 @@ export function MarkdownMatrixSettings() {
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle>Markdown matrices</CardTitle>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+        <CardTitle id={MARKDOWN_MATRICES_HEADING_ID} role="heading" aria-level={2}>
+          Markdown matrices
+        </CardTitle>
+        <p className="mt-1 max-w-prose text-sm text-semantic-text-secondary">
           Set separate discounts for stock with and without confirmed full supplier credit.
-          {!hasRetailData &&
-            ' Upload a catalogue with a retail (or selling price) column to enable retail-based markdowns.'}
+          {!hasRetailData && (
+            <span id={RETAIL_HINT_ID}>
+              {' '}
+              Upload a catalogue with a retail (or selling price) column to enable retail-based
+              markdowns.
+            </span>
+          )}
         </p>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading markdown settings…</p>
+          <p role="status" className="text-sm text-semantic-text-secondary">
+            Loading markdown settings…
+          </p>
         ) : matrices ? (
           <div className="space-y-4">
             <MarkdownMatrixEditor
@@ -263,19 +387,19 @@ export function MarkdownMatrixSettings() {
               onChange={(matrix) => updateMatrix('FULL_CREDIT', matrix)}
             />
             {error && (
-              <p role="alert" className="text-sm text-semantic-critical">
+              <p role="alert" className="text-sm text-semantic-critical-muted-foreground">
                 {error}
               </p>
             )}
             {success && (
-              <p role="status" className="text-sm text-semantic-success">
+              <p role="status" className="text-sm text-semantic-success-muted-foreground">
                 {success}
               </p>
             )}
             <Button
               type="button"
               size="lg"
-              className="min-h-11"
+              className="min-h-11 w-full sm:w-auto"
               onClick={() => setConfirming(true)}
               disabled={saving || !valid || !dirty}
             >
@@ -300,7 +424,7 @@ export function MarkdownMatrixSettings() {
             </AlertDialog>
           </div>
         ) : error ? (
-          <p role="alert" className="text-sm text-semantic-critical">
+          <p role="alert" className="text-sm text-semantic-critical-muted-foreground">
             {error}
           </p>
         ) : null}

@@ -5,6 +5,7 @@ import ExpiredItemsPage from '../pages/ExpiredItemsPage';
 import { apiService } from '../lib/api.service';
 import { getExpiredItems, processExpiredItem } from '../services/expiredItemService';
 import '@testing-library/jest-dom';
+import { semanticDataViz } from '../theme/semantic-tokens';
 
 vi.mock('../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
@@ -35,7 +36,24 @@ vi.mock('../components/ExpiredLossReport', () => ({
 }));
 
 vi.mock('react-chartjs-2', () => ({
-  Bar: () => <div role="img" aria-label="Loss chart" />,
+  Bar: ({
+    role,
+    'aria-label': ariaLabel,
+    data,
+    options,
+  }: {
+    role?: string;
+    'aria-label'?: string;
+    data?: { datasets?: Array<{ backgroundColor?: string }> };
+    options?: { plugins?: { title?: { display?: boolean } } };
+  }) => (
+    <canvas
+      role={role}
+      aria-label={ariaLabel}
+      data-background={data?.datasets?.[0]?.backgroundColor}
+      data-title-display={String(options?.plugins?.title?.display)}
+    />
+  ),
 }));
 
 describe('ExpiredItemsPage', () => {
@@ -133,7 +151,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    await userEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    await userEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
 
     const unitsInput = screen.getByLabelText(/Units to Discard/i);
     await userEvent.clear(unitsInput);
@@ -233,7 +251,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
     // '0' is invalid (must be >= 1), so the error element renders and we can assert
     // its typography class. The quantity is intentionally NOT capped at the
     // scanned count anymore (issue #268), so a value above quantityAvailable is valid.
@@ -299,7 +317,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
 
     const unitsInput = screen.getByLabelText(/Units to Discard/i);
     fireEvent.change(unitsInput, { target: { value: '15' } });
@@ -340,7 +358,7 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /as expired$/i })[0]);
     fireEvent.change(screen.getByLabelText(/Units to Discard/i), {
       target: { value: quantity },
     });
@@ -381,5 +399,206 @@ describe('ExpiredItemsPage', () => {
     expect(printTable).toHaveTextContent('EXP-200');
     expect(printTable).not.toHaveTextContent(/Actions/i);
     expect(printTable).not.toHaveTextContent(/Sold Through/i);
+  });
+
+  describe('accessibility', () => {
+    const item = {
+      id: 301,
+      productId: 40,
+      productName: 'Saline Ampoule',
+      sku: 'SAL-300',
+      expiryDate: '2026-05-01',
+      status: 'Expired',
+      costPrice: 4,
+      locationId: 6,
+      locationName: 'Dispensary',
+      quantityAvailable: 3,
+    };
+
+    it('names each row action after its product', async () => {
+      mockedGetExpiredItems.mockResolvedValue([item]);
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(
+        await screen.findAllByRole('button', { name: 'Mark Saline Ampoule as expired' }),
+      ).toHaveLength(2);
+      expect(
+        screen.getAllByRole('button', { name: 'Mark Saline Ampoule as sold through' }),
+      ).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Print Report' })).toBeInTheDocument();
+      expect(screen.getByRole('table', { name: 'Expired items' })).toBeInTheDocument();
+      screen
+        .getAllByRole('button', { name: 'Mark Saline Ampoule as expired' })
+        .forEach((button) => expect(button).toHaveClass('hover:text-semantic-critical-active'));
+    });
+
+    it('gives each loss chart a text alternative and a heading', async () => {
+      mockedGetExpiredItems.mockResolvedValue([]);
+      mockedApiGet.mockImplementation(async (url: string) =>
+        url === '/reports/loss-by-sku'
+          ? [{ sku: 'SAL-300', productName: 'Saline Ampoule', totalLoss: 12, count: 3 }]
+          : [{ department: 'Dispensary', totalLoss: 30.5, count: 4 }],
+      );
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(
+        await screen.findByRole('img', {
+          name: 'Bar chart of total loss by SKU: SAL-300 $12.00',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByRole('img', {
+          name: 'Bar chart of total loss by department: Dispensary $30.50',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: '5 Worst Performing SKUs' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: '5 Worst Performing Departments' }),
+      ).toBeInTheDocument();
+      // print-reports.css sets `section { page-break-inside: avoid !important }`;
+      // the report root must override it or a long report is pushed off page 1.
+      expect(screen.getByRole('region', { name: 'Expired Items' })).toHaveClass(
+        'print:break-inside-auto!',
+      );
+      expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    });
+
+    it('colours the loss charts from the brand data-viz tokens', async () => {
+      mockedGetExpiredItems.mockResolvedValue([]);
+      mockedApiGet.mockImplementation(async (url: string) =>
+        url === '/reports/loss-by-sku'
+          ? [{ sku: 'SAL-300', productName: 'Saline Ampoule', totalLoss: 12, count: 3 }]
+          : [{ department: 'Dispensary', totalLoss: 30.5, count: 4 }],
+      );
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(await screen.findByRole('img', { name: /loss by SKU/ })).toHaveAttribute(
+        'data-background',
+        semanticDataViz.series5,
+      );
+      expect(await screen.findByRole('img', { name: /loss by department/ })).toHaveAttribute(
+        'data-background',
+        semanticDataViz.series2,
+      );
+    });
+
+    it('does not repeat the card heading as a canvas title', async () => {
+      mockedGetExpiredItems.mockResolvedValue([]);
+      mockedApiGet.mockImplementation(async (url: string) =>
+        url === '/reports/loss-by-sku'
+          ? [{ sku: 'SAL-300', productName: 'Saline Ampoule', totalLoss: 12, count: 3 }]
+          : [{ department: 'Dispensary', totalLoss: 30.5, count: 4 }],
+      );
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      const charts = [
+        await screen.findByRole('img', { name: /loss by SKU/ }),
+        await screen.findByRole('img', { name: /loss by department/ }),
+      ];
+      charts.forEach((chart) => expect(chart).toHaveAttribute('data-title-display', 'false'));
+    });
+
+    it('announces a failed write-off inside the dialog with an AA-safe colour', async () => {
+      mockedGetExpiredItems.mockResolvedValue([item]);
+      mockedApiGet.mockResolvedValue([]);
+      mockedProcessExpiredItem.mockRejectedValue(new Error('Write-off failed'));
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      fireEvent.click(
+        (await screen.findAllByRole('button', { name: 'Mark Saline Ampoule as expired' }))[0],
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Confirm/i }));
+
+      const dialog = await screen.findByRole('dialog', { name: /Process Expired Item/i });
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent('Write-off failed');
+      expect(alert).toHaveClass('text-semantic-critical-muted-foreground');
+    });
+
+    it('announces an initial load failure', async () => {
+      mockedGetExpiredItems.mockRejectedValue(new Error('boom'));
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to fetch expired items');
+    });
+  });
+
+  describe('responsive', () => {
+    const makeItem = (n: number) => ({
+      id: 1000 + n,
+      productId: n,
+      productName: `Bulk Item ${n}`,
+      sku: `BLK-${n}`,
+      expiryDate: '2026-05-01',
+      status: 'Expired',
+      costPrice: 1,
+      locationId: 1,
+      locationName: 'Shelf',
+      quantityAvailable: 1,
+    });
+
+    it('lists every expired item on phone, not just the first 50', async () => {
+      mockedGetExpiredItems.mockResolvedValue(Array.from({ length: 60 }, (_, i) => makeItem(i)));
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      const phoneList = await screen.findByRole('list', { name: 'Expired items' });
+      expect(within(phoneList).getAllByRole('listitem')).toHaveLength(60);
+      expect(within(phoneList).getByText('Bulk Item 59')).toBeInTheDocument();
+    });
+
+    it('gives row actions a 44px minimum touch target', async () => {
+      mockedGetExpiredItems.mockResolvedValue([makeItem(1)]);
+      mockedApiGet.mockResolvedValue([]);
+
+      render(<ExpiredItemsPage token="test-session-value" />);
+
+      const actions = [
+        ...(await screen.findAllByRole('button', { name: /as expired$/i })),
+        ...screen.getAllByRole('button', { name: /as sold through$/i }),
+        screen.getByRole('button', { name: 'Print Report' }),
+      ];
+      actions.forEach((button) => expect(button).toHaveClass('min-h-11'));
+    });
+  });
+
+  describe('typography', () => {
+    it('keeps text at 14px or larger and numbers tabular', async () => {
+      mockedGetExpiredItems.mockResolvedValue([
+        {
+          id: 401,
+          productId: 50,
+          productName: 'Eye Drops',
+          sku: 'EYE-400',
+          expiryDate: '2026-05-01',
+          status: 'Expired',
+          costPrice: 6.25,
+          locationId: 7,
+          locationName: 'Front Shop',
+          quantityAvailable: 8,
+        },
+      ]);
+      mockedApiGet.mockResolvedValue([]);
+
+      const { container } = render(<ExpiredItemsPage token="test-session-value" />);
+
+      await screen.findAllByText('Eye Drops');
+      expect(container.querySelector('.text-xs')).toBeNull();
+      screen.getAllByText('$6.25').forEach((cell) => {
+        expect(cell).toHaveClass('tabular-nums');
+      });
+    });
   });
 });

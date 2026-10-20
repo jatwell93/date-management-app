@@ -10,6 +10,7 @@ const phaseThreeFiles = [
   '../StoreAreaManagementPage.tsx',
   '../UserManagementPage.tsx',
   '../../components/ExpiredLossReport.tsx',
+  '../../components/expired-items/ExpiredItemsParts.tsx',
   '../../components/MarkdownCalculator.tsx',
   '../../components/SubscriptionDashboard.tsx',
   '../CSVUploadPage.tsx',
@@ -33,7 +34,9 @@ describe('phase 3 semantic page surfaces', () => {
 
   it('uses semantic tokens for dashboard, reporting, and upload page states', () => {
     expect(readSource('../DashboardPage.tsx')).toContain('text-semantic-critical');
-    expect(readSource('../ExpiredItemsPage.tsx')).toContain('text-semantic-text-tertiary');
+    expect(readSource('../../components/expired-items/ExpiredItemsParts.tsx')).toContain(
+      'text-semantic-text-tertiary',
+    );
     expect(readSource('../CSVUploadPage.tsx')).toContain('bg-semantic-primary');
     expect(readSource('../ReportsPage.tsx')).toContain('bg-semantic-secondary-muted');
     expect(readSource('../OnboardingPage.tsx')).toContain('border-semantic-primary');

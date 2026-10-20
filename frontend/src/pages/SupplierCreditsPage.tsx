@@ -22,6 +22,7 @@ import type {
 } from '../types/supplierCredit';
 import { CatalogueReviewPanel } from '../components/supplier-credits/CatalogueReviewPanel';
 import { PolicyReviewPanel } from '../components/supplier-credits/PolicyReviewPanel';
+import { RejectClaimDialog } from '../components/supplier-credits/RejectClaimDialog';
 import {
   SupplierPolicyFields,
   supplierPolicyDraft,
@@ -66,9 +67,9 @@ const STATUS_TONE: Record<string, string> = {
   SENDING: 'bg-semantic-primary/10 text-semantic-primary',
   SENT: 'bg-semantic-primary/10 text-semantic-primary',
   ACKNOWLEDGED: 'bg-semantic-primary/10 text-semantic-primary',
-  CREDITED: 'bg-semantic-success-muted text-semantic-success',
-  PARTIALLY_CREDITED: 'bg-semantic-success-muted text-semantic-success',
-  REJECTED: 'bg-semantic-critical-muted text-semantic-critical',
+  CREDITED: 'bg-semantic-success-muted text-semantic-success-muted-foreground',
+  PARTIALLY_CREDITED: 'bg-semantic-success-muted text-semantic-success-muted-foreground',
+  REJECTED: 'bg-semantic-critical-muted text-semantic-critical-muted-foreground',
   CANCELLED: 'bg-semantic-surface-3 text-semantic-text-secondary',
 };
 
@@ -162,8 +163,8 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
         role="status"
         aria-label="Loading supplier credits"
       >
-        <div className="h-8 w-56 rounded bg-semantic-surface-3 animate-pulse" />
-        <div className="mt-6 h-40 w-full rounded bg-semantic-surface-3 animate-pulse" />
+        <div className="h-8 w-56 rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
+        <div className="mt-6 h-40 w-full rounded bg-semantic-surface-3 motion-safe:animate-pulse" />
       </div>
     );
   }
@@ -171,8 +172,10 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-semantic-critical font-medium">{error}</p>
-        <Button variant="outline" className="mt-4" onClick={() => void load()}>
+        <p role="alert" className="text-semantic-critical font-medium">
+          {error}
+        </p>
+        <Button variant="outline" className="mt-4 min-h-11" onClick={() => void load()}>
           Try again
         </Button>
       </div>
@@ -180,9 +183,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <section className="container mx-auto px-4 py-8" aria-labelledby="supplier-credits-heading">
       <header className="mb-6">
-        <h1 className="text-3xl font-semibold font-heading">Supplier Credits</h1>
+        <h1 id="supplier-credits-heading" className="text-3xl font-semibold font-heading">
+          Supplier Credits
+        </h1>
         <p className="mt-2 max-w-2xl text-sm text-semantic-text-secondary">
           Turn written-off stock back into supplier credits. Build a claim, attach photos, send it,
           and let the app chase the follow-up.
@@ -191,22 +196,29 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
 
       {report && <RecoveryPanel report={report} />}
 
-      <nav className="mt-8 mb-4 flex gap-2 border-b" aria-label="Supplier credit views">
-        <TabButton active={tab === 'to-claim'} onClick={() => setTab('to-claim')}>
-          To Claim
-        </TabButton>
-        <TabButton active={tab === 'catalogue-review'} onClick={() => setTab('catalogue-review')}>
-          Catalogue Review
-        </TabButton>
-        <TabButton active={tab === 'policy-review'} onClick={() => setTab('policy-review')}>
-          Policy Review
-        </TabButton>
-        <TabButton active={tab === 'open'} onClick={() => setTab('open')}>
-          Open Claims{followUpDueCount > 0 ? ` (${followUpDueCount} due)` : ''}
-        </TabButton>
-        <TabButton active={tab === 'settled'} onClick={() => setTab('settled')}>
-          Settled
-        </TabButton>
+      {/* The nav scrolls; the hairline lives on the inner row so the active tab's
+          -mb-px underline overlaps it inside the scroll box instead of being clipped. */}
+      <nav
+        className="mt-8 mb-4 overflow-x-auto overflow-y-hidden"
+        aria-label="Supplier credit views"
+      >
+        <div data-testid="supplier-credit-tab-row" className="flex w-max min-w-full gap-2 border-b">
+          <TabButton active={tab === 'to-claim'} onClick={() => setTab('to-claim')}>
+            To Claim
+          </TabButton>
+          <TabButton active={tab === 'catalogue-review'} onClick={() => setTab('catalogue-review')}>
+            Catalogue Review
+          </TabButton>
+          <TabButton active={tab === 'policy-review'} onClick={() => setTab('policy-review')}>
+            Policy Review
+          </TabButton>
+          <TabButton active={tab === 'open'} onClick={() => setTab('open')}>
+            Open Claims{followUpDueCount > 0 ? ` (${followUpDueCount} due)` : ''}
+          </TabButton>
+          <TabButton active={tab === 'settled'} onClick={() => setTab('settled')}>
+            Settled
+          </TabButton>
+        </div>
       </nav>
 
       {tab === 'to-claim' && (
@@ -251,7 +263,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setBuildGroup(null)}
           onbuilt={() => {
             setBuildGroup(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -264,7 +276,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setAssignItem(null)}
           onAssigned={() => {
             setAssignItem(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -275,7 +287,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setDetailClaim(null)}
           onChanged={() => {
             setDetailClaim(null);
-            void load();
+            void load(false);
           }}
         />
       )}
@@ -286,11 +298,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           onClose={() => setDisposeItem(null)}
           onDisposed={() => {
             setDisposeItem(null);
-            void load();
+            void load(false);
           }}
         />
       )}
-    </div>
+    </section>
   );
 };
 
@@ -301,7 +313,8 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 }) => (
   <button
     onClick={onClick}
-    className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+    // Inset ring: the scrolling tab row clips anything drawn outside the button box.
+    className={`-mb-px min-h-11 shrink-0 whitespace-nowrap rounded-t-md border-b-2 px-4 py-2 text-sm font-medium transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-semantic-primary ${
       active
         ? 'border-semantic-primary text-semantic-primary'
         : 'border-transparent text-semantic-text-secondary hover:text-semantic-text-primary'
@@ -316,31 +329,37 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-semantic-text-secondary">Outstanding credit</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-sm text-semantic-text-secondary">
+          Outstanding credit
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-2xl font-semibold tabular-nums">
           {currency.format(report.outstandingValue)}
         </p>
-        <p className="mt-1 text-xs text-semantic-text-tertiary">Owed on sent, unsettled claims</p>
+        <p className="mt-1 text-sm text-semantic-text-tertiary">Owed on sent, unsettled claims</p>
       </CardContent>
     </Card>
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-semantic-text-secondary">Money on the table</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-sm text-semantic-text-secondary">
+          Money on the table
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-2xl font-semibold tabular-nums text-semantic-critical">
           {currency.format(report.unclaimedValue)}
         </p>
-        <p className="mt-1 text-xs text-semantic-text-tertiary">
+        <p className="mt-1 text-sm text-semantic-text-tertiary">
           Eligible write-offs never claimed
         </p>
       </CardContent>
     </Card>
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-semantic-text-secondary">Recovery by supplier</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="text-sm text-semantic-text-secondary">
+          Recovery by supplier
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {report.suppliers.length === 0 ? (
@@ -348,8 +367,8 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
         ) : (
           <ul className="space-y-1 text-sm">
             {report.suppliers.slice(0, 4).map((s) => (
-              <li key={s.supplierId} className="flex justify-between">
-                <span className="truncate">{s.supplierName}</span>
+              <li key={s.supplierId} className="flex justify-between gap-2">
+                <span className="min-w-0 truncate">{s.supplierName}</span>
                 <span className="tabular-nums text-semantic-text-secondary">
                   {s.recoveryRate == null ? '—' : `${Math.round(s.recoveryRate * 100)}%`}
                 </span>
@@ -384,9 +403,13 @@ const ToClaimBoard: React.FC<{
     <div className="space-y-4">
       {pool.map((group) => (
         <Card key={group.supplierId ?? 'needs-supplier'}>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">
-              {group.supplierName ?? '⚠ Needs supplier'}
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+            <CardTitle role="heading" aria-level={2} className="text-lg">
+              {group.supplierName ?? (
+                <>
+                  <span aria-hidden="true">⚠ </span>Needs supplier
+                </>
+              )}
               {group.state === 'PENDING_CONFIRMATION' && (
                 <Badge className="ml-2">Pending confirmation</Badge>
               )}
@@ -398,7 +421,7 @@ const ToClaimBoard: React.FC<{
               </span>
             </CardTitle>
             {group.supplierId != null && (
-              <Button size="sm" onClick={() => onBuild(group)}>
+              <Button className="min-h-11" size="sm" onClick={() => onBuild(group)}>
                 Begin claim
               </Button>
             )}
@@ -408,7 +431,7 @@ const ToClaimBoard: React.FC<{
               {group.items.map((item) => (
                 <li
                   key={item.transactionId}
-                  className="flex items-center justify-between py-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
                 >
                   <span>
                     <span className="font-medium">{item.productName}</span>{' '}
@@ -417,6 +440,7 @@ const ToClaimBoard: React.FC<{
                   </span>
                   {group.state === 'NEEDS_BRAND' && (
                     <Button
+                      className="min-h-11"
                       size="sm"
                       variant="outline"
                       onClick={() => onAssign({ productId: item.productId, sku: item.sku })}
@@ -426,6 +450,7 @@ const ToClaimBoard: React.FC<{
                   )}
                   {group.state === 'PENDING_CONFIRMATION' && item.brandId != null && (
                     <Button
+                      className="min-h-11"
                       size="sm"
                       variant="outline"
                       onClick={() =>
@@ -442,6 +467,7 @@ const ToClaimBoard: React.FC<{
                   )}
                   {group.state === 'NO_POLICY' && (
                     <Button
+                      className="min-h-11"
                       size="sm"
                       variant="outline"
                       onClick={() => onDispose(item.transactionId, item.productName)}
@@ -488,12 +514,21 @@ const DisposeWriteOffModal: React.FC<{
           {item.productName} will be removed from the claimable pool. This does not delete its
           expiry transaction.
         </p>
-        {error && <p className="text-sm text-semantic-critical">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {error}
+          </p>
+        )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={() => void dispose()} disabled={submitting}>
+          <Button
+            className="min-h-11"
+            variant="destructive"
+            onClick={() => void dispose()}
+            disabled={submitting}
+          >
             Confirm disposal
           </Button>
         </DialogFooter>
@@ -520,11 +555,11 @@ const ClaimList: React.FC<{
         <li key={claim.id}>
           <button
             onClick={() => onOpen(claim)}
-            className="flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-semantic-surface-2/50"
+            className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-semantic-surface-2/50"
           >
             <span>
               <span className="font-medium">Claim #{claim.id}</span> · {claim.supplier.name}
-              <span className="ml-2 text-sm text-semantic-text-secondary">
+              <span className="ml-2 text-sm tabular-nums text-semantic-text-secondary">
                 {claim.lines.length} line{claim.lines.length === 1 ? '' : 's'} ·{' '}
                 {claim.expectedCreditValue != null
                   ? `~${currency.format(claim.expectedCreditValue)}`
@@ -533,7 +568,7 @@ const ClaimList: React.FC<{
             </span>
             <span className="flex items-center gap-2">
               {isFollowUpDue(claim) && (
-                <Badge className="bg-semantic-critical-muted text-semantic-critical">
+                <Badge className="bg-semantic-critical-muted text-semantic-critical-muted-foreground">
                   Follow-up due
                 </Badge>
               )}
@@ -593,15 +628,14 @@ const BuildClaimModal: React.FC<{
                 {item.productName}{' '}
                 <span className="font-mono text-semantic-text-secondary">{item.sku}</span>
               </p>
-              <p className="text-xs text-semantic-text-secondary">
+              <p className="text-sm text-semantic-text-secondary">
                 {item.unitsDiscarded} units · expect{' '}
                 {item.expectedCreditUnits == null ? '—' : `${item.expectedCreditUnits} unit(s)`}
               </p>
               <div className="mt-2">
-                <Label htmlFor={`batch-${item.transactionId}`} className="text-xs">
-                  Batch number
-                </Label>
+                <Label htmlFor={`batch-${item.transactionId}`}>Batch number</Label>
                 <Input
+                  className="min-h-11"
                   id={`batch-${item.transactionId}`}
                   value={batches[item.transactionId] ?? ''}
                   onChange={(e) =>
@@ -612,12 +646,16 @@ const BuildClaimModal: React.FC<{
             </div>
           ))}
         </div>
-        {err && <p className="text-sm text-semantic-critical">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {err}
+          </p>
+        )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={submitting}>
+          <Button className="min-h-11" onClick={() => void submit()} disabled={submitting}>
             {submitting ? 'Creating…' : 'Create draft claim'}
           </Button>
         </DialogFooter>
@@ -756,15 +794,19 @@ const AssignSupplierModal: React.FC<{
         {suppliers.length > 0 && (
           <div className="mb-3 flex gap-2">
             <Button
+              className="min-h-11"
               variant={mode === 'existing' ? 'default' : 'outline'}
               size="sm"
+              aria-pressed={mode === 'existing'}
               onClick={() => selectMode('existing')}
             >
               Existing
             </Button>
             <Button
+              className="min-h-11"
               variant={mode === 'new' ? 'default' : 'outline'}
               size="sm"
+              aria-pressed={mode === 'new'}
               onClick={() => selectMode('new')}
             >
               New supplier
@@ -778,7 +820,7 @@ const AssignSupplierModal: React.FC<{
               <Label htmlFor="supplier-select">Supplier</Label>
               <select
                 id="supplier-select"
-                className="mt-1 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm"
+                className="mt-1 min-h-11 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm"
                 value={supplierId}
                 onChange={(event) => setSupplierId(Number(event.target.value))}
               >
@@ -802,7 +844,13 @@ const AssignSupplierModal: React.FC<{
               />
             )}
             {isAdmin && selectedSupplier && (
-              <Button type="button" variant="outline" size="sm" onClick={enterEditMode}>
+              <Button
+                className="min-h-11"
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={enterEditMode}
+              >
                 Edit supplier policy
               </Button>
             )}
@@ -812,13 +860,18 @@ const AssignSupplierModal: React.FC<{
             <div>
               <Label htmlFor="supplier-name">Name</Label>
               <Input
+                className="min-h-11"
                 id="supplier-name"
                 maxLength={255}
+                aria-invalid={fieldErrors.name ? true : undefined}
+                aria-describedby={fieldErrors.name ? 'supplier-name-error' : undefined}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
               {fieldErrors.name && (
-                <p className="mt-1 text-xs text-semantic-critical">{fieldErrors.name}</p>
+                <p id="supplier-name-error" className="mt-1 text-sm text-semantic-critical">
+                  {fieldErrors.name}
+                </p>
               )}
             </div>
             <SupplierPolicyFields
@@ -837,17 +890,22 @@ const AssignSupplierModal: React.FC<{
         {permissionError && (
           <p
             role="alert"
-            className="rounded-md bg-semantic-critical-muted p-3 text-sm text-semantic-critical"
+            className="rounded-md bg-semantic-critical-muted p-3 text-sm text-semantic-critical-muted-foreground"
           >
             {permissionError}
           </p>
         )}
-        {err && <p className="text-sm text-semantic-critical">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {err}
+          </p>
+        )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button
+            className="min-h-11"
             onClick={() => void submit()}
             disabled={
               submitting ||
@@ -911,7 +969,7 @@ const ClaimDetailModal: React.FC<{
           <p>
             Status: <span className="font-medium">{formatClaimLabel(claim.status)}</span>
           </p>
-          <p className="text-semantic-text-secondary">
+          <p className="tabular-nums text-semantic-text-secondary">
             Expected{' '}
             {claim.expectedCreditValue != null ? currency.format(claim.expectedCreditValue) : 'TBC'}
             {claim.creditedValue != null && ` · credited ${currency.format(claim.creditedValue)}`}
@@ -920,22 +978,26 @@ const ClaimDetailModal: React.FC<{
 
         {claim.status === 'DRAFT' && claim.lines.length > 0 && (
           <div className="my-3 rounded-md border p-2">
-            <p className="mb-1 text-xs font-semibold uppercase text-semantic-text-secondary">
+            <h3 className="mb-1 text-sm font-semibold text-semantic-text-secondary">
               Photos (attach before sending)
-            </p>
+            </h3>
             <ul className="space-y-2">
               {claim.lines.map((line) => (
-                <li key={line.id} className="flex items-center justify-between text-xs">
+                <li
+                  key={line.id}
+                  className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                >
                   <span>
                     Batch {line.batchNumber ?? '—'} · {line.unitsClaimed} units ·{' '}
                     {line.photos.length} photo(s)
                   </span>
-                  <label className="cursor-pointer text-semantic-primary">
+                  <label className="inline-flex min-h-11 cursor-pointer items-center rounded-md px-2 font-medium text-semantic-primary underline-offset-4 hover:underline focus-within:ring-[3px] focus-within:ring-semantic-primary/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
                     {uploadingLine === line.id ? 'Uploading…' : 'Add photo'}
+                    <span className="sr-only"> for batch {line.batchNumber ?? 'unknown'}</span>
                     <input
                       type="file"
                       accept="image/*"
-                      className="hidden"
+                      className="sr-only"
                       disabled={uploadingLine != null}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -950,10 +1012,8 @@ const ClaimDetailModal: React.FC<{
         )}
 
         <div className="my-3 max-h-40 overflow-y-auto rounded-md border p-2">
-          <p className="mb-1 text-xs font-semibold uppercase text-semantic-text-secondary">
-            Timeline
-          </p>
-          <ul className="space-y-1 text-xs">
+          <h3 className="mb-1 text-sm font-semibold text-semantic-text-secondary">Timeline</h3>
+          <ul className="space-y-1 text-sm">
             {claim.events.map((ev) => (
               <li key={ev.id} className="flex justify-between">
                 <span>
@@ -968,11 +1028,16 @@ const ClaimDetailModal: React.FC<{
           </ul>
         </div>
 
-        {err && <p className="text-sm text-semantic-critical">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-semantic-critical">
+            {err}
+          </p>
+        )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {claim.status === 'DRAFT' && (
             <Button
+              className="min-h-11"
               disabled={busy}
               onClick={() => void run(async () => svc.sendClaim(claim.id, await getToken()))}
             >
@@ -982,26 +1047,29 @@ const ClaimDetailModal: React.FC<{
           {(claim.status === 'SENT' || claim.status === 'ACKNOWLEDGED') && (
             <>
               <Button
+                className="min-h-11"
                 variant="outline"
                 disabled={busy}
                 onClick={() => void run(async () => svc.sendFollowUp(claim.id, await getToken()))}
               >
                 Send follow-up
               </Button>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Label htmlFor="credited" className="text-xs">
-                    Credited value
-                  </Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-40 flex-1">
+                  <Label htmlFor="credited">Credited value (AUD)</Label>
                   <Input
+                    className="min-h-11"
                     id="credited"
                     type="number"
                     min="0"
+                    step="0.01"
+                    inputMode="decimal"
                     value={creditedValue}
                     onChange={(e) => setCreditedValue(e.target.value)}
                   />
                 </div>
                 <Button
+                  className="min-h-11"
                   disabled={busy}
                   onClick={() =>
                     void run(async () =>
@@ -1017,22 +1085,20 @@ const ClaimDetailModal: React.FC<{
                 >
                   Mark credited
                 </Button>
-                <Button
-                  variant="outline"
-                  className="text-semantic-critical border-semantic-critical"
+                <RejectClaimDialog
+                  claimId={claim.id}
+                  supplierName={claim.supplier.name}
                   disabled={busy}
-                  onClick={() =>
+                  onConfirm={() =>
                     void run(async () =>
                       svc.recordOutcome(claim.id, 'REJECTED', null, null, await getToken()),
                     )
                   }
-                >
-                  Rejected
-                </Button>
+                />
               </div>
             </>
           )}
-          <Button variant="outline" onClick={onClose} disabled={busy}>
+          <Button className="min-h-11" variant="outline" onClick={onClose} disabled={busy}>
             Close
           </Button>
         </DialogFooter>
