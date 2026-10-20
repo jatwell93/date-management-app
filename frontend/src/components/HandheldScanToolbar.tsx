@@ -29,11 +29,11 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
   const getSyncStatusColor = () => {
     switch (syncStatus) {
       case 'syncing':
-        return 'text-semantic-secondary';
+        return 'text-semantic-secondary-strong';
       case 'synced':
-        return 'text-semantic-success';
+        return 'text-semantic-success-strong';
       case 'offline':
-        return 'text-semantic-warning';
+        return 'text-semantic-warning-strong';
       case 'failed':
         return 'text-semantic-critical';
       default:
@@ -53,17 +53,23 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
             {userName && (
               <span className="text-sm font-medium text-semantic-text-primary">{userName}</span>
             )}
-            <div className={`text-sm font-medium ${getSyncStatusColor()}`}>
+            <div role="status" className={`text-sm font-medium ${getSyncStatusColor()}`}>
               {getSyncStatusText()}
             </div>
           </div>
           <button
             type="button"
             onClick={onSettingsClick}
-            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center focus-visible:outline-hidden"
+            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center"
             aria-label="Settings"
           >
-            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

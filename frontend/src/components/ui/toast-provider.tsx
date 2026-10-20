@@ -32,14 +32,13 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          isVisible={isVisible}
-          onClose={hideToast}
-        />
-      )}
+      {/* Always mounted so its live regions exist before the first message. */}
+      <Toast
+        message={toast?.message ?? ''}
+        type={toast?.type ?? 'info'}
+        isVisible={isVisible && toast !== null}
+        onClose={hideToast}
+      />
     </ToastContext.Provider>
   );
 };

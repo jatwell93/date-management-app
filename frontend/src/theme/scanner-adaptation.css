@@ -7,11 +7,18 @@
   --scanner-focus-ring: var(--semantic-primary);
 }
 
+/* 48px glove targets: the scan surface and every route inside the handheld shell
+   (`.handheld-layout` is set by layouts/HandheldLayout on a detected PDT). */
 .scanner-context button,
 .scanner-context [role='button'],
 .scanner-context input[type='button'],
 .scanner-context input[type='submit'],
-.scanner-context input[type='reset'] {
+.scanner-context input[type='reset'],
+.handheld-layout button,
+.handheld-layout [role='button'],
+.handheld-layout input[type='button'],
+.handheld-layout input[type='submit'],
+.handheld-layout input[type='reset'] {
   min-height: 48px;
   min-width: 48px;
 }
@@ -74,12 +81,4 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .scanner-context *,
-  .scanner-context *::before,
-  .scanner-context *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* Reduced motion is handled app-wide in globals.css (covers scanner-pulse too). */

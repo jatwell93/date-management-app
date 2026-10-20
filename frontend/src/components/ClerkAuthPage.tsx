@@ -44,7 +44,7 @@ export function ClerkSignUpPage() {
       >
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center font-display">
+            <CardTitle as="h1" className="text-3xl font-bold text-center font-display">
               Date Management App
             </CardTitle>
             <CardDescription className="text-center">
@@ -78,7 +78,7 @@ export function ClerkSignInPage() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center font-display">
+            <CardTitle as="h1" className="text-3xl font-bold text-center font-display">
               Date Management App
             </CardTitle>
             <CardDescription className="text-center">

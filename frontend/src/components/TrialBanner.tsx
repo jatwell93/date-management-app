@@ -118,8 +118,10 @@ export function TrialBanner({ token }: TrialBannerProps) {
                       : `You have ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in your Professional trial`}
                   </p>
                   <p
-                    className={`text-xs ${
-                      isUrgent ? 'text-semantic-warning' : 'text-semantic-secondary'
+                    className={`text-sm ${
+                      isUrgent
+                        ? 'text-semantic-warning-muted-foreground'
+                        : 'text-semantic-secondary-muted-foreground'
                     }`}
                   >
                     Upgrade now to keep all {tierLimits.maxProducts} products and{' '}
@@ -142,7 +144,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 type="button"
                 aria-label="Dismiss trial message"
                 onClick={() => setDismissed(true)}
-                className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-hidden transition-colors focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 ${
+                className={`inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md outline-hidden transition-colors focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 ${
                   isUrgent
                     ? 'text-semantic-warning-muted-foreground hover:bg-semantic-warning/10'
                     : 'text-semantic-secondary-muted-foreground hover:bg-semantic-secondary/10'
@@ -169,7 +171,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                   <p className="text-sm font-medium text-semantic-text-primary">
                     You're on the Starter plan (trial expired)
                   </p>
-                  <p className="text-xs text-semantic-text-secondary">
+                  <p className="text-sm text-semantic-text-secondary">
                     Limited to {tierLimits.maxProducts} products and {tierLimits.maxUsers} user
                   </p>
                 </div>
@@ -194,13 +196,13 @@ export function TrialBanner({ token }: TrialBannerProps) {
           <CardContent className="py-3 px-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <div className="size-2 rounded-full bg-semantic-success animate-pulse" />
+                <div className="size-2 rounded-full bg-semantic-success" />
                 <div>
                   <p className="text-sm font-medium text-semantic-success-muted-foreground">
                     Active subscription: {tierLevel.charAt(0).toUpperCase() + tierLevel.slice(1)} (
                     {price})
                   </p>
-                  <p className="text-xs text-semantic-success">
+                  <p className="text-sm text-semantic-success-muted-foreground">
                     {tierLimits.maxProducts} products,{' '}
                     {tierLimits.maxUsers === -1 ? 'unlimited' : tierLimits.maxUsers} users
                   </p>
