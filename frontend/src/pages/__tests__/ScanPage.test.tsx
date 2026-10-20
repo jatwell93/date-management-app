@@ -166,7 +166,7 @@ vi.mock('../../components/ui/select', () => ({
       {children}
     </select>
   ),
-  SelectTrigger: () => null,
+  SelectTrigger: ({ id }: any) => <span data-testid="location-trigger" id={id} />,
   SelectValue: () => null,
   SelectContent: ({ children }: any) => <>{children}</>,
   SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
@@ -312,11 +312,16 @@ describe('ScanPage Integration', () => {
         target: { value: expiryValue },
       });
 
-      expect(
-        await screen.findByText((_content, element) =>
-          Boolean(element?.textContent === `Markdown Price (${percentage}% off): $${price}`),
+      const markdownLine = await screen.findByText((_content, element) =>
+        Boolean(
+          element?.tagName === 'P' &&
+          element.textContent === `Markdown price (${percentage}% off): $${price}`,
         ),
-      ).toBeInTheDocument();
+      );
+      expect(markdownLine).toBeInTheDocument();
+      // Amber body text fails AA on light surfaces; the muted-foreground shade passes.
+      expect(markdownLine).toHaveClass('text-semantic-warning-muted-foreground');
+      expect(markdownLine).not.toHaveClass('text-semantic-warning');
       expect(screen.queryByText(/\$NaN/i)).not.toBeInTheDocument();
     },
   );
@@ -480,6 +485,136 @@ describe('ScanPage Integration', () => {
         mockToken,
       );
     });
+  });
+
+  const renderScanPage = () =>
+    render(
+      <HandheldProvider>
+        <ScanPage token={mockToken} />
+      </HandheldProvider>,
+    );
+
+  const mockUnknownProduct = () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      return Promise.reject(new Error('404 Not found'));
+    });
+  };
+
+  const mockProductWithRecentEntry = (createdAt = '2025-01-01T00:00:00.000Z') => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      if (url.includes('/products/by-barcode/1234567890')) {
+        return Promise.resolve(mockProductBarcode);
+      }
+      if (url.includes('/inventory-items/recent')) {
+        return Promise.resolve([
+          {
+            id: 7,
+            productId: 1,
+            expiryDate: '2025-12-31T00:00:00.000Z',
+            locationId: 1,
+            status: 'active',
+            createdAt,
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        ]);
+      }
+      if (url.includes('/inventory-items/')) return Promise.resolve([]);
+      return Promise.reject(new Error(`Not found call: ${url}`));
+    });
+  };
+
+  const scanAndWaitFor = async (text: string | RegExp) => {
+    await screen.findByTestId('mock-scanner');
+    userEvent.click(screen.getByTestId('trigger-scan'));
+    return screen.findByText(text);
+  };
+
+  it('keeps the new product form and typed values when validation fails', async () => {
+    mockUnknownProduct();
+    renderScanPage();
+    await scanAndWaitFor(/No catalog match for barcode 1234567890/i);
+
+    fireEvent.change(screen.getByLabelText(/Product Name/i), {
+      target: { value: 'Half-entered Product' },
+    });
+    userEvent.click(screen.getByRole('button', { name: /Create product/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Enter product name, SKU, and cost price/i,
+    );
+    expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Half-entered Product');
+    expect(screen.getByLabelText(/Cost Price/i)).toHaveAttribute('inputmode', 'decimal');
+    expect(apiService.post).not.toHaveBeenCalled();
+  });
+
+  it('labels the location select and names each delete button by its expiry', async () => {
+    mockProductWithRecentEntry();
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
+
+    const locationLabel = screen.getByText(/^Location$/i);
+    expect(locationLabel).toHaveAttribute('for', 'location');
+    expect(screen.getByTestId('location-trigger')).toHaveAttribute('id', 'location');
+    expect(
+      await screen.findByRole('button', {
+        name: /Delete entry expiring 31\/12\/2025/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /Inventory scan/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /Recent entries/i })).toBeInTheDocument();
+  });
+
+  it('renders a recent entry with an unparseable createdAt without crashing', async () => {
+    mockProductWithRecentEntry('not-a-timestamp');
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
+
+    expect(await screen.findByText('Added: not-a-timestamp')).toBeInTheDocument();
+    expect(screen.getByTestId('scan-page-main')).toBeInTheDocument();
+  });
+
+  it('formats a Postgres text createdAt from the recent-entries API', async () => {
+    mockProductWithRecentEntry('2026-10-19 03:12:45.123+00');
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
+
+    expect(await screen.findByText(/^Added: 19 Oct 2026, 2:12/)).toBeInTheDocument();
+  });
+
+  it('gives page-level controls 44px touch targets', async () => {
+    mockProductWithRecentEntry();
+    renderScanPage();
+    await scanAndWaitFor('Test Product Barcode');
+
+    expect(screen.getByLabelText(/Expiry Date/i)).toHaveClass('h-11');
+    expect(screen.getByRole('button', { name: /Save expiry item/i })).toHaveClass('min-h-11');
+    const deleteButton = await screen.findByRole('button', {
+      name: /Delete entry expiring/i,
+    });
+    expect(deleteButton).toHaveClass('min-h-11');
+    expect(deleteButton).not.toHaveClass('h-8');
+  });
+
+  it('announces success politely instead of as an alert', async () => {
+    mockUnknownProduct();
+    (apiService.post as jest.Mock).mockResolvedValue(mockProductBarcode);
+    renderScanPage();
+    await scanAndWaitFor(/No catalog match for barcode 1234567890/i);
+
+    for (const [label, value] of [
+      [/Product Name/i, 'Created Product'],
+      [/^SKU$/i, 'CREATED-1'],
+      [/Cost Price/i, '12.50'],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    userEvent.click(screen.getByRole('button', { name: /Create product/i }));
+
+    const success = await screen.findByText(/Product created. Add expiry details next./i);
+    expect(success.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
+    expect(success.closest('[role="alert"]')).toBeNull();
   });
 
   it('keeps unknown barcode lookup failures recoverable on the scan page', async () => {
@@ -677,7 +812,7 @@ describe('ScanPage Integration', () => {
 
     userEvent.click(screen.getByTestId('trigger-scan'));
 
-    expect(await screen.findByText('Recent Entries')).toBeInTheDocument();
+    expect(await screen.findByText('Recent entries')).toBeInTheDocument();
     userEvent.click(screen.getByRole('button', { name: /Delete entry/i }));
 
     expect(await screen.findByText('Delete expiry entry?')).toBeInTheDocument();
@@ -715,6 +850,28 @@ describe('ScanPage Integration', () => {
       // Should render HandheldScanner (which uses camera mode by default)
       expect(screen.getByTestId('handheld-scanner')).toBeInTheDocument();
       expect(screen.queryByTestId('mock-scanner')).not.toBeInTheDocument();
+    });
+
+    it('pads scan results away from the screen edge in handheld mode', async () => {
+      (apiService.get as jest.Mock).mockImplementation((url) => {
+        if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+        return Promise.reject(new Error('Network request failed'));
+      });
+
+      render(
+        <HandheldProvider>
+          <ScanPage token={mockToken} />
+        </HandheldProvider>,
+      );
+
+      await waitFor(() => expect(apiService.get).toHaveBeenCalledWith('/store-areas', mockToken));
+      userEvent.click(screen.getByTestId('handheld-scan-trigger'));
+
+      const alert = await screen.findByText(/Error: Network request failed/i);
+      expect(alert.closest('.px-3')).not.toBeNull();
+      expect(screen.getByRole('heading', { level: 1, name: /Inventory scan/i })).toHaveClass(
+        'sr-only',
+      );
     });
 
     it('auto-populates expiry date from GS1 barcode data in handheld mode', async () => {

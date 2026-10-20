@@ -4,18 +4,27 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import { Button } from '../components/ui/button';
 import { MarkdownMatrixSettings } from '../components/MarkdownMatrixSettings';
 
-function SettingsControlsFallback() {
+const WORKSPACE_FALLBACK = {
+  title: 'Workspace settings could not be loaded.',
+  body: 'Reload settings before changing team members or roles.',
+};
+
+const MARKDOWN_FALLBACK = {
+  title: 'Markdown matrices could not be loaded.',
+  body: 'Reload settings before changing markdown discounts.',
+};
+
+function SettingsControlsFallback({ title, body }: { title: string; body: string }) {
   return (
     <div
       role="alert"
       className="w-full rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-4 text-semantic-critical-muted-foreground"
     >
-      <h2 className="break-words text-lg font-semibold font-heading text-semantic-critical">
-        Workspace settings could not be loaded.
+      <h2 className="break-words text-lg font-semibold font-heading text-semantic-critical-muted-foreground">
+        {title}
       </h2>
       <p className="mt-2 max-w-prose break-words text-sm">
-        Reload settings before changing team members or roles. If this keeps happening, check your
-        connection and try again.
+        {body} If this keeps happening, check your connection and try again.
       </p>
       <Button
         type="button"
@@ -47,7 +56,7 @@ export function SettingsPage() {
         aria-label="Pharmacy workspace controls"
         className="clerk-responsive-surface settings-clerk-adapter min-w-0"
       >
-        <ErrorBoundary fallback={<SettingsControlsFallback />}>
+        <ErrorBoundary fallback={<SettingsControlsFallback {...WORKSPACE_FALLBACK} />}>
           <OrganizationProfile
             routing="path"
             path="/settings"
@@ -56,8 +65,8 @@ export function SettingsPage() {
         </ErrorBoundary>
       </section>
 
-      <section aria-label="Markdown matrix" className="mt-6 min-w-0">
-        <ErrorBoundary fallback={<SettingsControlsFallback />}>
+      <section aria-labelledby="markdown-matrices-heading" className="mt-6 min-w-0">
+        <ErrorBoundary fallback={<SettingsControlsFallback {...MARKDOWN_FALLBACK} />}>
           <MarkdownMatrixSettings />
         </ErrorBoundary>
       </section>
