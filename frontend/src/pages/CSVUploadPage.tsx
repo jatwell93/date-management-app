@@ -23,6 +23,11 @@ import * as XLSX from 'xlsx';
 import { downloadExpiryTemplate, downloadCatalogTemplate } from '../utils/uploadUtils';
 import { withOccurrenceKeys } from '../utils/listKeys';
 import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
+import { UploadResultPanel } from '../components/csv-upload/UploadResultPanel';
+import { toSafeReturnPath } from '../components/csv-upload/safeReturnUrl';
+import { LastUploadSummaryCard } from '../components/csv-upload/LastUploadSummaryCard';
+import { UploadProgress } from '../components/csv-upload/UploadProgress';
+import { FormatGuidelines } from '../components/csv-upload/FormatGuidelines';
 
 export const CSVUploadPage: React.FC<{
   token: string | null;
@@ -30,13 +35,10 @@ export const CSVUploadPage: React.FC<{
 }> = ({ token, defaultImportType = 'product-catalog' }) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const rawReturnUrl = searchParams.get('return');
-  // Only allow safe in-app paths: must start with a single '/' and must not contain a protocol or '//'
-  const returnUrl =
-    rawReturnUrl && /^\/[^/]/.test(rawReturnUrl) && !rawReturnUrl.includes('://')
-      ? rawReturnUrl
-      : null;
+  // Only same-origin in-app paths survive; see toSafeReturnPath for the rejected forms.
+  const returnUrl = toSafeReturnPath(searchParams.get('return'));
 
+  const headingId = 'csv-upload-heading';
   const fileInputId = 'csv-upload-file-input';
   const formatGuidelinesId = 'csv-upload-format-guidelines';
   const productCatalogPanelId = 'csv-upload-product-catalog-panel';
@@ -57,6 +59,7 @@ export const CSVUploadPage: React.FC<{
     lastUploadSummary,
     submitUpload,
     resetUploadState,
+    cancelUpload,
     downloadErrorReport,
   } = useUploadOrchestrator({ token, importType });
 
@@ -165,11 +168,11 @@ export const CSVUploadPage: React.FC<{
   const activePanelId = isExpiryImport ? expiryListPanelId : productCatalogPanelId;
 
   return (
-    <div className="mx-auto max-w-4xl px-3 sm:px-0">
-      <Card role="region" aria-label="CSV upload workspace" className="gap-0 overflow-hidden py-0">
+    <section aria-labelledby={headingId} className="mx-auto max-w-4xl">
+      <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="px-4 py-4 sm:px-6 sm:py-6">
           <CardTitle>
-            <h1 className="text-xl font-semibold font-heading sm:text-2xl">
+            <h1 id={headingId} className="text-xl font-semibold font-heading sm:text-2xl">
               {isExpiryImport
                 ? 'Expiry List Import (CSV/XLSX/XLS)'
                 : 'Product Catalog Upload (CSV/XLSX/XLS)'}
@@ -190,6 +193,7 @@ export const CSVUploadPage: React.FC<{
               aria-selected={importType === 'product-catalog'}
               aria-controls={importType === 'product-catalog' ? productCatalogPanelId : undefined}
               onClick={() => handleImportTypeChange('product-catalog')}
+              disabled={isUploading}
               variant={importType === 'product-catalog' ? 'default' : 'neutral'}
               className="min-h-11 shrink-0 px-3 py-2"
             >
@@ -202,6 +206,7 @@ export const CSVUploadPage: React.FC<{
               aria-selected={importType === 'expiry-list'}
               aria-controls={importType === 'expiry-list' ? expiryListPanelId : undefined}
               onClick={() => handleImportTypeChange('expiry-list')}
+              disabled={isUploading}
               variant={importType === 'expiry-list' ? 'default' : 'neutral'}
               className="min-h-11 shrink-0 px-3 py-2"
             >
@@ -222,117 +227,21 @@ export const CSVUploadPage: React.FC<{
                 : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode, and optional Retail Price) to update your product database.'}
             </p>
 
-            <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-              <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
-                Last uploaded file
-              </h3>
-              {lastUploadSummary ? (
-                <div className="grid gap-1 text-sm text-semantic-text-secondary sm:grid-cols-2">
-                  <p className="font-medium text-semantic-text-primary">
-                    {lastUploadSummary.fileName}
-                  </p>
-                  <p>
-                    {lastUploadSummary.importType === 'expiry-list'
-                      ? 'Expiry list'
-                      : 'Product catalog'}
-                  </p>
-                  <p>Completed</p>
-                  <p>
-                    {lastUploadSummary.importType === 'expiry-list'
-                      ? 'Rows imported'
-                      : 'Products imported'}
-                    : {lastUploadSummary.importedCount}
-                  </p>
-                  <p>
-                    {lastUploadSummary.importType === 'expiry-list'
-                      ? 'Rows merged'
-                      : 'Products updated'}
-                    : {lastUploadSummary.updatedCount}
-                  </p>
-                  <p>Rows rejected: {lastUploadSummary.rejectedCount}</p>
-                  <ReviewBrandMatchesAction
-                    importType={lastUploadSummary.importType}
-                    onReview={() => navigate('/supplier-credits?view=catalogue-review')}
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-semantic-text-secondary">No completed uploads yet.</p>
-              )}
-            </div>
+            <LastUploadSummaryCard
+              summary={lastUploadSummary}
+              onReviewBrandMatches={() => navigate('/supplier-credits?view=catalogue-review')}
+            />
 
-            {/* Column name and format guidelines */}
-            <div
+            <FormatGuidelines
               id={formatGuidelinesId}
               ref={formatGuidelinesRef}
-              className="mb-6 scroll-mt-4 p-4 bg-semantic-primary-muted rounded-md"
-            >
-              <h3 className="text-lg font-medium text-semantic-primary-muted-foreground mb-2">
-                Format Guidelines
-              </h3>
-              {isExpiryImport ? (
-                <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
-                  <li>
-                    Required columns:{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">SKU</code>,{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">Used-By Date</code>
-                  </li>
-                  <li>
-                    Optional columns:{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">Item Description</code>
-                    , <code className="bg-semantic-primary-muted px-1 rounded">Department</code>
-                  </li>
-                  <li>
-                    Accepted date formats:{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">dd/mm/yy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">dd/mm/yyyy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm/yy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm/yyyy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm-yy</code>,{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">mm-yyyy</code>
-                  </li>
-                  <li>
-                    Rejected examples:{' '}
-                    <code className="bg-semantic-critical-muted px-1 rounded">12/12</code>{' '}
-                    (ambiguous),{' '}
-                    <code className="bg-semantic-critical-muted px-1 rounded">Dec/2026</code> (month
-                    names unsupported)
-                  </li>
-                </ul>
-              ) : (
-                <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
-                  <li>
-                    Required columns: SKU, Name, Cost, Barcode{' '}
-                    <span className="text-xs">
-                      (<code className="bg-semantic-primary-muted px-1 rounded">SKU</code>,{' '}
-                      <code className="bg-semantic-primary-muted px-1 rounded">Name</code>,{' '}
-                      <code className="bg-semantic-primary-muted px-1 rounded">Cost</code>,{' '}
-                      <code className="bg-semantic-primary-muted px-1 rounded">Barcode</code>)
-                    </span>
-                  </li>
-                  <li>
-                    Optional column:{' '}
-                    <code className="bg-semantic-primary-muted px-1 rounded">Retail Price</code>{' '}
-                    (also accepts "Selling Price", "Sell Price", "RRP", "Sale Price") — enables
-                    retail-based markdown bands
-                  </li>
-                  <li>
-                    Column names are case-insensitive and can include common variations (e.g.,
-                    "Product Name", "Item Name", "Item Cost", "Unit Cost")
-                  </li>
-                  <li>
-                    Cost and Retail format: Use decimal numbers like{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">1.99</code> or{' '}
-                    <code className="bg-semantic-secondary-muted px-1 rounded">19.99</code> (no
-                    currency symbols)
-                  </li>
-                </ul>
-              )}
-            </div>
+              isExpiryImport={isExpiryImport}
+            />
 
             <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-              <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
+              <h2 className="text-lg font-medium text-semantic-text-primary mb-2">
                 Download Import Templates
-              </h3>
+              </h2>
               <p className="text-sm text-semantic-text-secondary mb-3">
                 {isExpiryImport
                   ? 'Templates include required fields, accepted date examples, and rejected-format guidance.'
@@ -388,6 +297,7 @@ export const CSVUploadPage: React.FC<{
                     type="file"
                     accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
                     onChange={handleFileChange}
+                    disabled={isUploading}
                     className="block h-auto min-h-11 w-full py-2 text-sm text-semantic-text-tertiary
                   cursor-pointer
                   file:mr-4 file:min-h-11 file:px-4 file:py-2
@@ -412,7 +322,7 @@ export const CSVUploadPage: React.FC<{
 
               {filePreview.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h3>
+                  <h2 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h2>
                   {/* Keyboard users need a focus target to scroll the wide preview table horizontally. */}
                   {/* eslint-disable jsx-a11y/no-noninteractive-tabindex */}
                   <div
@@ -427,7 +337,7 @@ export const CSVUploadPage: React.FC<{
                           {previewColumns.map(({ key, header }, index) => (
                             <TableHead
                               key={key}
-                              className="text-left text-xs font-medium text-semantic-text-secondary uppercase tracking-wider"
+                              className="text-left text-sm font-medium text-semantic-text-secondary"
                             >
                               {header || `Column ${index + 1}`}
                             </TableHead>
@@ -460,13 +370,13 @@ export const CSVUploadPage: React.FC<{
                   role="alert"
                   className="mb-4 p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-md"
                 >
-                  <h4 className="font-semibold text-semantic-warning-muted-foreground mb-2">
+                  <h3 className="font-semibold text-semantic-warning-muted-foreground mb-2">
                     Column validation warning
-                  </h4>
+                  </h3>
                   <div className="text-sm text-semantic-warning-muted-foreground whitespace-pre-line">
                     {formatColumnValidationError(columnValidation)}
                   </div>
-                  <p className="text-xs text-semantic-warning mt-2">
+                  <p className="text-sm text-semantic-warning-muted-foreground mt-2">
                     Upload will be blocked until column names are corrected.
                   </p>
                 </div>
@@ -491,42 +401,20 @@ export const CSVUploadPage: React.FC<{
                   role="status"
                   className="mb-4 p-4 bg-semantic-secondary-muted border border-semantic-secondary-muted rounded-md"
                 >
-                  <h4 className="font-semibold text-semantic-secondary-muted-foreground mb-1">
+                  <h3 className="font-semibold text-semantic-secondary-muted-foreground mb-1">
                     Large file detected
-                  </h4>
+                  </h3>
                   <p className="text-sm text-semantic-secondary-muted-foreground">
                     {rowEstimate.warningMessage}
                   </p>
-                  <p className="text-xs text-semantic-secondary mt-1">
+                  <p className="text-sm text-semantic-secondary-muted-foreground mt-1">
                     The upload will proceed normally, but please be patient during processing.
                   </p>
                 </div>
               )}
 
               {isUploading && (
-                <div className="mb-4" role="status" aria-label="Upload status" aria-live="polite">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-semantic-text-secondary">
-                      {progressMessage}
-                    </span>
-                    <span className="text-sm font-medium text-semantic-text-secondary">
-                      {uploadProgress}%
-                    </span>
-                  </div>
-                  <div
-                    role="progressbar"
-                    aria-label="Upload progress"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={uploadProgress}
-                    className="w-full overflow-hidden bg-semantic-surface-3 rounded-full h-2.5"
-                  >
-                    <div
-                      className="h-2.5 w-full origin-left rounded-full bg-semantic-primary transition-transform duration-300 ease-out"
-                      style={{ transform: `scaleX(${uploadProgress / 100})` }}
-                    ></div>
-                  </div>
-                </div>
+                <UploadProgress progress={uploadProgress} message={progressMessage} />
               )}
 
               <div className="grid gap-3 sm:flex sm:items-center sm:gap-4">
@@ -545,195 +433,41 @@ export const CSVUploadPage: React.FC<{
                 <Button
                   type="button"
                   onClick={handleReset}
+                  disabled={isUploading}
                   variant="neutral"
                   className="min-h-11 w-full px-4 py-2 sm:w-auto"
                 >
                   Reset
                 </Button>
+
+                {isUploading && (
+                  <Button
+                    type="button"
+                    onClick={cancelUpload}
+                    variant="outline"
+                    className="min-h-11 w-full px-4 py-2 sm:w-auto"
+                  >
+                    Cancel upload
+                  </Button>
+                )}
               </div>
             </form>
 
             {uploadResult && (
-              <div
-                role={uploadResult.success ? 'status' : 'alert'}
-                className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-semantic-success-muted text-semantic-success-muted-foreground' : 'bg-semantic-critical-muted text-semantic-critical-muted-foreground'}`}
-              >
-                <h3 className="font-semibold mb-2">
-                  {uploadResult.success ? 'Upload successful' : 'Upload failed'}
-                </h3>
-
-                <p>{uploadResult.message}</p>
-
-                {(uploadResult.importedCount !== undefined ||
-                  uploadResult.processedCount !== undefined) && (
-                  <div className="mt-2">
-                    {uploadResult.importedCount !== undefined && (
-                      <p>
-                        {isExpiryImport ? 'Rows imported' : 'Products imported'}:{' '}
-                        {uploadResult.importedCount}
-                      </p>
-                    )}
-                    {isExpiryImport ? (
-                      <p>
-                        Rows merged: {uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0}
-                      </p>
-                    ) : (
-                      <>
-                        {uploadResult.updatedCount !== undefined && (
-                          <p>Products updated: {uploadResult.updatedCount}</p>
-                        )}
-                        {uploadResult.unchangedCount !== undefined && (
-                          <p>Products unchanged: {uploadResult.unchangedCount}</p>
-                        )}
-                      </>
-                    )}
-                    {uploadResult.errorCount !== undefined && (
-                      <p>Errors: {uploadResult.errorCount}</p>
-                    )}
-                    {(uploadResult.rejectedCount !== undefined ||
-                      uploadResult.skippedCount !== undefined) && (
-                      <p>
-                        {isExpiryImport ? 'Rows rejected' : 'Rows skipped'}:{' '}
-                        {uploadResult.rejectedCount ?? uploadResult.skippedCount ?? 0}
-                      </p>
-                    )}
-                    {uploadResult.processedCount !== undefined && (
-                      <p>
-                        Rows processed: {uploadResult.processedCount}
-                        {uploadResult.totalCount !== undefined
-                          ? ` / ${uploadResult.totalCount}`
-                          : ''}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {uploadResult.errorReportUrl && (
-                  <button
-                    type="button"
-                    onClick={() => downloadErrorReport(uploadResult.errorReportUrl as string)}
-                    className="mt-3 text-sm font-medium underline text-semantic-link"
-                  >
-                    Download full error report
-                  </button>
-                )}
-
-                {isExpiryImport &&
-                  uploadResult.rejectedRows &&
-                  uploadResult.rejectedRows.length > 0 && (
-                    <div className="mt-3 p-3 bg-semantic-surface-1 rounded border border-semantic-critical-muted">
-                      <p className="text-sm font-medium mb-2">Rejected rows</p>
-                      <div className="space-y-2">
-                        {uploadResult.rejectedRows.map((row) => (
-                          <div key={`${row.rowNumber}-${row.reason}`} className="text-sm">
-                            <p className="font-medium">
-                              Row {row.rowNumber}: {row.reason}
-                            </p>
-                            <p className="text-xs opacity-90">
-                              SKU: {row.rawValues.sku || '-'} | Item Description:{' '}
-                              {row.rawValues.itemDescription || '-'} | Used-By Date:{' '}
-                              {row.rawValues.usedByDate || '-'}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Column Usage Summary */}
-                {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
-                  <div className="mt-3 p-3 bg-semantic-surface-1 rounded border border-semantic-success-muted">
-                    <p className="text-sm font-medium">Column summary</p>
-                    <p className="text-sm">
-                      Used: <span className="font-mono">{uploadResult.columnsUsed.join(', ')}</span>
-                    </p>
-                    {uploadResult.columnsIgnored !== undefined &&
-                      uploadResult.columnsIgnored > 0 && (
-                        <p className="text-sm text-semantic-success-muted-foreground">
-                          Ignored {uploadResult.columnsIgnored} extra column
-                          {uploadResult.columnsIgnored > 1 ? 's' : ''}
-                        </p>
-                      )}
-                  </div>
-                )}
-
-                {uploadResult.errors && uploadResult.errors.length > 0 && (
-                  <div className="mt-2">
-                    <h4 className="font-semibold mt-3">Error details:</h4>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                      {withOccurrenceKeys(uploadResult.errors, (e) => e).map(
-                        ({ item: error, key }) => (
-                          <li key={key} className="text-sm">
-                            {error.includes('column') && error.toLowerCase().includes('name') ? (
-                              <span>
-                                {error} -{' '}
-                                <button
-                                  type="button"
-                                  className="cursor-pointer text-semantic-primary hover:underline"
-                                  onClick={scrollToFormatGuidelines}
-                                  aria-controls={formatGuidelinesId}
-                                >
-                                  See format guidelines
-                                </button>
-                              </span>
-                            ) : error.includes('cost') && error.toLowerCase().includes('format') ? (
-                              <span>
-                                {error} -{' '}
-                                <button
-                                  type="button"
-                                  className="cursor-pointer text-semantic-primary hover:underline"
-                                  onClick={scrollToFormatGuidelines}
-                                  aria-controls={formatGuidelinesId}
-                                >
-                                  See cost format guidelines
-                                </button>
-                              </span>
-                            ) : (
-                              <span>{error}</span>
-                            )}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  </div>
-                )}
-
-                {uploadResult.success &&
-                  typeof returnUrl === 'string' &&
-                  returnUrl.startsWith('/') &&
-                  !returnUrl.startsWith('//') &&
-                  !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl) && (
-                    <div className="mt-6 pt-4 border-t border-semantic-success-muted">
-                      <Button
-                        type="button"
-                        onClick={() => navigate(returnUrl)}
-                        variant="success"
-                        className="w-full py-2 font-semibold"
-                      >
-                        Continue to next step
-                      </Button>
-                    </div>
-                  )}
-              </div>
+              <UploadResultPanel
+                uploadResult={uploadResult}
+                isExpiryImport={isExpiryImport}
+                returnUrl={returnUrl}
+                formatGuidelinesId={formatGuidelinesId}
+                onShowGuidelines={scrollToFormatGuidelines}
+                onDownloadErrorReport={downloadErrorReport}
+                onContinue={(url) => navigate(url)}
+              />
             )}
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
-};
-
-const ReviewBrandMatchesAction: React.FC<{
-  importType: UploadImportType;
-  onReview: () => void;
-}> = ({ importType, onReview }) => {
-  if (importType !== 'product-catalog') return null;
-  return (
-    <div className="mt-3 sm:col-span-2">
-      <Button type="button" onClick={onReview}>
-        Review brand matches
-      </Button>
-    </div>
+    </section>
   );
 };
 

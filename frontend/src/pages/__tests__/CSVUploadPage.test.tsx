@@ -166,7 +166,11 @@ describe('CSVUploadPage expiry import', () => {
     expect(progressbar).toHaveAttribute('aria-valuemin', '0');
     expect(progressbar).toHaveAttribute('aria-valuemax', '100');
     expect(progressbar).toHaveAttribute('aria-valuenow', '0');
-    expect(screen.getByRole('status', { name: 'Upload status' })).toHaveTextContent('Uploading');
+    expect(progressbar).toHaveAttribute('aria-valuetext', expect.stringMatching(/^0% - /));
+    const status = screen.getByRole('status', { name: 'Upload status' });
+    expect(status).toHaveTextContent('Uploading');
+    // The ticking percentage stays out of the live region so it is not re-announced.
+    expect(status).not.toHaveTextContent('%');
 
     resolveUpload(
       new Response(JSON.stringify({ key: 'uploads/org-123/products.csv' }), { status: 200 }),
@@ -184,10 +188,10 @@ describe('CSVUploadPage expiry import', () => {
 
     const activePanel = screen.getByRole('tabpanel', { name: 'Expiry List Import' });
 
-    expect(screen.getByRole('region', { name: 'CSV upload workspace' })).toHaveAttribute(
-      'data-slot',
-      'card',
-    );
+    const workspace = screen.getByRole('region', { name: 'Expiry List Import (CSV/XLSX/XLS)' });
+    expect(workspace.tagName).toBe('SECTION');
+    expect(workspace).not.toHaveClass('px-3');
+    expect(workspace.querySelector('[data-slot="card"]')).not.toBeNull();
     expect(activePanel).toContainElement(
       screen.getByRole('button', { name: 'Download CSV Template' }),
     );
@@ -746,5 +750,417 @@ describe('CSVUploadPage expiry import', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(3);
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(3);
+  });
+
+  describe('accessibility', () => {
+    it('uses a contiguous heading outline under the page h1', () => {
+      render(<CSVUploadPage token="test-token" />);
+
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Product Catalog Upload (CSV/XLSX/XLS)' }),
+      ).toBeInTheDocument();
+      ['Last uploaded file', 'Format Guidelines', 'Download Import Templates'].forEach((name) =>
+        expect(screen.getByRole('heading', { level: 2, name })).toBeInTheDocument(),
+      );
+      expect(screen.queryByRole('heading', { level: 4 })).not.toBeInTheDocument();
+    });
+
+    it('uses AA-contrast muted foreground tokens for validation and large-file notes', async () => {
+      (validateCSVColumns as jest.Mock).mockResolvedValue({
+        ...validColumns,
+        isValid: false,
+        missingColumns: ['usedByDate'],
+      });
+      (estimateRowCount as jest.Mock).mockReturnValue({
+        showWarning: true,
+        warningMessage: 'About 60,000 rows',
+      });
+
+      render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+      fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+        target: { files: [new File(['SKU\nSKU-1'], 'expiry.csv', { type: 'text/csv' })] },
+      });
+
+      expect(
+        await screen.findByText('Upload will be blocked until column names are corrected.'),
+      ).toHaveClass('text-sm', 'text-semantic-warning-muted-foreground');
+      expect(
+        screen.getByText(
+          'The upload will proceed normally, but please be patient during processing.',
+        ),
+      ).toHaveClass('text-sm', 'text-semantic-secondary-muted-foreground');
+    });
+
+    const uploadExpiryWithReturn = async (returnValue: string) => {
+      mockSearchParams.set('return', returnValue);
+      fetchMock
+        .mockResponseOnce(
+          JSON.stringify({
+            strategy: 'direct',
+            uploadUrl: '/api/upload/direct',
+            method: 'POST',
+            key: 'uploads/org-123/expiry.csv',
+          }),
+        )
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/expiry.csv', importedCount: 1 }));
+
+      render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+      fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+        target: {
+          files: [new File(['SKU,Used-By Date\nSKU-1,12/12/26'], 'expiry.csv')],
+        },
+      });
+      userEvent.click(screen.getByRole('button', { name: 'Upload Expiry List' }));
+      await screen.findByText('Upload successful');
+    };
+
+    afterEach(() => {
+      mockSearchParams.delete('return');
+    });
+
+    it('renders the continue action with the AA default button and a 44px target', async () => {
+      await uploadExpiryWithReturn('/expiry-tracking');
+
+      const continueButton = screen.getByRole('button', { name: 'Continue to next step' });
+      expect(continueButton).toHaveClass('min-h-11', 'bg-semantic-primary');
+      expect(continueButton.className).not.toMatch(/bg-semantic-success/);
+      await userEvent.click(continueButton);
+      expect(mockNavigate).toHaveBeenCalledWith('/expiry-tracking');
+    });
+
+    it.each(['/\\evil.com', '//evil.com', 'https://evil.com', '/\t/evil.com'])(
+      'never offers to continue to the unsafe return target %j',
+      async (returnValue) => {
+        await uploadExpiryWithReturn(returnValue);
+
+        expect(
+          screen.queryByRole('button', { name: 'Continue to next step' }),
+        ).not.toBeInTheDocument();
+        expect(mockNavigate).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('typography and touch targets', () => {
+    it('keeps preview headers at 14px sentence case and guideline chips neutral', async () => {
+      render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+
+      expect(screen.getByText('12/12').tagName).toBe('CODE');
+      expect(screen.getByText('12/12')).toHaveClass('bg-semantic-surface-1', 'border-hairline');
+      expect(screen.getByText('12/12').className).not.toMatch(/critical/);
+
+      fireEvent.change(screen.getByLabelText('CSV/XLSX/XLS File'), {
+        target: { files: [new File(['SKU,Used-By Date\nSKU-1,12/12/26'], 'expiry.csv')] },
+      });
+      const header = await screen.findByRole('columnheader', { name: 'SKU' });
+      expect(header).toHaveClass('text-sm');
+      expect(header).not.toHaveClass('text-xs', 'uppercase');
+    });
+
+    it('gives the brand-review action a 44px target', () => {
+      localStorage.setItem(
+        'csvUpload:lastUploadSummary',
+        JSON.stringify({
+          fileName: 'p.csv',
+          importType: 'product-catalog',
+          status: 'completed',
+          importedCount: 1,
+          updatedCount: 0,
+          rejectedCount: 0,
+          processedCount: 1,
+        }),
+      );
+      render(<CSVUploadPage token="test-token" />);
+      expect(screen.getByRole('button', { name: 'Review brand matches' })).toHaveClass('min-h-11');
+    });
+  });
+
+  describe('resilience', () => {
+    const directInitiate = JSON.stringify({
+      strategy: 'direct',
+      uploadUrl: '/api/upload/direct',
+      method: 'POST',
+      key: 'uploads/org-123/products.csv',
+    });
+
+    const selectProductFile = () => {
+      const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+      fireEvent.change(fileInput, {
+        target: {
+          files: [
+            new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+              type: 'text/csv',
+            }),
+          ],
+        },
+      });
+      return fileInput;
+    };
+
+    const submitProductUpload = () =>
+      userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    it('locks the tabs, file input and Reset while an upload is in flight', async () => {
+      let resolveUpload!: (response: Response) => void;
+      fetchMock.mockResponseOnce(directInitiate).mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveUpload = resolve;
+          }),
+      );
+
+      render(<CSVUploadPage token="test-token" />);
+      const fileInput = selectProductFile();
+      submitProductUpload();
+
+      await screen.findByRole('progressbar', { name: 'Upload progress' });
+      expect(fileInput).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+      expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Uploading' })).toBeDisabled();
+
+      fetchMock.mockResponseOnce(JSON.stringify({ status: 'complete', importedCount: 1 }));
+      resolveUpload(new Response(JSON.stringify({ key: 'uploads/org-123/products.csv' })));
+      expect(await screen.findByText('Upload successful')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    });
+
+    const statusCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/upload/status/')).length;
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const startStuckUpload = async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }));
+      // Every status poll after that fails with a swallowed, retryable error.
+      fetchMock.mockResponse('rate limited', { status: 429 });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(statusCalls()).toBe(1));
+    };
+
+    it('backs off between polling retries after a status error', async () => {
+      await startStuckUpload();
+
+      await wait(400);
+      expect(statusCalls()).toBe(1);
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+    });
+
+    it('stops polling when the user leaves the page mid-upload', async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }));
+      fetchMock.mockResponse('rate limited', { status: 429 });
+
+      const { unmount } = render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(statusCalls()).toBe(1));
+
+      unmount();
+
+      // The run wakes from its backoff after unmount and must not poll again.
+      await wait(1300);
+      expect(statusCalls()).toBe(1);
+    });
+
+    it('lets staff cancel a stuck upload, unlocking the form and stopping polling', async () => {
+      await startStuckUpload();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
+      // The direct upload was already queued server-side, so cancel says it keeps importing.
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Stopped waiting for this upload. The server already accepted the file',
+      );
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Cancel upload' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+      expect(screen.getByLabelText('CSV/XLSX/XLS File')).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' })).toBeEnabled();
+
+      // The superseded run wakes from its backoff and stops without polling again
+      // or overwriting the cancelled state.
+      await wait(1300);
+      expect(statusCalls()).toBe(1);
+      expect(screen.getByRole('alert')).toHaveTextContent('Stopped waiting for this upload');
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    });
+
+    const directUploadCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/upload/direct'));
+
+    const startPendingDirectUpload = async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockImplementationOnce(() => new Promise<Response>(() => {}));
+      const before = directUploadCalls().length;
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(directUploadCalls()).toHaveLength(before + 1));
+    };
+
+    it('aborts the in-flight upload but says the server may already have the file', async () => {
+      render(<CSVUploadPage token="test-token" />);
+      await startPendingDirectUpload();
+      const { signal } = directUploadCalls()[0][1] as RequestInit;
+      expect(signal?.aborted).toBe(false);
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
+      // The direct POST queues the import; once sent, the server may have queued it
+      // already, so cancel must not claim the server never accepted the file.
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Upload cancelled, but the server may already have received the file',
+      );
+      expect(screen.getByRole('alert')).not.toHaveTextContent(
+        'before the server accepted the file',
+      );
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('says the file was not accepted when cancelled before it was sent', async () => {
+      const initiateCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('/upload/initiate'));
+      fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(initiateCalls()).toHaveLength(1));
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Upload cancelled before the server accepted the file',
+      );
+      expect(directUploadCalls()).toHaveLength(0);
+    });
+
+    it('stops the cancelled upload progress timer so a new upload is not bumped by it', async () => {
+      render(<CSVUploadPage token="test-token" />);
+      await startPendingDirectUpload();
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+      await screen.findByText(
+        /Upload cancelled, but the server may already have received the file/,
+      );
+
+      await startPendingDirectUpload();
+      await wait(1600);
+
+      // Only the new run's timer ticks (+5 per 500 ms, so at most 15 here); a leaked timer
+      // from the cancelled run would double that.
+      const progress = Number(
+        screen.getByRole('progressbar', { name: 'Upload progress' }).getAttribute('aria-valuenow'),
+      );
+      expect(progress).toBeGreaterThan(0);
+      expect(progress).toBeLessThanOrEqual(15);
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+    });
+
+    it('explains a 409 from an import that is still running instead of retrying', async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ error: 'An active catalogue import already exists' }), {
+          status: 409,
+        });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Another catalogue import is still running for this store',
+      );
+      expect(directUploadCalls()).toHaveLength(1);
+    });
+
+    it('still renders when browser storage is blocked', async () => {
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('blocked', 'SecurityError');
+      });
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('blocked', 'SecurityError');
+      });
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }))
+        .mockResponseOnce(JSON.stringify({ status: 'complete', importedCount: 2 }));
+
+      render(<CSVUploadPage token="test-token" />);
+      expect(screen.getByText('No completed uploads yet.')).toBeInTheDocument();
+
+      selectProductFile();
+      submitProductUpload();
+
+      expect(await screen.findByText('Upload successful')).toBeInTheDocument();
+      expect(screen.getAllByText('Products imported: 2').length).toBeGreaterThan(0);
+    });
+
+    it('explains a non-JSON server response instead of showing a parser error', async () => {
+      fetchMock.mockResponseOnce('<html>Bad gateway</html>', { status: 200 });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('The server sent an unreadable response');
+      expect(alert).not.toHaveTextContent(/SyntaxError|Unexpected token/);
+    });
+
+    it('announces when the error report cannot be downloaded', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }))
+        .mockResponseOnce(
+          JSON.stringify({
+            status: 'completed_with_errors',
+            importedCount: 1,
+            errorCount: 1,
+            errorReportUrl: '/api/upload/errors/report-1',
+          }),
+        )
+        .mockResponseOnce('missing', { status: 404 });
+
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Download full error report' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'The error report could not be downloaded',
+      );
+    });
+
+    it('formats import counts with en-AU digit grouping', () => {
+      localStorage.setItem(
+        'csvUpload:lastUploadSummary',
+        JSON.stringify({
+          fileName: 'big.csv',
+          importType: 'product-catalog',
+          status: 'completed',
+          importedCount: 12345,
+          updatedCount: 1200,
+          rejectedCount: 0,
+          processedCount: 13545,
+        }),
+      );
+
+      render(<CSVUploadPage token="test-token" />);
+
+      expect(screen.getByText('Products imported: 12,345')).toBeInTheDocument();
+      expect(screen.getByText('Products updated: 1,200')).toBeInTheDocument();
+    });
   });
 });

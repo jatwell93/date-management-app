@@ -28,9 +28,16 @@ function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<'div'>) {
+type CardTitleElement = 'div' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
+type CardTitleProps = React.HTMLAttributes<HTMLElement> & {
+  /** Render the title as a heading so it joins the page outline. Defaults to `div`. */
+  as?: CardTitleElement;
+};
+
+function CardTitle({ className, as: Element = 'div', ...props }: CardTitleProps) {
   return (
-    <div
+    <Element
       data-slot="card-title"
       className={cn(
         'leading-none font-semibold font-heading text-semantic-text-primary',
@@ -41,11 +48,12 @@ function CardTitle({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+// 16px: the brand body-text floor. Pages that need the old 14px pass `text-sm`.
 function CardDescription({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="card-description"
-      className={cn('text-semantic-text-secondary text-sm', className)}
+      className={cn('text-semantic-text-secondary text-base', className)}
       {...props}
     />
   );

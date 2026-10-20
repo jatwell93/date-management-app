@@ -40,6 +40,27 @@ const daysFromNow = (n: number) => {
   return d.toISOString().split('T')[0];
 };
 
+// Local calendar date (not UTC) so 0/±1-day rows do not shift across the date line.
+const localDaysFromNow = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const pad = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const row = (inventoryId: number, days: number, productName: string) => ({
+  inventoryId,
+  expiryDate: localDaysFromNow(days),
+  status: 'Markdown 3',
+  productId: inventoryId,
+  productName,
+  sku: `SKU-${inventoryId}`,
+  costPrice: 10,
+  locationId: 2,
+  locationName: 'Front Counter',
+  subDepartment: null,
+});
+
 describe('DetailedExpiryReportPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,39 +103,82 @@ describe('DetailedExpiryReportPage', () => {
     expect(screen.getByRole('region', { name: /Expiry stock action summary/i })).toHaveTextContent(
       /Markdown action/i,
     );
-    expect(screen.getByRole('region', { name: /Primary shelf decision/i })).toHaveTextContent(
-      /Expired risk/i,
+    expect(screen.getByRole('region', { name: 'Expired stock to write off' })).toHaveTextContent(
+      'Expired — write off',
     );
 
     const allEntriesLink = screen.getByRole('link', { name: /Browse all expiry entries/i });
     expect(allEntriesLink).toHaveAttribute('href', '/expiry-entries');
     // The expired panel points to where write-offs happen instead of dead-ending.
-    expect(screen.getByRole('link', { name: 'Open expired items' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Write off on Expired items' })).toHaveAttribute(
       'href',
       '/expired-items',
     );
   });
 
-  it('labels the markdown price and words near-term expiry precisely', async () => {
-    // Local calendar date (not UTC) so 0/1-day rows do not shift across the date line.
-    const localDaysFromNow = (n: number) => {
-      const d = new Date();
-      d.setDate(d.getDate() + n);
-      const pad = (v: number) => String(v).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    };
-    const row = (inventoryId: number, days: number, productName: string) => ({
-      inventoryId,
-      expiryDate: localDaysFromNow(days),
-      status: 'Markdown 3',
-      productId: inventoryId,
-      productName,
-      sku: `SKU-${inventoryId}`,
-      costPrice: 10,
-      locationId: 2,
-      locationName: 'Front Counter',
-      subDepartment: null,
+  it('counts the expired tile from the Expired items worklist; today stays in Markdown 3', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        // The report endpoint only returns stock expiring today or later.
+        // A row past expiry in local time (server's UTC date is behind) is on the
+        // expired tile instead, so it is not counted as markdown work too.
+        return Promise.resolve([row(1, 0, 'Today Product'), row(2, -1, 'Late Product')]);
+      }
+      if (url === '/expired-items') {
+        // The worklist also returns day-0 and Markdown-status lines; the report
+        // already counts those, so only past-expiry (or undated) lines are expired.
+        return Promise.resolve([
+          { id: 11, expiryDate: localDaysFromNow(-3), status: 'Expired' },
+          { id: 12, expiryDate: null, status: 'Expired' },
+          { id: 1, expiryDate: localDaysFromNow(0), status: 'Expired' },
+          { id: 13, expiryDate: localDaysFromNow(40), status: 'Markdown 2' },
+        ]);
+      }
+      return Promise.resolve([]);
     });
+
+    renderPage('test-session-value');
+
+    const tile = await screen.findByRole('region', { name: 'Expired stock to write off' });
+    expect(tile).toHaveTextContent(/write off\s*2\s*These lines are past expiry/);
+    const link = screen.getByRole('link', { name: 'Write off on Expired items' });
+    expect(link).toHaveAttribute('href', '/expired-items');
+    expect(link).toHaveClass('min-h-11');
+
+    // 0 days: Markdown 3 work, counted under markdown action, not expired.
+    const markdown3 = screen.getByRole('region', { name: /Markdown 3 — urgent/i });
+    expect(markdown3).toHaveTextContent('Today Product');
+    expect(screen.getByText('Markdown action').nextElementSibling).toHaveTextContent(/^1$/);
+  });
+
+  it('still renders the report when the Expired items count cannot be loaded', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([row(1, 10, 'Report Product')]);
+      }
+      if (url === '/expired-items') {
+        return Promise.reject(new Error('Expired items unavailable'));
+      }
+      return Promise.resolve([]);
+    });
+
+    renderPage('test-session-value');
+
+    const tile = await screen.findByRole('region', { name: 'Expired stock to write off' });
+    expect(tile).toHaveTextContent('Count unavailable');
+    expect(screen.getByRole('link', { name: 'Write off on Expired items' })).toHaveAttribute(
+      'href',
+      '/expired-items',
+    );
+    expect(screen.getByRole('region', { name: /Markdown 3 — urgent/i })).toHaveTextContent(
+      'Report Product',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('labels the markdown price and words near-term expiry precisely', async () => {
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
