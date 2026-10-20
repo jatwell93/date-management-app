@@ -50,11 +50,15 @@ For non-trivial changes, recall prior context: `node scripts/mem-recall.js "<key
 
 Agents are trusted to use judgment; there's no rigid state machine. The through-line is:
 
-**Understand → (propose if non-trivial) → branch → build with tests → verify → get approval → commit/PR.**
+**Understand → (propose if non-trivial) → branch → build with tests → verify → push + PR → babysit → user merges.**
 
 - **Small/obvious fixes:** just make the change on a branch, add/adjust tests, run the gate (§6), and summarise.
 - **Non-trivial or spec-affecting work:** open an OpenSpec proposal first (§5), get it approved, then implement.
-- **Human gate before pushing:** present a short summary (what changed, tests run + result, anything risky). Push/PR only after the user approves.
+- **Push and open the PR yourself** once the gate passes on a `feature/*`, `fix/*` or `chore/*` branch. No approval needed. Put the summary (what changed, tests run + result, anything risky) in the PR body.
+- **Then run the `babysit-pr` skill** until CI is green and bot reviews are handled. Never ask the user to paste bot comments or CI logs.
+- **The human gate is the merge.** Do not merge, approve or enable auto-merge unless the change's `proposal.md` says `merge: auto` (§5). Never push to `main`.
+- **After a merge:** `node scripts/cleanup-merged.js` deletes merged branches and worktrees and moves you onto an up-to-date `main`.
+- Write scratch files with the Write tool, not `cat > "$VAR/file"`: `dcg` blocks shell redirects to variable paths.
 
 Commits use conventional format, e.g. `feat(workers): add markdown resolver`. Include a `Refs: <change-id>` line when tied to an OpenSpec change.
 
@@ -74,6 +78,9 @@ openspec archive <change-id> --yes      # archive after all tasks complete + mer
 ```
 
 Flow: `list` → `proposal` → edit `proposal.md` + `tasks.md` → `validate --strict` → implement tasks sequentially (checking `[x]`) → `archive`. Don't archive with incomplete tasks; don't skip `--strict` validation.
+
+- **Handover:** each active change keeps `openspec/changes/<id>/handover.md` (state, next task, open PRs, decisions waiting on the user). Update it with the `handover` skill when a task merges or a session ends; start the next session with `/resume <id>`. It replaces pasted handover prompts.
+- **Autonomy:** `proposal.md` may carry an `## Autonomy` section with `merge: auto` (agent may run `gh pr merge --auto --squash` once `babysit-pr` is clean) or `merge: human` (default). Migrations, billing, auth and anything touching production data stay `merge: human`.
 
 ---
 
@@ -135,33 +142,7 @@ npm run mem:rebuild                                   # rebuild local index afte
 - **`memory.jsonl` is committed to a public repository.** Never log secrets, customer or organization data, production hostnames, or unfixed-vulnerability detail. `scripts/mem-log.js` rejects obvious secret patterns (`scripts/mem-redact.js`); it cannot judge prose, so you must.
 - Claude's per-machine auto-memory is a private cache, not the shared record. A lesson that matters on another machine or tool belongs here.
 
-### Search & Refactor: When to Use What
+### Search & Refactor
 
-Pick the tool by the _question_, not by habit. For everyday "where is this string/symbol" lookups, `ripgrep` is the default and the fastest — reach for `mgrep` or `ast-grep` only when the question is genuinely semantic or structural.
-
-| Scenario                                                                              | Tool                               | Why                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "Find all uses of `verifyToken`" / "which files import `@clerk/backend`"              | `ripgrep` (the built-in Grep tool) | **Default choice — literal / symbol search.** Sub-second; honours `.gitignore` so vendored deps are skipped automatically. Prefer this for confirming whether/where something is used.                                                            |
-| "Find files with a `console.log`"                                                     | `ripgrep`                          | **Simple pattern matching:** fast, literal, line-by-line regex.                                                                                                                                                                                   |
-| "How is markdown-matrix pricing implemented?"                                         | `mgrep`                            | **Semantic search:** finds code by intent when you don't know the exact identifier. Index-backed and returns _ranked_ relevance (top matches), not every literal hit — trades a few seconds of query time for not having to know the search term. |
-| "Where does auth/session handling live?"                                              | `mgrep`                            | **Conceptual search:** locate architectural components with a natural-language query.                                                                                                                                                             |
-| "Rename `unwrap()` → `expect()` everywhere" / "change every `useState(x)` call shape" | `ast-grep`                         | **Structural refactor:** understands the AST for safe, syntax-aware edits. **Always scope it to source paths** (e.g. `frontend/src workers/src shared`) — an unscoped run parses every file in the tree, including vendored deps, and will crawl. |
-
-**Rule of thumb:** default to `ripgrep`; use `mgrep` when you don't know the exact term; use `ast-grep` only for structural rewrites, and always give it explicit source paths.
-
-## Serena Tool Usage
-
-This project uses Serena for semantic code operations. Serena's symbolic editors prevent broken edits by understanding the AST, so they are the **preferred way to edit code**.
-
-**Editing code (use Serena):**
-
-- `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, or `replace_content`
-- Before editing: 1) `get_symbols_overview`, 2) `find_symbol` with `include_body=true`, 3) apply the edit with a Serena symbol tool.
-
-**When Serena is unavailable** (the MCP server timed out, or you are Devin, Codex or another agent without it): do not stall. Edit with the native `Edit`/`Write` tool, read the whole symbol first, and re-run the diff-scoped gate afterwards, since nothing has checked the edit structurally. The Serena hooks live in each machine's untracked `.claude/settings.local.json`, so a fresh clone does not have them.
-
-**Reading and searching (basic tools are fine):**
-
-- `read`, `grep`/ripgrep, and `find_file_by_name` are acceptable for exploration, quick lookups, reading a few lines, or finding where a string/symbol is used. These are often faster and simpler than the symbolic equivalents for small reads.
-- Reach for Serena's `find_symbol` / `get_symbols_overview` when you need the full body of a named symbol or a structural overview of a file — not for every small read.
-- Use `mgrep` for semantic search when you don't know the exact term.
+- Search with `ripgrep` (the Grep tool). Edit with the native `Edit`/`Write` tools.
+- Structural rewrites: `ast-grep`, always scoped to source paths (`frontend/src workers/src shared`); an unscoped run parses vendored deps and crawls.
