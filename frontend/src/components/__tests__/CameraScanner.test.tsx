@@ -48,6 +48,53 @@ describe('CameraScanner', () => {
     );
   });
 
+  it('keeps the camera running when the parent re-renders with new callbacks', () => {
+    (Quagga.init as jest.Mock).mockImplementation((config, callback) => {
+      callback(null);
+    });
+    const firstOnDetected = vi.fn();
+    const secondOnDetected = vi.fn();
+
+    const { rerender } = render(
+      <CameraScanner onDetected={firstOnDetected} onScannerReady={() => {}} continuous />,
+    );
+    rerender(<CameraScanner onDetected={secondOnDetected} onScannerReady={() => {}} continuous />);
+
+    expect(Quagga.init).toHaveBeenCalledTimes(1);
+    expect(Quagga.stop).not.toHaveBeenCalled();
+
+    const detectedHandler = (Quagga.onDetected as jest.Mock).mock.calls[0][0];
+    act(() => {
+      detectedHandler({ codeResult: { code: '9300000000001' } });
+    });
+
+    expect(firstOnDetected).not.toHaveBeenCalled();
+    expect(secondOnDetected).toHaveBeenCalledWith('9300000000001');
+  });
+
+  it('does not re-initialise the camera after unmount when a reset is pending', () => {
+    vi.useFakeTimers();
+    (Quagga.init as jest.Mock).mockImplementation((config, callback) => {
+      callback(null);
+    });
+
+    const onScannerReset = vi.fn();
+    const { unmount } = render(
+      <CameraScanner onDetected={mockOnDetected} onScannerReset={onScannerReset} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Reset scanner/i }));
+    vi.clearAllMocks();
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(Quagga.init).not.toHaveBeenCalled();
+    expect(onScannerReset).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('starts scanner when initialization succeeds', () => {
     // Mock init to call the callback with no error
     (Quagga.init as jest.Mock).mockImplementation((config, callback) => {
@@ -71,6 +118,7 @@ describe('CameraScanner', () => {
     expect(Quagga.start).not.toHaveBeenCalled();
     // Expect error message
     expect(screen.getByText(/Camera Error/i)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/Allow camera permission/i);
   });
 
   it('calls onDetected when code is scanned', () => {
