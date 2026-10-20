@@ -66,6 +66,18 @@ describe('useHardwareScan', () => {
     expect(onScan).not.toHaveBeenCalled();
   });
 
+  it('should NOT treat a single typed key followed by Enter as a scan', () => {
+    const onScan = vi.fn();
+    renderHook(() => useHardwareScan(onScan));
+
+    // A one-digit cost typed into a form field, then Enter to submit it.
+    dispatchKey('5');
+    mockNow += 5;
+    dispatchKey('Enter');
+
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
   it('should accumulate characters correctly across Enter boundary', () => {
     const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));

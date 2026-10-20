@@ -86,12 +86,13 @@ export function useHardwareScan(
       // Ignore non-printable keys (Shift, Control, Alt, etc.)
       // Only accumulate single characters that form a barcode
       if (key.length === 1) {
-        // Timing check: first keystroke or within threshold = hardware scan
-        if (accumulatorRef.current.length === 0 || timeSinceLastKeystroke <= timingThreshold) {
+        // Timing check: a keystroke within threshold of the previous one = hardware scan
+        if (accumulatorRef.current.length > 0 && timeSinceLastKeystroke <= timingThreshold) {
           accumulatorRef.current += key;
           isHardwareScanRef.current = true;
         } else {
-          // Gap > threshold = human typing, reset accumulator
+          // First keystroke, or gap > threshold = human typing so far. A lone key is not
+          // a scan: a typed "5" then Enter in a form field must submit the form.
           accumulatorRef.current = key;
           isHardwareScanRef.current = false;
         }
