@@ -9,8 +9,8 @@
 import { renderHook } from '@testing-library/react';
 import { useHardwareScan } from '../useHardwareScan';
 
-function dispatchKey(key: string) {
-  document.dispatchEvent(new KeyboardEvent('keydown', { key }));
+function dispatchKey(key: string, repeat = false) {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key, repeat }));
 }
 
 describe('useHardwareScan', () => {
@@ -93,12 +93,41 @@ describe('useHardwareScan', () => {
     expect(onScan).toHaveBeenCalledWith('1234');
   });
 
+  it('should NOT treat a short key-rollover burst and Enter as a scan', () => {
+    const onScan = vi.fn();
+    renderHook(() => useHardwareScan(onScan));
+
+    // Fast typing can roll two or three keys under the threshold, e.g. a cost of "12".
+    dispatchKey('1');
+    mockNow += 20;
+    dispatchKey('2');
+    mockNow += 100;
+    dispatchKey('Enter');
+
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
+  it('should NOT treat a held, auto-repeating key and Enter as a scan', () => {
+    const onScan = vi.fn();
+    renderHook(() => useHardwareScan(onScan));
+
+    dispatchKey('0');
+    mockNow += 30;
+    for (let i = 0; i < 6; i += 1) {
+      dispatchKey('0', true);
+      mockNow += 30;
+    }
+    dispatchKey('Enter');
+
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
   it('should NOT submit a fast burst when Enter comes long after it', () => {
     const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
     // Key auto-repeat or quick typing looks like a scan burst...
-    ['7', '7', '7'].forEach((key) => {
+    ['7', '7', '7', '7'].forEach((key) => {
       dispatchKey(key);
       mockNow += 5;
     });
@@ -113,15 +142,15 @@ describe('useHardwareScan', () => {
     const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
-    // First scan: ABC
-    ['A', 'B', 'C'].forEach((key) => {
+    // First scan: ABCD
+    ['A', 'B', 'C', 'D'].forEach((key) => {
       dispatchKey(key);
       mockNow += 5;
     });
     mockNow += 5;
     dispatchKey('Enter');
 
-    expect(onScan).toHaveBeenCalledWith('ABC');
+    expect(onScan).toHaveBeenCalledWith('ABCD');
     expect(onScan).toHaveBeenCalledTimes(1);
   });
 
@@ -157,7 +186,7 @@ describe('useHardwareScan', () => {
     renderHook(() => useHardwareScan(onScan, { timingThreshold: 200 }));
 
     // Rapid keystroke scan
-    ['1', '2', '3'].forEach((key) => {
+    ['1', '2', '3', '4'].forEach((key) => {
       dispatchKey(key);
       mockNow += 5;
     });
@@ -172,6 +201,6 @@ describe('useHardwareScan', () => {
 
     // onScan should only be called once
     expect(onScan).toHaveBeenCalledTimes(1);
-    expect(onScan).toHaveBeenCalledWith('123');
+    expect(onScan).toHaveBeenCalledWith('1234');
   });
 });

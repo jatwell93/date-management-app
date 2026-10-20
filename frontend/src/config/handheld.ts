@@ -22,6 +22,10 @@ export const SCREEN_THRESHOLDS = {
   MIN_RATIO: 0.5, // width/height ratio for portrait orientation
 } as const;
 
+// Shortest keystroke burst accepted as a hardware scan. Key rollover while typing can
+// produce 2-3 keys under the timing threshold; a scanned SKU or barcode is longer.
+export const MIN_HARDWARE_SCAN_LENGTH = 4;
+
 // Timing and performance constants
 export const TIMING_CONSTANTS = {
   // Keyboard wedge detection - multiple keystrokes within this window = hardware scan

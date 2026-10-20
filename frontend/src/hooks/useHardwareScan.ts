@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { triggerHaptic } from '../lib/haptic';
-import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import config constants (fixes 17.9)
+import { MIN_HARDWARE_SCAN_LENGTH, TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import config constants (fixes 17.9)
 
 interface UseHardwareScanOptions {
   timingThreshold?: number; // ms - max time between keystrokes for hardware scan detection
@@ -77,7 +77,10 @@ export function useHardwareScan(
         }
 
         // If we accumulated characters in hardware scan mode, submit the barcode
-        if (accumulatorRef.current.length > 0 && isHardwareScanRef.current) {
+        if (
+          accumulatorRef.current.length >= MIN_HARDWARE_SCAN_LENGTH &&
+          isHardwareScanRef.current
+        ) {
           const barcode = accumulatorRef.current;
           accumulatorRef.current = '';
           isHardwareScanRef.current = false;
@@ -90,6 +93,18 @@ export function useHardwareScan(
           onScan(barcode);
         }
 
+        // Anything shorter is a typed fragment: drop it so this Enter only submits the form.
+        accumulatorRef.current = '';
+        isHardwareScanRef.current = false;
+        return;
+      }
+
+      // A held key auto-repeats faster than the timing threshold. Scanners never send
+      // repeats, so a repeat ends any burst in progress instead of extending it.
+      if (event.repeat) {
+        accumulatorRef.current = '';
+        isHardwareScanRef.current = false;
+        lastKeystrokeTimeRef.current = now;
         return;
       }
 
