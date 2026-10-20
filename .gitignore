@@ -81,6 +81,9 @@ skills/
 !.claude/skills/babysit-pr/
 !.claude/skills/handover/
 !.claude/skills/resume/
+# Agent worktrees (Agent isolation: "worktree"). Untracked, they would make the
+# main checkout look dirty to scripts/cleanup-merged.js on a fresh clone.
+.claude/worktrees/
 instructions/
 agents/
 go-to-market-docs/
