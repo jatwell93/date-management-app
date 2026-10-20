@@ -20,8 +20,8 @@ The division of labour is fixed:
 | Who | Does |
 | --- | --- |
 | **Devin** | Writes code inside the repo. Nothing else. |
-| **You** | Task brief, quality gate, diff review, fix rounds, task ticking, local commit. |
-| **User** | Push, PR, merge, anything touching an external service. |
+| **You** | Task brief, quality gate, diff review, fix rounds, task ticking, commit, push + PR, `babysit-pr`. |
+| **User** | Merge, anything touching an external service other than GitHub. |
 
 ## Non-negotiables
 
@@ -46,7 +46,8 @@ The division of labour is fixed:
    ended", never as "work is good".
 4. **Devin never touches the outside world.** No `git push`, `gh`, `doppler`, `wrangler`,
    `npx prisma migrate deploy`, no deploys. State this in every brief.
-5. **Never push, open a PR, or merge.** Stop and report. That gate is the user's.
+5. **Devin never pushes, opens a PR, or merges.** After your review passes, *you* push
+   and open the PR, then run `babysit-pr` (AGENTS.md §4). The merge is the user's.
 
 ## Choosing the unit of work
 
@@ -199,8 +200,8 @@ Once the gate passes and the diff survives review:
 
    Refs: <change-id>
    ```
-   Local commits are reversible and make each group independently reviewable.
-   **Do not push and do not open a PR.**
+   One commit per group keeps each group independently reviewable.
+   Then push, open the PR, and run `babysit-pr` (AGENTS.md §4). Do not merge.
 4. Log to project memory if a durable lesson emerged:
    `node scripts/mem-log.js PATTERN "<title>" "<message>"`
 5. Report to the user:
