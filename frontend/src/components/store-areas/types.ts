@@ -44,6 +44,16 @@ export interface FloorProgress {
 
 export type InvalidField = 'addAreaName' | 'editAreaName' | null;
 
+export const AREA_NAME_REQUIRED_MESSAGE = 'Enter an area name.';
+
+/** Links an input to its inline error only while the error is shown. */
+export function fieldErrorProps(errorId: string, invalid: boolean) {
+  return {
+    'aria-invalid': invalid,
+    'aria-describedby': invalid ? errorId : undefined,
+  } as const;
+}
+
 export const AREA_NAME_MAX_LENGTH = 100;
 export const SUB_DEPARTMENT_MAX_LENGTH = 50;
 

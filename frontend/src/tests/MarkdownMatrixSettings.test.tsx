@@ -37,6 +37,137 @@ describe('MarkdownMatrixSettings', () => {
     mockGetToken.mockResolvedValue('token');
   });
 
+  const renderLoaded = async (hasRetailData = false) => {
+    mockedGet.mockResolvedValue({ matrices, matrix: DEFAULT_MARKDOWN_MATRIX, hasRetailData });
+    render(<MarkdownMatrixSettings />);
+    await waitFor(() => expect(screen.getByText('No supplier credit')).toBeInTheDocument());
+  };
+
+  it('announces the loading state', () => {
+    mockedGet.mockReturnValue(new Promise(() => undefined));
+    render(<MarkdownMatrixSettings />);
+    expect(screen.getByRole('status')).toHaveTextContent('Loading markdown settings');
+  });
+
+  it('exposes a level-2 heading and a visible focus ring on basis toggles', async () => {
+    await renderLoaded(true);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Markdown matrices' })).toHaveAttribute(
+      'id',
+      'markdown-matrices-heading',
+    );
+    screen
+      .getAllByRole('button', { name: /^(Cost|Retail)$/ })
+      .forEach((btn) => expect(btn).toHaveClass('focus-visible:ring-[3px]'));
+    // Selected basis uses the teal semantic primary, not the navy shadcn primary.
+    const [cost] = screen.getAllByRole('button', { name: 'Cost', pressed: true });
+    expect(cost).toHaveClass('bg-semantic-primary', 'text-semantic-primary-foreground');
+  });
+
+  it('explains the disabled retail basis to assistive tech', async () => {
+    await renderLoaded(false);
+
+    const [retail] = screen.getAllByRole('button', { name: /^Retail$/ });
+    expect(retail).toHaveAccessibleDescription(/retail \(or selling price\) column/i);
+  });
+
+  it('adapts inputs and the save action for phones and scanners', async () => {
+    await renderLoaded();
+
+    expect(screen.getByLabelText('No supplier credit Markdown 1 Discount %')).toHaveAttribute(
+      'inputmode',
+      'decimal',
+    );
+    expect(screen.getByRole('button', { name: /Save markdown matrices/i })).toHaveClass(
+      'w-full',
+      'sm:w-auto',
+    );
+  });
+
+  it.each([
+    ['empty', ''],
+    ['whitespace-only', '   '],
+  ])('rejects an %s discount instead of saving 0', async (_label, raw) => {
+    await renderLoaded();
+
+    const band2 = screen.getByLabelText('No supplier credit Markdown 2 Discount %');
+    const band1 = screen.getByLabelText('No supplier credit Markdown 1 Discount %');
+    fireEvent.change(band1, { target: { value: '7' } });
+    fireEvent.change(band2, { target: { value: raw } });
+
+    expect(band2).toHaveAttribute('aria-invalid', 'true');
+    expect(band2).toHaveAccessibleDescription('Enter a discount from 0 to 100.');
+    expect(band1).not.toHaveAttribute('aria-invalid');
+    expect(band1).toHaveValue(7);
+    const saveButton = screen.getByRole('button', { name: /Save markdown matrices/i });
+    expect(saveButton).toBeDisabled();
+    fireEvent.click(saveButton);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(mockedPut).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicitly typed 0 valid and saves it', async () => {
+    await renderLoaded();
+    mockedPut.mockResolvedValue({
+      matrices,
+      matrix: DEFAULT_MARKDOWN_MATRIX,
+      hasRetailData: false,
+    });
+
+    const band1 = screen.getByLabelText('Full supplier credit Markdown 1 Discount %');
+    fireEvent.change(band1, { target: { value: '0' } });
+
+    expect(band1).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Save markdown matrices/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save and reprice/i }));
+
+    await waitFor(() => expect(mockedPut).toHaveBeenCalledOnce());
+    const sent = mockedPut.mock.calls[0][1] as { matrices: MarkdownMatrixSet };
+    expect(sent.matrices.FULL_CREDIT.band1.percentage).toBe(0);
+  });
+
+  it('ties the validation error to the invalid scope inputs', async () => {
+    await renderLoaded();
+
+    const band3 = screen.getByLabelText('No supplier credit Markdown 3 Discount %');
+    expect(band3).not.toHaveAttribute('aria-invalid');
+    fireEvent.change(band3, { target: { value: '10' } });
+
+    expect(band3).toHaveAttribute('aria-invalid', 'true');
+    expect(band3).toHaveAccessibleDescription(/must not decrease/i);
+    expect(screen.getByLabelText('Full supplier credit Markdown 3 Discount %')).not.toHaveAttribute(
+      'aria-invalid',
+    );
+  });
+
+  const saveWithError = async (cause: Error) => {
+    await renderLoaded();
+    mockedPut.mockRejectedValue(cause);
+    const input = screen.getByLabelText('Full supplier credit Markdown 1 Discount %');
+    fireEvent.change(input, { target: { value: '19' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save markdown matrices/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save and reprice/i }));
+    return { input, alert: await screen.findByRole('alert') };
+  };
+
+  it.each([
+    ['a non-JSON HTTP error', new Error('HTTP error! status: 502')],
+    ['a network failure', new TypeError('Failed to fetch')],
+  ])('replaces %s with friendly copy and keeps the edit', async (_label, cause) => {
+    const { input, alert } = await saveWithError(cause);
+
+    expect(alert).toHaveTextContent(
+      'We could not save your markdown settings. Check your connection and try again.',
+    );
+    expect(input).toHaveValue(19);
+  });
+
+  it('shows the server-provided save error message', async () => {
+    const { alert } = await saveWithError(new Error('Markdown percentages must be whole numbers'));
+    expect(alert).toHaveTextContent('Markdown percentages must be whole numbers');
+  });
+
   it('loads and renders the org matrix with a disabled retail option when no retail data', async () => {
     mockedGet.mockResolvedValue({
       matrices,
@@ -76,7 +207,7 @@ describe('MarkdownMatrixSettings', () => {
     await waitFor(() => expect(screen.getByText('No supplier credit')).toBeInTheDocument());
 
     // Make band 3 (deepest) less than band 2 -> non-monotonic.
-    fireEvent.change(screen.getByLabelText('No supplier credit Markdown 3 discount %'), {
+    fireEvent.change(screen.getByLabelText('No supplier credit Markdown 3 Discount %'), {
       target: { value: '10' },
     });
 
@@ -104,7 +235,7 @@ describe('MarkdownMatrixSettings', () => {
     const saveButton = screen.getByRole('button', { name: /Save markdown matrices/i });
     expect(saveButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('Full supplier credit Markdown 1 discount %'), {
+    fireEvent.change(screen.getByLabelText('Full supplier credit Markdown 1 Discount %'), {
       target: { value: '19' },
     });
     expect(saveButton).toBeEnabled();
@@ -131,6 +262,8 @@ describe('MarkdownMatrixSettings', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(/Markdown matrices saved/i),
     );
+    // AA contrast: the success text uses the dark muted-foreground green, not #10B981.
+    expect(screen.getByRole('status')).toHaveClass('text-semantic-success-muted-foreground');
     expect(saveButton).toBeDisabled();
   });
 });
