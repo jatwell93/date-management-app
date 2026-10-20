@@ -22,10 +22,19 @@ export const SCREEN_THRESHOLDS = {
   MIN_RATIO: 0.5, // width/height ratio for portrait orientation
 } as const;
 
+// Shortest keystroke burst accepted as a hardware scan. Key rollover while typing can
+// produce 2-3 keys under the timing threshold; a scanned SKU or barcode is longer.
+export const MIN_HARDWARE_SCAN_LENGTH = 4;
+
 // Timing and performance constants
 export const TIMING_CONSTANTS = {
   // Keyboard wedge detection - multiple keystrokes within this window = hardware scan
   KEYBOARD_WEDGE_THRESHOLD_MS: 50,
+
+  // Scan terminator - the trailing Enter must follow the last character within this window.
+  // Wider than the keystroke gap: scanners (e.g. Honeywell, CipherLab) can add a 50-100 ms
+  // suffix delay before Enter, while a user's own Enter after a typed burst comes later.
+  SCAN_TERMINATOR_WINDOW_MS: 500,
 
   // Duplicate scan prevention - ignore same barcode within this window
   DEDUP_WINDOW_MS: 2000,
