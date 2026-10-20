@@ -14,6 +14,7 @@ import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import config cons
 interface UseHardwareScanOptions {
   timingThreshold?: number; // ms - max time between keystrokes for hardware scan detection
   debounceMs?: number; // ms - debounce time for Enter key to prevent double-submit
+  terminatorWindowMs?: number; // ms - max time from the last character to the trailing Enter
 }
 
 /**
@@ -37,7 +38,11 @@ export function useHardwareScan(
   onScan: (barcode: string) => void,
   options: UseHardwareScanOptions = {},
 ): void {
-  const { timingThreshold = 50, debounceMs = 100 } = options;
+  const {
+    timingThreshold = 50,
+    debounceMs = 100,
+    terminatorWindowMs = TIMING_CONSTANTS.SCAN_TERMINATOR_WINDOW_MS,
+  } = options;
 
   // Refs to maintain state across renders
   const accumulatorRef = useRef<string>('');
@@ -62,9 +67,10 @@ export function useHardwareScan(
 
         lastEnterTimeRef.current = now;
 
-        // A scanner sends Enter straight after its last character. A late Enter belongs to
-        // the user, so a fast burst typed earlier (key repeat, quick typing) is dropped.
-        if (now - lastKeystrokeTimeRef.current > timingThreshold) {
+        // A scanner sends Enter soon after its last character (allowing for a configured
+        // suffix delay). A late Enter belongs to the user, so a fast burst typed earlier
+        // (key repeat, quick typing) is dropped.
+        if (now - lastKeystrokeTimeRef.current > terminatorWindowMs) {
           accumulatorRef.current = '';
           isHardwareScanRef.current = false;
           return;
@@ -106,7 +112,7 @@ export function useHardwareScan(
         }
       }
     },
-    [timingThreshold, debounceMs, onScan],
+    [timingThreshold, debounceMs, terminatorWindowMs, onScan],
   );
 
   // Attach keydown listener on mount, remove on unmount

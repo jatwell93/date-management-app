@@ -27,6 +27,11 @@ export const TIMING_CONSTANTS = {
   // Keyboard wedge detection - multiple keystrokes within this window = hardware scan
   KEYBOARD_WEDGE_THRESHOLD_MS: 50,
 
+  // Scan terminator - the trailing Enter must follow the last character within this window.
+  // Wider than the keystroke gap: scanners (e.g. Honeywell, CipherLab) can add a 50-100 ms
+  // suffix delay before Enter, while a user's own Enter after a typed burst comes later.
+  SCAN_TERMINATOR_WINDOW_MS: 500,
+
   // Duplicate scan prevention - ignore same barcode within this window
   DEDUP_WINDOW_MS: 2000,
 

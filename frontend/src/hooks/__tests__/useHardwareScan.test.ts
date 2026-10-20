@@ -78,6 +78,21 @@ describe('useHardwareScan', () => {
     expect(onScan).not.toHaveBeenCalled();
   });
 
+  it('should accept a scan whose Enter follows a scanner suffix delay', () => {
+    const onScan = vi.fn();
+    renderHook(() => useHardwareScan(onScan));
+
+    ['1', '2', '3', '4'].forEach((key) => {
+      dispatchKey(key);
+      mockNow += 5;
+    });
+    // Honeywell/CipherLab scanners can be set to pause 50-100 ms before the terminator.
+    mockNow += 100;
+    dispatchKey('Enter');
+
+    expect(onScan).toHaveBeenCalledWith('1234');
+  });
+
   it('should NOT submit a fast burst when Enter comes long after it', () => {
     const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
