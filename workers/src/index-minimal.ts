@@ -3936,6 +3936,8 @@ type TrialStatusResponse = {
   subscription: {
     status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
     tierLevel: string;
+    /** The tier the organization is entitled to now: `free` once the trial or plan lapsed. */
+    effectiveTierLevel: string;
     trialEndDate: string | null;
     trialStartedAt: string | null;
     trialConvertedAt: string | null;
@@ -4533,7 +4535,10 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
       trial_end_date,
       trial_started_at,
       trial_converted_at,
-      billing_cycle
+      billing_cycle,
+      current_period_end,
+      cancel_at_period_end,
+      past_due_since
     FROM subscription_tiers
     WHERE organization_id = ${organizationId}
     ORDER BY created_at DESC
@@ -4541,14 +4546,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   `;
 
   const subscription = subscriptionRows[0] as
-    | {
+    | (SubscriptionAccessRow & {
         status?: string;
         tier_level?: string;
         trial_end_date?: string | null;
         trial_started_at?: string | null;
         trial_converted_at?: string | null;
         billing_cycle?: string | null;
-      }
+      })
     | undefined;
 
   let daysRemaining: number | null = null;
@@ -4570,8 +4575,11 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   }
 
   const normalizedTierKey = normalizeLaunchTier(subscription?.tier_level);
-  const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, normalizedTierKey)
-    ? normalizedTierKey
+  // Limits follow the tier the organization is entitled to now, not the stored one:
+  // an expired trial keeps `tier_level = professional` but is held to free caps.
+  const effectiveTierKey = deriveSubscriptionAccess(subscription).effectiveTier;
+  const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, effectiveTierKey)
+    ? effectiveTierKey
     : 'free';
   const tierLimits = SUBSCRIPTION_TIER_LIMITS[tierKey];
 
@@ -4582,6 +4590,7 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
       ? {
           status: normalizedStatus,
           tierLevel: normalizedTierKey,
+          effectiveTierLevel: tierKey,
           trialEndDate: subscription.trial_end_date || null,
           trialStartedAt: subscription.trial_started_at || null,
           trialConvertedAt: subscription.trial_converted_at || null,

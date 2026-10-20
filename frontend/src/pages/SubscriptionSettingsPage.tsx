@@ -21,7 +21,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
-  const [billingLoading, setBillingLoading] = useState(false);
+  // Starts true when a token exists so the dashboard shows "Loading" rather than
+  // a load failure on the first render, before the fetch effect runs.
+  const [billingLoading, setBillingLoading] = useState(Boolean(token));
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const loadSubscriptionData = useCallback(
@@ -216,9 +218,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
+    <section aria-labelledby="subscription-settings-heading" className="mx-auto w-full max-w-6xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-semibold font-heading mb-2">Subscription & Billing</h1>
+        <h1 id="subscription-settings-heading" className="text-3xl font-semibold font-heading mb-2">
+          Subscription & Billing
+        </h1>
         <p className="text-muted-foreground">
           Manage your subscription, view usage, and update billing information
         </p>
@@ -226,13 +230,23 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
       <div className="space-y-6">
         {billingLoadError && (
-          <Card className="border-destructive/40 bg-destructive/5">
+          <Card role="alert" className="border-semantic-critical">
             <CardHeader>
-              <CardTitle>Unable to load billing settings</CardTitle>
+              <CardTitle
+                role="heading"
+                aria-level={2}
+                className="text-semantic-critical-muted-foreground"
+              >
+                Unable to load billing settings
+              </CardTitle>
               <CardDescription>{billingLoadError}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => loadSubscriptionData()} disabled={billingLoading}>
+              <Button
+                className="min-h-11"
+                onClick={() => loadSubscriptionData()}
+                disabled={billingLoading}
+              >
                 {billingLoading ? 'Retrying...' : 'Retry billing data'}
               </Button>
             </CardContent>
@@ -240,13 +254,19 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {checkoutError && (
-          <Card className="border-destructive/40 bg-destructive/5">
+          <Card role="alert" className="border-semantic-critical">
             <CardHeader>
-              <CardTitle>Billing action failed</CardTitle>
+              <CardTitle
+                role="heading"
+                aria-level={2}
+                className="text-semantic-critical-muted-foreground"
+              >
+                Billing action failed
+              </CardTitle>
               <CardDescription>{checkoutError}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" onClick={() => setCheckoutError(null)}>
+              <Button variant="outline" className="min-h-11" onClick={() => setCheckoutError(null)}>
                 Dismiss
               </Button>
             </CardContent>
@@ -254,9 +274,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {cancellationScheduled && (
-          <Card className="border-green-500/40 bg-green-500/5">
+          <Card role="status" className="border-hairline bg-semantic-surface-2">
             <CardHeader>
-              <CardTitle>Subscription cancellation scheduled</CardTitle>
+              <CardTitle role="heading" aria-level={2}>
+                Subscription cancellation scheduled
+              </CardTitle>
               <CardDescription>
                 Your subscription will remain active until the end of your current billing period.
                 After that, you will be downgraded to the Starter plan.
@@ -266,7 +288,17 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         )}
 
         {/* Main Subscription Dashboard */}
-        <SubscriptionDashboard token={token} onUpgrade={handleUpgrade} />
+        {/* Shares this page's single load, so Retry and post-cancel reloads refresh it. */}
+        <SubscriptionDashboard
+          token={token}
+          onUpgrade={handleUpgrade}
+          data={{
+            subscription,
+            usage,
+            loading: billingLoading,
+            error: billingLoadError,
+          }}
+        />
 
         {/* Usage Warnings */}
         {usage && (
@@ -299,7 +331,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         {/* Billing Management */}
         <Card>
           <CardHeader>
-            <CardTitle>Billing Management</CardTitle>
+            <CardTitle role="heading" aria-level={2}>
+              Billing Management
+            </CardTitle>
             <CardDescription>
               {canManageBilling
                 ? 'Update payment methods, view invoices, and manage billing details'
@@ -307,16 +341,23 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-start gap-3">
               {canManageBilling ? (
                 <>
-                  <ManageSubscriptionButton token={token} variant="default" />
-                  <Button variant="outline" onClick={handleUpgrade}>
+                  {/* Own column so the portal error stacks under its button. */}
+                  <div className="flex flex-col">
+                    <ManageSubscriptionButton
+                      token={token}
+                      variant="default"
+                      className="min-h-11"
+                    />
+                  </div>
+                  <Button variant="outline" className="min-h-11" onClick={handleUpgrade}>
                     Change Plan
                   </Button>
                 </>
               ) : (
-                <Button variant="default" onClick={handleUpgrade}>
+                <Button variant="default" className="min-h-11" onClick={handleUpgrade}>
                   View plans
                 </Button>
               )}
@@ -331,15 +372,17 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           subscription.tierLevel !== 'free' && (
             <Card>
               <CardHeader>
-                <CardTitle>Plan Management</CardTitle>
+                <CardTitle role="heading" aria-level={2}>
+                  Plan Management
+                </CardTitle>
                 <CardDescription>
                   Cancel your subscription or make changes to your plan
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
-                    <p className="text-sm text-semantic-warning-muted-foreground">
+                  <div className="p-4 bg-semantic-surface-2 border border-hairline rounded-lg">
+                    <p className="text-sm text-semantic-text-primary">
                       <strong>Note:</strong> If you cancel, you'll retain access to your current
                       plan until the end of your billing period. After that, you'll be downgraded to
                       the Starter plan.
@@ -347,6 +390,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
                   </div>
                   <Button
                     variant="destructive"
+                    className="min-h-11"
                     onClick={handleCancelSubscription}
                     disabled={cancelLoading}
                   >
@@ -360,7 +404,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         {/* Help & Support */}
         <Card>
           <CardHeader>
-            <CardTitle>Need Help?</CardTitle>
+            <CardTitle role="heading" aria-level={2}>
+              Need Help?
+            </CardTitle>
             <CardDescription>
               Contact our support team for assistance with your subscription
             </CardDescription>
@@ -370,7 +416,11 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
               If you have questions about billing, plan features, or need assistance, our support
               team is here to help.
             </p>
-            <Button variant="outline" onClick={() => window.open('mailto:support@example.com')}>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => window.open('mailto:support@example.com')}
+            >
               Contact Support
             </Button>
           </CardContent>
@@ -384,6 +434,6 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         onSelectPlan={handleSelectPlan}
         currentTier={subscription?.tierLevel || 'free'}
       />
-    </div>
+    </section>
   );
 }

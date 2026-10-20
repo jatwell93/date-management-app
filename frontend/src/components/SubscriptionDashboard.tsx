@@ -6,9 +6,22 @@ import { buildApiUrl } from '../lib/api.service';
 import type { SubscriptionData, UsageData } from '../types/subscription';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
+/**
+ * Data already loaded by the parent. When supplied, the dashboard does not
+ * fetch on its own, so a parent retry or post-cancel reload refreshes it too.
+ */
+export interface SubscriptionDashboardData {
+  subscription: SubscriptionData | null;
+  usage: UsageData | null;
+  loading: boolean;
+  /** Set when the parent's load failed; the parent renders the error and retry. */
+  error: string | null;
+}
+
 interface SubscriptionDashboardProps {
   token: string | null;
   onUpgrade?: () => void;
+  data?: SubscriptionDashboardData;
 }
 
 interface ProgressBarProps {
@@ -27,14 +40,14 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
     ? 'bg-semantic-critical'
     : isWarning
       ? 'bg-semantic-warning'
-      : 'bg-semantic-secondary';
+      : 'bg-semantic-primary';
 
-  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString();
+  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString('en-AU');
   const displayLimit = isUnlimited
     ? 'Unlimited'
     : formatValue
       ? formatValue(limit)
-      : limit.toLocaleString();
+      : limit.toLocaleString('en-AU');
 
   return (
     <div className="space-y-2">
@@ -44,16 +57,22 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
           {displayCurrent} / {displayLimit}
         </span>
       </div>
-      <div className="w-full bg-semantic-surface-3 rounded-full h-2.5 dark:bg-semantic-surface-4">
-        <div
-          className={`h-2.5 rounded-full transition-all ${progressBarColorClass}`}
-          style={{ width: `${isUnlimited ? 0 : percentage}%` }}
-          role="progressbar"
-          aria-valuenow={current}
-          aria-valuemin={0}
-          aria-valuemax={limit || 100}
-        />
-      </div>
+      {/* Unlimited resources have no meaningful maximum, so no progressbar is
+          exposed; the "x / Unlimited" text above carries the value. */}
+      {!isUnlimited && (
+        <div className="w-full bg-semantic-surface-3 rounded-full h-2.5 dark:bg-semantic-surface-4">
+          <div
+            className={`h-2.5 rounded-full motion-safe:transition-[width] ${progressBarColorClass}`}
+            style={{ width: `${percentage}%` }}
+            role="progressbar"
+            aria-label={`${label} usage`}
+            aria-valuenow={Math.min(current, limit)}
+            aria-valuemin={0}
+            aria-valuemax={limit}
+            aria-valuetext={`${displayCurrent} of ${displayLimit} used`}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -66,14 +85,19 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboardProps) {
+export function SubscriptionDashboard({ token, onUpgrade, data }: SubscriptionDashboardProps) {
   const getFreshApiToken = useFreshApiToken(token);
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [usage, setUsage] = useState<UsageData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchedSubscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [fetchedUsage, setUsage] = useState<UsageData | null>(null);
+  const [fetchLoading, setLoading] = useState(true);
+  const [fetchError, setError] = useState<string | null>(null);
+  const isControlled = data !== undefined;
 
   useEffect(() => {
+    if (isControlled) {
+      return;
+    }
+
     if (!token) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
@@ -112,13 +136,25 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     };
 
     fetchData();
-  }, [token, getFreshApiToken]);
+  }, [token, getFreshApiToken, isControlled]);
+
+  const subscription = isControlled ? data.subscription : fetchedSubscription;
+  const usage = isControlled ? data.usage : fetchedUsage;
+  const loading = isControlled ? data.loading : fetchLoading;
+  const error = isControlled ? data.error : fetchError;
+
+  // The parent already shows its own error card with a retry action.
+  if (isControlled && error && !loading) {
+    return null;
+  }
 
   if (loading) {
     return (
       <Card>
         <CardContent className="py-8 text-center">
-          <p className="text-muted-foreground">Loading subscription data…</p>
+          <p role="status" className="text-muted-foreground">
+            Loading subscription data…
+          </p>
         </CardContent>
       </Card>
     );
@@ -127,7 +163,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   if (error || !subscription || !usage) {
     return (
       <Card>
-        <CardContent className="py-8 text-center">
+        <CardContent role="alert" className="py-8 text-center">
           <p className="text-semantic-critical">Unable to load subscription data</p>
           {error && <p className="text-sm text-muted-foreground mt-2">{error}</p>}
         </CardContent>
@@ -158,13 +194,14 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-3">
+            <CardTitle role="heading" aria-level={2} className="flex items-center gap-3">
               <span>Subscription Overview</span>
               <span
                 className={`text-sm font-semibold px-3 py-1 rounded-full border ${tierColors[subscription.tierLevel]}`}
               >
+                <span className="sr-only">Current plan: </span>
                 {tierDisplayName}
               </span>
             </CardTitle>
@@ -173,7 +210,10 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
                 <span>
                   Billed {subscription.billingCycle}
                   {subscription.currentPeriodEnd && (
-                    <> • Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
+                    <>
+                      {' '}
+                      • Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-AU')}
+                    </>
                   )}
                 </span>
               )}
@@ -187,7 +227,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
             </CardDescription>
           </div>
           {showUpgrade && onUpgrade && (
-            <Button onClick={onUpgrade} size="sm">
+            <Button onClick={onUpgrade} className="min-h-11">
               Upgrade Plan
             </Button>
           )}
@@ -226,7 +266,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
             <p className="text-sm text-muted-foreground mb-3">
               Need more resources? Upgrade to unlock higher limits and premium features.
             </p>
-            <Button onClick={onUpgrade} variant="outline" className="w-full">
+            <Button onClick={onUpgrade} variant="outline" className="w-full min-h-11">
               Compare Plans
             </Button>
           </div>

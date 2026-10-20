@@ -6,8 +6,11 @@ import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import type { BillingCycle, LaunchTier } from '../lib/planCatalog';
 
 interface SubscriptionTierResponse {
-  status: 'active' | 'trialing' | 'expired' | 'canceled';
+  /** The Worker sends these upper-case (see `normalizedStatus` in trial-status). */
+  status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
   tierLevel: string;
+  /** The tier the limits apply to now: `free` once a trial or plan has lapsed. */
+  effectiveTierLevel?: string;
   trialEndDate: string | null;
   trialStartedAt: string | null;
   trialConvertedAt: string | null;
@@ -36,13 +39,23 @@ interface ActivePlanCardProps {
   billingCycle: string | null;
 }
 
+function capitalize(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
 function ActivePlanCard({ tierLevel, billingCycle }: ActivePlanCardProps) {
-  const planName = `${tierLevel.charAt(0).toUpperCase()}${tierLevel.slice(1)}`;
+  const planName = capitalize(tierLevel);
 
   return (
-    <Card className="w-full max-w-md">
+    <Card
+      role="region"
+      aria-labelledby="upgrade-active-plan-heading"
+      className="mx-auto w-full max-w-md"
+    >
       <CardHeader>
-        <CardTitle>{planName} plan active</CardTitle>
+        <CardTitle id="upgrade-active-plan-heading" role="heading" aria-level={1}>
+          {planName} plan active
+        </CardTitle>
         <CardDescription>
           Your current paid plan is active
           {billingCycle ? ` and billed ${billingCycle}` : ''}.
@@ -63,6 +76,7 @@ interface UpgradeHeaderProps {
   status: SubscriptionTierResponse['status'] | undefined;
   daysRemaining: number;
   tierLimits: TrialStatusResponse['tierLimits'];
+  tierLevel: string;
 }
 
 function UpgradeHeader({
@@ -71,12 +85,13 @@ function UpgradeHeader({
   status,
   daysRemaining,
   tierLimits,
+  tierLevel,
 }: UpgradeHeaderProps) {
   function getDescription(): string {
     if (isInTrial && daysRemaining > 0) {
       return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining on your Professional trial`;
     }
-    if (isTrialExpired || status === 'expired') {
+    if (isTrialExpired || status === 'EXPIRED') {
       return 'Trial expired. Upgrade to restore full access.';
     }
     return 'Upgrade to Professional when you need more capacity.';
@@ -84,29 +99,41 @@ function UpgradeHeader({
 
   return (
     <div className="mb-8">
-      <h1 className="text-3xl font-semibold font-heading mb-2 flex items-center gap-2">
-        {isInTrial && <span className="size-3 rounded-full bg-semantic-secondary animate-pulse" />}
-        {isInTrial ? 'Professional Trial' : 'Starter plan'}
+      <h1
+        id="upgrade-heading"
+        className="text-3xl font-semibold font-heading mb-2 flex items-center gap-2"
+      >
+        {isInTrial && (
+          <span
+            aria-hidden="true"
+            className="size-3 rounded-full bg-semantic-secondary motion-safe:animate-pulse"
+          />
+        )}
+        {isInTrial ? 'Professional Trial' : `${capitalize(tierLevel)} plan`}
       </h1>
       <p className="text-muted-foreground">{getDescription()}</p>
 
+      {/* The trial-status payload carries limits only, not live usage, so this
+          card states the limits rather than showing placeholder usage counts. */}
       <Card className="mt-6 max-w-md">
         <CardHeader>
-          <CardTitle className="text-base">Your current usage</CardTitle>
+          <CardTitle role="heading" aria-level={2} className="text-base">
+            Your plan limits
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Products</span>
-            <span className="tabular-nums">0 / {tierLimits.maxProducts}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Users</span>
-            <span className="tabular-nums">1 / {tierLimits.maxUsers}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Store Areas</span>
-            <span className="tabular-nums">0 / {tierLimits.maxStoreAreas}</span>
-          </div>
+        <CardContent>
+          <dl className="space-y-2">
+            {[
+              { label: 'Products', value: tierLimits.maxProducts },
+              { label: 'Users', value: tierLimits.maxUsers },
+              { label: 'Store Areas', value: tierLimits.maxStoreAreas },
+            ].map((row) => (
+              <div key={row.label} className="flex justify-between text-sm">
+                <dt className="text-muted-foreground">{row.label}</dt>
+                <dd className="tabular-nums">up to {row.value.toLocaleString('en-AU')}</dd>
+              </div>
+            ))}
+          </dl>
         </CardContent>
       </Card>
     </div>
@@ -159,7 +186,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     // Free is a no-op (nothing to buy); Enterprise is contract-based.
     if (tier === 'free') return;
     if (tier === 'enterprise') {
-      alert('Enterprise plans are configured by contract. Please contact support.');
+      setError('Enterprise plans are configured by contract. Please contact support.');
       return;
     }
 
@@ -199,7 +226,8 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        // A non-JSON error body (e.g. a gateway page) must not replace the message.
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to convert trial');
       }
 
@@ -217,14 +245,22 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     }
   };
 
-  if (loading || !token) {
+  if (!token) {
     return null;
+  }
+
+  if (loading) {
+    return (
+      <p role="status" className="py-8 text-center text-muted-foreground">
+        Loading plan details…
+      </p>
+    );
   }
 
   if (!trialStatus) {
     return (
-      <Card className="w-full max-w-md">
-        <CardContent className="py-8 text-center text-muted-foreground">
+      <Card className="mx-auto w-full max-w-md">
+        <CardContent role="alert" className="py-8 text-center text-muted-foreground">
           Unable to load trial status
         </CardContent>
       </Card>
@@ -234,8 +270,10 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
   const daysRemaining = subscription?.daysRemaining ?? 0;
   const tierLevel = subscription?.tierLevel?.toLowerCase() || 'free';
-  const status = subscription?.status;
-  const isActivePaidPlan = status === 'active' && tierLevel !== 'free';
+  // Upper-cased so a status in any case still matches; the Worker sends upper case.
+  const status = subscription?.status?.toUpperCase() as
+    SubscriptionTierResponse['status'] | undefined;
+  const isActivePaidPlan = status === 'ACTIVE' && tierLevel !== 'free';
 
   if (isActivePaidPlan) {
     return (
@@ -244,18 +282,23 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
+    <section aria-labelledby="upgrade-heading" className="mx-auto w-full max-w-6xl">
       <UpgradeHeader
         isInTrial={isInTrial}
         isTrialExpired={isTrialExpired}
         status={status}
         daysRemaining={daysRemaining}
         tierLimits={tierLimits}
+        // An expired trial keeps its stored tier but is held to the effective tier's limits.
+        tierLevel={subscription?.effectiveTierLevel?.toLowerCase() || tierLevel}
       />
 
       {error && (
-        <div className="mb-6 max-w-md p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md">
-          <p className="text-sm text-semantic-critical">{error}</p>
+        <div
+          role="alert"
+          className="mb-6 max-w-md p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md"
+        >
+          <p className="text-sm text-semantic-critical-muted-foreground">{error}</p>
         </div>
       )}
 
@@ -266,6 +309,6 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         onSelectPlan={handleUpgrade}
         busyTier={converting ? selectedTier : null}
       />
-    </div>
+    </section>
   );
 }
