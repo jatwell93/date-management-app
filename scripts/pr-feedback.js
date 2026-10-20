@@ -94,63 +94,77 @@ function summarizeChecks(rows) {
   return summary;
 }
 
+function nodes(connection) {
+  return connection?.nodes || [];
+}
+
+function toThread(t) {
+  const [first = {}, ...rest] = nodes(t.comments);
+  return {
+    id: t.id,
+    author: login(first),
+    path: t.path,
+    line: t.line,
+    outdated: t.isOutdated,
+    url: first.url,
+    createdAt: first.createdAt,
+    body: clip(first.body),
+    replies: rest.map((c) => ({ author: login(c), body: clip(c.body) })),
+  };
+}
+
+/**
+ * CodeScene reports failed gates as a COMMENTED review, not CHANGES_REQUESTED,
+ * so its body is the only signal.
+ */
+function isActionableReview(r) {
+  return r.state === 'CHANGES_REQUESTED' || /\*\*Gates Failed\*\*/.test(r.body || '');
+}
+
+/** Only the latest review per author matters: CodeScene re-reviews every push. */
+function latestReviews(reviewNodes) {
+  const latest = new Map();
+  for (const r of reviewNodes) {
+    const prev = latest.get(login(r));
+    if (!prev || Date.parse(r.submittedAt) >= Date.parse(prev.submittedAt)) latest.set(login(r), r);
+  }
+  return [...latest.values()].map((r) => ({
+    author: login(r),
+    state: r.state,
+    submittedAt: r.submittedAt,
+    url: r.url,
+    actionable: isActionableReview(r),
+    body: clip(r.body),
+  }));
+}
+
+function toComment(c) {
+  return { author: login(c), createdAt: c.createdAt, url: c.url, body: clip(c.body) };
+}
+
+function activityTimes(pr, head) {
+  return [
+    head.committedDate,
+    ...nodes(pr.reviewThreads).flatMap((t) => nodes(t.comments).map((c) => c.createdAt)),
+    ...nodes(pr.reviews).map((r) => r.submittedAt),
+    ...nodes(pr.comments).map((c) => c.createdAt),
+  ];
+}
+
 /**
  * Reduce the GraphQL pull request and the checks rows to what an agent acts
  * on. Pure, so the tests can drive it with fixtures.
  */
 function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUIET_MINUTES } = {}) {
-  const head = pr.commits?.nodes?.[0]?.commit || {};
-
-  const threads = (pr.reviewThreads?.nodes || [])
+  const head = nodes(pr.commits)[0]?.commit || {};
+  const threads = nodes(pr.reviewThreads)
     .filter((t) => !t.isResolved)
-    .map((t) => {
-      const comments = t.comments?.nodes || [];
-      const first = comments[0] || {};
-      return {
-        id: t.id,
-        author: login(first),
-        path: t.path,
-        line: t.line,
-        outdated: t.isOutdated,
-        url: first.url,
-        createdAt: first.createdAt,
-        body: clip(first.body),
-        replies: comments.slice(1).map((c) => ({ author: login(c), body: clip(c.body) })),
-      };
-    });
-
-  // Only the latest review per author matters: CodeScene re-reviews every push.
-  const latestReview = new Map();
-  for (const r of pr.reviews?.nodes || []) {
-    const prev = latestReview.get(login(r));
-    if (!prev || Date.parse(r.submittedAt) >= Date.parse(prev.submittedAt))
-      latestReview.set(login(r), r);
-  }
-  const reviews = [...latestReview.values()].map((r) => ({
-    author: login(r),
-    state: r.state,
-    submittedAt: r.submittedAt,
-    url: r.url,
-    actionable: r.state === 'CHANGES_REQUESTED',
-    body: clip(r.body),
-  }));
-
-  const comments = (pr.comments?.nodes || []).map((c) => ({
-    author: login(c),
-    createdAt: c.createdAt,
-    url: c.url,
-    body: clip(c.body),
-  }));
-
+    .map(toThread);
+  const reviews = latestReviews(nodes(pr.reviews));
+  const comments = nodes(pr.comments).map(toComment);
   const checks = summarizeChecks(checkRows);
-  const lastActivityAt = latestTime([
-    head.committedDate,
-    ...(pr.reviewThreads?.nodes || []).flatMap((t) =>
-      (t.comments?.nodes || []).map((c) => c.createdAt),
-    ),
-    ...(pr.reviews?.nodes || []).map((r) => r.submittedAt),
-    ...comments.map((c) => c.createdAt),
-  ]);
+
+  const lastActivityAt = latestTime(activityTimes(pr, head));
   const quietFor = lastActivityAt ? (now - Date.parse(lastActivityAt)) / 60000 : Infinity;
   const settled = checks.pending.length === 0 && quietFor >= quietMinutes;
 

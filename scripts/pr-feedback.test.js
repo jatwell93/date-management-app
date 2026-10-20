@@ -112,6 +112,27 @@ test('a failing CodeScene review is actionable', () => {
   assert.equal(report.actionable, 1);
 });
 
+test('a CodeScene COMMENTED review with failed gates is actionable', () => {
+  const report = summarize(
+    pr({
+      reviews: {
+        nodes: [
+          {
+            author: { login: 'codescene-delta-analysis' },
+            state: 'COMMENTED',
+            submittedAt: '2026-10-21T11:00:00Z',
+            body: '[//]: # (cs-code-health)\n**Gates Failed**',
+          },
+        ],
+      },
+    }),
+    [],
+    { now: NOW },
+  );
+  assert.equal(report.reviews[0].actionable, true);
+  assert.equal(report.actionable, 1);
+});
+
 test('checks are bucketed, and failures count as actionable', () => {
   const checks = summarizeChecks([
     { name: 'Frontend CI Gate', bucket: 'pass' },

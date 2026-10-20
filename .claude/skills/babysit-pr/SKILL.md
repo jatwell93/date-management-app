@@ -62,9 +62,11 @@ node scripts/pr-feedback.js resolve <threadId>
 
 ## Per-source notes
 
-- **CodeScene** posts a review per push. Only the latest one counts, and only
-  `CHANGES_REQUESTED` is actionable. Act on duplication and complexity flags only
-  when the change makes the real code better, not to satisfy the score.
+- **CodeScene** posts a review per push; only the latest one counts. Failed gates
+  arrive as a `COMMENTED` review whose body says **Gates Failed**, plus one inline
+  thread per smell and a failing `CodeScene Code Health Review` check. Act on
+  duplication and complexity flags when the change makes the real code better, not
+  to satisfy the score. A smell you decide to keep gets a reply saying why.
 - **Copilot** may post "unable to review … quota limit". That is not feedback.
   Report it once, because the `main` ruleset requires a Copilot review and the
   merge will block on it.

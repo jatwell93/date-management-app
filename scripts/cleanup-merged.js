@@ -65,25 +65,22 @@ function plan({ branches, worktrees, current, dirty }) {
   const goneNames = new Set(
     branches.filter((b) => b.gone && !PROTECTED.has(b.name)).map((b) => b.name),
   );
-  const mainCheckout = worktrees.find((w) => w.main);
 
-  if (goneNames.has(current)) {
-    if (mainCheckout && dirty.has(mainCheckout.path)) {
-      kept.push({ branch: current, reason: 'current branch has uncommitted changes' });
-      goneNames.delete(current);
-    } else {
-      actions.push({ type: 'switch-to-main', from: current });
-    }
-  }
-
+  // A gone branch checked out somewhere must be released first: the main
+  // checkout moves to main, any other worktree is removed. The main checkout is
+  // listed first, so a switch always precedes removals.
   for (const wt of worktrees) {
-    if (wt.main || !wt.branch || !goneNames.has(wt.branch)) continue;
+    const branch = wt.main ? current : wt.branch;
+    if (!goneNames.has(branch)) continue;
     if (dirty.has(wt.path)) {
-      kept.push({ branch: wt.branch, reason: `worktree ${wt.path} has uncommitted changes` });
-      goneNames.delete(wt.branch);
-      continue;
+      const where = wt.main ? 'current branch' : `worktree ${wt.path}`;
+      kept.push({ branch, reason: `${where} has uncommitted changes` });
+      goneNames.delete(branch);
+    } else if (wt.main) {
+      actions.push({ type: 'switch-to-main', from: branch });
+    } else {
+      actions.push({ type: 'remove-worktree', path: wt.path, locked: wt.locked });
     }
-    actions.push({ type: 'remove-worktree', path: wt.path, locked: wt.locked });
   }
 
   for (const name of goneNames) actions.push({ type: 'delete-branch', branch: name });
@@ -100,28 +97,37 @@ function isDirty(git, wtPath) {
   }
 }
 
+const ACTIONS = {
+  'switch-to-main': {
+    describe: (a) => `switch ${a.from} -> main and pull --ff-only`,
+    commands: () => [
+      ['checkout', '-q', 'main'],
+      ['pull', '-q', '--ff-only'],
+    ],
+  },
+  'remove-worktree': {
+    describe: (a) => `remove worktree ${a.path}${a.locked ? ' (unlock first)' : ''}`,
+    commands: (a) => [
+      ...(a.locked ? [['worktree', 'unlock', a.path]] : []),
+      ['worktree', 'remove', a.path],
+    ],
+  },
+  'delete-branch': {
+    describe: (a) => `delete branch ${a.branch} (remote gone)`,
+    commands: (a) => [['branch', '-D', a.branch]],
+  },
+  'prune-worktrees': {
+    describe: () => 'git worktree prune',
+    commands: () => [['worktree', 'prune']],
+  },
+};
+
 function execute(actions, git) {
-  for (const a of actions) {
-    if (a.type === 'switch-to-main') {
-      git(['checkout', '-q', 'main']);
-      git(['pull', '-q', '--ff-only']);
-    } else if (a.type === 'remove-worktree') {
-      if (a.locked) git(['worktree', 'unlock', a.path]);
-      git(['worktree', 'remove', a.path]);
-    } else if (a.type === 'delete-branch') {
-      git(['branch', '-D', a.branch]);
-    } else if (a.type === 'prune-worktrees') {
-      git(['worktree', 'prune']);
-    }
-  }
+  for (const a of actions) ACTIONS[a.type].commands(a).forEach((args) => git(args));
 }
 
 function describe(a) {
-  if (a.type === 'switch-to-main') return `switch ${a.from} -> main and pull --ff-only`;
-  if (a.type === 'remove-worktree')
-    return `remove worktree ${a.path}${a.locked ? ' (unlock first)' : ''}`;
-  if (a.type === 'delete-branch') return `delete branch ${a.branch} (remote gone)`;
-  return 'git worktree prune';
+  return ACTIONS[a.type].describe(a);
 }
 
 function main(argv, { git = defaultGit, log = console.log } = {}) {
