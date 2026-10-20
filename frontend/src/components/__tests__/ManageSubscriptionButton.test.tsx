@@ -52,6 +52,9 @@ describe('ManageSubscriptionButton', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Unable to open billing portal/i);
     });
 
+    // --destructive is #FF0000 (~4:1 on white); the critical muted foreground passes AA.
+    expect(screen.getByRole('alert')).toHaveClass('text-semantic-critical-muted-foreground');
+    expect(screen.getByRole('alert')).not.toHaveClass('text-destructive');
     expect(Sentry.captureException).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Manage Billing/i })).not.toBeDisabled();
   });

@@ -23,7 +23,12 @@ export function UsageWarning({
 
   useEffect(() => {
     const dismissedKey = `usage-warning-dismissed-${resourceType}`;
-    const lastDismissed = localStorage.getItem(dismissedKey);
+    let lastDismissed: string | null = null;
+    try {
+      lastDismissed = localStorage.getItem(dismissedKey);
+    } catch {
+      // Storage blocked (private mode, kiosk policy): show the warning.
+    }
 
     if (lastDismissed) {
       const dismissedDate = new Date(lastDismissed);
@@ -47,7 +52,11 @@ export function UsageWarning({
 
   const handleDismiss = () => {
     const dismissedKey = `usage-warning-dismissed-${resourceType}`;
-    localStorage.setItem(dismissedKey, new Date().toISOString());
+    try {
+      localStorage.setItem(dismissedKey, new Date().toISOString());
+    } catch {
+      // Storage blocked: dismiss for this render session only.
+    }
     setDismissed(true);
   };
 
@@ -62,10 +71,10 @@ export function UsageWarning({
     inventoryItems: 'Inventory Items',
   };
 
-  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString();
-  const displayLimit = formatValue ? formatValue(limit) : limit.toLocaleString();
+  const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString('en-AU');
+  const displayLimit = formatValue ? formatValue(limit) : limit.toLocaleString('en-AU');
   const remaining = limit - current;
-  const displayRemaining = formatValue ? formatValue(remaining) : remaining.toLocaleString();
+  const displayRemaining = formatValue ? formatValue(remaining) : remaining.toLocaleString('en-AU');
 
   const isUrgent = percentage >= 95;
 
@@ -81,6 +90,7 @@ export function UsageWarning({
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3 flex-1">
             <div
+              aria-hidden="true"
               className={`w-2 h-2 rounded-full ${isUrgent ? 'bg-semantic-critical' : 'bg-semantic-warning'}`}
             />
             <div className="flex-1">
@@ -95,30 +105,34 @@ export function UsageWarning({
                 {resourceNames[resourceType]} usage at {Math.round(percentage)}%
               </p>
               <p
-                className={`text-xs ${
-                  isUrgent ? 'text-semantic-critical' : 'text-semantic-warning'
+                className={`text-sm tabular-nums ${
+                  isUrgent
+                    ? 'text-semantic-critical-muted-foreground'
+                    : 'text-semantic-warning-muted-foreground'
                 }`}
               >
                 Using {displayCurrent} of {displayLimit} ({displayRemaining} remaining)
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {onUpgrade && (
               <Button
                 size="sm"
                 onClick={onUpgrade}
                 className={
                   isUrgent
-                    ? 'bg-semantic-critical hover:bg-semantic-critical-hover text-semantic-critical-foreground'
-                    : 'bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
+                    ? 'min-h-11 bg-semantic-critical hover:bg-semantic-critical-hover text-semantic-critical-foreground'
+                    : 'min-h-11 bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
                 }
               >
                 Upgrade
+                <span className="sr-only"> for more {resourceNames[resourceType]}</span>
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={handleDismiss}>
+            <Button size="sm" variant="ghost" className="min-h-11" onClick={handleDismiss}>
               Dismiss
+              <span className="sr-only"> {resourceNames[resourceType]} warning</span>
             </Button>
           </div>
         </div>
