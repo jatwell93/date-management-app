@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /** One upload attempt. Cancel/reset supersede it, which also aborts its requests. */
 export interface UploadRun {
@@ -35,6 +35,14 @@ export function useUploadRuns() {
     previous?.controller.abort();
     return previous ? { handOff: previous.handOff } : null;
   }, []);
+
+  // Leaving the page ends the run: no status polling or token refreshes in the background.
+  useEffect(
+    () => () => {
+      supersede();
+    },
+    [supersede],
+  );
 
   const begin = useCallback((): UploadRun => {
     supersede();

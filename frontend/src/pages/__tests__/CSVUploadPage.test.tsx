@@ -951,6 +951,24 @@ describe('CSVUploadPage expiry import', () => {
       userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
     });
 
+    it('stops polling when the user leaves the page mid-upload', async () => {
+      fetchMock
+        .mockResponseOnce(directInitiate)
+        .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv' }));
+      fetchMock.mockResponse('rate limited', { status: 429 });
+
+      const { unmount } = render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(statusCalls()).toBe(1));
+
+      unmount();
+
+      // The run wakes from its backoff after unmount and must not poll again.
+      await wait(1300);
+      expect(statusCalls()).toBe(1);
+    });
+
     it('lets staff cancel a stuck upload, unlocking the form and stopping polling', async () => {
       await startStuckUpload();
       expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
