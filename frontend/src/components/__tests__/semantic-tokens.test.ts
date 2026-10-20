@@ -9,6 +9,7 @@ import {
   semanticSurface,
   semanticText,
   semanticDataViz,
+  semanticDataVizStrong,
   semanticColors,
 } from '../../theme/semantic-tokens';
 
@@ -72,6 +73,32 @@ describe('Semantic Tokens', () => {
       expect(semanticDataViz.series5).toBe(designTokens.colors.brand.red);
       expect(semanticDataViz.series6).toBe(designTokens.colors.brand.navy);
     });
+  });
+
+  describe('text-safe aliases', () => {
+    const luminance = (hex: string) => {
+      const channels = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const [r, g, b] = channels.map((v) =>
+        v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
+      );
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrastOnWhite = (hex: string) => 1.05 / (luminance(hex) + 0.05);
+
+    it.each([
+      ['secondary', semanticSecondary.strong],
+      ['success', semanticSuccess.strong],
+      ['warning', semanticWarning.strong],
+    ])('%s strong reaches AA (4.5:1) on white', (_name, hex) => {
+      expect(contrastOnWhite(hex)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it.each(Object.entries(semanticDataVizStrong))(
+      'data-viz strong %s reaches 3:1 on white',
+      (_series, hex) => {
+        expect(contrastOnWhite(hex)).toBeGreaterThanOrEqual(3);
+      },
+    );
   });
 
   describe('dark mode variants apply correctly', () => {

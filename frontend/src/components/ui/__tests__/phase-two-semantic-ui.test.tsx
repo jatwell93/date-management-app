@@ -22,6 +22,33 @@ describe('phase 2 semantic UI primitives', () => {
     expect(buttonVariants({ variant: 'error' })).toContain('bg-semantic-critical');
   });
 
+  it('keeps white button labels and link text at AA contrast', () => {
+    expect(buttonVariants({ variant: 'success' })).toContain('bg-semantic-success-strong');
+    expect(buttonVariants({ variant: 'secondary' })).toContain('bg-semantic-secondary-strong');
+    expect(buttonVariants({ variant: 'link' })).toContain('text-semantic-primary');
+    expect(buttonVariants({ variant: 'link' })).not.toMatch(/\btext-semantic-secondary\b/);
+  });
+
+  it('keeps desktop density but gives touch pointers a 44px floor', () => {
+    (['default', 'sm', 'lg', 'icon'] as const).forEach((size) => {
+      expect(buttonVariants({ size })).toContain('pointer-coarse:min-h-11');
+    });
+    expect(buttonVariants({ size: 'icon' })).toContain('pointer-coarse:min-w-11');
+    expect(buttonVariants({ size: 'default' })).toContain('h-9');
+
+    render(<Input aria-label="quantity" />);
+    const input = screen.getByLabelText('quantity');
+    expect(input).toHaveClass('text-base', 'pointer-coarse:min-h-11');
+    expect(input).not.toHaveClass('md:text-sm');
+    // text-muted (#94A3B8) is 2.6:1; tertiary (#64748B) is 4.8:1.
+    expect(input).toHaveClass('placeholder:text-semantic-text-tertiary');
+  });
+
+  it('renders badges at 14px', () => {
+    expect(badgeVariants({ variant: 'inactive' })).toContain('text-sm');
+    expect(badgeVariants({ variant: 'inactive' })).not.toContain('text-xs');
+  });
+
   it('uses semantic focus and validation tokens for text inputs', () => {
     render(<Input aria-label="email" />);
 
@@ -49,10 +76,10 @@ describe('phase 2 semantic UI primitives', () => {
   });
 
   it.each([
-    ['success', 'bg-semantic-success'],
+    ['success', 'bg-semantic-success-strong'],
     ['error', 'bg-semantic-critical'],
-    ['warning', 'bg-semantic-warning'],
-    ['info', 'bg-semantic-secondary'],
+    ['warning', 'bg-semantic-warning-strong'],
+    ['info', 'bg-semantic-secondary-strong'],
   ] as const)('uses semantic %s token for toast variants', (type, className) => {
     render(<Toast message={`${type} toast`} type={type} isVisible onClose={() => undefined} />);
 

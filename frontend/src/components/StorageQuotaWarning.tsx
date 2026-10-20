@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import './StorageQuotaWarning.css';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { buildApiUrl } from '../lib/api.service';
@@ -33,6 +34,31 @@ interface StorageQuotaWarningProps {
   autoHideDays?: number; // Days before showing warning again (default 7)
 }
 
+/**
+ * Focus handling for the Radix dialog below. On open, focus the dialog itself, not an
+ * action button: staff use keyboard-wedge barcode scanners, and a scan's trailing
+ * Enter landing on "Remind Me Later" would silently snooze the warning for days.
+ * On close, return focus to whatever was focused before the dialog opened (Radix
+ * would otherwise send it to a trigger, and this dialog has none).
+ */
+function useQuotaDialogFocus(dialogRef: React.RefObject<HTMLDivElement | null>) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  const onOpenAutoFocus = (event: Event) => {
+    const active = document.activeElement;
+    returnFocusRef.current = active instanceof HTMLElement ? active : null;
+    event.preventDefault();
+    dialogRef.current?.focus();
+  };
+
+  const onCloseAutoFocus = (event: Event) => {
+    event.preventDefault();
+    returnFocusRef.current?.focus();
+  };
+
+  return { onOpenAutoFocus, onCloseAutoFocus };
+}
+
 export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   userId,
   token,
@@ -45,6 +71,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Fetch storage quota on component mount
   useEffect(() => {
@@ -113,8 +140,11 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
     onDismiss?.();
   };
 
+  const isOpen = !dismissed && !loading && !error && !!quota?.isWarning;
+  const focusHandlers = useQuotaDialogFocus(dialogRef);
+
   // Don't show if dismissed, loading, error, or no warning
-  if (dismissed || loading || error || !quota || !quota.isWarning) {
+  if (!isOpen || !quota) {
     return null;
   }
 
@@ -129,89 +159,110 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   };
 
   return (
-    <div className="storage-quota-warning">
-      <button
-        type="button"
-        className="storage-quota-warning__overlay"
-        onClick={handleDismiss}
-        aria-label="Dismiss storage quota warning"
-      />
-
-      <div className="storage-quota-warning__modal">
-        <div className="storage-quota-warning__header">
-          <h2>Storage Quota Warning</h2>
-          <button
-            className="storage-quota-warning__close"
+    // Radix Dialog traps Tab inside the modal, hides the rest of the page from
+    // assistive tech, and closes on Escape (onOpenChange). Overlay clicks dismiss
+    // through the overlay's own onClick, so outside pointer-downs are ignored to
+    // avoid a second dismiss.
+    <DialogPrimitive.Root open onOpenChange={(open) => !open && handleDismiss()}>
+      <DialogPrimitive.Portal>
+        <div className="storage-quota-warning">
+          <DialogPrimitive.Overlay
+            className="storage-quota-warning__overlay"
             onClick={handleDismiss}
-            aria-label="Close warning"
+            data-testid="storage-quota-warning-overlay"
+          />
+
+          <DialogPrimitive.Content
+            ref={dialogRef}
+            className="storage-quota-warning__modal"
+            aria-modal="true"
+            onOpenAutoFocus={focusHandlers.onOpenAutoFocus}
+            onCloseAutoFocus={focusHandlers.onCloseAutoFocus}
+            onPointerDownOutside={(event) => event.preventDefault()}
           >
-            ✕
-          </button>
-        </div>
-
-        <div className="storage-quota-warning__content">
-          <div className="storage-quota-warning__icon">⚠️</div>
-
-          <p className="storage-quota-warning__message">
-            You're using <strong>{quota.percentageUsed}%</strong> of your storage quota
-          </p>
-
-          {/* Progress bar */}
-          <div className="storage-quota-warning__progress">
-            <div className="storage-quota-warning__progress-bar">
-              <div
-                className="storage-quota-warning__progress-fill"
-                style={{ width: `${Math.min(quota.percentageUsed, 100)}%` }}
-              />
+            <div className="storage-quota-warning__header">
+              <DialogPrimitive.Title asChild>
+                <h2>Storage Quota Warning</h2>
+              </DialogPrimitive.Title>
+              <button
+                type="button"
+                className="storage-quota-warning__close"
+                onClick={handleDismiss}
+                aria-label="Close warning"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
             </div>
-            <div className="storage-quota-warning__progress-text">
-              <span>{formatBytes(quota.used)}</span>
-              <span>{quota.displayLimit}</span>
+
+            <div className="storage-quota-warning__content">
+              <div className="storage-quota-warning__icon" aria-hidden="true">
+                ⚠️
+              </div>
+
+              <DialogPrimitive.Description className="storage-quota-warning__message">
+                You're using <strong>{quota.percentageUsed}%</strong> of your storage quota
+              </DialogPrimitive.Description>
+
+              {/* Progress bar */}
+              <div className="storage-quota-warning__progress">
+                <div className="storage-quota-warning__progress-bar">
+                  <div
+                    className="storage-quota-warning__progress-fill"
+                    style={{ width: `${Math.min(quota.percentageUsed, 100)}%` }}
+                  />
+                </div>
+                <div className="storage-quota-warning__progress-text">
+                  <span>{formatBytes(quota.used)}</span>
+                  <span>{quota.displayLimit}</span>
+                </div>
+              </div>
+
+              <p className="storage-quota-warning__details">
+                {remainingBytes > 0 ? (
+                  <>
+                    You have <strong>{formatBytes(remainingBytes)}</strong> of storage remaining.
+                  </>
+                ) : (
+                  <>You have reached your storage limit. Upgrade your plan to continue uploading.</>
+                )}
+              </p>
+
+              <div className="storage-quota-warning__tier-info">
+                <p>
+                  Current Plan:{' '}
+                  <strong>{quota.tier.charAt(0).toUpperCase() + quota.tier.slice(1)}</strong>
+                </p>
+              </div>
             </div>
-          </div>
 
-          <p className="storage-quota-warning__details">
-            {remainingBytes > 0 ? (
-              <>
-                You have <strong>{formatBytes(remainingBytes)}</strong> of storage remaining.
-              </>
-            ) : (
-              <>You have reached your storage limit. Upgrade your plan to continue uploading.</>
-            )}
-          </p>
+            <div className="storage-quota-warning__actions">
+              {onUpgrade && (
+                <button
+                  type="button"
+                  className="storage-quota-warning__button storage-quota-warning__button--primary"
+                  onClick={onUpgrade}
+                >
+                  Upgrade Plan
+                </button>
+              )}
 
-          <div className="storage-quota-warning__tier-info">
-            <p>
-              Current Plan:{' '}
-              <strong>{quota.tier.charAt(0).toUpperCase() + quota.tier.slice(1)}</strong>
+              <button
+                type="button"
+                className="storage-quota-warning__button storage-quota-warning__button--secondary"
+                onClick={handleDismiss}
+              >
+                Remind Me Later
+              </button>
+            </div>
+
+            <p className="storage-quota-warning__footer">
+              We'll remind you again in {autoHideDays} days. You can manage your storage by deleting
+              old uploads.
             </p>
-          </div>
+          </DialogPrimitive.Content>
         </div>
-
-        <div className="storage-quota-warning__actions">
-          {onUpgrade && (
-            <button
-              className="storage-quota-warning__button storage-quota-warning__button--primary"
-              onClick={onUpgrade}
-            >
-              Upgrade Plan
-            </button>
-          )}
-
-          <button
-            className="storage-quota-warning__button storage-quota-warning__button--secondary"
-            onClick={handleDismiss}
-          >
-            Remind Me Later
-          </button>
-        </div>
-
-        <p className="storage-quota-warning__footer">
-          We'll remind you again in {autoHideDays} days. You can manage your storage by deleting old
-          uploads.
-        </p>
-      </div>
-    </div>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 };
 

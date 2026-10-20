@@ -39,6 +39,22 @@
   }
 }
 
+/* ── Reduced motion (app-wide) ────────────────────────────────
+ * Unlayered + !important so it beats Tailwind `animate-*`/`transition-*`
+ * utilities, Radix enter/exit animations and component CSS. Animations still
+ * run one 0.01ms frame so `animationend` listeners fire.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer components {
   .clerk-responsive-surface {
     --clerk-pharmiq-border: var(--border-hairline);
@@ -161,7 +177,8 @@
   --background: 0 0% 100%;
   --foreground: 222.2 47.4% 11.2%;
   --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  /* 40% L: 5.6:1 on --muted (#F1F5F9). 46.9% was 4.3:1 and failed AA. */
+  --muted-foreground: 215.4 16.3% 40%;
   --popover: 0 0% 100%;
   --popover-foreground: 222.2 47.4% 11.2%;
   --card: 0 0% 100%;
@@ -174,7 +191,8 @@
   --secondary-foreground: 222.2 47.4% 11.2%;
   --accent: 210 40% 96.1%;
   --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 100% 50%;
+  /* #DC2626 (= --semantic-critical): 4.8:1 with white. #FF0000 was 4.0:1. */
+  --destructive: 0 72% 51%;
   --destructive-foreground: 210 40% 98%;
   --ring: 215 20.2% 65.1%;
   --radius: 0.5rem;
