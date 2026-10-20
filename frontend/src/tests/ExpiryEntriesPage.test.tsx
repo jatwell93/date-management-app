@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ExpiryEntriesPage } from '../pages/ExpiryEntriesPage';
 import { apiService } from '../lib/api.service';
 import { ROLES } from '../constants/roles';
@@ -108,8 +108,8 @@ describe('ExpiryEntriesPage', () => {
 
     await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
 
-    expect(screen.getAllByRole('button', { name: /^Edit$/i }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Edit /i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /^Delete /i })).not.toBeInTheDocument();
   });
 
   it('shows delete controls for admins', async () => {
@@ -119,8 +119,140 @@ describe('ExpiryEntriesPage', () => {
 
     await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
 
-    expect(screen.getAllByRole('button', { name: /^Edit$/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /^Delete$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^Edit /i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^Delete /i }).length).toBeGreaterThan(0);
+  });
+
+  it('names row actions by product and keeps a single main landmark', async () => {
+    mockApi();
+
+    const { container } = render(
+      <ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />,
+    );
+
+    await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
+
+    // The app shell owns <main>; the page must not nest another one.
+    expect(container.querySelector('main')).toBeNull();
+    expect(screen.getByRole('region', { name: 'All Expiry Entries' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Front Counter Product' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Aisle One Product' })).toBeInTheDocument();
+    // Visible text and accessible name match (WCAG 2.5.3).
+    expect(screen.getByRole('button', { name: 'Print Report' })).toBeInTheDocument();
+  });
+
+  it('moves focus into the edit row and back to Edit on cancel', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    const editButton = await screen.findByRole('button', { name: 'Edit Front Counter Product' });
+    fireEvent.click(editButton);
+
+    const dateInput = await screen.findByLabelText('Expiry date for Front Counter Product');
+    await waitFor(() => expect(dateInput).toHaveFocus());
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit Front Counter Product' })).toHaveFocus(),
+    );
+  });
+
+  it('keeps the edit input mounted and focused while the user types', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Front Counter Product' }));
+    const dateInput = await screen.findByLabelText('Expiry date for Front Counter Product');
+    await waitFor(() => expect(dateInput).toHaveFocus());
+
+    // Each change updates editing state. If the column definitions were rebuilt on
+    // every change, TanStack's flexRender would see a new cell component type and
+    // remount the input, losing focus mid-entry.
+    for (const value of [daysFromNow(40), daysFromNow(41), daysFromNow(42)]) {
+      fireEvent.change(screen.getByLabelText('Expiry date for Front Counter Product'), {
+        target: { value },
+      });
+      const current = screen.getByLabelText('Expiry date for Front Counter Product');
+      expect(current).toBe(dateInput);
+      expect(current).toHaveValue(value);
+      expect(current).toHaveFocus();
+    }
+  });
+
+  it('returns focus to the table heading when a saved row leaves the page', async () => {
+    mockApi();
+    // @ts-expect-error — apiService.put is mocked as vi.fn()
+    apiService.put.mockResolvedValue({});
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Front Counter Product' }));
+    await screen.findByLabelText('Expiry date for Front Counter Product');
+
+    // After the save, the refetch no longer contains the edited row (moved/filtered).
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) =>
+      Promise.resolve(url === '/reports/expiry-entries' ? [twoLocationRows[1]] : []),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Expiry entries', level: 2 })).toHaveFocus(),
+    );
+  });
+
+  it('restores focus to Save when the save fails', async () => {
+    mockApi();
+    // @ts-expect-error — apiService.put is mocked as vi.fn()
+    apiService.put.mockRejectedValue(new Error('Save failed'));
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Front Counter Product' }));
+    await screen.findByLabelText('Expiry date for Front Counter Product');
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Save$/i })).toHaveFocus());
+  });
+
+  it('restores focus to Confirm delete when the delete fails', async () => {
+    mockApi();
+    // @ts-expect-error — apiService.delete is mocked as vi.fn()
+    apiService.delete.mockRejectedValue(new Error('Delete failed'));
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Aisle One Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete Aisle One Product' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Delete failed');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Confirm delete Aisle One Product' }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it('focuses Cancel when a delete is pending and returns focus on cancel', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Aisle One Product' }));
+
+    expect(
+      screen.getByRole('button', { name: 'Confirm delete Aisle One Product' }),
+    ).toBeInTheDocument();
+    const cancel = screen.getByRole('button', { name: /^Cancel$/i });
+    await waitFor(() => expect(cancel).toHaveFocus());
+
+    fireEvent.click(cancel);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Delete Aisle One Product' })).toHaveFocus(),
+    );
   });
 
   it('exposes a location filter control', async () => {
@@ -131,6 +263,85 @@ describe('ExpiryEntriesPage', () => {
     await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
 
     expect(screen.getByRole('combobox', { name: /Filter by location/i })).toBeInTheDocument();
+  });
+
+  it('renders urgency text with AA-contrast token pairs', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    await screen.findByRole('heading', { name: /All Expiry Entries/i, level: 1 });
+
+    // Base amber (#D97706) is 3.2:1 on white; the muted-foreground shade passes AA.
+    // The table status cell (the print table's <td> carries no colour).
+    const statusCell = screen
+      .getAllByText('Markdown 3')
+      .find((el) => el.tagName === 'DIV' && el.className.includes('min-w-[120px]'));
+    expect(statusCell?.className).toMatch(/text-semantic-warning-muted-foreground/);
+    expect(statusCell?.className).not.toMatch(/text-semantic-warning(\s|$)/);
+    // Mobile "Normal" badge: green-on-mint was ~2.2:1.
+    const normalBadge = screen
+      .getAllByText('Normal')
+      .find((el) => el.className.includes('bg-semantic-success-muted'));
+    expect(normalBadge?.className).toMatch(/text-semantic-success-muted-foreground/);
+    // Save must not use the white-on-green success variant (2.5:1).
+    fireEvent.click(screen.getAllByRole('button', { name: /^Edit/i })[0]);
+    expect(screen.getByRole('button', { name: /^Save$/i }).className).not.toMatch(
+      /bg-semantic-success/,
+    );
+  });
+
+  it('gives row actions and the location filter 44px touch targets', async () => {
+    mockApi();
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    const edit = await screen.findByRole('button', { name: 'Edit Front Counter Product' });
+    expect(edit.className).toMatch(/min-h-11/);
+    expect(screen.getByRole('button', { name: 'Delete Front Counter Product' }).className).toMatch(
+      /min-h-11/,
+    );
+    expect(screen.getByRole('combobox', { name: /Filter by location/i }).className).toMatch(
+      /min-h-11/,
+    );
+  });
+
+  it('tells phone users when the summary list is truncated', async () => {
+    const manyRows = Array.from({ length: 51 }, (_, i) => ({
+      ...twoLocationRows[0],
+      inventoryId: 100 + i,
+      productName: `Product ${i}`,
+    }));
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) =>
+      Promise.resolve(url === '/reports/expiry-entries' ? manyRows : []),
+    );
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    expect(await screen.findByText(/Showing the first 50 of 51 entries/i)).toBeInTheDocument();
+    const summary = screen.getByRole('list', { name: 'Expiry entry summary' });
+    expect(summary.querySelectorAll(':scope > li')).toHaveLength(50);
+  });
+
+  it('prints the same derived markdown status the screen shows', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) =>
+      Promise.resolve(
+        url === '/reports/expiry-entries'
+          ? [{ ...twoLocationRows[0], status: 'Normal', expiryDate: daysFromNow(20) }]
+          : [],
+      ),
+    );
+
+    render(<ExpiryEntriesPage token="test-session-value" role={ROLES.ADMIN} />);
+
+    const printTable = await screen.findByRole('table', {
+      name: /Printable expiry entries table/i,
+      hidden: true,
+    });
+    const statusCell = printTable.querySelector('tbody tr td:last-child');
+    expect(statusCell).toHaveTextContent('Markdown 3');
   });
 
   it('announces a missing token', async () => {

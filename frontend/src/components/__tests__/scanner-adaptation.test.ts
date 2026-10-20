@@ -12,6 +12,10 @@ describe('scanner adaptation stylesheet', () => {
     expect(scannerAdaptationCss).toContain(".scanner-context[class*='handheld-scan-toolbar']");
   });
 
+  it('applies the 48px glove target floor across the whole handheld layout', () => {
+    expect(scannerAdaptationCss).toMatch(/\.handheld-layout button,[^{]*{\s*min-height: 48px;/s);
+  });
+
   it('does not pin handheld camera height to brittle viewport math', () => {
     expect(scannerAdaptationCss).not.toContain('calc(100vh');
     expect(scannerAdaptationCss).not.toMatch(

@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { HandheldLayout } from '../HandheldLayout';
 import { HandheldProvider } from '../../contexts/HandheldContext';
+import { SHELL_MAIN_CLASS, SHELL_MAIN_ID } from '../shellMain';
 
 // Mock the HandheldScanToolbar component
 vi.mock('../../components/HandheldScanToolbar', () => ({
@@ -180,6 +181,26 @@ describe('HandheldLayout', () => {
     expect(mainContent).toHaveClass('max-w-7xl');
     expect(mainContent).toHaveClass('mx-auto');
     expect(mainContent).toHaveClass('p-4');
+    expect(mainContent).toHaveClass(...SHELL_MAIN_CLASS.split(' '));
+    expect(mainContent).toHaveAttribute('id', SHELL_MAIN_ID);
+  });
+
+  it('gives the handheld main the shared skip-link target id', () => {
+    mockUseHandheldDetectionContext.mockReturnValue({
+      isHandheld: true,
+      detectionResult: { isHandheld: true, method: 'user-agent' },
+    });
+
+    const { container } = render(
+      <HandheldProvider>
+        <HandheldLayout {...defaultProps} />
+      </HandheldProvider>,
+    );
+
+    const mainContent = container.querySelector('main');
+    expect(mainContent).toHaveAttribute('id', SHELL_MAIN_ID);
+    expect(mainContent).toHaveAttribute('tabindex', '-1');
+    expect(container.firstElementChild).toHaveClass('handheld-layout');
   });
 
   it('passes toolbar props to HandheldScanToolbar', () => {

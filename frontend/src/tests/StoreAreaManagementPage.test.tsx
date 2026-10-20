@@ -538,3 +538,281 @@ describe('StoreAreaManagementPage', () => {
     expect(await screen.findByText(/Aisle 1 deleted/i)).toBeInTheDocument();
   });
 });
+
+const progressSummary = (coveragePercent: number) => ({
+  totalBays: 2,
+  checkedBays: 1,
+  notCheckedBays: 0,
+  overdueBays: 1,
+  uncheckedBays: 1,
+  coveragePercent,
+});
+
+function mockAreasAndProgress(areas: unknown[], progress: unknown = null) {
+  // @ts-expect-error — apiService.get is mocked as vi.fn()
+  apiService.get.mockImplementation((url: string) =>
+    Promise.resolve(url === '/store-areas/floor-progress' ? progress : areas),
+  );
+}
+
+const activeProgress = {
+  activeCycle: { id: 31, name: 'July walk', status: 'active' },
+  summary: progressSummary(50),
+  departments: [
+    {
+      department: { id: 10, name: 'Hair' },
+      summary: progressSummary(50),
+      bays: [
+        {
+          id: 11,
+          name: 'Hair Bay 1',
+          parentId: 10,
+          state: 'checked',
+          checkedAt: null,
+          checkedBy: null,
+        },
+        {
+          id: 12,
+          name: 'Hair Bay 2',
+          parentId: 10,
+          state: 'overdue',
+          checkedAt: null,
+          checkedBy: null,
+        },
+      ],
+    },
+  ],
+};
+
+describe('StoreAreaManagementPage UI audit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetToken.mockResolvedValue(undefined);
+  });
+
+  it('uses AA-contrast tokens for messages and a calm row delete trigger', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    (apiService.post as jest.Mock).mockResolvedValue({ id: 2, name: 'Shelf', last_checked: null });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    const [deleteTrigger] = screen.getAllByRole('button', { name: 'Delete Aisle 1' });
+    expect(deleteTrigger).toHaveClass('text-semantic-critical-muted-foreground');
+    expect(deleteTrigger).not.toHaveClass('bg-semantic-critical');
+
+    fireEvent.change(screen.getByLabelText(/^Area name$/i), { target: { value: 'Shelf' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
+
+    expect(await screen.findByRole('status')).toHaveClass('text-semantic-success-muted-foreground');
+  });
+
+  it('emphasises overdue bays with text, not colour alone', async () => {
+    mockAreasAndProgress([], activeProgress);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    const overdue = await screen.findByText('Overdue');
+    expect(overdue).toHaveClass('text-semantic-warning-muted-foreground');
+  });
+
+  it('sizes every form control and dialog button for touch', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }], {
+      ...activeProgress,
+      activeCycle: null,
+    });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    [/^Area name$/i, /Sub-department \(optional\)/i, /Parent department/i, /Walk name/i].forEach(
+      (label) => expect(screen.getByLabelText(label)).toHaveClass('min-h-11'),
+    );
+    expect(screen.getByLabelText(/Parent department/i)).toHaveClass('text-base');
+
+    const mobileRow = within(screen.getByRole('list', { name: 'Store areas' })).getByRole(
+      'listitem',
+      { name: 'Aisle 1' },
+    );
+    const areaLabel = within(mobileRow).getByText('Area');
+    expect(areaLabel.tagName).toBe('DT');
+    expect(areaLabel).toHaveClass('text-sm');
+    expect(areaLabel).not.toHaveClass('text-xs', 'uppercase');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0]);
+    within(screen.getByRole('dialog'))
+      .getAllByRole('textbox')
+      .forEach((input) => expect(input).toHaveClass('min-h-11'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Aisle 1' })[0]);
+    within(screen.getByRole('alertdialog'))
+      .getAllByRole('button')
+      .forEach((button) => expect(button).toHaveClass('min-h-11'));
+  });
+
+  it('exposes one page heading with section headings beneath it', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }], activeProgress);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Store Area Management' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 2, name: 'Floor progress' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Expiry-check locations' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Hair' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Store Area Management' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Store areas' })).toBeInTheDocument();
+  });
+
+  it('reports store coverage as a labelled progressbar and names checked bays by state', async () => {
+    mockAreasAndProgress([], activeProgress);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    const bar = await screen.findByRole('progressbar', { name: 'Store coverage' });
+    expect(bar).toHaveAttribute('aria-valuenow', '50');
+    expect(bar).toHaveAttribute('aria-valuemin', '0');
+    expect(bar).toHaveAttribute('aria-valuemax', '100');
+    expect(bar).toHaveAttribute('aria-valuetext', '50% of bays checked');
+
+    const checkedBay = screen.getByRole('button', { name: 'Hair Bay 1 checked' });
+    expect(checkedBay).toBeDisabled();
+    expect(checkedBay).toHaveTextContent('Checked');
+    expect(screen.getByRole('button', { name: 'Mark Hair Bay 2 checked' })).toBeEnabled();
+
+    const bays = within(screen.getByRole('list', { name: 'Hair bays' })).getAllByRole('listitem');
+    expect(bays).toHaveLength(2);
+    bays.forEach((bay) => expect(bay).not.toHaveClass('border'));
+  });
+
+  it('ties the add-name validation error to its field', async () => {
+    mockAreasAndProgress([]);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await act(async () => {});
+
+    const nameInput = screen.getByLabelText(/^Area name$/i);
+    expect(nameInput).not.toHaveAttribute('aria-describedby');
+
+    fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
+
+    expect(await screen.findByText('Enter an area name.')).toHaveAttribute(
+      'id',
+      'newAreaName-error',
+    );
+    expect(nameInput).toHaveAttribute('aria-describedby', 'newAreaName-error');
+    expect(nameInput).toHaveAccessibleDescription('Enter an area name.');
+  });
+
+  it('shows edit validation and save errors inside the dialog', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    (apiService.put as jest.Mock).mockRejectedValue(new Error('Server unavailable'));
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0]);
+    const dialog = screen.getByRole('dialog');
+    const nameInput = within(dialog).getByLabelText(/^Area name$/i);
+
+    fireEvent.change(nameInput, { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save location' }));
+
+    expect(await within(dialog).findByText('Enter an area name.')).toBeInTheDocument();
+    expect(nameInput).toHaveAccessibleDescription('Enter an area name.');
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+
+    fireEvent.change(nameInput, { target: { value: 'Front Counter' } });
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save location' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Server unavailable');
+    expect(nameInput).toHaveValue('Front Counter');
+  });
+
+  it('does not carry an earlier error into a newly opened edit dialog', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    (apiService.delete as jest.Mock).mockRejectedValue(new Error('Delete failed'));
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete Aisle 1' })[0]);
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete location' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Delete failed');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0]);
+    expect(within(screen.getByRole('dialog')).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a repeated save error after the edit dialog is reopened', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    (apiService.put as jest.Mock).mockRejectedValue(new Error('Server unavailable'));
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    const saveAndExpectError = async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0]);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save location' }));
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Server unavailable');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await _waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    };
+
+    await saveAndExpectError();
+    await saveAndExpectError();
+    expect(apiService.put).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes the edit dialog from Cancel and returns focus to its trigger', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    const trigger = screen.getAllByRole('button', { name: 'Edit Aisle 1' })[0];
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    await _waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await _waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('keeps the delete trigger focusable while the delete is in flight', async () => {
+    mockAreasAndProgress([{ id: 1, name: 'Aisle 1', last_checked: null }]);
+    let rejectDelete: (reason: unknown) => void = () => {};
+    (apiService.delete as jest.Mock).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectDelete = reject;
+        }),
+    );
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+    await screen.findAllByText(/Aisle 1/i);
+
+    const trigger = screen.getAllByRole('button', { name: 'Delete Aisle 1' })[0];
+    fireEvent.click(trigger);
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete location' }),
+    );
+
+    await _waitFor(() => expect(trigger).toHaveTextContent('Deleting'));
+    expect(trigger).toBeEnabled();
+    await _waitFor(() => expect(apiService.delete).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      rejectDelete(new Error('Delete failed'));
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Delete failed');
+  });
+});
