@@ -6,7 +6,8 @@ import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import type { BillingCycle, LaunchTier } from '../lib/planCatalog';
 
 interface SubscriptionTierResponse {
-  status: 'active' | 'trialing' | 'expired' | 'canceled';
+  /** The Worker sends these upper-case (see `normalizedStatus` in trial-status). */
+  status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
   tierLevel: string;
   /** The tier the limits apply to now: `free` once a trial or plan has lapsed. */
   effectiveTierLevel?: string;
@@ -90,7 +91,7 @@ function UpgradeHeader({
     if (isInTrial && daysRemaining > 0) {
       return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining on your Professional trial`;
     }
-    if (isTrialExpired || status === 'expired') {
+    if (isTrialExpired || status === 'EXPIRED') {
       return 'Trial expired. Upgrade to restore full access.';
     }
     return 'Upgrade to Professional when you need more capacity.';
@@ -269,8 +270,10 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
   const daysRemaining = subscription?.daysRemaining ?? 0;
   const tierLevel = subscription?.tierLevel?.toLowerCase() || 'free';
-  const status = subscription?.status;
-  const isActivePaidPlan = status === 'active' && tierLevel !== 'free';
+  // Upper-cased so a status in any case still matches; the Worker sends upper case.
+  const status = subscription?.status?.toUpperCase() as
+    SubscriptionTierResponse['status'] | undefined;
+  const isActivePaidPlan = status === 'ACTIVE' && tierLevel !== 'free';
 
   if (isActivePaidPlan) {
     return (

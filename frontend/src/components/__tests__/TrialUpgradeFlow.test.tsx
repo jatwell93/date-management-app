@@ -31,7 +31,7 @@ describe('TrialUpgradeFlow', () => {
     isInTrial: true,
     isTrialExpired: false,
     subscription: {
-      status: 'trialing',
+      status: 'TRIALING',
       tierLevel: 'professional',
       trialEndDate: '2026-05-20',
       trialStartedAt: '2026-05-01',
@@ -129,7 +129,7 @@ describe('TrialUpgradeFlow', () => {
           isTrialExpired: true,
           subscription: {
             ...trialStatus.subscription,
-            status: 'expired',
+            status: 'EXPIRED',
             tierLevel: 'starter',
             daysRemaining: 0,
           },
@@ -186,7 +186,7 @@ describe('TrialUpgradeFlow', () => {
         ...trialStatus,
         isInTrial: false,
         isTrialExpired: true,
-        subscription: { ...trialStatus.subscription, status: 'expired', tierLevel: 'free' },
+        subscription: { ...trialStatus.subscription, status: 'EXPIRED', tierLevel: 'free' },
       }),
     );
 
@@ -203,7 +203,7 @@ describe('TrialUpgradeFlow', () => {
         isTrialExpired: true,
         subscription: {
           ...trialStatus.subscription,
-          status: 'trialing',
+          status: 'TRIALING',
           tierLevel: 'professional',
           effectiveTierLevel: 'free',
           daysRemaining: 0,
@@ -240,7 +240,7 @@ describe('TrialUpgradeFlow', () => {
         isTrialExpired: false,
         subscription: {
           ...trialStatus.subscription,
-          status: 'active',
+          status: 'ACTIVE',
           tierLevel: 'professional',
           billingCycle: 'monthly',
           daysRemaining: null,
