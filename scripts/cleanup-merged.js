@@ -4,14 +4,21 @@
  * branch is gone, remove their clean worktrees, and move off a merged branch
  * back onto an up-to-date main.
  *
- * "Gone" is the only deletion signal. GitHub deletes the head branch when a
- * PR merges (repo setting `delete_branch_on_merge`), and `git fetch --prune`
- * then marks the local branch's upstream `[gone]`. A branch that was never
- * pushed has no upstream and is never touched, so local-only work survives.
- * `git branch -d` cannot be the check here: squash merges leave the branch
- * "unmerged" as far as git can tell.
+ * A branch is deleted only when BOTH hold:
+ *
+ *   * Its upstream is `[gone]`. GitHub deletes the head branch when a PR merges
+ *     (repo setting `delete_branch_on_merge`), and `git fetch --prune` then
+ *     marks the local upstream gone. A never-pushed branch has no upstream and
+ *     is never touched.
+ *   * Its local tip is already on GitHub: equal to (or behind) the head of a
+ *     merged PR for that branch, or contained in `origin/main`. `[gone]` hides
+ *     the ahead/behind count, so without this check a commit made after the
+ *     merge would be lost to `git branch -D`. `git branch -d` cannot do this
+ *     check: squash merges leave the branch "unmerged" as far as git can tell.
  *
  * A worktree with uncommitted changes is never removed, and its branch is kept.
+ * The script refuses to run from a linked worktree, because it may need to
+ * check out `main` in the main checkout and remove linked worktrees.
  *
  * Usage:
  *   node scripts/cleanup-merged.js            # act, and print what was done
@@ -24,7 +31,15 @@ const path = require('node:path');
 const PROTECTED = new Set(['main', 'master']);
 
 function defaultGit(args, opts = {}) {
-  return execFileSync('git', args, { encoding: 'utf8', ...opts });
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    ...opts,
+  });
+}
+
+function defaultGh(args, opts = {}) {
+  return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...opts });
 }
 
 /** Parse `git for-each-ref --format=%(refname:short)%09%(upstream:short)%09%(upstream:track)`. */
@@ -56,40 +71,50 @@ function parseWorktrees(text) {
 }
 
 /** Free a gone branch from the worktree holding it: the main checkout moves to main, others go. */
-function releaseAction(wt, branch) {
+function releaseAction(wt) {
   return wt.main
-    ? { type: 'switch-to-main', from: branch }
+    ? { type: 'switch-to-main', from: wt.branch }
     : { type: 'remove-worktree', path: wt.path, locked: wt.locked };
 }
 
 /**
  * Decide what to do. Pure: `dirty` is the set of worktree paths with
- * uncommitted changes, and `current` is the main checkout's branch.
+ * uncommitted changes, `verified` the set of branch names whose tip is
+ * already on GitHub.
  */
-function plan({ branches, worktrees, current, dirty }) {
-  const actions = [];
+function plan({ branches, worktrees, dirty, verified }) {
   const kept = [];
-  const goneNames = new Set(
-    branches.filter((b) => b.gone && !PROTECTED.has(b.name)).map((b) => b.name),
-  );
+  const gone = new Set();
+  for (const b of branches.filter((x) => x.gone && !PROTECTED.has(x.name))) {
+    if (verified.has(b.name)) gone.add(b.name);
+    else kept.push({ branch: b.name, reason: 'local commits not in any merged PR or origin/main' });
+  }
 
   // A gone branch checked out somewhere must be released before it can be
   // deleted. The main checkout is listed first, so a switch precedes removals.
-  for (const wt of worktrees) {
-    const branch = wt.main ? current : wt.branch;
-    if (!goneNames.has(branch)) continue;
+  const actions = [];
+  for (const wt of worktrees.filter((w) => gone.has(w.branch))) {
     if (dirty.has(wt.path)) {
       const where = wt.main ? 'current branch' : `worktree ${wt.path}`;
-      kept.push({ branch, reason: `${where} has uncommitted changes` });
-      goneNames.delete(branch);
+      kept.push({ branch: wt.branch, reason: `${where} has uncommitted changes` });
+      gone.delete(wt.branch);
     } else {
-      actions.push(releaseAction(wt, branch));
+      actions.push(releaseAction(wt));
     }
   }
 
-  for (const name of goneNames) actions.push({ type: 'delete-branch', branch: name });
+  for (const name of gone) actions.push({ type: 'delete-branch', branch: name });
   if (actions.length) actions.push({ type: 'prune-worktrees' });
   return { actions, kept };
+}
+
+function succeeds(fn) {
+  try {
+    fn();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isDirty(git, wtPath) {
@@ -99,6 +124,39 @@ function isDirty(git, wtPath) {
     // A worktree directory that no longer exists has nothing to lose.
     return false;
   }
+}
+
+/** name -> head SHAs of merged PRs from that branch (names can be reused). */
+function mergedHeads(gh) {
+  const rows = JSON.parse(
+    gh(['pr', 'list', '--state', 'merged', '--limit', '300', '--json', 'headRefName,headRefOid']),
+  );
+  const heads = new Map();
+  for (const r of rows)
+    heads.set(r.headRefName, [...(heads.get(r.headRefName) || []), r.headRefOid]);
+  return heads;
+}
+
+/** True when the branch tip is a merged PR head, behind one, or in origin/main. */
+function tipIsOnGitHub(git, name, heads) {
+  const tip = git(['rev-parse', `refs/heads/${name}`]).trim();
+  const ancestorOf = (ref) => succeeds(() => git(['merge-base', '--is-ancestor', tip, ref]));
+  return (
+    (heads.get(name) || []).some((oid) => oid === tip || ancestorOf(oid)) ||
+    ancestorOf('origin/main')
+  );
+}
+
+function inLinkedWorktree(git) {
+  const [gitDir, commonDir] = git([
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-dir',
+    '--git-common-dir',
+  ])
+    .trim()
+    .split('\n');
+  return path.resolve(gitDir) !== path.resolve(commonDir);
 }
 
 const ACTIONS = {
@@ -117,7 +175,7 @@ const ACTIONS = {
     ],
   },
   'delete-branch': {
-    describe: (a) => `delete branch ${a.branch} (remote gone)`,
+    describe: (a) => `delete branch ${a.branch} (merged, remote gone)`,
     commands: (a) => [['branch', '-D', a.branch]],
   },
   'prune-worktrees': {
@@ -130,12 +188,12 @@ function execute(actions, git) {
   for (const a of actions) ACTIONS[a.type].commands(a).forEach((args) => git(args));
 }
 
-function describe(a) {
-  return ACTIONS[a.type].describe(a);
-}
-
-function main(argv, { git = defaultGit, log = console.log } = {}) {
+function main(argv, { git = defaultGit, gh = defaultGh, log = console.log } = {}) {
   const dryRun = argv.includes('--dry-run');
+  if (inLinkedWorktree(git)) {
+    log('run this from the main checkout, not a linked worktree');
+    return 1;
+  }
   git(['fetch', '-q', '--prune', 'origin']);
   const branches = parseBranches(
     git([
@@ -145,23 +203,27 @@ function main(argv, { git = defaultGit, log = console.log } = {}) {
     ]),
   );
   const worktrees = parseWorktrees(git(['worktree', 'list', '--porcelain']));
-  const current = git(['rev-parse', '--abbrev-ref', 'HEAD']).trim();
   const dirty = new Set(worktrees.filter((w) => isDirty(git, w.path)).map((w) => w.path));
+  const goneNames = branches.filter((b) => b.gone).map((b) => b.name);
+  const heads = goneNames.length ? mergedHeads(gh) : new Map();
+  const verified = new Set(goneNames.filter((name) => tipIsOnGitHub(git, name, heads)));
 
-  const { actions, kept } = plan({ branches, worktrees, current, dirty });
+  const { actions, kept } = plan({ branches, worktrees, dirty, verified });
   for (const k of kept) log(`keep ${k.branch}: ${k.reason}`);
   if (!actions.length) {
     log('nothing to clean');
     return 0;
   }
-  for (const a of actions) log(`${dryRun ? 'would ' : ''}${describe(a)}`);
+  for (const a of actions) log(`${dryRun ? 'would ' : ''}${ACTIONS[a.type].describe(a)}`);
   if (!dryRun) execute(actions, git);
   return 0;
 }
 
 if (require.main === module) {
+  const cwd = path.resolve(__dirname, '..');
   process.exitCode = main(process.argv.slice(2), {
-    git: (args) => defaultGit(args, { cwd: path.resolve(__dirname, '..') }),
+    git: (args) => defaultGit(args, { cwd }),
+    gh: (args) => defaultGh(args, { cwd }),
   });
 }
 

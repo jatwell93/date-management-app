@@ -82,7 +82,7 @@ function latestTime(times) {
   return valid.length ? new Date(Math.max(...valid)).toISOString() : null;
 }
 
-/** Map `gh pr checks --json name,bucket` rows to pass/fail/pending counts. */
+/** Map `gh pr checks --json name,bucket,...` rows to pass/fail/pending counts. */
 function summarizeChecks(rows) {
   const summary = { pass: 0, fail: [], pending: [], skipped: 0 };
   for (const row of rows || []) {
@@ -113,38 +113,54 @@ function toThread(t) {
   };
 }
 
-/**
- * CodeScene reports failed gates as a COMMENTED review, not CHANGES_REQUESTED,
- * so its body is the only signal.
- */
-function isActionableReview(r) {
-  return r.state === 'CHANGES_REQUESTED' || /\*\*Gates Failed\*\*/.test(r.body || '');
+// Review states that set a reviewer's verdict. A later COMMENTED review does
+// not clear an earlier CHANGES_REQUESTED, matching GitHub's review decision.
+const DECISIVE = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
+
+function newer(map, key, r) {
+  const prev = map.get(key);
+  if (!prev || Date.parse(r.submittedAt) >= Date.parse(prev.submittedAt)) map.set(key, r);
 }
 
-/** Only the latest review per author matters: CodeScene re-reviews every push. */
+/**
+ * The latest review per author (CodeScene re-reviews every push), with that
+ * author's latest decisive state. CodeScene reports failed gates as a
+ * COMMENTED review, so its body is the only signal for those.
+ */
 function latestReviews(reviewNodes) {
   const latest = new Map();
+  const decisive = new Map();
   for (const r of reviewNodes) {
-    const prev = latest.get(login(r));
-    if (!prev || Date.parse(r.submittedAt) >= Date.parse(prev.submittedAt)) latest.set(login(r), r);
+    newer(latest, login(r), r);
+    if (DECISIVE.has(r.state)) newer(decisive, login(r), r);
   }
-  return [...latest.values()].map((r) => ({
-    author: login(r),
-    state: r.state,
-    submittedAt: r.submittedAt,
-    url: r.url,
-    actionable: isActionableReview(r),
-    body: clip(r.body),
-  }));
+  return [...latest.values()].map((r) => {
+    const decision = decisive.get(login(r))?.state || null;
+    return {
+      author: login(r),
+      state: r.state,
+      decision,
+      submittedAt: r.submittedAt,
+      url: r.url,
+      actionable: decision === 'CHANGES_REQUESTED' || /\*\*Gates Failed\*\*/.test(r.body || ''),
+      body: clip(r.body),
+    };
+  });
 }
 
 function toComment(c) {
   return { author: login(c), createdAt: c.createdAt, url: c.url, body: clip(c.body) };
 }
 
-function activityTimes(pr, head) {
+/**
+ * Every timestamp that restarts the quiet window. Check start and completion
+ * times stand in for the push time: the commit date can be long before the
+ * push, and Seer posts after its own check completes.
+ */
+function activityTimes(pr, head, checkRows) {
   return [
     head.committedDate,
+    ...(checkRows || []).flatMap((c) => [c.startedAt, c.completedAt]),
     ...nodes(pr.reviewThreads).flatMap((t) => nodes(t.comments).map((c) => c.createdAt)),
     ...nodes(pr.reviews).map((r) => r.submittedAt),
     ...nodes(pr.comments).map((c) => c.createdAt),
@@ -164,7 +180,7 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
   const comments = nodes(pr.comments).map(toComment);
   const checks = summarizeChecks(checkRows);
 
-  const lastActivityAt = latestTime(activityTimes(pr, head));
+  const lastActivityAt = latestTime(activityTimes(pr, head, checkRows));
   const quietFor = lastActivityAt ? (now - Date.parse(lastActivityAt)) / 60000 : Infinity;
   const settled = checks.pending.length === 0 && quietFor >= quietMinutes;
 
@@ -208,7 +224,9 @@ function fetchReport(number, { gh = defaultGh, now, quietMinutes } = {}) {
   const pr = JSON.parse(raw).data.repository.pullRequest;
   let checkRows = [];
   try {
-    checkRows = JSON.parse(gh(['pr', 'checks', String(number), '--json', 'name,bucket']));
+    checkRows = JSON.parse(
+      gh(['pr', 'checks', String(number), '--json', 'name,bucket,startedAt,completedAt']),
+    );
   } catch (err) {
     // `gh pr checks` exits 8 while checks are pending and 1 when one failed,
     // but still prints the JSON on stdout.

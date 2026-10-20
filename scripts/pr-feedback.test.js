@@ -112,6 +112,52 @@ test('a failing CodeScene review is actionable', () => {
   assert.equal(report.actionable, 1);
 });
 
+test('a later COMMENTED review does not clear an earlier CHANGES_REQUESTED', () => {
+  const report = summarize(
+    pr({
+      reviews: {
+        nodes: [
+          {
+            author: { login: 'reviewer' },
+            state: 'CHANGES_REQUESTED',
+            submittedAt: '2026-10-21T10:00:00Z',
+            body: 'fix this',
+          },
+          {
+            author: { login: 'reviewer' },
+            state: 'COMMENTED',
+            submittedAt: '2026-10-21T11:00:00Z',
+            body: 'one more thing',
+          },
+        ],
+      },
+    }),
+    [],
+    { now: NOW },
+  );
+  assert.equal(report.reviews[0].state, 'COMMENTED');
+  assert.equal(report.reviews[0].decision, 'CHANGES_REQUESTED');
+  assert.equal(report.actionable, 1);
+});
+
+test('the quiet window restarts at the latest check start or completion, not the commit date', () => {
+  // Committed long ago, but a check (e.g. Seer) completed 2 minutes ago.
+  const report = summarize(
+    pr(),
+    [
+      {
+        name: 'Seer Code Review',
+        bucket: 'pass',
+        startedAt: '2026-10-21T11:55:00Z',
+        completedAt: '2026-10-21T11:58:00Z',
+      },
+    ],
+    { now: NOW, quietMinutes: 10 },
+  );
+  assert.equal(report.settled, false);
+  assert.equal(report.lastActivityAt, '2026-10-21T11:58:00.000Z');
+});
+
 test('a CodeScene COMMENTED review with failed gates is actionable', () => {
   const report = summarize(
     pr({
