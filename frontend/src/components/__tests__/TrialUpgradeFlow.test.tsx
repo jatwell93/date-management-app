@@ -195,6 +195,30 @@ describe('TrialUpgradeFlow', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Free plan' })).toBeInTheDocument();
   });
 
+  it('names an expired Professional trial by the tier it is held to', async () => {
+    fetchMock.mockResponseOnce(
+      JSON.stringify({
+        ...trialStatus,
+        isInTrial: false,
+        isTrialExpired: true,
+        subscription: {
+          ...trialStatus.subscription,
+          status: 'trialing',
+          tierLevel: 'professional',
+          effectiveTierLevel: 'free',
+          daysRemaining: 0,
+        },
+      }),
+    );
+
+    render(<TrialUpgradeFlow token="test-token" />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Free plan' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 1, name: 'Professional plan' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps a readable error when checkout fails with a non-JSON body', async () => {
     fetchMock
       .mockResponseOnce(JSON.stringify(trialStatus))

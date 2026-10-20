@@ -8,6 +8,8 @@ import type { BillingCycle, LaunchTier } from '../lib/planCatalog';
 interface SubscriptionTierResponse {
   status: 'active' | 'trialing' | 'expired' | 'canceled';
   tierLevel: string;
+  /** The tier the limits apply to now: `free` once a trial or plan has lapsed. */
+  effectiveTierLevel?: string;
   trialEndDate: string | null;
   trialStartedAt: string | null;
   trialConvertedAt: string | null;
@@ -284,7 +286,8 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         status={status}
         daysRemaining={daysRemaining}
         tierLimits={tierLimits}
-        tierLevel={tierLevel}
+        // An expired trial keeps its stored tier but is held to the effective tier's limits.
+        tierLevel={subscription?.effectiveTierLevel?.toLowerCase() || tierLevel}
       />
 
       {error && (
