@@ -24,16 +24,20 @@ function LocationProbe() {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
-function renderOnboarding(initialEntry = '/onboarding') {
-  return render(
+function onboardingTree(initialEntry = '/onboarding') {
+  return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="*" element={<div>Elsewhere</div>} />
       </Routes>
       <LocationProbe />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderOnboarding(initialEntry = '/onboarding') {
+  return render(onboardingTree(initialEntry));
 }
 
 const location = () => screen.getByTestId('location').textContent;
@@ -83,6 +87,19 @@ describe('OnboardingPage structure', () => {
       expect(screen.getByRole('heading', { level: 1 })).not.toHaveFocus();
     },
   );
+
+  it('focuses the catalog step heading once Clerk creates the organization', async () => {
+    mockOrganization.current = null;
+    const { rerender } = renderOnboarding();
+    expect(screen.getByText('Step 1 of 3')).toBeInTheDocument();
+
+    // Clerk moves on by itself after creating the organization; handleNext never runs.
+    mockOrganization.current = { id: 'org_new' };
+    rerender(onboardingTree());
+
+    expect(await screen.findByText('Step 2 of 3')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+  });
 
   it('exposes card titles as level-2 headings', () => {
     renderOnboarding('/onboarding?step=1');

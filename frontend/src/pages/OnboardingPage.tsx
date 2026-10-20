@@ -1,4 +1,11 @@
-import { type ComponentType, type ReactNode, useState, useEffect, useRef } from 'react';
+import {
+  type ComponentType,
+  type ReactNode,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CreateOrganization, useAuth, useOrganization } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -366,9 +373,9 @@ function useFocusOnStepChange(currentStep: OnboardingStep) {
     }
   }, [currentStep]);
 
-  const requestFocus = () => {
+  const requestFocus = useCallback(() => {
     focusRequested.current = true;
-  };
+  }, []);
 
   return { headingRef, requestFocus };
 }
@@ -378,10 +385,20 @@ export function OnboardingPage() {
   const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
   const { headingRef, requestFocus } = useFocusOnStepChange(currentStep);
+  // Clerk's CreateOrganization redirects to step 1 itself, so handleNext never runs.
+  // An organization appearing after step 0 was shown is that user-driven step change.
+  const awaitingOrganization = useRef(false);
 
   // Initialize step from URL query param or organization state
   useEffect(() => {
     if (!isOrgLoaded) return;
+
+    if (!organization) {
+      awaitingOrganization.current = true;
+    } else if (awaitingOrganization.current) {
+      awaitingOrganization.current = false;
+      requestFocus();
+    }
 
     const stepParam = searchParams.get('step');
     if (stepParam !== null) {
@@ -399,7 +416,7 @@ export function OnboardingPage() {
       setCurrentStep(1);
       setSearchParams({ step: '1' });
     }
-  }, [searchParams, organization, isOrgLoaded, setSearchParams]);
+  }, [searchParams, organization, isOrgLoaded, setSearchParams, requestFocus]);
 
   const handleNext = () => {
     if (currentStep < MAX_STEP) {
