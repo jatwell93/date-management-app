@@ -1,7 +1,8 @@
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { UsageReportPage } from '../pages/UsageReportPage';
 import { apiService } from '../lib/api.service';
+import { semanticDataViz } from '../theme/semantic-tokens';
 import '@testing-library/jest-dom';
 
 vi.mock('../hooks/useFreshApiToken', () => ({
@@ -24,9 +25,33 @@ vi.mock('../lib/api.service', () => ({
   },
 }));
 
+interface MockChartProps {
+  role?: string;
+  'aria-label'?: string;
+  data: { datasets: Array<{ backgroundColor?: string; borderColor?: string }> };
+  options: {
+    animation?: boolean;
+    maintainAspectRatio?: boolean;
+    plugins: { title: { display: boolean } };
+  };
+}
+
+// Record the props each chart receives so tests can assert colours/options.
+const chartProps = vi.hoisted(() => ({
+  bar: null as MockChartProps | null,
+  line: null as MockChartProps | null,
+}));
+
+// Forward the accessibility props the page passes so tests can assert the canvas name.
 vi.mock('react-chartjs-2', () => ({
-  Bar: () => <div role="img" aria-label="Items added by user chart" />,
-  Line: () => <div role="img" aria-label="Items added per day chart" />,
+  Bar: (props: MockChartProps) => {
+    chartProps.bar = props;
+    return <div data-testid="bar-chart" role={props.role} aria-label={props['aria-label']} />;
+  },
+  Line: (props: MockChartProps) => {
+    chartProps.line = props;
+    return <div data-testid="line-chart" role={props.role} aria-label={props['aria-label']} />;
+  },
 }));
 
 describe('UsageReportPage', () => {
@@ -72,10 +97,38 @@ describe('UsageReportPage', () => {
       await screen.findByRole('heading', { name: /Stock Added by Team Member/i, level: 2 }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Usage Report/i, level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('main', { name: /Usage reporting workspace/i })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /User contribution summary/i })).toHaveTextContent(
+    // The app shell owns <main>; the page must not render a second one.
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /^Usage Report$/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Stock Added by Team Member/i })).toHaveTextContent(
       /Manager 1/i,
     );
+    expect(screen.getByRole('region', { name: /Daily Stock Additions/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Daily Activity/i })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /Time frame/i })).toBeInTheDocument();
+    // Charts load lazily behind Suspense, so wait for them.
+    expect(
+      await screen.findByRole('img', { name: /items added per team member/i }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole('img', { name: /stock additions over time/i }),
+    ).toBeInTheDocument();
+    // Both single-series charts use teal (>= 3:1 on white) and no in-canvas title,
+    // because the card heading already names the chart.
+    expect(chartProps.bar?.data.datasets[0].backgroundColor).toBe(semanticDataViz.series1);
+    expect(chartProps.line?.data.datasets[0].borderColor).toBe(semanticDataViz.series1);
+    expect(chartProps.bar?.options.plugins.title.display).toBe(false);
+    expect(chartProps.line?.options.plugins.title.display).toBe(false);
+    expect(chartProps.bar?.options.maintainAspectRatio).toBe(false);
+    expect(screen.getByRole('table', { name: /Daily activity by user/i })).toHaveTextContent(
+      /Manager/i,
+    );
+    expect(screen.getByRole('list', { name: /^Stock added by team member$/i })).toBeInTheDocument();
+    // Daily counts are neutral ink (green/amber/red on muted tiles failed AA and implied urgency).
+    const dailyList = screen.getByRole('list', { name: /^Daily activity$/i });
+    for (const count of ['5', '3', '1']) {
+      expect(within(dailyList).getByText(count)).toHaveClass('text-semantic-text-primary');
+    }
     expect(screen.getByRole('heading', { name: /Daily Activity/i })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: /Daily Stock Additions/i, level: 2 }),
@@ -98,6 +151,95 @@ describe('UsageReportPage', () => {
       tokenValue,
       expect.any(Object),
     );
+  });
+
+  it('turns off chart animation when the user prefers reduced motion', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      onchange: null,
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    try {
+      // @ts-expect-error — apiService.get is mocked as vi.fn()
+      apiService.get.mockImplementation((url) => {
+        if (url.startsWith('/reports/items-by-user')) {
+          return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
+        }
+        if (url === '/reports/items-by-date') {
+          return Promise.resolve([{ date: '2025-01-30', itemCount: 20 }]);
+        }
+        return Promise.resolve([]);
+      });
+
+      render(<UsageReportPage token="test-session-value" />);
+
+      await screen.findByRole('img', { name: /items added per team member/i });
+      await screen.findByRole('img', { name: /stock additions over time/i });
+      expect(chartProps.bar?.options.animation).toBe(false);
+      expect(chartProps.line?.options.animation).toBe(false);
+      // The time-frame control meets the 44px touch-target floor.
+      expect(screen.getByRole('combobox', { name: /Time frame/i })).toHaveClass('min-h-11');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('keeps chart animation when reduced motion is not requested', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+
+    await screen.findByRole('img', { name: /items added per team member/i });
+    expect(chartProps.bar?.options.animation).toBeUndefined();
+  });
+
+  it('keeps a team-member chart error after the daily chart loads successfully later', async () => {
+    let resolveItemsByDate: (value: Array<{ date: string; itemCount: number }>) => void = () => {};
+    const itemsByDatePromise = new Promise<Array<{ date: string; itemCount: number }>>(
+      (resolve) => {
+        resolveItemsByDate = resolve;
+      },
+    );
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.reject(new Error('Team member chart unavailable'));
+      }
+      if (url === '/reports/items-by-date') {
+        return itemsByDatePromise;
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+    await screen.findByRole('heading', { name: /Stock Added by Team Member/i, level: 2 });
+
+    // items-by-date succeeds AFTER items-by-user failed: it must not wipe that error.
+    await act(async () => {
+      resolveItemsByDate([{ date: '2025-01-30', itemCount: 20 }]);
+      await itemsByDatePromise;
+    });
+
+    expect(
+      await screen.findByRole('table', { name: /Items added per day summary/i }),
+    ).toBeInTheDocument();
+    const byUser = screen.getByRole('region', { name: /Stock Added by Team Member/i });
+    expect(within(byUser).getByRole('alert')).toHaveTextContent(/Team member chart unavailable/i);
+    // The error belongs to the team-member card only.
+    const byDate = screen.getByRole('region', { name: /Daily Stock Additions/i });
+    expect(within(byDate).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('displays an error message if token is missing', async () => {
@@ -212,17 +354,17 @@ describe('UsageReportPage', () => {
     expect(screen.getByRole('region', { name: /Store walk audit/i })).toHaveTextContent(
       /July walk/i,
     );
-    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
-      /Alex Checker/i,
-    );
-    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
-      /75%/i,
-    );
-    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
-      /12.5 bays\/hour/i,
-    );
+    // Each cycle's table is named after its cycle so screen-reader table lists can tell them apart.
+    const walkTable = screen.getByRole('table', { name: /July walk store walk productivity/i });
+    expect(walkTable).toHaveTextContent(/Alex Checker/i);
+    expect(walkTable).toHaveTextContent(/75%/i);
+    expect(walkTable).toHaveTextContent(/12.5 bays\/hour/i);
     expect(screen.getByText(/42 min/i)).toBeInTheDocument();
     expect(screen.getByText(/Implausible pace/i)).toBeInTheDocument();
+    // Flag text uses the AA-safe muted-foreground token on the muted critical surface.
+    expect(screen.getByText(/Implausible pace/i)).toHaveClass(
+      'text-semantic-critical-muted-foreground',
+    );
     expect(screen.getByText(/All-zero findings/i)).toBeInTheDocument();
     expect(apiService.get).toHaveBeenCalledWith(
       '/reports/store-walk-audit',

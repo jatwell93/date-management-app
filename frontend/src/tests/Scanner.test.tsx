@@ -79,6 +79,15 @@ describe('Scanner', () => {
     expect(screen.getByTestId('scanner-state-indicator')).toBeInTheDocument();
   });
 
+  it('turns off mobile keyboard autocorrection on the barcode input', () => {
+    render(<Scanner onScan={mockOnScan} />);
+    const input = screen.getByLabelText(/Barcode or SKU/i);
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+    expect(input).toHaveAttribute('autocapitalize', 'off');
+    expect(input).toHaveAttribute('spellcheck', 'false');
+  });
+
   it('disables manual, camera, and hardware scan entry points when disabled', () => {
     let capturedOnScanCallback: ((barcode: string) => void) | null = null;
     mockUseHardwareScan.mockImplementation((cb) => {

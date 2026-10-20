@@ -1,3 +1,4 @@
+import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import {
   AlertDialog,
@@ -41,10 +42,11 @@ export function AreaDeleteDialog({
     >
       <AlertDialogTrigger asChild>
         <Button
-          variant="destructive"
-          className={triggerClassName}
+          variant="outline"
+          className={cn('text-semantic-critical-muted-foreground', triggerClassName)}
           aria-label={`Delete ${area.name}`}
-          disabled={deletingAreaId !== null}
+          // Stays enabled while a delete is in flight so Radix can return focus here
+          // when the dialog closes; the confirm action below is what stays disabled.
         >
           {deletingAreaId === area.id ? 'Deleting' : 'Delete'}
         </Button>
@@ -57,9 +59,11 @@ export function AreaDeleteDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={deletingAreaId !== null}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={deletingAreaId !== null} className="min-h-11">
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction
-            className="bg-semantic-critical text-semantic-critical-foreground hover:bg-semantic-critical-hover active:bg-semantic-critical-active focus-visible:ring-semantic-critical/20 dark:focus-visible:ring-semantic-critical/40"
+            className="min-h-11 bg-semantic-critical text-semantic-critical-foreground hover:bg-semantic-critical-hover active:bg-semantic-critical-active focus-visible:ring-semantic-critical/20 dark:focus-visible:ring-semantic-critical/40"
             disabled={deletingAreaId !== null}
             onClick={() => onDelete(area)}
           >
