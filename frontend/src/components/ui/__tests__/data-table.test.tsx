@@ -39,6 +39,20 @@ describe('DataTable pagination', () => {
     expect(screen.queryByText('No results.')).not.toBeInTheDocument();
   });
 
+  it('goes back to page 1 when an outside filter changes', async () => {
+    const { rerender } = render(<DataTable columns={columns} data={rows(25)} pageResetKey="all" />);
+    await act(() => Promise.resolve());
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    expect(screen.getByText('Item 11')).toBeInTheDocument();
+
+    // A location filter narrows the data but still leaves a page 2 to stay on.
+    rerender(<DataTable columns={columns} data={rows(22, 'Front')} pageResetKey="front" />);
+    await act(() => Promise.resolve());
+    expect(screen.getByText('Front 1')).toBeInTheDocument();
+    expect(screen.getByText(/^Showing 1 to 10 of 22 entries$/)).toBeInTheDocument();
+  });
+
   it('goes back to page 1 when the search changes', () => {
     render(<DataTable columns={columns} data={rows(25)} />);
 

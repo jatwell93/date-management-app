@@ -1017,6 +1017,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                     <DataTable
                       columns={columns}
                       data={filteredData}
+                      pageResetKey={locationFilter}
                       filtering={true}
                       pagination={true}
                       sorting={true}

@@ -23,6 +23,8 @@ interface DataTableProps<TData, TValue> {
   pagination?: boolean;
   sorting?: boolean;
   filtering?: boolean;
+  /** Filters applied outside the table (e.g. a location select); a change returns to page 1. */
+  pageResetKey?: string;
 }
 
 // Global filter function
@@ -41,6 +43,7 @@ export function DataTable<TData, TValue>({
   pagination = true,
   sorting = true,
   filtering = true,
+  pageResetKey,
 }: DataTableProps<TData, TValue>) {
   const [sortingState, setSortingState] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -48,6 +51,13 @@ export function DataTable<TData, TValue>({
     pageIndex: 0,
     pageSize: 10,
   });
+
+  // Adjusted during render (not in an effect) so the new filter never paints a stale page.
+  const [lastPageResetKey, setLastPageResetKey] = React.useState(pageResetKey);
+  if (pageResetKey !== lastPageResetKey) {
+    setLastPageResetKey(pageResetKey);
+    setPaginationState((current) => ({ ...current, pageIndex: 0 }));
+  }
 
   const goToFirstPage = React.useCallback(
     () => setPaginationState((current) => ({ ...current, pageIndex: 0 })),
