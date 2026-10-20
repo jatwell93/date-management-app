@@ -11,6 +11,7 @@ import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
 import { MarkdownCreditScopeBadge } from '../components/MarkdownCreditScopeBadge';
 import { MarkdownMatricesNotice } from '../components/MarkdownMatricesNotice';
+import type { ExpiredItem } from '../types/inventory';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
@@ -51,15 +52,24 @@ function getDaysToExpiry(expiryDate: string) {
   return Number.isNaN(days) ? null : days;
 }
 
-// The expired tile mirrors the Expired items worklist exactly. A failure here must
-// not block the markdown report, so it resolves to null ("count unavailable").
+// The Expired items worklist also holds Markdown 1-3 and day-0 rows, which this
+// report already counts as markdown work. Only lines past expiry (or with no date,
+// which the report never returns) belong on the expired tile.
+function isPastExpiry(item: Pick<ExpiredItem, 'expiryDate'>): boolean {
+  if (!item.expiryDate) return true;
+  const daysToExpiry = getDaysToExpiry(item.expiryDate);
+  return daysToExpiry === null || daysToExpiry < 0;
+}
+
+// A failure here must not block the markdown report, so it resolves to null
+// ("count unavailable").
 async function fetchExpiredItemCount(
   authToken: string | undefined,
   signal?: AbortSignal,
 ): Promise<number | null> {
   try {
-    const items = await apiService.get<unknown[]>('/expired-items', authToken, signal);
-    return Array.isArray(items) ? items.length : null;
+    const items = await apiService.get<ExpiredItem[]>('/expired-items', authToken, signal);
+    return Array.isArray(items) ? items.filter(isPastExpiry).length : null;
   } catch {
     return null;
   }
@@ -244,7 +254,10 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         (summary, item) => {
           // The report only returns stock expiring today or later, so 0-day items
           // stay Markdown 3 work. Past-expiry stock is counted from /expired-items.
+          // The report's "today" is the server's UTC date; a row already past expiry
+          // in local time is on the expired tile, so it is not counted twice.
           const daysToExpiry = getDaysToExpiry(item.expiryDate);
+          if (daysToExpiry !== null && daysToExpiry < 0) return summary;
           if (daysToExpiry !== null && daysToExpiry <= 90) {
             summary.markdown += 1;
           } else {

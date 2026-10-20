@@ -121,10 +121,19 @@ describe('DetailedExpiryReportPage', () => {
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
         // The report endpoint only returns stock expiring today or later.
-        return Promise.resolve([row(1, 0, 'Today Product')]);
+        // A row past expiry in local time (server's UTC date is behind) is on the
+        // expired tile instead, so it is not counted as markdown work too.
+        return Promise.resolve([row(1, 0, 'Today Product'), row(2, -1, 'Late Product')]);
       }
       if (url === '/expired-items') {
-        return Promise.resolve([{ id: 11 }, { id: 12 }, { id: 13 }]);
+        // The worklist also returns day-0 and Markdown-status lines; the report
+        // already counts those, so only past-expiry (or undated) lines are expired.
+        return Promise.resolve([
+          { id: 11, expiryDate: localDaysFromNow(-3), status: 'Expired' },
+          { id: 12, expiryDate: null, status: 'Expired' },
+          { id: 1, expiryDate: localDaysFromNow(0), status: 'Expired' },
+          { id: 13, expiryDate: localDaysFromNow(40), status: 'Markdown 2' },
+        ]);
       }
       return Promise.resolve([]);
     });
@@ -132,7 +141,7 @@ describe('DetailedExpiryReportPage', () => {
     renderPage('test-session-value');
 
     const tile = await screen.findByRole('region', { name: 'Expired stock to write off' });
-    expect(tile).toHaveTextContent(/write off\s*3\s*These lines are past expiry/);
+    expect(tile).toHaveTextContent(/write off\s*2\s*These lines are past expiry/);
     const link = screen.getByRole('link', { name: 'Write off on Expired items' });
     expect(link).toHaveAttribute('href', '/expired-items');
     expect(link).toHaveClass('min-h-11');
