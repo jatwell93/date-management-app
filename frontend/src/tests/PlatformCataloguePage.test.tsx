@@ -80,6 +80,11 @@ describe('PlatformCataloguePage', () => {
     render(<PlatformCataloguePage token="token" />);
 
     await screen.findByText('Store A');
+    // The live region must be in the accessibility tree before its first message.
+    // jsdom applies no Tailwind, so guard the class: `empty:hidden` hides it while empty.
+    const status = screen.getByRole('status');
+    expect(status).toBeEmptyDOMElement();
+    expect(status.className).not.toMatch(/(^|\s)(empty:)?hidden(\s|$)/);
     fireEvent.click(screen.getByRole('checkbox', { name: /select all/i }));
     fireEvent.click(screen.getByRole('button', { name: /accept selected/i }));
 

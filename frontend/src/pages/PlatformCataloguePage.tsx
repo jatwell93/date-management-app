@@ -303,7 +303,8 @@ export default function PlatformCataloguePage({ token }: PlatformCataloguePagePr
             </Button>
           </div>
         </div>
-        <p role="status" aria-live="polite" className="mt-3 empty:hidden">
+        {/* Never display:none while empty: a hidden live region drops the first message. */}
+        <p role="status" aria-live="polite" className="mt-3 empty:mt-0">
           {statusMessage}
         </p>
         {actionError && (
