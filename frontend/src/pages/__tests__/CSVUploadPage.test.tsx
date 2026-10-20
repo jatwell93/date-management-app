@@ -988,7 +988,7 @@ describe('CSVUploadPage expiry import', () => {
       await waitFor(() => expect(directUploadCalls()).toHaveLength(before + 1));
     };
 
-    it('aborts the in-flight request when cancelled before the server accepts the file', async () => {
+    it('aborts the in-flight upload but says the server may already have the file', async () => {
       render(<CSVUploadPage token="test-token" />);
       await startPendingDirectUpload();
       const { signal } = directUploadCalls()[0][1] as RequestInit;
@@ -996,17 +996,41 @@ describe('CSVUploadPage expiry import', () => {
 
       userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
 
+      // The direct POST queues the import; once sent, the server may have queued it
+      // already, so cancel must not claim the server never accepted the file.
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Upload cancelled, but the server may already have received the file',
+      );
+      expect(screen.getByRole('alert')).not.toHaveTextContent(
+        'before the server accepted the file',
+      );
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('says the file was not accepted when cancelled before it was sent', async () => {
+      const initiateCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('/upload/initiate'));
+      fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+      render(<CSVUploadPage token="test-token" />);
+      selectProductFile();
+      submitProductUpload();
+      await waitFor(() => expect(initiateCalls()).toHaveLength(1));
+
+      userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
       expect(await screen.findByRole('alert')).toHaveTextContent(
         'Upload cancelled before the server accepted the file',
       );
-      expect(signal?.aborted).toBe(true);
+      expect(directUploadCalls()).toHaveLength(0);
     });
 
     it('stops the cancelled upload progress timer so a new upload is not bumped by it', async () => {
       render(<CSVUploadPage token="test-token" />);
       await startPendingDirectUpload();
       userEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
-      await screen.findByText(/Upload cancelled before the server accepted the file/);
+      await screen.findByText(
+        /Upload cancelled, but the server may already have received the file/,
+      );
 
       await startPendingDirectUpload();
       await wait(1600);

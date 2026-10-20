@@ -20,7 +20,7 @@ import {
   validateSelectedFile,
 } from '../utils/uploadUtils';
 import { useFreshApiToken } from './useFreshApiToken';
-import { type UploadRun, useUploadRuns } from './useUploadRuns';
+import { type HandOffState, type UploadRun, useUploadRuns } from './useUploadRuns';
 
 const POLL_TIMEOUT_MS = 30 * 60 * 1000;
 const POLL_INITIAL_INTERVAL_MS = 1000;
@@ -29,11 +29,20 @@ export const UPLOAD_CANCELLED_MESSAGE =
   'Upload cancelled before the server accepted the file. You can upload it again.';
 export const HANDED_OFF_CANCEL_MESSAGE =
   'Stopped waiting for this upload. The server already accepted the file and will finish importing it, but the result will not appear under "Last uploaded file". Wait a few minutes before uploading another catalogue.';
+export const HAND_OFF_UNCERTAIN_MESSAGE =
+  'Upload cancelled, but the server may already have received the file. If it did, it will finish importing it, and the result will not appear under "Last uploaded file". Wait a few minutes before uploading another catalogue.';
 export const ACTIVE_IMPORT_MESSAGE =
   'Another catalogue import is still running for this store. Wait for it to finish, then upload again.';
 
-const cancelMessage = (cancelled: { handedOff: boolean } | null) =>
-  cancelled?.handedOff ? HANDED_OFF_CANCEL_MESSAGE : UPLOAD_CANCELLED_MESSAGE;
+const CANCEL_MESSAGES: Record<HandOffState, string> = {
+  none: UPLOAD_CANCELLED_MESSAGE,
+  // The request that queues the import was in flight: aborting it here cannot undo a
+  // queue the server may already have done.
+  pending: HAND_OFF_UNCERTAIN_MESSAGE,
+  done: HANDED_OFF_CANCEL_MESSAGE,
+};
+const cancelMessage = (cancelled: { handOff: HandOffState } | null) =>
+  CANCEL_MESSAGES[cancelled?.handOff ?? 'none'];
 
 // 409 means the server is still importing an earlier file (often one the user just cancelled).
 const requestFailure = (res: Response, fallback: string) =>
@@ -406,6 +415,8 @@ export function useUploadOrchestrator({
         assertCurrent();
 
         setProgressMessage('Uploading file');
+        // A direct upload queues the import in the same request that sends the file.
+        if (strategy === 'direct') run.markHandOffPending();
         const { uploadKey, directCompletionData } = await executeUpload(
           strategy,
           uploadUrl,
@@ -443,6 +454,7 @@ export function useUploadOrchestrator({
 
         if (strategy === 'presigned') {
           setProgressMessage('Processing file');
+          run.markHandOffPending();
           const completeData = await completeUpload(
             uploadKey,
             importType,

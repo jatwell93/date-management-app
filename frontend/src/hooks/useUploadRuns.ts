@@ -4,13 +4,21 @@ import { useCallback, useRef } from 'react';
 export interface UploadRun {
   readonly signal: AbortSignal;
   isCurrent: () => boolean;
+  /**
+   * Called as the request that queues the import is sent. Aborting it from here on cannot
+   * tell whether the server already queued the file.
+   */
+  markHandOffPending: () => void;
   /** Called once the server has accepted the file for import (it runs on regardless). */
   markHandedOff: () => void;
 }
 
+/** How far the file got: not sent for import, import request in flight, or accepted. */
+export type HandOffState = 'none' | 'pending' | 'done';
+
 interface RunState {
   controller: AbortController;
-  handedOff: boolean;
+  handOff: HandOffState;
 }
 
 /**
@@ -21,22 +29,25 @@ interface RunState {
 export function useUploadRuns() {
   const activeRef = useRef<RunState | null>(null);
 
-  const supersede = useCallback((): { handedOff: boolean } | null => {
+  const supersede = useCallback((): { handOff: HandOffState } | null => {
     const previous = activeRef.current;
     activeRef.current = null;
     previous?.controller.abort();
-    return previous ? { handedOff: previous.handedOff } : null;
+    return previous ? { handOff: previous.handOff } : null;
   }, []);
 
   const begin = useCallback((): UploadRun => {
     supersede();
-    const state: RunState = { controller: new AbortController(), handedOff: false };
+    const state: RunState = { controller: new AbortController(), handOff: 'none' };
     activeRef.current = state;
     return {
       signal: state.controller.signal,
       isCurrent: () => activeRef.current === state,
+      markHandOffPending: () => {
+        if (state.handOff === 'none') state.handOff = 'pending';
+      },
       markHandedOff: () => {
-        state.handedOff = true;
+        state.handOff = 'done';
       },
     };
   }, [supersede]);
