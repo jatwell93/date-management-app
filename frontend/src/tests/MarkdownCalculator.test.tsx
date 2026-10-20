@@ -534,6 +534,38 @@ describe('MarkdownCalculator', () => {
     }
   });
 
+  it('still explains a lookup timeout where abort() ignores its reason', async () => {
+    // Safari <= 15.3 and Chrome < 98 drop the reason passed to abort().
+    const originalAbort = AbortController.prototype.abort;
+    const abortSpy = vi.spyOn(AbortController.prototype, 'abort').mockImplementation(function (
+      this: AbortController,
+    ) {
+      originalAbort.call(this);
+    });
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config'
+        ? Promise.resolve(markdownConfigResponse)
+        : new Promise(() => undefined),
+    );
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+      await act(async () => {
+        vi.advanceTimersByTime(SCAN_LOOKUP_TIMEOUT_MS);
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /The product lookup took too long/i,
+      );
+    } finally {
+      vi.useRealTimers();
+      abortSpy.mockRestore();
+    }
+  });
+
   it('calculates when the form is submitted with Enter', async () => {
     render(<MarkdownCalculator token={mockToken} />);
     await waitForMatrixReady();

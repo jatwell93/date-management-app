@@ -17,6 +17,11 @@ export interface ScanLookup {
   isCurrent: () => boolean;
   /** Ends this scan's in-flight state (no-op once a newer scan has started). */
   finish: () => void;
+  /**
+   * Why the lookup was aborted. Kept here rather than read from `signal.reason`, which
+   * older browsers (Safari <= 15.3, Chrome < 98) leave undefined.
+   */
+  abortReason: () => unknown;
 }
 
 /**
@@ -45,10 +50,12 @@ export function useLatestScanLookup() {
     inFlightRef.current = true;
     setIsLookingUp(true);
 
-    const timer = setTimeout(
-      () => controller.abort(new ScanLookupTimeoutError()),
-      SCAN_LOOKUP_TIMEOUT_MS,
-    );
+    let timeoutError: ScanLookupTimeoutError | null = null;
+    const timer = setTimeout(() => {
+      timeoutError = new ScanLookupTimeoutError();
+      controller.abort(timeoutError);
+    }, SCAN_LOOKUP_TIMEOUT_MS);
+    const abortReason = () => timeoutError ?? controller.signal.reason;
     const isCurrent = () => scanIdRef.current === scanId;
     const finish = () => {
       clearTimeout(timer);
@@ -60,17 +67,21 @@ export function useLatestScanLookup() {
       }, 0);
     };
 
-    return { signal: controller.signal, isCurrent, finish };
+    return { signal: controller.signal, isCurrent, finish, abortReason };
   }, []);
 
   return { start, isLookingUp, inFlightRef };
 }
 
 /** Settles with `promise`, or rejects with the abort reason as soon as `signal` aborts. */
-export function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+export function raceAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+  abortReason: () => unknown = () => signal.reason,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortReason());
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason);
+    const onAbort = () => reject(abortReason());
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
   });

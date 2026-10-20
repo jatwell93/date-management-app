@@ -134,7 +134,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
         const apiToken = await getFreshApiToken('markdown-product-lookup');
         return findProduct(input, apiToken, scan.signal);
       };
-      const product = await raceAbort(lookup(), scan.signal);
+      const product = await raceAbort(lookup(), scan.signal, scan.abortReason);
       if (!scan.isCurrent()) return;
       if (!product) {
         setError(NO_MATCH_MESSAGE);
