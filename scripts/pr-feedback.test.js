@@ -240,6 +240,38 @@ test('fetchReport reads checks JSON from a non-zero gh exit (pending or failed c
   );
 });
 
+test('fetchReport treats "no checks reported" right after a push as pending, and rethrows other errors', () => {
+  const ghWith = (stderr) => (args) => {
+    if (args[0] === 'repo') return 'o/r\n';
+    if (args[0] === 'api') return JSON.stringify({ data: { repository: { pullRequest: pr() } } });
+    const err = new Error('exit 1');
+    err.stdout = '';
+    err.stderr = stderr;
+    throw err;
+  };
+  const report = fetchReport(667, {
+    gh: ghWith("no checks reported on the 'feature/x' branch"),
+    now: NOW,
+  });
+  assert.equal(report.settled, false);
+  assert.deepEqual(report.checks.pending, ['(no checks reported yet)']);
+
+  assert.throws(
+    () => fetchReport(667, { gh: ghWith('HTTP 401: Bad credentials'), now: NOW }),
+    /exit 1/,
+  );
+});
+
+test('more threads than the query reads blocks settled', () => {
+  const report = summarize(
+    pr({ reviewThreads: { totalCount: 150, nodes: [thread('T1', { resolved: true })] } }),
+    [{ name: 'a', bucket: 'pass' }],
+    { now: NOW },
+  );
+  assert.equal(report.threadsTruncated, true);
+  assert.equal(report.settled, false);
+});
+
 test('main routes reply and resolve to GraphQL mutations, and rejects bad usage', () => {
   const calls = [];
   const gh = (args) => {

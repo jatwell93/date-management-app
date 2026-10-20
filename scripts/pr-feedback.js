@@ -39,7 +39,8 @@ const QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
       url
       headRefName
       commits(last: 1) { nodes { commit { oid committedDate } } }
-      reviewThreads(first: 100) {
+      reviewThreads(last: 100) {
+        totalCount
         nodes {
           id
           isResolved
@@ -180,9 +181,13 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
   const comments = nodes(pr.comments).map(toComment);
   const checks = summarizeChecks(checkRows);
 
+  // The query reads the newest 100 threads. Past that, older unresolved threads
+  // would be invisible, so the report refuses to call the PR settled.
+  const threadsTruncated = (pr.reviewThreads?.totalCount ?? 0) > nodes(pr.reviewThreads).length;
+
   const lastActivityAt = latestTime(activityTimes(pr, head, checkRows));
   const quietFor = lastActivityAt ? (now - Date.parse(lastActivityAt)) / 60000 : Infinity;
-  const settled = checks.pending.length === 0 && quietFor >= quietMinutes;
+  const settled = checks.pending.length === 0 && quietFor >= quietMinutes && !threadsTruncated;
 
   return {
     pr: pr.number,
@@ -192,6 +197,7 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
     head: head.oid,
     checks,
     settled,
+    threadsTruncated,
     lastActivityAt,
     unresolvedThreads: threads,
     reviews,
@@ -222,18 +228,25 @@ function fetchReport(number, { gh = defaultGh, now, quietMinutes } = {}) {
     `number=${number}`,
   ]);
   const pr = JSON.parse(raw).data.repository.pullRequest;
-  let checkRows = [];
+  return summarize(pr, fetchChecks(gh, number), { now, quietMinutes });
+}
+
+// Stands in for checks GitHub has not registered yet, so the PR is not settled.
+const NO_CHECKS_YET = [{ name: '(no checks reported yet)', bucket: 'pending' }];
+
+function fetchChecks(gh, number) {
   try {
-    checkRows = JSON.parse(
+    return JSON.parse(
       gh(['pr', 'checks', String(number), '--json', 'name,bucket,startedAt,completedAt']),
     );
   } catch (err) {
     // `gh pr checks` exits 8 while checks are pending and 1 when one failed,
-    // but still prints the JSON on stdout.
-    if (err.stdout) checkRows = JSON.parse(err.stdout);
-    else throw err;
+    // but still prints the JSON on stdout. Right after a push it exits 1 with
+    // only "no checks reported" on stderr.
+    if (err.stdout) return JSON.parse(err.stdout);
+    if (/no checks reported/i.test(String(err.stderr || err.message))) return NO_CHECKS_YET;
+    throw err;
   }
-  return summarize(pr, checkRows, { now, quietMinutes });
 }
 
 function reply(threadId, body, { gh = defaultGh } = {}) {

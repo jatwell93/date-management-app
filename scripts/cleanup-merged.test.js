@@ -106,18 +106,25 @@ test('main and master are never deleted, even if their upstream is gone', () => 
  */
 function fakeGit({ branches, worktrees, tips = {}, ancestors = [], linked = false }) {
   const calls = [];
+  const gitDirs = linked
+    ? 'C:/repo/.git/worktrees/a\nC:/repo/.git\n'
+    : 'C:/repo/.git\nC:/repo/.git\n';
+  const isAncestor = (args) => {
+    if (ancestors.includes(`${args[2]} ${args[3]}`)) return '';
+    throw new Error('not ancestor');
+  };
+  // Keyed by the first one or two args; the most specific key wins.
+  const handlers = {
+    'rev-parse --path-format=absolute': () => gitDirs,
+    'rev-parse': (args) => `${tips[args[1].replace('refs/heads/', '')]}\n`,
+    'merge-base': isAncestor,
+    'for-each-ref': () => branches,
+    'worktree list': () => worktrees,
+  };
   const git = (args) => {
     calls.push(args.join(' '));
-    if (args[0] === 'rev-parse' && args[1] === '--path-format=absolute')
-      return linked ? 'C:/repo/.git/worktrees/a\nC:/repo/.git\n' : 'C:/repo/.git\nC:/repo/.git\n';
-    if (args[0] === 'rev-parse') return `${tips[args[1].replace('refs/heads/', '')]}\n`;
-    if (args[0] === 'merge-base') {
-      if (ancestors.includes(`${args[2]} ${args[3]}`)) return '';
-      throw new Error('not ancestor');
-    }
-    if (args[0] === 'for-each-ref') return branches;
-    if (args[0] === 'worktree' && args[1] === 'list') return worktrees;
-    return '';
+    const handler = handlers[args.slice(0, 2).join(' ')] || handlers[args[0]];
+    return handler ? handler(args) : '';
   };
   return { git, calls };
 }

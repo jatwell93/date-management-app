@@ -77,6 +77,35 @@ function releaseAction(wt) {
     : { type: 'remove-worktree', path: wt.path, locked: wt.locked };
 }
 
+/** Gone, unprotected branches whose tip is on GitHub; the unverified rest go to `kept`. */
+function deletableBranches(branches, verified, kept) {
+  const gone = new Set();
+  for (const b of branches.filter((x) => x.gone && !PROTECTED.has(x.name))) {
+    if (verified.has(b.name)) gone.add(b.name);
+    else kept.push({ branch: b.name, reason: 'local commits not in any merged PR or origin/main' });
+  }
+  return gone;
+}
+
+/**
+ * A gone branch checked out somewhere must be released before it can be
+ * deleted; a dirty checkout keeps its branch instead (removed from `gone`).
+ * The main checkout is listed first, so a switch precedes removals.
+ */
+function releaseWorktrees(worktrees, gone, dirty, kept) {
+  const actions = [];
+  for (const wt of worktrees.filter((w) => gone.has(w.branch))) {
+    if (!dirty.has(wt.path)) {
+      actions.push(releaseAction(wt));
+      continue;
+    }
+    const where = wt.main ? 'current branch' : `worktree ${wt.path}`;
+    kept.push({ branch: wt.branch, reason: `${where} has uncommitted changes` });
+    gone.delete(wt.branch);
+  }
+  return actions;
+}
+
 /**
  * Decide what to do. Pure: `dirty` is the set of worktree paths with
  * uncommitted changes, `verified` the set of branch names whose tip is
@@ -84,25 +113,8 @@ function releaseAction(wt) {
  */
 function plan({ branches, worktrees, dirty, verified }) {
   const kept = [];
-  const gone = new Set();
-  for (const b of branches.filter((x) => x.gone && !PROTECTED.has(x.name))) {
-    if (verified.has(b.name)) gone.add(b.name);
-    else kept.push({ branch: b.name, reason: 'local commits not in any merged PR or origin/main' });
-  }
-
-  // A gone branch checked out somewhere must be released before it can be
-  // deleted. The main checkout is listed first, so a switch precedes removals.
-  const actions = [];
-  for (const wt of worktrees.filter((w) => gone.has(w.branch))) {
-    if (dirty.has(wt.path)) {
-      const where = wt.main ? 'current branch' : `worktree ${wt.path}`;
-      kept.push({ branch: wt.branch, reason: `${where} has uncommitted changes` });
-      gone.delete(wt.branch);
-    } else {
-      actions.push(releaseAction(wt));
-    }
-  }
-
+  const gone = deletableBranches(branches, verified, kept);
+  const actions = releaseWorktrees(worktrees, gone, dirty, kept);
   for (const name of gone) actions.push({ type: 'delete-branch', branch: name });
   if (actions.length) actions.push({ type: 'prune-worktrees' });
   return { actions, kept };
