@@ -140,6 +140,27 @@ describe('GET /api/subscription/trial-status', () => {
     expect(body.subscription.daysRemaining).toBe(0);
   });
 
+  it('gives an expired trial the free limits, though the stored tier stays professional', async () => {
+    const { body } = await trialStatus([
+      { status: 'trialing', tier_level: 'professional', trial_end_date: inDays(-3) },
+    ]);
+
+    expect(body.subscription).toMatchObject({
+      tierLevel: 'professional',
+      effectiveTierLevel: 'free',
+    });
+    expect(body.tierLimits.maxProducts).toBe(resolveMaxSkus('free', ENV));
+  });
+
+  it('keeps the professional limits while the trial runs', async () => {
+    const { body } = await trialStatus([
+      { status: 'trialing', tier_level: 'professional', trial_end_date: inDays(5) },
+    ]);
+
+    expect(body.subscription.effectiveTierLevel).toBe('professional');
+    expect(body.tierLimits.maxProducts).toBe(resolveMaxSkus('professional', ENV));
+  });
+
   it('serializes the conversion time when there is one, and null when there is not', async () => {
     const converted = '2026-09-01T10:00:00.000Z';
 

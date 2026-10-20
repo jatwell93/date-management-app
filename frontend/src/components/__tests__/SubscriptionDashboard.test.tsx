@@ -98,6 +98,101 @@ describe('SubscriptionDashboard', () => {
     });
   });
 
+  it('names each progress bar and omits one for unlimited resources', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSubscriptionData,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockUsageData,
+      });
+
+    render(<SubscriptionDashboard token="test-token" />);
+
+    const skus = await screen.findByRole('progressbar', { name: 'SKUs (Products) usage' });
+    expect(skus).toHaveAttribute('aria-valuenow', '1200');
+    expect(skus).toHaveAttribute('aria-valuemax', '2000');
+    expect(skus).toHaveAttribute('aria-valuetext', '1,200 of 2,000 used');
+    expect(screen.getByRole('progressbar', { name: 'Users usage' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Storage usage' })).toBeInTheDocument();
+    // inventoryItems has limit: null, so it shows "Unlimited" text instead of a bar.
+    expect(
+      screen.queryByRole('progressbar', { name: 'Inventory Items usage' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /Subscription Overview/ }),
+    ).toBeInTheDocument();
+  });
+
+  describe('with parent-supplied data', () => {
+    it('renders the supplied data without fetching', () => {
+      render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{
+            subscription: mockSubscriptionData as never,
+            usage: mockUsageData as never,
+            loading: false,
+            error: null,
+          }}
+        />,
+      );
+
+      expect(
+        screen.getByRole('progressbar', { name: 'SKUs (Products) usage' }),
+      ).toBeInTheDocument();
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('shows the loading state while the parent loads', () => {
+      render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{ subscription: null, usage: null, loading: true, error: null }}
+        />,
+      );
+
+      expect(screen.getByRole('status')).toHaveTextContent(/Loading subscription data/);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('defers to the parent error card instead of showing a second error', () => {
+      const { container } = render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{ subscription: null, usage: null, loading: false, error: 'Load failed' }}
+        />,
+      );
+
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    it('re-renders with fresh data after a parent reload', () => {
+      const { rerender } = render(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{ subscription: null, usage: null, loading: false, error: 'Load failed' }}
+        />,
+      );
+
+      rerender(
+        <SubscriptionDashboard
+          token="test-token"
+          data={{
+            subscription: mockSubscriptionData as never,
+            usage: mockUsageData as never,
+            loading: false,
+            error: null,
+          }}
+        />,
+      );
+
+      expect(screen.getByText(/1,200/)).toBeInTheDocument();
+    });
+  });
+
   it('displays unlimited for null limits', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({

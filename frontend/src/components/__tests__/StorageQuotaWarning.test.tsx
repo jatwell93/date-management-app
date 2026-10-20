@@ -52,6 +52,99 @@ describe('StorageQuotaWarning', () => {
     props: Partial<React.ComponentProps<typeof StorageQuotaWarning>> = {},
   ) => render(<StorageQuotaWarning userId={mockUserId} {...props} />);
 
+  describe('Dialog semantics', () => {
+    it('is a labelled modal dialog that takes focus and closes on Escape', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
+      const onDismiss = vi.fn();
+
+      renderWarning({ onDismiss });
+
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      // The dialog itself takes focus, not an action button.
+      expect(dialog).toHaveFocus();
+
+      await userEvent.keyboard('{Escape}');
+
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('ignores a barcode scanner Enter that lands as the dialog opens', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
+      const onDismiss = vi.fn();
+
+      renderWarning({ onDismiss });
+
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      // A keyboard-wedge scanner ends every scan with Enter.
+      await userEvent.keyboard('{Enter}');
+
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(localStorage.getItem(`storage-quota-dismissed-${mockUserId}`)).toBeNull();
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveFocus();
+    });
+
+    it('keeps Tab inside the dialog', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
+
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <StorageQuotaWarning userId={mockUserId} token={mockAuthToken} onUpgrade={vi.fn()} />
+        </>,
+      );
+
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      const close = screen.getByRole('button', { name: 'Close warning' });
+      const remind = screen.getByRole('button', { name: 'Remind Me Later' });
+      expect(dialog).toHaveFocus();
+
+      await userEvent.tab();
+      expect(close).toHaveFocus();
+      await userEvent.tab();
+      expect(screen.getByRole('button', { name: 'Upgrade Plan' })).toHaveFocus();
+      await userEvent.tab();
+      expect(remind).toHaveFocus();
+      // Remind Me Later is the last tabbable element: Tab wraps to the first...
+      await userEvent.tab();
+      expect(close).toHaveFocus();
+      // ...and Shift+Tab from the first wraps to the last.
+      await userEvent.tab({ shift: true });
+      expect(remind).toHaveFocus();
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+      // The trap pulls focus back if anything tries to move it behind the modal.
+      act(() => {
+        screen.getByRole('button', { name: 'Outside control', hidden: true }).focus();
+      });
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    });
+
+    it('returns focus to the previously focused element when dismissed', async () => {
+      fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
+      render(
+        <>
+          <button type="button">Scan item</button>
+          <StorageQuotaWarning userId={mockUserId} token={mockAuthToken} />
+        </>,
+      );
+      // Focus the page control before the quota response opens the dialog.
+      screen.getByRole('button', { name: 'Scan item' }).focus();
+
+      const dialog = await screen.findByRole('dialog', { name: 'Storage Quota Warning' });
+      expect(dialog).toHaveFocus();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remind Me Later' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Scan item' })).toHaveFocus();
+      });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
   describe('API Integration', () => {
     it('fetches quota data on mount with correct URL and headers', async () => {
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));

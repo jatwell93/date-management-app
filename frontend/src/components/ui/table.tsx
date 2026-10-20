@@ -58,7 +58,9 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'text-semantic-text-primary h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+        // Wraps by default so long headers do not force horizontal scroll on phones;
+        // pass `whitespace-nowrap` for columns that must stay on one line.
+        'text-semantic-text-primary h-10 px-2 py-2 text-left align-middle text-sm font-medium [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
         className,
       )}
       {...props}

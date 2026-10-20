@@ -65,6 +65,69 @@ describe('PlanComparison', () => {
     expect(currentButton).toBeDisabled();
   });
 
+  it('keeps downgrade cards at full opacity so their text stays AA legible', () => {
+    render(<PlanComparison currentTier="professional" onSelectPlan={onSelectPlan} />);
+
+    expect(screen.getByTestId('tier-card-free')).not.toHaveClass('opacity-60');
+    expect(screen.getByTestId('tier-card-starter')).not.toHaveClass('opacity-60');
+  });
+
+  it('uses AA-contrast tokens for the annual saving badge', () => {
+    render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
+
+    const badge = screen.getByText('Save 17%');
+    expect(badge).toHaveClass('text-semantic-success-muted-foreground', 'text-sm');
+    expect(badge).not.toHaveClass('bg-semantic-success');
+  });
+
+  it('exposes the billing-cycle toggle state with aria-pressed', () => {
+    render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
+
+    const group = screen.getByRole('group', { name: 'Billing cycle' });
+    const monthly = within(group).getByRole('button', { name: 'Monthly' });
+    const annual = within(group).getByRole('button', { name: /Annual/ });
+    expect(monthly).toHaveAttribute('aria-pressed', 'true');
+    expect(annual).toHaveAttribute('aria-pressed', 'false');
+    expect(monthly).toHaveClass('min-h-11');
+    expect(annual).toHaveClass('min-h-11');
+
+    fireEvent.click(annual);
+
+    expect(monthly).toHaveAttribute('aria-pressed', 'false');
+    expect(annual).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('names each tier CTA after its plan and exposes tier names as headings', () => {
+    render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
+
+    expect(screen.getByRole('button', { name: 'Upgrade (Starter plan)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upgrade (Professional plan)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Current Plan (Free plan)' })).toBeDisabled();
+    expect(screen.getByRole('heading', { level: 2, name: 'Professional' })).toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: 'Included' }).length).toBeGreaterThan(0);
+  });
+
+  it('nests headings one level deeper when rendered inside a dialog', () => {
+    render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} headingLevel={3} />);
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Professional' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+  });
+
+  it('locks every tier while a checkout is in flight', () => {
+    render(
+      <PlanComparison currentTier="free" onSelectPlan={onSelectPlan} busyTier="professional" />,
+    );
+
+    const starter = within(screen.getByTestId('tier-card-starter')).getByRole('button');
+    expect(starter).toBeDisabled();
+    fireEvent.click(starter);
+    expect(onSelectPlan).not.toHaveBeenCalled();
+    expect(
+      within(screen.getByTestId('tier-card-professional')).getByRole('button'),
+    ).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('never exposes Enterprise self-serve checkout', () => {
     render(<PlanComparison currentTier="free" onSelectPlan={onSelectPlan} />);
 

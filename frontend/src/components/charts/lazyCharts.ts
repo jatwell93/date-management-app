@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { applyChartDefaults } from './chartDefaults';
 
 // Register the superset of scales/elements used across all report charts (bar + line).
 // Registering unused pieces is harmless for pages that only render one chart type.
@@ -24,5 +25,9 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
+
+// Set once, when the chart chunk first loads (14px Inter, token ink, no motion
+// under prefers-reduced-motion). Per-chart options still override these.
+applyChartDefaults(ChartJS);
 
 export { Bar, Line } from 'react-chartjs-2';
