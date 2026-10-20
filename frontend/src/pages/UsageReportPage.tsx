@@ -164,7 +164,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   const [itemsByUserLoading, setItemsByUserLoading] = useState(true);
   const [itemsByDateLoading, setItemsByDateLoading] = useState(true);
   const [storeWalkAuditLoading, setStoreWalkAuditLoading] = useState(true);
-  const [chartsError, setChartsError] = useState<string | null>(null);
+  // Separate error per chart fetch: a shared flag let one fetch's success clear the other's error.
+  const [itemsByUserError, setItemsByUserError] = useState<string | null>(null);
+  const [itemsByDateError, setItemsByDateError] = useState<string | null>(null);
   const [storeWalkAuditError, setStoreWalkAuditError] = useState<string | null>(null);
   const [timeFrame, setTimeFrame] = useState('all-time');
   const chartsLoading = itemsByUserLoading || itemsByDateLoading;
@@ -202,14 +204,14 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       unknownErrorMessage: 'An unknown error occurred when fetching chart data',
       onStart: () => {
         setItemsByDateLoading(true);
-        setChartsError(null);
+        setItemsByDateError(null);
       },
       onMissingToken: () => setItemsByDateLoading(false),
       onData: (data) => {
         setItemsByDate(data);
-        setChartsError(null);
+        setItemsByDateError(null);
       },
-      onError: (message) => setChartsError(message),
+      onError: (message) => setItemsByDateError(message),
       onSettled: () => setItemsByDateLoading(false),
     });
     return () => controller.abort();
@@ -227,17 +229,17 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       unknownErrorMessage: 'An unknown error occurred when fetching chart data',
       onStart: () => {
         setItemsByUserLoading(true);
-        setChartsError(null);
+        setItemsByUserError(null);
       },
       onMissingToken: () => {
-        setChartsError('Authentication token is missing.');
+        setItemsByUserError('Authentication token is missing.');
         setItemsByUserLoading(false);
       },
       onData: (data) => {
         setItemsByUser(data);
-        setChartsError(null);
+        setItemsByUserError(null);
       },
-      onError: (message) => setChartsError(message),
+      onError: (message) => setItemsByUserError(message),
       onSettled: () => setItemsByUserLoading(false),
     });
     return () => controller.abort();
@@ -273,8 +275,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         {
           label: 'Items Added',
           data: itemsByUser?.map((item) => item.itemCount) || [],
-          backgroundColor: semanticDataViz.series4,
-          borderColor: semanticDataViz.series4,
+          // Teal (series1) clears the 3:1 non-text contrast floor on white; green/sky do not.
+          backgroundColor: semanticDataViz.series1,
+          borderColor: semanticDataViz.series1,
           borderWidth: 1,
         },
       ],
@@ -291,8 +294,8 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           label: 'Items Added',
           data: itemsByDate?.map((item) => item.itemCount) || [],
           fill: false,
-          borderColor: semanticDataViz.series2,
-          backgroundColor: semanticDataViz.series2,
+          borderColor: semanticDataViz.series1,
+          backgroundColor: semanticDataViz.series1,
           tension: 0.1,
         },
       ],
@@ -300,32 +303,24 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     [itemsByDate],
   );
 
-  const barChartOptions = useMemo(
-    () => ({
-      responsive: true,
-      plugins: {
-        title: {
-          display: true,
-        },
-        legend: {
-          display: false,
-        },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-        },
-      },
-    }),
+  // The card h2 already titles each chart, so the in-canvas title is hidden (its text lives
+  // on as the canvas aria-label). Both charts share one options object.
+  // Chart.js animates on draw regardless of the OS setting; honour reduced motion.
+  const prefersReducedMotion = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
   );
 
   const lineChartOptions = useMemo(
     () => ({
       responsive: true,
+      ...(prefersReducedMotion ? { animation: false as const } : {}),
       plugins: {
         title: {
-          display: true,
+          display: false,
         },
         legend: {
           display: false,
@@ -337,12 +332,17 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         },
       },
     }),
-    [],
+    [prefersReducedMotion],
+  );
+
+  const barChartOptions = useMemo(
+    () => ({ ...lineChartOptions, maintainAspectRatio: false }),
+    [lineChartOptions],
   );
 
   if (loading) {
     return (
-      <div className="container mx-auto p-4 text-center" role="status" aria-live="polite">
+      <div className="py-8 text-center" role="status" aria-live="polite">
         Loading usage report…
       </div>
     );
@@ -350,20 +350,19 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
   if (usageError && !usageData) {
     return (
-      <div className="container mx-auto p-4 text-center text-semantic-critical" role="alert">
+      <div className="py-8 text-center text-semantic-critical" role="alert">
         {usageError}
       </div>
     );
   }
 
   return (
-    <main
-      className="container mx-auto max-w-6xl space-y-7 p-4"
-      aria-label="Usage reporting workspace"
-    >
+    <section className="mx-auto max-w-6xl space-y-7" aria-labelledby="usage-report-heading">
       <header className="max-w-3xl">
         <div className="flex items-center justify-between">
-          <h1 className="font-heading text-2xl font-semibold">Usage Report</h1>
+          <h1 id="usage-report-heading" className="font-heading text-2xl font-semibold">
+            Usage Report
+          </h1>
         </div>
         <p className="mt-2 text-sm text-semantic-text-secondary">
           See which team members are adding stock, and review daily adds, edits, and removals over
@@ -372,14 +371,23 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       </header>
       {/* Chart Section */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <Card role="region" aria-label="User contribution summary">
+        <Card role="region" aria-labelledby="usage-report-by-user-heading">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <CardTitle>
-                <h2 className="text-xl font-semibold">Stock Added by Team Member</h2>
+                <h2 id="usage-report-by-user-heading" className="text-xl font-semibold">
+                  Stock Added by Team Member
+                </h2>
               </CardTitle>
+              <span id="usage-report-timeframe-label" className="sr-only">
+                Time frame
+              </span>
               <Select value={timeFrame} onValueChange={setTimeFrame}>
-                <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectTrigger
+                  id="usage-report-timeframe"
+                  aria-labelledby="usage-report-timeframe-label usage-report-timeframe"
+                  className="min-h-11 w-full sm:w-[180px]"
+                >
                   <SelectValue placeholder="Select time frame" />
                 </SelectTrigger>
                 <SelectContent>
@@ -396,37 +404,29 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               <div className="text-center py-8" role="status" aria-live="polite">
                 Loading chart data…
               </div>
-            ) : chartsError ? (
+            ) : itemsByUserError ? (
               <p className="text-semantic-critical text-sm" role="alert">
-                {chartsError}
+                {itemsByUserError}
               </p>
             ) : itemsByUser && itemsByUser.length > 0 ? (
               <div className="space-y-4">
-                <div className="aspect-[4/3] w-full sm:aspect-auto">
+                {/* maintainAspectRatio is off, so the container must own the height at every width. */}
+                <div className="aspect-[4/3] w-full sm:aspect-auto sm:h-64">
                   <Suspense
-                    fallback={<div className="h-64 animate-pulse rounded bg-semantic-surface-3" />}
+                    fallback={
+                      <div className="h-64 motion-safe:animate-pulse rounded bg-semantic-surface-3" />
+                    }
                   >
                     <Bar
+                      role="img"
+                      aria-label="Bar chart of items added per team member. The same figures are listed below."
                       data={itemsByUserChartData}
-                      options={{
-                        ...barChartOptions,
-                        maintainAspectRatio: false,
-                        plugins: {
-                          ...barChartOptions.plugins,
-                          title: {
-                            display: true,
-                            text: 'Items added per team member',
-                          },
-                        },
-                      }}
+                      options={barChartOptions}
                     />
                   </Suspense>
                 </div>
                 {/* Mobile row summary for Items by User */}
-                <ul
-                  className="space-y-3 sm:hidden"
-                  aria-label="Mobile stock by team member summary"
-                >
+                <ul className="space-y-3 sm:hidden" aria-label="Stock added by team member">
                   {itemsByUser.map((item) => (
                     <li
                       key={item.userId}
@@ -435,7 +435,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                       <span className="font-medium text-semantic-text-primary">
                         {formatUserLabel(item)}
                       </span>
-                      <span className="font-bold text-semantic-teal">
+                      <span className="font-bold tabular-nums text-semantic-text-primary">
                         {numberFormatter.format(item.itemCount)} items
                       </span>
                     </li>
@@ -453,7 +453,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                       {itemsByUser.map((item) => (
                         <TableRow key={item.userId}>
                           <TableCell>{formatUserLabel(item)}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right tabular-nums">
                             {numberFormatter.format(item.itemCount)}
                           </TableCell>
                         </TableRow>
@@ -470,38 +470,35 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card role="region" aria-labelledby="usage-report-by-date-heading">
           <CardHeader>
             <CardTitle>
-              <h2 className="text-xl font-semibold">Daily Stock Additions</h2>
+              <h2 id="usage-report-by-date-heading" className="text-xl font-semibold">
+                Daily Stock Additions
+              </h2>
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Loading is shared with the card above (charts appear together), which already
+                announces it, so no live role here. */}
             {chartsLoading ? (
-              <div className="text-center py-8" role="status" aria-live="polite">
-                Loading chart data…
-              </div>
-            ) : chartsError ? (
+              <div className="text-center py-8">Loading chart data…</div>
+            ) : itemsByDateError ? (
               <p className="text-semantic-critical text-sm" role="alert">
-                {chartsError}
+                {itemsByDateError}
               </p>
             ) : itemsByDate && itemsByDate.length > 0 ? (
               <div className="space-y-4">
                 <Suspense
-                  fallback={<div className="h-64 animate-pulse rounded bg-semantic-surface-3" />}
+                  fallback={
+                    <div className="h-64 motion-safe:animate-pulse rounded bg-semantic-surface-3" />
+                  }
                 >
                   <Line
+                    role="img"
+                    aria-label="Line chart of stock additions over time. The same figures are listed below."
                     data={itemsByDateChartData}
-                    options={{
-                      ...lineChartOptions,
-                      plugins: {
-                        ...lineChartOptions.plugins,
-                        title: {
-                          display: true,
-                          text: 'Stock additions over time',
-                        },
-                      },
-                    }}
+                    options={lineChartOptions}
                   />
                 </Suspense>
                 <Table aria-label="Items added per day summary">
@@ -515,7 +512,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     {itemsByDate.map((item) => (
                       <TableRow key={item.date}>
                         <TableCell>{formatUsageDate(item.date)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right tabular-nums">
                           {numberFormatter.format(item.itemCount)}
                         </TableCell>
                       </TableRow>
@@ -532,10 +529,12 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         </Card>
       </div>
 
-      <Card role="region" aria-label="Store walk audit">
+      <Card role="region" aria-labelledby="usage-report-walk-audit-heading">
         <CardHeader>
           <CardTitle>
-            <h2 className="text-xl font-semibold">Store Walk Audit</h2>
+            <h2 id="usage-report-walk-audit-heading" className="text-xl font-semibold">
+              Store Walk Audit
+            </h2>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -560,7 +559,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     </span>
                   </div>
                   <div className="overflow-x-auto">
-                    <Table aria-label="Store walk productivity">
+                    <Table aria-label={`${cycle.cycleName} store walk productivity`}>
                       <TableHeader>
                         <TableRow>
                           <TableHead>User</TableHead>
@@ -594,11 +593,11 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                           key={`${cycle.cycleId}-${flag.type}-${flag.userName}-${flag.message}`}
                           className="rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-3 text-sm"
                         >
-                          <p className="font-medium text-semantic-critical">
+                          <p className="font-medium text-semantic-critical-muted-foreground">
                             {formatAuditFlagType(flag.type)}
                           </p>
-                          <p className="text-semantic-critical">{flag.userName}</p>
-                          <p className="text-semantic-critical">{flag.message}</p>
+                          <p className="text-semantic-critical-muted-foreground">{flag.userName}</p>
+                          <p className="text-semantic-critical-muted-foreground">{flag.message}</p>
                         </li>
                       ))}
                     </ul>
@@ -615,17 +614,19 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       </Card>
 
       {/* Original Table Section */}
-      <Card>
+      <Card role="region" aria-labelledby="usage-report-daily-activity-heading">
         <CardHeader>
           <CardTitle>
-            <h2 className="text-xl font-semibold">Daily Activity — Last 90 Days</h2>
+            <h2 id="usage-report-daily-activity-heading" className="text-xl font-semibold">
+              Daily Activity — Last 90 Days
+            </h2>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {usageData && usageData.length > 0 ? (
             <>
               {/* Mobile daily activity summary */}
-              <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile daily activity summary">
+              <ul className="mb-5 space-y-3 md:hidden" aria-label="Daily activity">
                 {usageData.map((row) => (
                   <li
                     key={`${row.date}-${row.user_id}`}
@@ -633,24 +634,24 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                   >
                     <div className="flex items-center justify-between border-b pb-2 mb-3">
                       <span className="font-heading font-bold">{formatUsageDate(row.date)}</span>
-                      <span className="text-xs text-semantic-text-secondary">{row.user_role}</span>
+                      <span className="text-sm text-semantic-text-secondary">{row.user_role}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div className="rounded bg-semantic-success-muted p-2">
+                    <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                      <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items added</p>
-                        <p className="text-lg font-bold text-semantic-success">
+                        <p className="text-lg font-bold tabular-nums text-semantic-text-primary">
                           {numberFormatter.format(row.creations)}
                         </p>
                       </div>
-                      <div className="rounded bg-semantic-warning-muted p-2">
+                      <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items edited</p>
-                        <p className="text-lg font-bold text-semantic-warning">
+                        <p className="text-lg font-bold tabular-nums text-semantic-text-primary">
                           {numberFormatter.format(row.updates)}
                         </p>
                       </div>
-                      <div className="rounded bg-semantic-critical-muted p-2">
+                      <div className="rounded border bg-semantic-surface-2 p-2">
                         <p className="text-semantic-text-secondary">Items removed</p>
-                        <p className="text-lg font-bold text-semantic-critical">
+                        <p className="text-lg font-bold tabular-nums text-semantic-text-primary">
                           {numberFormatter.format(row.deletions)}
                         </p>
                       </div>
@@ -660,7 +661,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               </ul>
 
               <div className="hidden md:block overflow-x-auto">
-                <Table>
+                <Table aria-label="Daily activity by user">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
@@ -699,6 +700,6 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           )}
         </CardContent>
       </Card>
-    </main>
+    </section>
   );
 }
