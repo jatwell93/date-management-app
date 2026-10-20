@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -64,8 +65,10 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
   const statusCard = isError ? null : card;
   const alertCard = isError ? card : null;
 
+  // Portalled to <body>: an open Radix modal aria-hides the app root, and a toast first
+  // mounted while one is open (an ExpiredItemsPage error) would sit in that hidden subtree.
   // pointer-events-none: the empty fixed container never blocks clicks beneath it.
-  return (
+  return createPortal(
     <div className="pointer-events-none fixed bottom-4 right-4 z-50">
       <div
         role={statusCard ? 'status' : undefined}
@@ -83,7 +86,8 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
       >
         {alertCard}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

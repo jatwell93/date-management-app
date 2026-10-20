@@ -1,3 +1,4 @@
+import type React from 'react';
 import { render, screen } from '@testing-library/react';
 
 import Toast from '../toast';
@@ -56,6 +57,32 @@ describe('toast announcements', () => {
     expect(status).toBeEmptyDOMElement();
     expect(screen.getByTestId('toast-alert-region')).toHaveAttribute('aria-live', 'assertive');
     expect(status.parentElement).toHaveClass('pointer-events-none');
+  });
+
+  it('announces a toast first mounted while a modal dialog is open', async () => {
+    const page = (toast: React.ReactNode) => (
+      <>
+        <Dialog open>
+          <DialogContent>
+            <DialogTitle>Process item</DialogTitle>
+            <DialogDescription>Choose an action.</DialogDescription>
+          </DialogContent>
+        </Dialog>
+        {toast}
+      </>
+    );
+    const { container, rerender } = render(page(null));
+    // Radix hides everything outside the dialog, including the page's own root.
+    expect(container).toHaveAttribute('aria-hidden', 'true');
+
+    // ExpiredItemsPage mounts its Toast only once there is something to show.
+    rerender(
+      page(<Toast message="Save failed" type="error" isVisible onClose={() => undefined} />),
+    );
+
+    const region = await screen.findByRole('alert');
+    expect(region).toHaveTextContent('Save failed');
+    expect(region.closest('[aria-hidden="true"]')).toBeNull();
   });
 
   it('names the dismiss control and gives it a 44px target', () => {
