@@ -25,11 +25,11 @@ export function MarkdownCreditScopeBadge({
   if (creditSupplierId != null) params.set('supplierId', String(creditSupplierId));
 
   return (
-    <span className="inline-flex flex-wrap items-center gap-2 text-xs">
+    <span className="inline-flex flex-wrap items-center gap-2 text-sm">
       <Badge title={creditSupplierName ?? undefined}>{LABELS[creditScopeReason]}</Badge>
       {(catalogueReview || policyReview) && (
         <Link
-          className="font-medium text-semantic-primary underline-offset-2 hover:underline"
+          className="inline-flex min-h-11 items-center rounded-sm font-medium text-semantic-primary underline underline-offset-2 hover:text-semantic-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-semantic-primary"
           to={`/supplier-credits?${params.toString()}`}
         >
           {policyReview ? 'Review policy' : 'Review catalogue'}

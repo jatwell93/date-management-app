@@ -81,6 +81,11 @@ module.exports = {
           muted: '#CCFBF1',
           'muted-foreground': brand.teal,
         },
+        /*
+         * DEFAULT sky/amber/green are fill, icon and border colours: they fail AA
+         * as text on white and behind white text. Use `-strong` for text on white
+         * or as a fill behind `-foreground`, and `-muted-foreground` on `-muted`.
+         */
         'semantic-secondary': {
           DEFAULT: brand['sky-blue'],
           foreground: '#FFFFFF',
@@ -88,6 +93,8 @@ module.exports = {
           active: '#0369A1',
           muted: brand['sky-light'],
           'muted-foreground': '#0369A1',
+          strong: '#0369A1',
+          'strong-hover': '#075985',
         },
         'semantic-warning': {
           DEFAULT: brand.amber,
@@ -96,6 +103,8 @@ module.exports = {
           active: '#92400E',
           muted: '#FEF3C7',
           'muted-foreground': '#92400E',
+          strong: '#B45309',
+          'strong-hover': '#92400E',
         },
         'semantic-success': {
           DEFAULT: brand.green,
@@ -104,6 +113,8 @@ module.exports = {
           active: '#047857',
           muted: '#D1FAE5',
           'muted-foreground': '#047857',
+          strong: '#047857',
+          'strong-hover': '#065F46',
         },
         'semantic-critical': {
           DEFAULT: brand.red,
@@ -135,6 +146,12 @@ module.exports = {
           4: brand.green,
           5: brand.red,
           6: brand.navy,
+        },
+        /* Single-series / thin-line variants that reach 3:1 on white (WCAG 1.4.11). */
+        'semantic-data-viz-strong': {
+          2: '#0369A1',
+          3: '#B45309',
+          4: '#047857',
         },
 
         /* ── DEPRECATED: inventory-* colors ────────────────── */

@@ -11,6 +11,7 @@ import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
 import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
 import { MarkdownCreditScopeBadge } from '../components/MarkdownCreditScopeBadge';
 import { MarkdownMatricesNotice } from '../components/MarkdownMatricesNotice';
+import type { ExpiredItem } from '../types/inventory';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
@@ -49,6 +50,41 @@ function formatCurrencyValue(value: number): string {
 function getDaysToExpiry(expiryDate: string) {
   const days = calendarDaysUntil(expiryDate);
   return Number.isNaN(days) ? null : days;
+}
+
+// The Expired items worklist also holds Markdown 1-3 and day-0 rows, which this
+// report already counts as markdown work. Only lines past expiry (or with no date,
+// which the report never returns) belong on the expired tile.
+function isPastExpiry(item: Pick<ExpiredItem, 'expiryDate'>): boolean {
+  if (!item.expiryDate) return true;
+  const daysToExpiry = getDaysToExpiry(item.expiryDate);
+  return daysToExpiry === null || daysToExpiry < 0;
+}
+
+// A failure here must not block the markdown report, so it resolves to null
+// ("count unavailable").
+async function fetchExpiredItemCount(
+  authToken: string | undefined,
+  signal?: AbortSignal,
+): Promise<number | null> {
+  try {
+    const items = await apiService.get<ExpiredItem[]>('/expired-items', authToken, signal);
+    return Array.isArray(items) ? items.filter(isPastExpiry).length : null;
+  } catch {
+    return null;
+  }
+}
+
+function ExpiredCountValue({ count }: { count: number | null }) {
+  if (count === null) {
+    return (
+      <>
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Count unavailable</span>
+      </>
+    );
+  }
+  return <>{numberFormatter.format(count)}</>;
 }
 
 function formatDaysLeft(daysToExpiry: number | null): string {
@@ -92,6 +128,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
   const getFreshApiToken = useFreshApiToken(token);
   const markdownConfig = useMarkdownMatrices(token);
   const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
+  const [expiredCount, setExpiredCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -111,13 +148,13 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       }
       try {
         const authToken = await getFreshApiToken('detailed-expiry-report-fetch');
-        const data = await apiService.get<DetailedExpiryReportItem[]>(
-          '/reports/expiry-details',
-          authToken,
-          signal,
-        );
+        const [data, expiredItems] = await Promise.all([
+          apiService.get<DetailedExpiryReportItem[]>('/reports/expiry-details', authToken, signal),
+          fetchExpiredItemCount(authToken, signal),
+        ]);
         if (!signal?.aborted) {
           setReportData(data);
+          setExpiredCount(expiredItems);
           setFetchError(null);
         }
       } catch (err: unknown) {
@@ -215,17 +252,20 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     () =>
       (reportData || []).reduce(
         (summary, item) => {
+          // The report only returns stock expiring today or later, so 0-day items
+          // stay Markdown 3 work. Past-expiry stock is counted from /expired-items.
+          // The report's "today" is the server's UTC date; a row already past expiry
+          // in local time is on the expired tile, so it is not counted twice.
           const daysToExpiry = getDaysToExpiry(item.expiryDate);
-          if (daysToExpiry !== null && daysToExpiry <= 0) {
-            summary.expired += 1;
-          } else if (daysToExpiry !== null && daysToExpiry <= 90) {
+          if (daysToExpiry !== null && daysToExpiry < 0) return summary;
+          if (daysToExpiry !== null && daysToExpiry <= 90) {
             summary.markdown += 1;
           } else {
             summary.active += 1;
           }
           return summary;
         },
-        { expired: 0, markdown: 0, active: 0 },
+        { markdown: 0, active: 0 },
       ),
     [reportData],
   );
@@ -322,22 +362,22 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         <div
           className="rounded-lg border border-semantic-critical-muted bg-semantic-critical-muted p-4"
           role="region"
-          aria-label="Primary shelf decision"
+          aria-label="Expired stock to write off"
         >
           <p className="text-sm font-medium text-semantic-critical-muted-foreground">
-            Expired risk
+            Expired — write off
           </p>
           <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
-            {numberFormatter.format(expirySummary.expired)}
+            <ExpiredCountValue count={expiredCount} />
           </p>
           <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
-            Remove, reconcile, or confirm these lines before markdown work starts.
+            These lines are past expiry. Write them off on the Expired items page.
           </p>
           <Link
             to="/expired-items"
             className="mt-1 inline-flex min-h-11 items-center rounded-md text-sm font-medium text-semantic-critical-muted-foreground underline underline-offset-4 outline-hidden focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
           >
-            Open expired items
+            Write off on Expired items
           </Link>
         </div>
         <dl className="grid gap-3 rounded-lg border bg-semantic-surface-2 p-4 sm:grid-cols-2">

@@ -24,8 +24,12 @@ export const semanticPrimary = {
 } as const;
 
 /**
- * SECONDARY — Data visualization, informational highlights, links
+ * SECONDARY — Data visualization, informational highlights
  * Source: brand sky-blue #0EA5E9
+ *
+ * NOT a link or text colour: #0EA5E9 is 2.8:1 on white. Links use primary teal
+ * (#0F766E, 5.5:1). For informational text use `strong` on white or
+ * `muted-foreground` on `muted`; `strong` is also the fill behind white text.
  */
 export const semanticSecondary = {
   DEFAULT: brandColors['sky-blue'],
@@ -34,12 +38,16 @@ export const semanticSecondary = {
   active: '#0369A1',
   muted: brandColors['sky-light'],
   'muted-foreground': '#0369A1',
+  strong: '#0369A1',
+  'strong-hover': '#075985',
 } as const;
 
 /**
  * WARNING — Alert states, pending badges, form validation warnings, amber restraint
  * Source: brand amber #D97706
  * NOTE: Amber is restricted to alert/emphasis contexts ONLY (see AMBER_USAGE_GUIDE.md)
+ * DEFAULT is 3.2:1 on white: icons/borders only. Text uses `strong` (5.0:1) on
+ * white or `muted-foreground` on `muted`; `strong` is the fill behind white text.
  */
 export const semanticWarning = {
   DEFAULT: brandColors.amber,
@@ -48,11 +56,15 @@ export const semanticWarning = {
   active: '#92400E',
   muted: '#FEF3C7',
   'muted-foreground': '#92400E',
+  strong: '#B45309',
+  'strong-hover': '#92400E',
 } as const;
 
 /**
  * SUCCESS — Confirmation states, active badges, positive indicators
  * Source: brand green #10B981
+ * DEFAULT is 2.5:1 on white: icons/borders only. Text uses `strong` (5.5:1) on
+ * white or `muted-foreground` on `muted`; `strong` is the fill behind white text.
  */
 export const semanticSuccess = {
   DEFAULT: brandColors.green,
@@ -61,6 +73,8 @@ export const semanticSuccess = {
   active: '#047857',
   muted: '#D1FAE5',
   'muted-foreground': '#047857',
+  strong: '#047857',
+  'strong-hover': '#065F46',
 } as const;
 
 /**
@@ -131,6 +145,19 @@ export const semanticDataViz = {
   series6: brandColors.navy,
 } as const;
 
+/**
+ * DATA-VIZ (strong) — for a series drawn alone or as a thin line, where it must
+ * reach 3:1 against white (WCAG 1.4.11). Sky #0EA5E9 is 2.8:1 and green #10B981
+ * is 2.5:1; amber #D97706 passes at 3.2:1 but is marginal for 1-2px lines.
+ * Multi-series charts may keep the brand palette when each series also has a
+ * label, pattern or legend entry (colour is never the only signal).
+ */
+export const semanticDataVizStrong = {
+  series2: '#0369A1',
+  series3: '#B45309',
+  series4: '#047857',
+} as const;
+
 /* ── Aggregated Export ─────────────────────────────────────── */
 
 export const semanticColors = {
@@ -142,6 +169,7 @@ export const semanticColors = {
   surface: semanticSurface,
   text: semanticText,
   dataViz: semanticDataViz,
+  dataVizStrong: semanticDataVizStrong,
 } as const;
 
 export default semanticColors;

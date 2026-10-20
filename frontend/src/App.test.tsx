@@ -202,6 +202,22 @@ describe('App navigation', () => {
     ]);
   });
 
+  it('starts every signed-in page with a skip link to the shell main landmark', () => {
+    mockSignedInContext();
+
+    render(<App />);
+
+    const skip = screen.getByRole('link', { name: 'Skip to content' });
+    const main = screen.getByRole('main');
+    expect(skip).toHaveAttribute('href', `#${main.id}`);
+    expect(main.id).toBe('main-content');
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    expect(
+      skip.compareDocumentPosition(screen.getByRole('navigation')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('keeps Billing inside Account navigation without a standalone top-level tab', () => {
     mockSignedInContext();
 
