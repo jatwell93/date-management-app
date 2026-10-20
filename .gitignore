@@ -78,6 +78,9 @@ skills/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/delegate/
+!.claude/skills/babysit-pr/
+!.claude/skills/handover/
+!.claude/skills/resume/
 instructions/
 agents/
 go-to-market-docs/
