@@ -55,6 +55,13 @@ function parseWorktrees(text) {
     });
 }
 
+/** Free a gone branch from the worktree holding it: the main checkout moves to main, others go. */
+function releaseAction(wt, branch) {
+  return wt.main
+    ? { type: 'switch-to-main', from: branch }
+    : { type: 'remove-worktree', path: wt.path, locked: wt.locked };
+}
+
 /**
  * Decide what to do. Pure: `dirty` is the set of worktree paths with
  * uncommitted changes, and `current` is the main checkout's branch.
@@ -66,9 +73,8 @@ function plan({ branches, worktrees, current, dirty }) {
     branches.filter((b) => b.gone && !PROTECTED.has(b.name)).map((b) => b.name),
   );
 
-  // A gone branch checked out somewhere must be released first: the main
-  // checkout moves to main, any other worktree is removed. The main checkout is
-  // listed first, so a switch always precedes removals.
+  // A gone branch checked out somewhere must be released before it can be
+  // deleted. The main checkout is listed first, so a switch precedes removals.
   for (const wt of worktrees) {
     const branch = wt.main ? current : wt.branch;
     if (!goneNames.has(branch)) continue;
@@ -76,10 +82,8 @@ function plan({ branches, worktrees, current, dirty }) {
       const where = wt.main ? 'current branch' : `worktree ${wt.path}`;
       kept.push({ branch, reason: `${where} has uncommitted changes` });
       goneNames.delete(branch);
-    } else if (wt.main) {
-      actions.push({ type: 'switch-to-main', from: branch });
     } else {
-      actions.push({ type: 'remove-worktree', path: wt.path, locked: wt.locked });
+      actions.push(releaseAction(wt, branch));
     }
   }
 
