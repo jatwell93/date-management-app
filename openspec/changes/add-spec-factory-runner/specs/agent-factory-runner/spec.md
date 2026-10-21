@@ -28,6 +28,24 @@ The factory SHALL NOT merge, approve or enable auto-merge on any PR, regardless 
 - **WHEN** its factory PR becomes settled with nothing actionable
 - **THEN** the runner leaves the PR open for the owner to merge
 
+#### Scenario: Runner attempts a merge anyway
+
+- **GIVEN** a factory PR authored by the Claude GitHub App with all checks green
+- **WHEN** a merge is attempted with the runner's credentials, or auto-merge is enabled
+- **THEN** GitHub refuses or holds the merge until the owner approves the PR
+- **AND** the runner's tool configuration denies `gh pr merge`, `gh pr review` and `gh api`
+
+### Requirement: no_go paths are enforced on the diff
+
+Before pushing, the runner SHALL compare the branch diff against the change's `no_go` patterns (default `.github/**`, `database/migrations/**`, `scripts/database-backup.sh`) and SHALL NOT push when any changed path matches.
+
+#### Scenario: Diff touches a workflow file
+
+- **GIVEN** a factory branch whose diff against `origin/main` includes `.github/workflows/factory.yml`
+- **WHEN** the runner reaches the push step
+- **THEN** it does not push
+- **AND** labels the tracking issue `needs-human` with the matching path
+
 ### Requirement: Factory escalates instead of guessing
 
 When a task needs a product decision, touches a `no_go` path, or is an operator task, the runner SHALL label the PR or tracking issue `needs-human`, mention the owner, record the decision in `handover.md`, and stop.
