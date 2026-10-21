@@ -312,6 +312,8 @@ test('main routes reply and resolve to GraphQL mutations, and rejects bad usage'
     assert.equal(main(['675', '--quiet-minutes', 'ten'], { gh }), 2);
     assert.equal(main(['675', '--quiet-minutes'], { gh }), 2);
     assert.equal(main(['675', '--quiet-minutes', '-1'], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes', ''], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes', ' '], { gh }), 2);
   } finally {
     process.stderr.write = origWrite;
   }

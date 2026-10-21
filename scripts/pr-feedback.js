@@ -292,8 +292,8 @@ function resolve(threadId, { gh = defaultGh } = {}) {
 function parseQuietMinutes(args) {
   const i = args.indexOf('--quiet-minutes');
   if (i < 0) return DEFAULT_QUIET_MINUTES;
-  const value = Number(args[i + 1]);
-  return args[i + 1] !== undefined && Number.isFinite(value) && value >= 0 ? value : null;
+  // A strict decimal match, because Number('') and Number(' ') are 0.
+  return /^\d+(\.\d+)?$/.test(args[i + 1] ?? '') ? Number(args[i + 1]) : null;
 }
 
 function usage() {
