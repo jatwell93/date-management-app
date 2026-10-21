@@ -308,6 +308,10 @@ test('main routes reply and resolve to GraphQL mutations, and rejects bad usage'
   process.stderr.write = () => true;
   try {
     assert.equal(main(['bogus'], { gh }), 2);
+    // An invalid or missing --quiet-minutes value is a usage error, not a NaN crash.
+    assert.equal(main(['675', '--quiet-minutes', 'ten'], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes'], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes', '-1'], { gh }), 2);
   } finally {
     process.stderr.write = origWrite;
   }

@@ -288,6 +288,21 @@ function resolve(threadId, { gh = defaultGh } = {}) {
   ]);
 }
 
+/** `--quiet-minutes N` as a non-negative number, the default when absent, or null when invalid. */
+function parseQuietMinutes(args) {
+  const i = args.indexOf('--quiet-minutes');
+  if (i < 0) return DEFAULT_QUIET_MINUTES;
+  const value = Number(args[i + 1]);
+  return args[i + 1] !== undefined && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function usage() {
+  process.stderr.write(
+    'usage: pr-feedback.js <pr> [--quiet-minutes N] | reply <threadId> <body> | resolve <threadId>\n',
+  );
+  return 2;
+}
+
 function main(argv, { gh = defaultGh, out = process.stdout } = {}) {
   const [cmd, ...rest] = argv;
   if (cmd === 'reply' && rest.length >= 2) {
@@ -298,16 +313,10 @@ function main(argv, { gh = defaultGh, out = process.stdout } = {}) {
     resolve(rest[0], { gh });
     return 0;
   }
-  if (/^\d+$/.test(cmd || '')) {
-    const i = rest.indexOf('--quiet-minutes');
-    const quietMinutes = i >= 0 ? Number(rest[i + 1]) : DEFAULT_QUIET_MINUTES;
-    out.write(`${JSON.stringify(fetchReport(Number(cmd), { gh, quietMinutes }), null, 2)}\n`);
-    return 0;
-  }
-  process.stderr.write(
-    'usage: pr-feedback.js <pr> [--quiet-minutes N] | reply <threadId> <body> | resolve <threadId>\n',
-  );
-  return 2;
+  const quietMinutes = parseQuietMinutes(rest);
+  if (!/^\d+$/.test(cmd || '') || quietMinutes === null) return usage();
+  out.write(`${JSON.stringify(fetchReport(Number(cmd), { gh, quietMinutes }), null, 2)}\n`);
+  return 0;
 }
 
 if (require.main === module) {
