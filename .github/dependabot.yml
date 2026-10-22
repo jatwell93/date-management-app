@@ -8,11 +8,19 @@ version: 2
 # docs/security.md. Major bumps are left ungrouped so each gets individual
 # review, and Dependabot security PRs remain individual (they are the ones we
 # want to see and triage on their own).
+#
+# Supply-chain cooldown: every entry waits 7 days after a version is published
+# before proposing it. Compromised releases (npm worms) are usually caught and
+# pulled within that window. This enforces the 7-day rule in docs/security.md
+# ("NPM Supply-Chain Security"). Cooldown never delays security updates.
+# Dependabot PRs are merged by the owner; nothing auto-merges them.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     versioning-strategy: increase
     # ESLint 10 is blocked upstream: eslint-plugin-react crashes under it (see the
@@ -37,6 +45,8 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     versioning-strategy: increase
     # See the note on the root entry: ESLint 10 is blocked on eslint-plugin-react.
@@ -60,6 +70,8 @@ updates:
     directory: /workers
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     versioning-strategy: increase
     groups:
@@ -78,8 +90,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       github-actions:
         patterns:
-          - "*"
+          - '*'

@@ -2,7 +2,7 @@
 
 This document describes the security measures implemented in the Date Management Application to protect user data, prevent attacks, and ensure safe operation in production environments.
 
-**Last Updated**: May 23, 2026  
+**Last Updated**: October 23, 2026  
 **Status**: Active - security controls implemented with documented dependency exceptions
 
 ---
@@ -516,6 +516,12 @@ Do not set global `ignore-scripts=true` for this repo without a separate migrati
 
 Dependabot is configured for the root, frontend, workers, and GitHub Actions package ecosystems. Review dependency PRs by package boundary and avoid mixing unrelated runtime and tooling updates unless the advisory requires coordinated remediation.
 
+**7-day cooldown (enforced).** Every entry in `.github/dependabot.yml` sets `cooldown: default-days: 7`, so Dependabot does not propose a version until 7 days after it was published. Compromised releases, such as self-spreading npm worms, are usually detected and unpublished within that window. Cooldown applies to version updates only. Security updates still arrive at once and get the per-PR scan below.
+
+**No auto-merge.** Dependabot PRs are merged by the owner, never by a workflow. The `main` ruleset requires an approving review with an admin-only bypass, and the previous `dependabot-auto-merge.yml` was removed (2026-10-23). It auto-merged dev-dependency minor and patch bumps once the required checks passed. None of those checks looks at publish age or install scripts, and dev dependencies are the path a worm takes: their install scripts run in `npm ci` and on developer machines. Keeping a human merge for every dependency PR also keeps one rule for all automation, including the factory runner: only the owner merges.
+
+**Per-PR scan before merging** (manual): non-registry `resolved` URLs, new `hasInstallScript` entries, and packages published within the last 7 days. The cooldown makes the last check rare for version updates; it still matters for security updates and for hand-made dependency changes.
+
 ### Dependabot Remediation Log
 
 > Entries below are dated records. Rows marked "Backend" refer to the Express backend (`backend/`), retired in October 2026 (tag `express-sqlite-last`); they are kept as history and are not current dependencies.
@@ -606,7 +612,7 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
 | root + frontend           | Weekly dev groups #636 (root: `@typescript-eslint/*` 8.71.2, `browserstack-local`, `prettier` 3.9.10, others) and #637 (frontend: `vitest` 5.0.4, `postcss` 8.5.30, `prettier` 3.9.10, others)                                                  | Merged 2026-10-17 with CI green, **although the scan had flagged packages under 7 days old** |
 | root + frontend           | `dotenv` 17 → 18.0.7 (#646, replaces #638) and `@testing-library/jest-dom` 6 → 7.0.1 (#646, replaces #642). dotenv still loads and overrides; its banner no longer has brackets                                                                 | Frontend 533/533, tooling 66 pass; both packages over 7 days old                             |
 
-**The 7-day rule is a review practice, not an enforced gate.** Nothing in CI checks publish age, so a flagged PR can still be merged, as #636 and #637 were. Treat the rule as advisory unless a check is added.
+**The 7-day rule was a review practice, not an enforced gate.** Nothing in CI checked publish age, so a flagged PR could still be merged, as #636 and #637 were. Since 2026-10-23 Dependabot's `cooldown: default-days: 7` enforces it for version updates (see "Dependabot" above). Security updates and hand-made dependency changes still rely on the manual scan.
 
 **Still deferred (2026-10-17, re-check after about 2026-10-24):**
 

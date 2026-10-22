@@ -32,7 +32,7 @@ The runner is safe because of what it can reach, not because of permission promp
 - **"Never merges" is enforced, not just instructed.** Two layers:
   - **Ruleset:** the `main` ruleset requires 1 approving review, with a bypass for the repository admin role only. Factory PRs are authored by the Claude GitHub App, which cannot approve its own PR and has no bypass, so even `gh pr merge` or an enabled auto-merge waits for the owner's approval. The owner's own PRs merge through the admin bypass, as today.
   - **Tool deny-list:** `claude_args` passes `--disallowedTools` for `Bash(gh pr merge:*)`, `Bash(gh pr review:*)` and `Bash(gh api:*)`. The runner gets `gh pr`, `gh issue` and `gh run` subcommands only.
-  - **Dependabot:** `dependabot-auto-merge.yml` relies on 0 required approvals, so it must either approve its PR (requires "Allow GitHub Actions to create and approve pull requests") or have Dependabot added to the ruleset bypass. This is decided in task 0.4.
+  - **Dependabot:** decided in task 0.4 (2026-10-23): neither letting Actions approve PRs (a repo-wide setting that would let any workflow token with `pull-requests: write`, including the runner's, approve a PR) nor a Dependabot ruleset bypass. `dependabot-auto-merge.yml` was removed, Dependabot gets a 7-day `cooldown`, and the owner merges Dependabot PRs through the admin bypass. See `docs/security.md` ("Dependabot").
 - **PRs must trigger CI.** A PR opened with the default `GITHUB_TOKEN` does not trigger other workflows. The runner pushes and opens PRs as the Claude GitHub App, so the required checks run.
 
 ## Autonomy
@@ -69,7 +69,7 @@ The list above is a fixed baseline, hard-coded in `scripts/check-no-go.js`. A ch
 1. Run `claude setup-token`, then store the result as repository secret `CLAUDE_CODE_OAUTH_TOKEN`.
 2. Install the Claude GitHub App on the repository (`/install-github-app`).
 3. Create the labels `factory:run`, `needs-human` and `factory:<id>` (the workflow can create `factory:<id>` itself).
-4. Set the `main` ruleset to require 1 approving review with an admin-role bypass, and decide how Dependabot auto-merge gets past it.
+4. Set the `main` ruleset to require 1 approving review with an admin-role bypass. Dependabot PRs are merged by the owner (task 0.4).
 
 ## Pilot
 
