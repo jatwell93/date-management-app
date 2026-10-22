@@ -53,8 +53,8 @@ The default for a change with no `no_go` list is the list above. The agent's own
 
 `no_go` is enforced in two places, and only the second is a gate:
 
-1. **Agent self-check.** `run-spec` and `babysit-pr` run `git diff --name-only origin/main...HEAD` before pushing. They diff against the merge base, so files that changed only on `main` never count. On a match they refuse with `needs-human`. This saves a wasted PR but is only an instruction.
-2. **Required guard check.** `.github/workflows/no-go-guard.yml` runs on `pull_request_target`, so GitHub always uses `main`'s copy of the workflow and of `scripts/check-no-go.js`; a PR cannot edit the check that judges it. It never checks out PR code. It reads the PR's file list (`gh pr diff --name-only`) and fails a factory PR (labelled `factory:*` or authored by the Claude App) that touches a `no_go` path. It is added to the `main` ruleset's required checks, so such a PR cannot merge.
+1. **Agent self-check.** `run-spec` and `babysit-pr` run `git diff --name-only --no-renames origin/main...HEAD` before pushing. `--no-renames` lists a renamed file under both its old and new path, so renaming a protected file away cannot hide it. They diff against the merge base, so files that changed only on `main` never count. On a match they refuse with `needs-human`. This saves a wasted PR but is only an instruction.
+2. **Required guard check.** `.github/workflows/no-go-guard.yml` runs on `pull_request_target`, so GitHub always uses `main`'s copy of the workflow and of `scripts/check-no-go.js`; a PR cannot edit the check that judges it. It never checks out PR code. It reads the PR's file list from the API (`gh api repos/{owner}/{repo}/pulls/{n}/files --paginate`), checking both `filename` and `previous_filename` so a rename out of a protected path is caught, and fails a factory PR (labelled `factory:*` or authored by the Claude App) that touches a `no_go` path. It is added to the `main` ruleset's required checks, so such a PR cannot merge.
 
 **Workflow edits on a factory branch.** The guard blocks the merge, but a pushed workflow file could still run in CI before merge. The action's FAQ says the Claude App has no write access to workflows, so GitHub would reject that push. Its security doc, though, lists Workflows read & write as requested for future use. Task 0.2 therefore verifies the installed app's permissions. If Workflows write is granted, the runner must use its own `github_token` from an app without it.
 
@@ -76,7 +76,7 @@ The default for a change with no `no_go` list is the list above. The agent's own
 Phase 1 is proven on a new, small change written for the factory: `add-agent-route-map-and-tooling-polish`. Its three low-risk tasks avoid every `no_go` path:
 
 - `scripts/route-map.js`, which prints a route-to-line map of `workers/src/index-minimal.ts`, with tests so the map cannot go stale
-- in `babysit-pr`, background waits run a pinned copy of `pr-feedback.js`, so a branch switch cannot change the script mid-wait
+- `pr-feedback.js --summary`, a one-line verdict (settled, waitingOn, actionable count) for logs and the daily digest
 - `cleanup-merged.js` prints the manual delete command for each branch it keeps
 
 Its setting is `merge: human`. The retro's ESLint required-check job is not a pilot task. It edits `.github/**`, so it stays interactive work for the owner. The retro skill is third-party (`skills-lock.json`), so it is not edited here.

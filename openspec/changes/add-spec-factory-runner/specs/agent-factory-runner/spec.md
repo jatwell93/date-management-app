@@ -44,7 +44,13 @@ The factory SHALL NOT merge, approve or enable auto-merge on any PR, regardless 
 
 ### Requirement: no_go paths are enforced on the diff
 
-Before pushing, the runner SHALL compare the branch diff against the change's `no_go` patterns (default `.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) and SHALL NOT push when any changed path matches. Independently of the runner, a required `no-go-guard` check SHALL run from the base branch's definition (`pull_request_target`) and SHALL fail any factory PR whose file list matches a `no_go` pattern.
+Before pushing, the runner SHALL compare the branch diff against the change's `no_go` patterns (default `.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) and SHALL NOT push when any changed path matches. A renamed file SHALL count under both its old and its new path. Independently of the runner, a required `no-go-guard` check SHALL run from the base branch's definition (`pull_request_target`) and SHALL fail any factory PR whose file list, including each file's previous name, matches a `no_go` pattern.
+
+#### Scenario: Protected file renamed to an unprotected path
+
+- **GIVEN** a factory branch that renames `.claude/skills/run-spec/SKILL.md` to `docs/run-spec.md`
+- **WHEN** the agent check or the `no-go-guard` check runs
+- **THEN** it reports `.claude/skills/run-spec/SKILL.md` as a match and fails
 
 #### Scenario: Diff touches a workflow file
 
