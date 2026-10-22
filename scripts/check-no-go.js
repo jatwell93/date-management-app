@@ -22,7 +22,8 @@
  *   node scripts/check-no-go.js [--change <id>] --files <path|->  # list mode, one path per line
  *   node scripts/check-no-go.js scope   # guard: is $AUTHOR/$LABELS a factory PR, and for which change
  *
- * Exit codes: 0 no match, 1 matches (printed one per line), 2 usage error.
+ * Exit codes: 0 no match, 1 matches (printed one per line), 2 usage error or an
+ * unreadable no_go list. Callers must treat any non-zero exit as a failure.
  * The scope mode lives here, not in its own script, so it is protected by the
  * same baseline entry.
  */
@@ -80,20 +81,29 @@ function scalar(text) {
 
 const isFiller = (line) => /^\s*(#.*)?$/.test(line);
 
+class NoGoFormatError extends Error {}
+
 /**
  * The `no_go` list from the first yaml fence under `## Autonomy`, or [].
  * Reads a block list (`  - path`, with blank and comment lines between items)
- * or a flow list (`no_go: [a, b]`).
+ * or a one-line flow list (`no_go: [a, b]`). Any other shape throws
+ * NoGoFormatError instead of being read partly: a misread list would silently
+ * drop protected paths, so an unrecognised one fails the check.
  */
 function parseNoGo(proposal) {
   const yaml = autonomyYaml(proposal.split(/\r?\n/));
   const key = yaml.findIndex((l) => /^no_go:/.test(l));
   if (key === -1) return [];
-  const flow = yaml[key].match(/^no_go:\s*\[(.*)\]/);
+  const inline = scalar(yaml[key].slice('no_go:'.length));
+  const flow = inline.match(/^\[(.*)\]$/);
   if (flow) return flow[1].split(',').map(scalar).filter(Boolean);
+  if (inline) throw new NoGoFormatError(`unrecognised no_go value: ${yaml[key].trim()}`);
   const rest = yaml.slice(key + 1);
   // Items may be indented or not: YAML allows `- path` at the key's own column.
   const end = rest.findIndex((l) => !isFiller(l) && !/^\s*-\s/.test(l));
+  if (end !== -1 && /^\s/.test(rest[end])) {
+    throw new NoGoFormatError(`unrecognised line in no_go list: ${rest[end].trim()}`);
+  }
   return (end === -1 ? rest : rest.slice(0, end))
     .filter((l) => !isFiller(l))
     .map((l) => scalar(l.replace(/^\s*-\s+/, '')))
@@ -175,7 +185,15 @@ function main(argv, io = defaultIo, root = process.cwd(), env = process.env) {
     io.error(USAGE);
     return 2;
   }
-  const matches = findMatches(changedPaths(opts, io), patternsFor(opts.change, root));
+  let patterns;
+  try {
+    patterns = patternsFor(opts.change, root);
+  } catch (err) {
+    if (!(err instanceof NoGoFormatError)) throw err;
+    io.error(`no_go: ${err.message}; use a block list of "  - path" lines`);
+    return 2;
+  }
+  const matches = findMatches(changedPaths(opts, io), patterns);
   if (matches.length === 0) {
     io.log('no_go: no protected path touched');
     return 0;

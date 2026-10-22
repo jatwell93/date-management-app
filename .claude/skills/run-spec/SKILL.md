@@ -51,8 +51,9 @@ merge is the only gate before production.
 
 ## 4. Check, push, open the PR
 
-1. `node scripts/check-no-go.js --change <id>`. On exit 1, do not push. Escalate
-   with the listed paths.
+1. `node scripts/check-no-go.js --change <id>`. On any non-zero exit, do not
+   push. Escalate with the listed paths (exit 1) or the error (exit 2, for
+   example an unreadable `no_go` list).
 2. `git push -u origin HEAD`.
 3. Create the label if it is missing:
    `gh label create "factory:<id>" --color 5319E7 --description "Factory task for <id>"`
