@@ -6,225 +6,152 @@
  *
  * Usage: node scripts/route-map.js [--root <repo root>]
  *
- * Read-only. An entry it cannot parse or a handler it cannot locate makes it
- * exit 1 and name the entry; it never skips one. Test files are never searched.
+ * Read-only. It parses the source with the TypeScript compiler API (a root
+ * devDependency), so strings, regex literals, comments and entries split over
+ * several lines need no hand-written tokenizer. An entry it cannot read or a
+ * handler it cannot locate makes it exit 1 and name the entry; it never skips
+ * one. Handlers are resolved through index-minimal.ts's own imports, and a
+ * test file is never reported.
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const ts = require('typescript');
 
 const ROUTES_FILE = 'workers/src/index-minimal.ts';
+const TABLE = 'MINIMAL_API_ROUTES';
 const TEST_FILE = /(\.(test|spec)\.[cm]?[jt]sx?$)|(^|\/)(__tests__|test)\//;
+const EXTENSIONS = ['.ts', '.tsx', '.js', '/index.ts'];
+const USAGE = 'usage: node scripts/route-map.js [--root <repo root>]';
 
 class RouteMapError extends Error {}
 
-/**
- * Split the body of the table array into top-level entries. Strings, regex
- * literals and comments are skipped so their brackets and commas do not count.
- * Returns [{ text, line }] where text is the entry without its outer brackets.
- */
-function splitEntries(src, start) {
-  const entries = [];
-  let depth = 0;
-  let entryStart = -1;
-  let prev = '[';
-  let i = start;
-  const lineAt = (idx) => src.slice(0, idx).split('\n').length;
-  while (i < src.length) {
-    const c = src[i];
-    if (c === '/' && src[i + 1] === '/') {
-      while (i < src.length && src[i] !== '\n') i++;
-      continue;
-    }
-    if (c === '/' && src[i + 1] === '*') {
-      i = src.indexOf('*/', i + 2) + 2;
-      if (i < 2) throw new RouteMapError('unterminated comment in route table');
-      continue;
-    }
-    if (c === "'" || c === '"' || c === '`') {
-      i++;
-      while (i < src.length && src[i] !== c) i += src[i] === '\\' ? 2 : 1;
-      i++;
-      prev = 'x';
-      continue;
-    }
-    if (c === '/' && (prev === ',' || prev === '[')) {
-      i++;
-      let inClass = false;
-      while (i < src.length && (inClass || src[i] !== '/')) {
-        if (src[i] === '\\') i++;
-        else if (src[i] === '[') inClass = true;
-        else if (src[i] === ']') inClass = false;
-        i++;
-      }
-      i++;
-      while (/[a-z]/.test(src[i] || '')) i++;
-      prev = 'x';
-      continue;
-    }
-    if (c === '[') {
-      if (depth === 1) entryStart = i;
-      depth++;
-    } else if (c === ']') {
-      depth--;
-      if (depth === 1 && entryStart >= 0) {
-        entries.push({ text: src.slice(entryStart + 1, i), line: lineAt(entryStart) });
-        entryStart = -1;
-      }
-      if (depth === 0) return entries;
-    }
-    if (!/\s/.test(c)) prev = c;
-    i++;
-  }
-  throw new RouteMapError('route table is not closed');
+function parse(root, file) {
+  const text = fs.readFileSync(path.join(root, file), 'utf8');
+  return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
 }
 
-/** Split an entry on top-level commas, skipping strings and regex literals. */
-function splitFields(text) {
-  const fields = [];
-  let from = 0;
-  let prev = ',';
-  let i = 0;
-  while (i < text.length) {
-    const c = text[i];
-    if (c === "'" || c === '"' || c === '`') {
-      i++;
-      while (i < text.length && text[i] !== c) i += text[i] === '\\' ? 2 : 1;
-      i++;
-      prev = 'x';
-      continue;
-    }
-    if (c === '/' && prev === ',') {
-      i++;
-      let inClass = false;
-      while (i < text.length && (inClass || text[i] !== '/')) {
-        if (text[i] === '\\') i++;
-        else if (text[i] === '[') inClass = true;
-        else if (text[i] === ']') inClass = false;
-        i++;
-      }
-      i++;
-      while (/[a-z]/.test(text[i] || '')) i++;
-      prev = 'x';
-      continue;
-    }
-    if (c === ',') {
-      fields.push(text.slice(from, i).trim());
-      from = i + 1;
-      prev = ',';
-    } else if (!/\s/.test(c)) prev = c;
-    i++;
-  }
-  const last = text.slice(from).trim();
-  if (last) fields.push(last);
-  return fields;
-}
+const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
 
-function regexSource(literal) {
-  const m = /^\/(.*)\/[a-z]*$/s.exec(literal);
-  return m ? m[1] : null;
-}
-
-/** Map imported local name -> module specifier (relative imports only). */
-function parseImports(src) {
-  const map = new Map();
-  const re = /import\s+(?!type\b)\{([^}]*)\}\s*from\s*'(\.[^']*)'/g;
-  let m;
-  while ((m = re.exec(src))) {
-    for (const part of m[1].split(',')) {
-      const spec = part.trim();
-      if (!spec || spec.startsWith('type ')) continue;
-      const [imported, local] = spec.split(/\s+as\s+/);
-      map.set((local || imported).trim(), { name: imported.trim(), from: m[2] });
+/** Top-level `const NAME = <init>` declarations, by name. */
+function topLevelConsts(sf) {
+  const out = new Map();
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const d of stmt.declarationList.declarations) {
+      if (ts.isIdentifier(d.name)) out.set(d.name.text, d);
     }
   }
-  return map;
+  return out;
 }
 
-function findDeclaration(src, name) {
-  const re = new RegExp(
-    `^(?:export\\s+)?(?:async\\s+function\\s*\\*?\\s*|function\\s*\\*?\\s*|const\\s+)${name}\\b`,
-    'm',
-  );
-  const m = re.exec(src);
-  return m ? src.slice(0, m.index).split('\n').length : null;
+/** Line of the function or const that declares `name` in `sf`, or 0. */
+function declarationLine(sf, name) {
+  const fn = sf.statements.find((s) => ts.isFunctionDeclaration(s) && s.name?.text === name);
+  if (fn) return lineOf(sf, fn);
+  const d = topLevelConsts(sf).get(name);
+  return d ? lineOf(sf, d) : 0;
 }
 
-function resolveModule(root, fromFile, specifier) {
-  const base = path.resolve(root, path.dirname(fromFile), specifier);
-  for (const cand of [`${base}.ts`, path.join(base, 'index.ts')]) {
-    if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-      return path.relative(root, cand).split(path.sep).join('/');
+/** Named imports: local name to { module, imported }. */
+function namedImports(sf) {
+  const out = new Map();
+  for (const stmt of sf.statements) {
+    const bindings = ts.isImportDeclaration(stmt) && stmt.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) {
+      out.set(el.name.text, {
+        module: stmt.moduleSpecifier.text,
+        imported: (el.propertyName || el.name).text,
+      });
     }
   }
-  return null;
+  return out;
 }
 
-function locateHandler(root, name, src, imports) {
-  const imp = imports.get(name);
-  let file = ROUTES_FILE;
-  let target = name;
-  if (imp) {
-    file = resolveModule(root, ROUTES_FILE, imp.from);
-    target = imp.name;
-    if (!file) throw new RouteMapError(`cannot resolve import '${imp.from}' for ${name}`);
+function resolveModule(root, fromFile, spec) {
+  const base = path.posix.join(path.posix.dirname(fromFile), spec);
+  const file = EXTENSIONS.map((ext) => base + ext).find((f) => fs.existsSync(path.join(root, f)));
+  if (!file) throw new RouteMapError(`cannot resolve import ${spec}`);
+  return file;
+}
+
+/** file:line of the handler, through the routes file's own imports. */
+function locateHandler(ctx, name) {
+  const imp = ctx.imports.get(name);
+  if (!imp) {
+    const line = declarationLine(ctx.sf, name);
+    if (!line) throw new RouteMapError(`cannot locate ${name} in ${ROUTES_FILE}`);
+    return `${ROUTES_FILE}:${line}`;
   }
-  if (TEST_FILE.test(file)) throw new RouteMapError(`${name} resolves to test file ${file}`);
-  const text = imp ? fs.readFileSync(path.join(root, file), 'utf8') : src;
-  const line = findDeclaration(text, target);
-  if (!line) throw new RouteMapError(`cannot locate ${target} in ${file}`);
+  const file = resolveModule(ctx.root, ROUTES_FILE, imp.module);
+  if (TEST_FILE.test(file)) throw new RouteMapError(`${name} resolves to a test file`);
+  const line = declarationLine(parse(ctx.root, file), imp.imported);
+  if (!line) throw new RouteMapError(`cannot locate ${name} in ${file}`);
   return `${file}:${line}`;
 }
 
+/** A regex literal's source, without its slashes and flags. */
+const regexSource = (node) => node.text.slice(1, node.text.lastIndexOf('/'));
+
+function routeOf(ctx, node) {
+  if (ts.isStringLiteral(node)) return node.text;
+  if (ts.isRegularExpressionLiteral(node)) return regexSource(node);
+  const init = ts.isIdentifier(node) && ctx.consts.get(node.text)?.initializer;
+  if (init && ts.isRegularExpressionLiteral(init)) return regexSource(init);
+  throw new RouteMapError(`unrecognised path ${node.getText(ctx.sf)}`);
+}
+
+function entryLine(ctx, entry) {
+  if (!ts.isArrayLiteralExpression(entry) || ![3, 4].includes(entry.elements.length)) {
+    throw new RouteMapError('expected an array of 3 or 4 fields');
+  }
+  const [method, route, handler] = entry.elements;
+  if (!ts.isStringLiteral(method) || !/^[A-Z]+$/.test(method.text)) {
+    throw new RouteMapError(`unrecognised method ${method.getText(ctx.sf)}`);
+  }
+  if (!ts.isIdentifier(handler)) {
+    throw new RouteMapError(`unrecognised handler ${handler.getText(ctx.sf)}`);
+  }
+  const at = locateHandler(ctx, handler.text);
+  return [method.text, routeOf(ctx, route), handler.text, at].join('\t');
+}
+
+function routeTable(ctx) {
+  const init = ctx.consts.get(TABLE)?.initializer;
+  if (!init || !ts.isArrayLiteralExpression(init)) {
+    throw new RouteMapError(`${TABLE} not found in ${ROUTES_FILE}`);
+  }
+  return init.elements;
+}
+
 function buildRouteMap(root) {
-  const src = fs.readFileSync(path.join(root, ROUTES_FILE), 'utf8');
-  const decl = /export\s+const\s+MINIMAL_API_ROUTES\b[^=]*=\s*\[/.exec(src);
-  if (!decl) throw new RouteMapError(`MINIMAL_API_ROUTES not found in ${ROUTES_FILE}`);
-  const imports = parseImports(src);
+  const sf = parse(root, ROUTES_FILE);
+  const ctx = { root, sf, consts: topLevelConsts(sf), imports: namedImports(sf) };
   const lines = [];
   const problems = [];
-  for (const entry of splitEntries(src, decl.index + decl[0].length - 1)) {
+  for (const entry of routeTable(ctx)) {
     try {
-      const fields = splitFields(entry.text);
-      if (fields.length < 3 || fields.length > 4) throw new RouteMapError('expected 3 or 4 fields');
-      const [methodRaw, pathRaw, handler] = fields;
-      const method = /^'([A-Z]+)'$/.exec(methodRaw);
-      if (!method) throw new RouteMapError(`unrecognised method ${methodRaw}`);
-      if (!/^[A-Za-z_$][\w$]*$/.test(handler))
-        throw new RouteMapError(`unrecognised handler ${handler}`);
-      let route;
-      const str = /^'([^']*)'$/.exec(pathRaw);
-      if (str) route = str[1];
-      else if (/^RE_[A-Z0-9_]+$/.test(pathRaw)) {
-        const def = new RegExp(`^const\\s+${pathRaw}\\s*=\\s*(/.*/[a-z]*);`, 'm').exec(src);
-        route = def && regexSource(def[1]);
-        if (route === null || route === undefined)
-          throw new RouteMapError(`cannot find ${pathRaw}`);
-      } else {
-        route = regexSource(pathRaw);
-        if (route === null) throw new RouteMapError(`unrecognised path ${pathRaw}`);
-      }
-      lines.push(
-        [method[1], route, handler, locateHandler(root, handler, src, imports)].join('\t'),
-      );
+      lines.push(entryLine(ctx, entry));
     } catch (err) {
       if (!(err instanceof RouteMapError)) throw err;
-      problems.push(
-        `${ROUTES_FILE}:${entry.line}: ${err.message}: [${entry.text.replace(/\s+/g, ' ').trim()}]`,
-      );
+      const text = entry.getText(sf).replace(/\s+/g, ' ');
+      problems.push(`${ROUTES_FILE}:${lineOf(sf, entry)}: ${err.message}: ${text}`);
     }
   }
   return { lines, problems };
 }
 
-function main(argv, io = { log: console.log, error: console.error }, cwd = process.cwd()) {
-  let root = cwd;
+function rootFrom(argv, cwd) {
   const i = argv.indexOf('--root');
-  if (i >= 0) {
-    if (!argv[i + 1]) {
-      io.error('usage: node scripts/route-map.js [--root <repo root>]');
-      return 2;
-    }
-    root = path.resolve(argv[i + 1]);
+  if (i === -1) return cwd;
+  return argv[i + 1] ? path.resolve(argv[i + 1]) : null;
+}
+
+function main(argv, io = { log: console.log, error: console.error }, cwd = process.cwd()) {
+  const root = rootFrom(argv, cwd);
+  if (!root) {
+    io.error(USAGE);
+    return 2;
   }
   let result;
   try {
@@ -234,14 +161,12 @@ function main(argv, io = { log: console.log, error: console.error }, cwd = proce
     io.error(`route-map: ${err.message}`);
     return 1;
   }
-  if (result.problems.length) {
-    for (const p of result.problems) io.error(`route-map: ${p}`);
-    return 1;
-  }
+  for (const p of result.problems) io.error(`route-map: ${p}`);
+  if (result.problems.length) return 1;
   for (const l of result.lines) io.log(l);
   return 0;
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { buildRouteMap, splitEntries, splitFields, main };
+module.exports = { buildRouteMap, main };
