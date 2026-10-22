@@ -153,3 +153,17 @@ test('bad arguments print usage and exit 2', () => {
   assert.equal(main(['--bogus', 'x'], io, tempRoot({})), 2);
   assert.match(io.out.error[0], /^usage:/);
 });
+
+test('an unrecognised no_go shape fails closed with exit 2', () => {
+  const multiLineFlow = PROPOSAL.replace(
+    /no_go:[\s\S]*?other/,
+    'no_go: [\n    a/**,\n    b.md\n  ]\nother',
+  );
+  const scalarValue = PROPOSAL.replace(/no_go:[\s\S]*?other/, 'no_go: a/**\nother');
+  for (const body of [multiLineFlow, scalarValue]) {
+    assert.throws(() => parseNoGo(body), /unrecognised/);
+    const io = fakeIo({ diff: 'docs/x.md\0' });
+    assert.equal(main(['--change', 'odd'], io, tempRoot({ odd: body })), 2);
+    assert.match(io.out.error[0], /^no_go: unrecognised/);
+  }
+});
