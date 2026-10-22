@@ -167,3 +167,8 @@ test('an unrecognised no_go shape fails closed with exit 2', () => {
     assert.match(io.out.error[0], /^no_go: unrecognised/);
   }
 });
+
+test('a protected path containing a newline still matches', () => {
+  const io = fakeIo({ diff: '.claude/a\nb.md\0' });
+  assert.equal(main([], io, tempRoot({})), 1);
+});
