@@ -90,6 +90,13 @@ Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHAL
 - **WHEN** a bot review with an actionable thread starts a babysit pass seconds after it posts
 - **THEN** the pass acts on the thread in that run, without waiting for the quiet window
 
+#### Scenario: Only a non-Actions check is still pending
+
+- **GIVEN** a factory PR whose GitHub Actions checks have all finished
+- **AND** whose CodeScene check is still pending
+- **WHEN** a Seer review with an actionable thread starts a babysit pass
+- **THEN** the pass acts on the thread in that run
+
 #### Scenario: Fifth round already used
 
 - **GIVEN** a factory PR whose commits include a `Babysit-Round: 5` trailer
@@ -110,7 +117,7 @@ When a task needs a product decision, touches a `no_go` path, or is an operator 
 
 ### Requirement: Merged factory PRs start the next task
 
-When a PR labelled `factory:<change-id>` merges, the factory SHALL start the next unchecked task of that change, and SHALL run at most one review-response pass per PR at a time, capped at 5 fix commits per PR.
+When a PR labelled `factory:<change-id>` merges, the factory SHALL start the next unchecked task of that change, and SHALL run at most one review-response pass per PR at a time, capped at 5 babysit rounds per PR as counted by `Babysit-Round: N` trailers.
 
 #### Scenario: Factory PR merges
 
