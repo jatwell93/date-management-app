@@ -42,47 +42,43 @@ const USAGE = 'usage: check-no-go.js [--change <id>] [--base <ref>] [--files <pa
 
 /** Glob to an anchored RegExp: `**` spans directories, `*` and `?` do not. */
 function globToRegExp(glob) {
-  let out = '';
-  for (let i = 0; i < glob.length; i += 1) {
-    const ch = glob[i];
-    if (ch === '*' && glob[i + 1] === '*') {
-      out += '.*';
-      i += 1;
-    } else if (ch === '*') {
-      out += '[^/]*';
-    } else if (ch === '?') {
-      out += '[^/]';
-    } else {
-      out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return new RegExp(`^${out}$`);
+  const escape = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const segment = (s) =>
+    s
+      .split('*')
+      .map((part) => part.split('?').map(escape).join('[^/]'))
+      .join('[^/]*');
+  return new RegExp(`^${glob.split('**').map(segment).join('.*')}$`);
+}
+
+/** Lines of the first yaml fence under `## Autonomy`, or []. */
+function autonomyYaml(lines) {
+  const heading = lines.findIndex((l) => /^##\s+Autonomy\s*$/.test(l));
+  const fence = lines.findIndex((l, i) => heading !== -1 && i > heading && /^```ya?ml\s*$/.test(l));
+  if (fence === -1) return [];
+  const body = lines.slice(fence + 1);
+  const end = body.findIndex((l) => /^```/.test(l));
+  return end === -1 ? body : body.slice(0, end);
+}
+
+/** `  - value # comment` to `value`; '' for a line that is not a list item. */
+function listItem(line) {
+  const item = line.match(/^\s+-\s+(.*)$/);
+  if (!item) return '';
+  return item[1]
+    .replace(/\s+#.*$/, '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '');
 }
 
 /** The `no_go` list from the first yaml fence under `## Autonomy`, or []. */
 function parseNoGo(proposal) {
-  const lines = proposal.split(/\r?\n/);
-  const heading = lines.findIndex((l) => /^##\s+Autonomy\s*$/.test(l));
-  if (heading === -1) return [];
-  const fence = lines.findIndex((l, i) => i > heading && /^```ya?ml\s*$/.test(l));
-  if (fence === -1) return [];
-  const entries = [];
-  let inList = false;
-  for (const line of lines.slice(fence + 1)) {
-    if (/^```/.test(line)) break;
-    if (/^no_go:\s*$/.test(line)) {
-      inList = true;
-    } else if (inList) {
-      const item = line.match(/^\s+-\s+(.*)$/);
-      if (!item) break;
-      const value = item[1]
-        .replace(/\s+#.*$/, '')
-        .trim()
-        .replace(/^['"]|['"]$/g, '');
-      if (value) entries.push(value);
-    }
-  }
-  return entries;
+  const yaml = autonomyYaml(proposal.split(/\r?\n/));
+  const key = yaml.findIndex((l) => /^no_go:\s*$/.test(l));
+  if (key === -1) return [];
+  const rest = yaml.slice(key + 1);
+  const end = rest.findIndex((l) => !listItem(l));
+  return (end === -1 ? rest : rest.slice(0, end)).map(listItem);
 }
 
 function patternsFor(changeId, root) {
@@ -103,17 +99,16 @@ function findMatches(paths, patterns) {
   return matches;
 }
 
+const FLAGS = ['--change', '--base', '--files'];
+
+/** Flag/value pairs to options, or null on an unknown flag or a missing value. */
 function parseArgs(argv) {
   const opts = { change: '', base: 'origin/main', files: null };
-  for (let i = 0; i < argv.length; i += 1) {
-    const key = argv[i];
-    const value = argv[i + 1];
-    if (!['--change', '--base', '--files'].includes(key) || value === undefined) {
-      return null;
-    }
-    opts[key.slice(2)] = value;
-    i += 1;
-  }
+  const pairs = argv.length % 2 === 0 ? argv.filter((_, i) => i % 2 === 0) : null;
+  if (!pairs || !pairs.every((k) => FLAGS.includes(k))) return null;
+  pairs.forEach((key, i) => {
+    opts[key.slice(2)] = argv[i * 2 + 1];
+  });
   return opts;
 }
 
