@@ -2,7 +2,7 @@
 
 ### Requirement: Factory runs one OpenSpec task per run without production access
 
-The factory workflow SHALL implement at most one unchecked task of the named OpenSpec change per run, and SHALL run with no production secrets and with GitHub token permissions limited to contents, pull-requests and issues write.
+The factory workflow SHALL implement at most one unchecked task of the named OpenSpec change per run, SHALL NOT start a task while an open `factory:<change-id>` PR exists, and SHALL run with no production secrets and with GitHub token permissions limited to contents, pull-requests and issues write.
 
 #### Scenario: Dispatched on a change with unchecked tasks
 
@@ -11,6 +11,13 @@ The factory workflow SHALL implement at most one unchecked task of the named Ope
 - **THEN** the runner implements the first unchecked task only
 - **AND** pushes a feature branch and opens a PR labelled `factory:<change-id>`
 - **AND** updates `openspec/changes/<change-id>/handover.md`
+
+#### Scenario: Triggered again while a factory PR is open
+
+- **GIVEN** an open PR labelled `factory:<change-id>`
+- **WHEN** the factory is dispatched or labelled again for that change
+- **THEN** the run waits in the `factory-<change-id>` concurrency group behind any running task
+- **AND** exits without changes, because a factory PR is still open
 
 #### Scenario: Workflow carries no production credentials
 
@@ -41,7 +48,7 @@ Before pushing, the runner SHALL compare the branch diff against the change's `n
 
 #### Scenario: Diff touches a workflow file
 
-- **GIVEN** a factory branch whose diff against `origin/main` includes `.github/workflows/factory.yml`
+- **GIVEN** a factory branch whose diff against its merge base with `origin/main` includes `.github/workflows/factory.yml`
 - **WHEN** the runner reaches the push step
 - **THEN** it does not push
 - **AND** labels the tracking issue `needs-human` with the matching path

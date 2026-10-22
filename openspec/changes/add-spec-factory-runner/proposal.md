@@ -14,6 +14,7 @@ Two things still need a human at the keyboard:
 - **A GitHub Actions runner** (`.github/workflows/factory.yml`) runs Claude Code via `anthropics/claude-code-action@v1`. It authenticates with the user's subscription (`CLAUDE_CODE_OAUTH_TOKEN`) and works on one task per run, with fresh context each time.
 - **Event-driven loop:**
   - `workflow_dispatch` (change id) or the `factory:run` label on a tracking issue starts the next unchecked task.
+  - One task at a time per change: new-task runs share the concurrency group `factory-<id>` (queued, never cancelled), and `run-spec` exits without changes when an open `factory:<id>` PR already exists. A repeated trigger therefore cannot take the same task twice.
   - `pull_request_review`, `pull_request_review_comment` and `workflow_run: completed` (for the CI workflows) on a `factory:<id>` PR run a `babysit-pr` pass. Not `check_suite`: GitHub does not start workflows from check suites that Actions itself created, and all CI here is Actions. One pass per PR runs at a time (concurrency group). Each PR gets at most 5 fix rounds.
   - `pull_request: closed` with `merged == true` on a `factory:<id>` PR starts the next task.
   - Each babysit pass runs `scripts/check-no-go.js` before pushing, like `run-spec`. Its round count survives between runs: every babysit commit carries a `Babysit-Round: N` trailer, the next pass reads the highest N from the PR's commits, and at 5 it stops with `needs-human`.
@@ -44,7 +45,7 @@ no_go:
   - scripts/database-backup.sh
 ```
 
-`no_go` is checked against the diff, not trusted to the prompt: `run-spec` runs `git diff --name-only origin/main` before pushing and refuses (with `needs-human`) if any path matches. The default for a change with no `no_go` list is the list above.
+`no_go` is checked against the diff, not trusted to the prompt: `run-spec` runs `git diff --name-only origin/main...HEAD` (against the merge base, so files that changed only on `main` never count) before pushing and refuses (with `needs-human`) if any path matches. The default for a change with no `no_go` list is the list above.
 
 ## Out of scope
 
