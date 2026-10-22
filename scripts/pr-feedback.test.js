@@ -215,6 +215,25 @@ test('settled needs finished checks AND a quiet window since the last commit or 
   assert.equal(fresh.lastActivityAt, '2026-10-21T11:57:00.000Z');
 });
 
+test('waitingOn names every blocker and quietUntil says when the window ends', () => {
+  const quiet = summarize(pr(), [{ name: 'a', bucket: 'pass' }], { now: NOW, quietMinutes: 10 });
+  assert.deepEqual(quiet.waitingOn, []);
+
+  const busy = summarize(
+    pr({
+      reviewThreads: {
+        totalCount: 101,
+        nodes: [thread('T1', { resolved: true, at: '2026-10-21T11:57:00Z' })],
+      },
+    }),
+    [{ name: 'a', bucket: 'pending' }],
+    { now: NOW, quietMinutes: 10 },
+  );
+  assert.deepEqual(busy.waitingOn, ['checks', 'quiet window', 'truncated threads']);
+  assert.equal(busy.quietUntil, '2026-10-21T12:07:00.000Z');
+  assert.equal(busy.settled, false);
+});
+
 test('long bodies are clipped', () => {
   const big = thread('T1');
   big.comments.nodes[0].body = 'x'.repeat(5000);
@@ -289,6 +308,12 @@ test('main routes reply and resolve to GraphQL mutations, and rejects bad usage'
   process.stderr.write = () => true;
   try {
     assert.equal(main(['bogus'], { gh }), 2);
+    // An invalid or missing --quiet-minutes value is a usage error, not a NaN crash.
+    assert.equal(main(['675', '--quiet-minutes', 'ten'], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes'], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes', '-1'], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes', ''], { gh }), 2);
+    assert.equal(main(['675', '--quiet-minutes', ' '], { gh }), 2);
   } finally {
     process.stderr.write = origWrite;
   }
