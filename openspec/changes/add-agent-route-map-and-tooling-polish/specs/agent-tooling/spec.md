@@ -10,6 +10,12 @@ The repository SHALL provide `scripts/route-map.js`, which prints one line per e
 - **WHEN** an agent runs `npm run route-map`
 - **THEN** the output contains a line for `GET /api/products` naming `handleGetProducts` and the `file:line` that declares it
 
+#### Scenario: A test mock shares the handler's name
+
+- **GIVEN** `handleGetProducts` is declared in a Worker module and also in a `*.test.ts` mock
+- **WHEN** `npm run route-map` runs
+- **THEN** the line for `GET /api/products` points at the Worker module, not the test file
+
 #### Scenario: A handler moves out of reach
 
 - **GIVEN** a route table entry whose handler is declared nowhere under `workers/src/`
