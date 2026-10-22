@@ -59,6 +59,14 @@ test('globToRegExp: ** spans directories, * stays inside one segment', () => {
   assert.ok(!globToRegExp('AGENTS.md').test('AGENTSxmd'), 'a dot is literal');
 });
 
+test('globToRegExp: **/ matches zero directories; a trailing / covers the directory', () => {
+  assert.ok(globToRegExp('**/.env').test('.env'));
+  assert.ok(globToRegExp('**/.env').test('workers/.env'));
+  assert.ok(globToRegExp('docs/**/x.md').test('docs/x.md'));
+  assert.ok(globToRegExp('docs/legacy/').test('docs/legacy/old/page.md'));
+  assert.ok(!globToRegExp('docs/legacy/').test('docs/legacy-notes.md'));
+});
+
 test('parseNoGo reads the Autonomy yaml list, dropping comments and quotes', () => {
   assert.deepEqual(parseNoGo(PROPOSAL), ['frontend/src/legacy/**', 'workers/wrangler.toml']);
   assert.deepEqual(parseNoGo('# Proposal\n\nno Autonomy block'), []);
@@ -66,6 +74,20 @@ test('parseNoGo reads the Autonomy yaml list, dropping comments and quotes', () 
     'frontend/src/legacy/**',
     'workers/wrangler.toml',
   ]);
+});
+
+test('parseNoGo keeps items after blank and comment lines, and reads flow lists', () => {
+  const block = PROPOSAL.replace(
+    "  - 'workers/wrangler.toml'",
+    "\n  # runtime config\n  - 'workers/wrangler.toml'\n  - docs/legacy/",
+  );
+  assert.deepEqual(parseNoGo(block), [
+    'frontend/src/legacy/**',
+    'workers/wrangler.toml',
+    'docs/legacy/',
+  ]);
+  const flow = PROPOSAL.replace(/no_go:[\s\S]*?other/, "no_go: [a/**, 'b.md'] # two\nother");
+  assert.deepEqual(parseNoGo(flow), ['a/**', 'b.md']);
 });
 
 test('patternsFor adds the change list to the baseline and never drops it', () => {
@@ -90,14 +112,25 @@ test('findMatches reports protected paths only, once each', () => {
   assert.deepEqual(m, [{ path: '.claude/skills/run-spec/SKILL.md', pattern: '.claude/**' }]);
 });
 
-test('diff mode diffs the merge base with --no-renames and passes clean branches', () => {
-  const io = fakeIo({ diff: 'scripts/route-map.js\nscripts/route-map.test.js\n' });
+test('diff mode diffs the merge base with --no-renames and -z, and passes clean branches', () => {
+  const io = fakeIo({ diff: 'scripts/route-map.js\0scripts/route-map.test.js\0' });
   assert.equal(main([], io, tempRoot({})), 0);
-  assert.deepEqual(io.out.gitArgs, ['diff', '--name-only', '--no-renames', 'origin/main...HEAD']);
+  assert.deepEqual(io.out.gitArgs, [
+    'diff',
+    '--name-only',
+    '--no-renames',
+    '-z',
+    'origin/main...HEAD',
+  ]);
+});
+
+test('a protected path with non-ASCII characters is matched unquoted', () => {
+  const io = fakeIo({ diff: '.claude/skills/café/SKILL.md\0' });
+  assert.equal(main([], io, tempRoot({})), 1);
 });
 
 test('a rename out of a protected path still fails (both sides are listed)', () => {
-  const io = fakeIo({ diff: '.claude/skills/run-spec/SKILL.md\ndocs/run-spec.md\n' });
+  const io = fakeIo({ diff: '.claude/skills/run-spec/SKILL.md\0docs/run-spec.md\0' });
   assert.equal(main([], io, tempRoot({})), 1);
   assert.match(io.out.log.join('\n'), /^\.claude\/skills\/run-spec\/SKILL\.md\t/);
 });

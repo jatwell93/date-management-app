@@ -40,7 +40,11 @@ const BASELINE = [
 
 const USAGE = 'usage: check-no-go.js [--change <id>] [--base <ref>] [--files <path|->]';
 
-/** Glob to an anchored RegExp: `**` spans directories, `*` and `?` do not. */
+/**
+ * Glob to an anchored RegExp: `**` spans directories (and `**` plus a slash
+ * also matches zero directories), `*` and `?` stay inside one segment, and a
+ * trailing `/` means everything under that directory.
+ */
 function globToRegExp(glob) {
   const escape = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   const segment = (s) =>
@@ -48,7 +52,9 @@ function globToRegExp(glob) {
       .split('*')
       .map((part) => part.split('?').map(escape).join('[^/]'))
       .join('[^/]*');
-  return new RegExp(`^${glob.split('**').map(segment).join('.*')}$`);
+  const spans = (s) => s.split('**').map(segment).join('.*');
+  const full = glob.endsWith('/') ? `${glob}**` : glob;
+  return new RegExp(`^${full.split('**/').map(spans).join('(?:.*/)?')}$`);
 }
 
 /** Lines of the first yaml fence under `## Autonomy`, or []. */
@@ -61,24 +67,33 @@ function autonomyYaml(lines) {
   return end === -1 ? body : body.slice(0, end);
 }
 
-/** `  - value # comment` to `value`; '' for a line that is not a list item. */
-function listItem(line) {
-  const item = line.match(/^\s+-\s+(.*)$/);
-  if (!item) return '';
-  return item[1]
+/** A yaml scalar without its comment and quotes. */
+function scalar(text) {
+  return text
     .replace(/\s+#.*$/, '')
     .trim()
     .replace(/^['"]|['"]$/g, '');
 }
 
-/** The `no_go` list from the first yaml fence under `## Autonomy`, or []. */
+const isFiller = (line) => /^\s*(#.*)?$/.test(line);
+
+/**
+ * The `no_go` list from the first yaml fence under `## Autonomy`, or [].
+ * Reads a block list (`  - path`, with blank and comment lines between items)
+ * or a flow list (`no_go: [a, b]`).
+ */
 function parseNoGo(proposal) {
   const yaml = autonomyYaml(proposal.split(/\r?\n/));
-  const key = yaml.findIndex((l) => /^no_go:\s*$/.test(l));
+  const key = yaml.findIndex((l) => /^no_go:/.test(l));
   if (key === -1) return [];
+  const flow = yaml[key].match(/^no_go:\s*\[(.*)\]/);
+  if (flow) return flow[1].split(',').map(scalar).filter(Boolean);
   const rest = yaml.slice(key + 1);
-  const end = rest.findIndex((l) => !listItem(l));
-  return (end === -1 ? rest : rest.slice(0, end)).map(listItem);
+  const end = rest.findIndex((l) => !isFiller(l) && !/^\s+-\s/.test(l));
+  return (end === -1 ? rest : rest.slice(0, end))
+    .filter((l) => !isFiller(l))
+    .map((l) => scalar(l.replace(/^\s+-\s+/, '')))
+    .filter(Boolean);
 }
 
 function patternsFor(changeId, root) {
@@ -116,7 +131,9 @@ function changedPaths(opts, io) {
   if (opts.files !== null) {
     return io.readFile(opts.files === '-' ? 0 : opts.files).split(/\r?\n/);
   }
-  return io.git(['diff', '--name-only', '--no-renames', `${opts.base}...HEAD`]).split(/\r?\n/);
+  // -z: git would otherwise quote a path with non-ASCII or special characters
+  // ("\"caf\\303\\251\""), and a quoted path matches no pattern.
+  return io.git(['diff', '--name-only', '--no-renames', '-z', `${opts.base}...HEAD`]).split('\0');
 }
 
 const defaultIo = {
