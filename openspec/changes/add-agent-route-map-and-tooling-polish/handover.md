@@ -1,23 +1,24 @@
 # Handover: add-agent-route-map-and-tooling-polish
 
-Updated: 2026-10-23 · main at cdfb9974
+Updated: 2026-10-22 · branch feature/factory-add-agent-route-map-and-tooling-polish-1.1
 
 ## State
 
-Pilot change for the factory runner (`add-spec-factory-runner` task 1.3). Written by hand; no task started.
+Task 1.1 done on the branch (`scripts/route-map.js`, its test, `route-map` root script, `workers/README.md` pointer); PR pending the owner's merge. Tasks 1.2 and 1.3 not started.
 
 ## Next
 
-Task 1.1, `scripts/route-map.js`. It is meant to be the factory's first run (`add-spec-factory-runner` task 1.4), dispatched once `factory.yml` is on `main` and the `main` ruleset requires an approval.
+Task 1.2, `--summary` for `scripts/pr-feedback.js`, once 1.1 is merged.
 
 ## Open PRs
 
-- None.
+- Task 1.1 factory PR (label `factory:add-agent-route-map-and-tooling-polish`).
 
 ## Waiting on the user
 
-- Nothing.
+- Merge of the task 1.1 PR.
 
 ## Learnings
 
-- `MINIMAL_API_ROUTES` is at `workers/src/index-minimal.ts:335`; path patterns are `RE_*` constants defined just above it. Most handlers are declared in `index-minimal.ts` itself; some are imported from other modules (for example `./clerk/bootstrap-handler`, `./stripe/billing-handlers`, `./upload/upload-handlers`). `./minimal-api-routes` exports only the route type and the resolvers, not handlers.
+- `MINIMAL_API_ROUTES` is at `workers/src/index-minimal.ts:335`; path patterns are `RE_*` constants defined just above it. Most handlers are declared in `index-minimal.ts` itself; some are imported from other modules (for example `./clerk/bootstrap-handler`). `./minimal-api-routes` exports only the route type and the resolvers, not handlers.
+- `route-map.js` tokenizes the table (strings, regex literals, comments) rather than using line regexes, so multi-line entries and `[^/]` classes parse. It takes `--root <dir>` for fixtures.
