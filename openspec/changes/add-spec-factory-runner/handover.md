@@ -1,25 +1,26 @@
 # Handover: add-spec-factory-runner
 
-Updated: 2026-10-21 · main at 05cace3a
+Updated: 2026-10-23 · main at cdfb9974
 
 ## State
 
-The proposal has been drafted and awaits owner approval. PR #675 (agent-run PR loop: `pr-feedback`, `cleanup-merged`, the `babysit-pr`, `handover` and `resume` skills) is merged. PR #677 (`waitingOn` and `quietUntil` in `pr-feedback`) is open.
+The proposal merged (#678). Phase 0 is done except the ruleset: the secret, the Claude GitHub App (Workflows permission is read-only, so the app cannot push workflow files) and the labels are in place, and #680 settled Dependabot (7-day cooldown, owner merges). Task 1.1 is on `feature/factory-run-spec-and-no-go-check`: the `run-spec` skill and `scripts/check-no-go.js` with tests.
 
 ## Next
 
-Phase 0 is the owner's setup. After that comes task 1.1, the `run-spec` skill.
+Task 1.2: `.github/workflows/factory.yml`, with 1.2a (`no-go-guard.yml`) on the same branch. Then 1.3, the pilot change.
 
 ## Open PRs
 
-- #677 feat(tooling): say why a PR is not settled in pr-feedback. The babysit job is running.
+- Task 1.1 PR (run-spec skill and check-no-go.js): opened from this branch.
 
 ## Waiting on the user
 
-- Approve the proposal. Decisions already made on 2026-10-21: billing uses the subscription OAuth token, merges default to `human`, and the pilot is a new small spec.
-- Phase 0: store the `CLAUDE_CODE_OAUTH_TOKEN` secret, install the Claude GitHub App, and create the labels.
+- 0.4: the `main` ruleset still reports `required_approving_review_count: 0` and an empty bypass list (checked 2026-10-23 with `gh api repos/{owner}/{repo}/rulesets/14671588`). Set Required approvals to 1, add Repository admin to the bypass list, and save. Task 1.4 (first dispatch) must wait for this.
 
 ## Learnings
 
 - The `production` environment has `wait_timer` and `branch_policy` but no required reviewers. A push to `main` deploys Workers and Pages to production with no further human gate (`.github/workflows/pages-deploy.yml:147-151`, `.github/workflows/workers-deploy.yml:73`). Do not enable `merge: auto` until that changes.
-- A PR opened with the default `GITHUB_TOKEN` does not trigger other workflows. The factory must push as the Claude GitHub App.
+- A PR opened with the default `GITHUB_TOKEN` does not trigger other workflows. The factory must push and open PRs as the Claude GitHub App. In agent mode the action rewrites the git remote to use the app token; whether `gh` inside the run also uses the app token is unverified. Task 1.4 checks that CI ran on the factory PR.
+- In agent mode (`prompt` set), `claude-code-action` allows no Bash unless `--allowedTools` lists it, so `factory.yml` needs an allow-list, not only the deny-list.
+- A `pull_request_target` run's check is attached to the base commit, so it may not satisfy a required check on the PR head. `no-go-guard.yml` should also post a commit status on the head SHA.

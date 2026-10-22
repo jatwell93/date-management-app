@@ -2,16 +2,16 @@
 
 ## Phase 0 — Owner setup (manual)
 
-- [ ] 0.1 Owner stores `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) as a repository secret.
-- [ ] 0.2 Owner installs the Claude GitHub App on the repository and checks its permissions (Settings → GitHub Apps → Claude → Configure).
+- [x] 0.1 Owner stores `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) as a repository secret.
+- [x] 0.2 Owner installs the Claude GitHub App on the repository and checks its permissions (Settings → GitHub Apps → Claude → Configure).
       Acceptance: the app has no Workflows write permission on this repository; if it does, record that in `handover.md` so 1.2 uses its own `github_token` from an app without it.
-- [ ] 0.3 Owner creates labels `factory:run` and `needs-human`.
+- [x] 0.3 Owner creates labels `factory:run` and `needs-human`.
 - [ ] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path. Decided 2026-10-23: owner merges Dependabot PRs; `dependabot-auto-merge.yml` removed and a 7-day `cooldown` added (interactive PR, since both files are under `.github/**`).
       Acceptance: a Claude-App-authored test PR cannot be merged without the owner's approval.
 
 ## Phase 1 — One task, started by hand
 
-- [ ] 1.1 Add `.claude/skills/run-spec/SKILL.md`. It runs `/resume <id>`, implements exactly one unchecked task, gates, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`. It refuses operator tasks with `needs-human`, and before pushing runs `scripts/check-no-go.js`, which fails if `git diff --name-only --no-renames origin/main...HEAD` (merge base, not the moving tip; both sides of a rename) matches a `no_go` pattern. The patterns are a hard-coded baseline (`.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) plus the change's own `no_go` entries, which add to the baseline and never replace it.
+- [x] 1.1 Add `.claude/skills/run-spec/SKILL.md`. It runs `/resume <id>`, implements exactly one unchecked task, gates, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`. It refuses operator tasks with `needs-human`, and before pushing runs `scripts/check-no-go.js`, which fails if `git diff --name-only --no-renames origin/main...HEAD` (merge base, not the moving tip; both sides of a rename) matches a `no_go` pattern. The patterns are a hard-coded baseline (`.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) plus the change's own `no_go` entries, which add to the baseline and never replace it.
       Acceptance: the skill names every step above; `check-no-go.js` has tests for matching and non-matching paths, for a rename out of a protected path, and for a change whose `no_go` list omits `.github/**` still failing on a workflow edit.
 - [ ] 1.2 Add `.github/workflows/factory.yml` with a `workflow_dispatch` input `change_id`. It runs `claude-code-action@v1` with `prompt: /run-spec <change_id>`, with no production secrets, token permissions limited to contents, pull-requests and issues write plus `id-token: write` (required for the action's OIDC login) and `actions: read` (for `gh run view --log-failed`), and `--disallowedTools` for `Bash(gh pr merge:*)`, `Bash(gh pr review:*)` and `Bash(gh api:*)`. New-task runs share the concurrency group `factory-<change_id>` with `cancel-in-progress: false`, and `run-spec` exits without changes when an open `factory:<id>` PR already exists.
       Acceptance: the workflow passes `actionlint` locally; a static test asserts it references no `prd`, `PRODUCTION` or `NEON_API_KEY` secret, carries the deny-list, sets the per-change concurrency group, and grants no permission beyond those five.
