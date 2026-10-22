@@ -17,7 +17,7 @@ Two things still need a human at the keyboard:
   - One task at a time per change: new-task runs share the concurrency group `factory-<id>` (queued, never cancelled), and `run-spec` exits without changes when an open `factory:<id>` PR already exists. A repeated trigger therefore cannot take the same task twice.
   - `pull_request_review`, `pull_request_review_comment` and `workflow_run: completed` (for the CI workflows) on a `factory:<id>` PR run a `babysit-pr` pass. Not `check_suite`: GitHub does not start workflows from check suites that Actions itself created, and all CI here is Actions. One pass per PR runs at a time (concurrency group). Each PR gets at most 5 fix rounds.
   - `pull_request: closed` with `merged == true` on a `factory:<id>` PR starts the next task.
-  - Each babysit pass is one-shot: it never waits or schedules a check-back. If checks are still running or the quiet window is open, it exits, and the next event starts a fresh pass. Each pass runs `scripts/check-no-go.js` before pushing, like `run-spec`. Its round count survives between runs: every babysit commit carries a `Babysit-Round: N` trailer, the next pass reads the highest N from the PR's commits, and at 5 it stops with `needs-human`.
+  - Each babysit pass is one-shot: it never waits or schedules a check-back. It ignores the quiet window, because every late bot that posts starts its own pass; a pass that waited for quiet would exit on the very review that started it, and nothing would start another. It exits without changes only while checks are still running, because the `workflow_run: completed` or review event that ends that wait starts the next pass. Each pass runs `scripts/check-no-go.js` before pushing, like `run-spec`. Its round count survives between runs: every babysit commit carries a `Babysit-Round: N` trailer, the next pass reads the highest N from the PR's commits, and at 5 it stops with `needs-human`.
 - **A `run-spec` skill** used by the runner. It runs `/resume <id>` and implements exactly one task. It then runs the gate, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`.
 - **Escalation, not stalling.** A task that needs a decision, or that touches a `no_go` path, gets the `needs-human` label and an `@`-mention to the owner, and its decision is recorded in `handover.md`. Every later task waits for it, so the run stops until the owner answers. A run never merges.
 - **An `## Autonomy` block in `proposal.md`** (already described in AGENTS.md §5) is extended with `no_go` paths. `merge` defaults to `human`.
@@ -49,7 +49,7 @@ no_go:
   - CLAUDE.md
 ```
 
-The default for a change with no `no_go` list is the list above. The agent's own rules are on it, so a manipulated run cannot rewrite the instructions or the check that constrain later runs.
+The list above is a fixed baseline, hard-coded in `scripts/check-no-go.js`. A change's own `no_go` entries are added to it and never replace it, so no proposal can drop a protected path. The guard reads the change's entries from `main`'s copy of `proposal.md`, so a PR cannot remove an entry its own change added. The agent's own rules are on the baseline, so a manipulated run cannot rewrite the instructions or the check that constrain later runs.
 
 `no_go` is enforced in two places, and only the second is a gate:
 

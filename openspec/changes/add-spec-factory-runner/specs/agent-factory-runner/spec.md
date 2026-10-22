@@ -44,13 +44,20 @@ The factory SHALL NOT merge, approve or enable auto-merge on any PR, regardless 
 
 ### Requirement: no_go paths are enforced on the diff
 
-Before pushing, the runner SHALL compare the branch diff against the change's `no_go` patterns (default `.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) and SHALL NOT push when any changed path matches. A renamed file SHALL count under both its old and its new path. Independently of the runner, a required `no-go-guard` check SHALL run from the base branch's definition (`pull_request_target`) and SHALL fail any factory PR whose file list, including each file's previous name, matches a `no_go` pattern.
+Before pushing, the runner SHALL compare the branch diff against the `no_go` patterns: a fixed baseline (`.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) plus the change's own entries, which SHALL add to the baseline and never replace it. It SHALL NOT push when any changed path matches. A renamed file SHALL count under both its old and its new path. Independently of the runner, a required `no-go-guard` check SHALL run from the base branch's definition (`pull_request_target`) and SHALL fail any factory PR whose file list, including each file's previous name, matches a `no_go` pattern.
 
 #### Scenario: Protected file renamed to an unprotected path
 
 - **GIVEN** a factory branch that renames `.claude/skills/run-spec/SKILL.md` to `docs/run-spec.md`
 - **WHEN** the agent check or the `no-go-guard` check runs
 - **THEN** it reports `.claude/skills/run-spec/SKILL.md` as a match and fails
+
+#### Scenario: Change lists its own no_go paths
+
+- **GIVEN** a change whose `no_go` list is only `frontend/src/legacy/**`
+- **AND** a factory branch whose diff includes `.github/workflows/factory.yml`
+- **WHEN** the agent check or the `no-go-guard` check runs
+- **THEN** it reports `.github/workflows/factory.yml` as a match and fails
 
 #### Scenario: Diff touches a workflow file
 
@@ -76,6 +83,12 @@ Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHAL
 - **WHEN** it reaches the push step
 - **THEN** it does not push
 - **AND** labels the PR `needs-human` with the matching path
+
+#### Scenario: Bot review arrives inside the quiet window
+
+- **GIVEN** a factory PR whose checks have all finished
+- **WHEN** a bot review with an actionable thread starts a babysit pass seconds after it posts
+- **THEN** the pass acts on the thread in that run, without waiting for the quiet window
 
 #### Scenario: Fifth round already used
 
