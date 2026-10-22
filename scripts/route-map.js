@@ -25,6 +25,10 @@ const USAGE = 'usage: node scripts/route-map.js [--root <repo root>]';
 
 class RouteMapError extends Error {}
 
+function fail(message) {
+  throw new RouteMapError(message);
+}
+
 function parse(root, file) {
   const text = fs.readFileSync(path.join(root, file), 'utf8');
   return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -34,111 +38,118 @@ const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart(sf))
 
 /** Top-level `const NAME = <init>` declarations, by name. */
 function topLevelConsts(sf) {
-  const out = new Map();
-  for (const stmt of sf.statements) {
-    if (!ts.isVariableStatement(stmt)) continue;
-    for (const d of stmt.declarationList.declarations) {
-      if (ts.isIdentifier(d.name)) out.set(d.name.text, d);
-    }
-  }
-  return out;
+  const decls = sf.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((s) => s.declarationList.declarations)
+    .filter((d) => ts.isIdentifier(d.name));
+  return new Map(decls.map((d) => [d.name.text, d]));
 }
+
+const declaresFunction = (name) => (s) => ts.isFunctionDeclaration(s) && s.name?.text === name;
 
 /** Line of the function or const that declares `name` in `sf`, or 0. */
 function declarationLine(sf, name) {
-  const fn = sf.statements.find((s) => ts.isFunctionDeclaration(s) && s.name?.text === name);
-  if (fn) return lineOf(sf, fn);
-  const d = topLevelConsts(sf).get(name);
-  return d ? lineOf(sf, d) : 0;
+  const node = sf.statements.find(declaresFunction(name)) || topLevelConsts(sf).get(name);
+  return node ? lineOf(sf, node) : 0;
 }
 
-/** Named imports: local name to { module, imported }. */
+/** [localName, { module, imported }] for each named import of one statement. */
+function importEntries(stmt) {
+  const bindings = stmt.importClause?.namedBindings;
+  if (!bindings || !ts.isNamedImports(bindings)) return [];
+  const module = stmt.moduleSpecifier.text;
+  return bindings.elements.map((el) => [
+    el.name.text,
+    { module, imported: (el.propertyName || el.name).text },
+  ]);
+}
+
 function namedImports(sf) {
-  const out = new Map();
-  for (const stmt of sf.statements) {
-    const bindings = ts.isImportDeclaration(stmt) && stmt.importClause?.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings)) continue;
-    for (const el of bindings.elements) {
-      out.set(el.name.text, {
-        module: stmt.moduleSpecifier.text,
-        imported: (el.propertyName || el.name).text,
-      });
-    }
-  }
-  return out;
+  return new Map(sf.statements.filter(ts.isImportDeclaration).flatMap(importEntries));
 }
 
 function resolveModule(root, fromFile, spec) {
   const base = path.posix.join(path.posix.dirname(fromFile), spec);
   const file = EXTENSIONS.map((ext) => base + ext).find((f) => fs.existsSync(path.join(root, f)));
-  if (!file) throw new RouteMapError(`cannot resolve import ${spec}`);
-  return file;
+  return file || fail(`cannot resolve import ${spec}`);
+}
+
+function lineIn(sf, file, name, label) {
+  const line = declarationLine(sf, name);
+  return line ? `${file}:${line}` : fail(`cannot locate ${label} in ${file}`);
+}
+
+function importedHandler(ctx, name, imp) {
+  const file = resolveModule(ctx.root, ROUTES_FILE, imp.module);
+  if (TEST_FILE.test(file)) fail(`${name} resolves to a test file`);
+  return lineIn(parse(ctx.root, file), file, imp.imported, name);
 }
 
 /** file:line of the handler, through the routes file's own imports. */
 function locateHandler(ctx, name) {
   const imp = ctx.imports.get(name);
-  if (!imp) {
-    const line = declarationLine(ctx.sf, name);
-    if (!line) throw new RouteMapError(`cannot locate ${name} in ${ROUTES_FILE}`);
-    return `${ROUTES_FILE}:${line}`;
-  }
-  const file = resolveModule(ctx.root, ROUTES_FILE, imp.module);
-  if (TEST_FILE.test(file)) throw new RouteMapError(`${name} resolves to a test file`);
-  const line = declarationLine(parse(ctx.root, file), imp.imported);
-  if (!line) throw new RouteMapError(`cannot locate ${name} in ${file}`);
-  return `${file}:${line}`;
+  return imp ? importedHandler(ctx, name, imp) : lineIn(ctx.sf, ROUTES_FILE, name, name);
 }
 
 /** A regex literal's source, without its slashes and flags. */
 const regexSource = (node) => node.text.slice(1, node.text.lastIndexOf('/'));
 
+function constRegex(ctx, node) {
+  const init = ts.isIdentifier(node) ? ctx.consts.get(node.text)?.initializer : undefined;
+  return init && ts.isRegularExpressionLiteral(init) ? regexSource(init) : null;
+}
+
 function routeOf(ctx, node) {
   if (ts.isStringLiteral(node)) return node.text;
   if (ts.isRegularExpressionLiteral(node)) return regexSource(node);
-  const init = ts.isIdentifier(node) && ctx.consts.get(node.text)?.initializer;
-  if (init && ts.isRegularExpressionLiteral(init)) return regexSource(init);
-  throw new RouteMapError(`unrecognised path ${node.getText(ctx.sf)}`);
+  return constRegex(ctx, node) ?? fail(`unrecognised path ${node.getText(ctx.sf)}`);
+}
+
+function fieldsOf(entry) {
+  const ok = ts.isArrayLiteralExpression(entry) && [3, 4].includes(entry.elements.length);
+  return ok ? entry.elements : fail('expected an array of 3 or 4 fields');
+}
+
+function methodOf(ctx, node) {
+  const ok = ts.isStringLiteral(node) && /^[A-Z]+$/.test(node.text);
+  return ok ? node.text : fail(`unrecognised method ${node.getText(ctx.sf)}`);
+}
+
+function handlerOf(ctx, node) {
+  return ts.isIdentifier(node) ? node.text : fail(`unrecognised handler ${node.getText(ctx.sf)}`);
 }
 
 function entryLine(ctx, entry) {
-  if (!ts.isArrayLiteralExpression(entry) || ![3, 4].includes(entry.elements.length)) {
-    throw new RouteMapError('expected an array of 3 or 4 fields');
-  }
-  const [method, route, handler] = entry.elements;
-  if (!ts.isStringLiteral(method) || !/^[A-Z]+$/.test(method.text)) {
-    throw new RouteMapError(`unrecognised method ${method.getText(ctx.sf)}`);
-  }
-  if (!ts.isIdentifier(handler)) {
-    throw new RouteMapError(`unrecognised handler ${handler.getText(ctx.sf)}`);
-  }
-  const at = locateHandler(ctx, handler.text);
-  return [method.text, routeOf(ctx, route), handler.text, at].join('\t');
+  const [method, route, handler] = fieldsOf(entry);
+  const name = handlerOf(ctx, handler);
+  return [methodOf(ctx, method), routeOf(ctx, route), name, locateHandler(ctx, name)].join('\t');
 }
 
 function routeTable(ctx) {
   const init = ctx.consts.get(TABLE)?.initializer;
-  if (!init || !ts.isArrayLiteralExpression(init)) {
-    throw new RouteMapError(`${TABLE} not found in ${ROUTES_FILE}`);
+  const ok = init && ts.isArrayLiteralExpression(init);
+  return ok ? init.elements : fail(`${TABLE} not found in ${ROUTES_FILE}`);
+}
+
+/** One entry to { line } or { problem }; only RouteMapError becomes a problem. */
+function mapEntry(ctx, entry) {
+  try {
+    return { line: entryLine(ctx, entry) };
+  } catch (err) {
+    if (!(err instanceof RouteMapError)) throw err;
+    const text = entry.getText(ctx.sf).replace(/\s+/g, ' ');
+    return { problem: `${ROUTES_FILE}:${lineOf(ctx.sf, entry)}: ${err.message}: ${text}` };
   }
-  return init.elements;
 }
 
 function buildRouteMap(root) {
   const sf = parse(root, ROUTES_FILE);
   const ctx = { root, sf, consts: topLevelConsts(sf), imports: namedImports(sf) };
-  const lines = [];
-  const problems = [];
-  for (const entry of routeTable(ctx)) {
-    try {
-      lines.push(entryLine(ctx, entry));
-    } catch (err) {
-      if (!(err instanceof RouteMapError)) throw err;
-      const text = entry.getText(sf).replace(/\s+/g, ' ');
-      problems.push(`${ROUTES_FILE}:${lineOf(sf, entry)}: ${err.message}: ${text}`);
-    }
-  }
-  return { lines, problems };
+  const results = routeTable(ctx).map((entry) => mapEntry(ctx, entry));
+  return {
+    lines: results.filter((r) => r.line).map((r) => r.line),
+    problems: results.filter((r) => r.problem).map((r) => r.problem),
+  };
 }
 
 function rootFrom(argv, cwd) {
@@ -147,23 +158,26 @@ function rootFrom(argv, cwd) {
   return argv[i + 1] ? path.resolve(argv[i + 1]) : null;
 }
 
+/** buildRouteMap, with a missing file or table reported as one problem. */
+function tryBuild(root) {
+  try {
+    return buildRouteMap(root);
+  } catch (err) {
+    if (!(err instanceof RouteMapError) && err.code !== 'ENOENT') throw err;
+    return { lines: [], problems: [err.message] };
+  }
+}
+
 function main(argv, io = { log: console.log, error: console.error }, cwd = process.cwd()) {
   const root = rootFrom(argv, cwd);
   if (!root) {
     io.error(USAGE);
     return 2;
   }
-  let result;
-  try {
-    result = buildRouteMap(root);
-  } catch (err) {
-    if (!(err instanceof RouteMapError) && err.code !== 'ENOENT') throw err;
-    io.error(`route-map: ${err.message}`);
-    return 1;
-  }
-  for (const p of result.problems) io.error(`route-map: ${p}`);
-  if (result.problems.length) return 1;
-  for (const l of result.lines) io.log(l);
+  const { lines, problems } = tryBuild(root);
+  problems.forEach((p) => io.error(`route-map: ${p}`));
+  if (problems.length) return 1;
+  lines.forEach((l) => io.log(l));
   return 0;
 }
 
