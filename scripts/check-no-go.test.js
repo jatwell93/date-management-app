@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const {
   BASELINE,
+  factoryScope,
   globToRegExp,
   parseNoGo,
   patternsFor,
@@ -166,6 +167,39 @@ test('an unrecognised no_go shape fails closed with exit 2', () => {
     assert.equal(main(['--change', 'odd'], io, tempRoot({ odd: body })), 2);
     assert.match(io.out.error[0], /^no_go: unrecognised/);
   }
+});
+
+test('factoryScope: the Claude App author or any factory:* label marks a factory PR', () => {
+  assert.equal(factoryScope(['bug'], 'jatwell93'), 'factory=false\n');
+  assert.equal(
+    factoryScope([], 'claude[bot]'),
+    'factory=true\n',
+    'removing labels does not unmark',
+  );
+  assert.equal(factoryScope(['factory:add-x'], 'jatwell93'), 'factory=true\n');
+});
+
+test('scope mode prints the GITHUB_OUTPUT line from LABELS and AUTHOR', () => {
+  const io = fakeIo();
+  const env = { LABELS: '["factory:pilot"]', AUTHOR: 'claude[bot]' };
+  assert.equal(main(['scope'], io, tempRoot({}), env), 0);
+  assert.deepEqual(io.out.log, ['factory=true']);
+});
+
+test('--change all applies every active change list, skipping the archive', () => {
+  const other = PROPOSAL.replace('frontend/src/legacy/**', 'docs/other/**');
+  const root = tempRoot({ pilot: PROPOSAL, other, archive: PROPOSAL.replace('frontend', 'zzz') });
+  const patterns = patternsFor('all', root);
+  for (const p of [...BASELINE, 'frontend/src/legacy/**', 'docs/other/**']) {
+    assert.ok(patterns.includes(p), `${p} applies`);
+  }
+  assert.ok(!patterns.includes('zzz/src/legacy/**'), 'archive is not an active change');
+  const io = fakeIo({ files: 'docs/other/x.md\n' });
+  assert.equal(
+    main(['--change', 'all', '--files', 'f'], io, root),
+    1,
+    'another change list blocks',
+  );
 });
 
 test('a protected path containing a newline still matches', () => {

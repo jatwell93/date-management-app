@@ -1,0 +1,85 @@
+name: Factory
+
+# Runs one task of an OpenSpec change, unattended, with the run-spec skill
+# (OpenSpec change add-spec-factory-runner). Phase 1: started by hand with
+# workflow_dispatch; later phases add the merge, review and CI triggers.
+#
+# Why it cannot reach production:
+#   * Its only secret is CLAUDE_CODE_OAUTH_TOKEN. No Doppler, Neon, Stripe or
+#     Cloudflare credential is passed to it (scripts/factory-workflows.test.js
+#     fails if one is added).
+#   * It never merges. The main ruleset requires an approving review and the
+#     Claude GitHub App, which authors factory PRs, cannot approve its own PR.
+#     The deny-list below also blocks gh pr merge, gh pr review and gh api.
+#   * Protected paths (scripts/check-no-go.js) are checked before every push and
+#     again by the no-go-guard workflow, which runs main's copy of the check.
+#
+# The action pushes as the Claude GitHub App, so CI runs on factory PRs (a push
+# made with the default GITHUB_TOKEN would not trigger other workflows).
+
+on:
+  workflow_dispatch:
+    inputs:
+      change_id:
+        description: OpenSpec change id (a folder under openspec/changes/)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write # the action's OIDC login to the Claude GitHub App
+  actions: read # gh run view --log-failed
+
+# One task per change at a time: a second dispatch queues behind the first and
+# never cancels it; run-spec then exits if the first run's PR is still open.
+concurrency:
+  group: factory-${{ inputs.change_id }}
+  cancel-in-progress: false
+
+jobs:
+  run-spec:
+    name: Run one task
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Validate change id
+        env:
+          CHANGE_ID: ${{ inputs.change_id }}
+        run: |
+          if ! printf '%s' "$CHANGE_ID" | grep -Eq '^[a-z0-9][a-z0-9-]{0,99}$'; then
+            echo "::error::change_id must be a lowercase OpenSpec change id"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the change exists
+        env:
+          CHANGE_ID: ${{ inputs.change_id }}
+        run: test -f "openspec/changes/$CHANGE_ID/tasks.md" || { echo "::error::no tasks.md for $CHANGE_ID"; exit 1; }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run one task
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `${{ inputs.change_id }}`.
+            You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.
+          claude_args: |
+            --max-turns 200
+            --allowedTools "Read,Edit,Write,Glob,Grep,Skill,TodoWrite,Bash(git:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr checks:*),Bash(gh issue:*),Bash(gh label create:*),Bash(gh label list:*),Bash(gh run view:*),Bash(npm ci:*),Bash(npm run:*),Bash(npx openspec:*),Bash(npx prettier:*),Bash(node:*),Bash(cd:*)"
+            --disallowedTools "Bash(gh pr merge:*),Bash(gh pr review:*),Bash(gh api:*),Bash(git push --force:*),Bash(git push -f:*),Bash(npm run test:prod:*),Bash(doppler:*),Bash(curl:*),Bash(wget:*)"
