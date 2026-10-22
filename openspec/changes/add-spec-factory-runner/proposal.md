@@ -26,7 +26,7 @@ Two things still need a human at the keyboard:
 
 The runner is safe because of what it can reach, not because of permission prompts:
 
-- **GitHub token:** contents, pull-requests and issues write only. The `main` ruleset already blocks direct pushes and requires 6 checks.
+- **GitHub token:** contents, pull-requests and issues write, plus `id-token: write`. The action needs that last one to authenticate the Claude GitHub App via OIDC; it mints an identity token and grants no repository access. The `main` ruleset already blocks direct pushes and requires 6 checks.
 - **No production secrets.** The workflow gets no Doppler `prd` token and no Neon or Stripe production credentials, so it cannot read or write production. If tests need secrets, use a dedicated Doppler config with development values only.
 - **`merge: auto` stays disabled.** The `production` environment has a wait timer and a branch policy but **no required reviewers**, and a push to `main` deploys both Workers and Pages to production. Until production requires a reviewer, the human merge is the only human gate before a production deploy, so the runner never merges.
 - **"Never merges" is enforced, not just instructed.** Two layers:
@@ -43,9 +43,20 @@ no_go:
   - .github/** # every workflow, including factory.yml itself and migration-prep.yml
   - database/migrations/**
   - scripts/database-backup.sh
+  - scripts/check-no-go.js # the check itself
+  - .claude/** # skills, hooks and settings the runner follows
+  - AGENTS.md
+  - CLAUDE.md
 ```
 
-`no_go` is checked against the diff, not trusted to the prompt: `run-spec` runs `git diff --name-only origin/main...HEAD` (against the merge base, so files that changed only on `main` never count) before pushing and refuses (with `needs-human`) if any path matches. The default for a change with no `no_go` list is the list above.
+The default for a change with no `no_go` list is the list above. The agent's own rules are on it, so a manipulated run cannot rewrite the instructions or the check that constrain later runs.
+
+`no_go` is enforced in two places, and only the second is a gate:
+
+1. **Agent self-check.** `run-spec` and `babysit-pr` run `git diff --name-only origin/main...HEAD` before pushing. They diff against the merge base, so files that changed only on `main` never count. On a match they refuse with `needs-human`. This saves a wasted PR but is only an instruction.
+2. **Required guard check.** `.github/workflows/no-go-guard.yml` runs on `pull_request_target`, so GitHub always uses `main`'s copy of the workflow and of `scripts/check-no-go.js`; a PR cannot edit the check that judges it. It never checks out PR code. It reads the PR's file list (`gh pr diff --name-only`) and fails a factory PR (labelled `factory:*` or authored by the Claude App) that touches a `no_go` path. It is added to the `main` ruleset's required checks, so such a PR cannot merge.
+
+**Workflow edits on a factory branch.** The guard blocks the merge, but a pushed workflow file could still run in CI before merge. The action's FAQ says the Claude App has no write access to workflows, so GitHub would reject that push. Its security doc, though, lists Workflows read & write as requested for future use. Task 0.2 therefore verifies the installed app's permissions. If Workflows write is granted, the runner must use its own `github_token` from an app without it.
 
 ## Out of scope
 

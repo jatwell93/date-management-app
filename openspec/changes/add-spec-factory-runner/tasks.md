@@ -3,17 +3,20 @@
 ## Phase 0 — Owner setup (manual)
 
 - [ ] 0.1 Owner stores `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) as a repository secret.
-- [ ] 0.2 Owner installs the Claude GitHub App on the repository.
+- [ ] 0.2 Owner installs the Claude GitHub App on the repository and checks its permissions (Settings → GitHub Apps → Claude → Configure).
+      Acceptance: the app has no Workflows write permission on this repository; if it does, record that in `handover.md` so 1.2 uses its own `github_token` from an app without it.
 - [ ] 0.3 Owner creates labels `factory:run` and `needs-human`.
 - [ ] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path (workflow approves its own PR, or Dependabot joins the bypass).
       Acceptance: a Claude-App-authored test PR cannot be merged without the owner's approval.
 
 ## Phase 1 — One task, started by hand
 
-- [ ] 1.1 Add `.claude/skills/run-spec/SKILL.md`. It runs `/resume <id>`, implements exactly one unchecked task, gates, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`. It refuses operator tasks with `needs-human`, and before pushing runs `scripts/check-no-go.js`, which fails if `git diff --name-only origin/main...HEAD` (merge base, not the moving tip) matches a `no_go` pattern (default: `.github/**`, `database/migrations/**`, `scripts/database-backup.sh`).
+- [ ] 1.1 Add `.claude/skills/run-spec/SKILL.md`. It runs `/resume <id>`, implements exactly one unchecked task, gates, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`. It refuses operator tasks with `needs-human`, and before pushing runs `scripts/check-no-go.js`, which fails if `git diff --name-only origin/main...HEAD` (merge base, not the moving tip) matches a `no_go` pattern (default: `.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`).
       Acceptance: the skill names every step above; `check-no-go.js` has tests for matching, non-matching and default patterns.
-- [ ] 1.2 Add `.github/workflows/factory.yml` with a `workflow_dispatch` input `change_id`. It runs `claude-code-action@v1` with `prompt: /run-spec <change_id>`, with no production secrets, token permissions limited to contents, pull-requests and issues write, and `--disallowedTools` for `Bash(gh pr merge:*)`, `Bash(gh pr review:*)` and `Bash(gh api:*)`. New-task runs share the concurrency group `factory-<change_id>` with `cancel-in-progress: false`, and `run-spec` exits without changes when an open `factory:<id>` PR already exists.
-      Acceptance: the workflow passes `actionlint` locally; a static test asserts it references no `prd`, `PRODUCTION` or `NEON_API_KEY` secret, carries the deny-list, and sets the per-change concurrency group.
+- [ ] 1.2 Add `.github/workflows/factory.yml` with a `workflow_dispatch` input `change_id`. It runs `claude-code-action@v1` with `prompt: /run-spec <change_id>`, with no production secrets, token permissions limited to contents, pull-requests and issues write plus `id-token: write` (required for the action's OIDC login), and `--disallowedTools` for `Bash(gh pr merge:*)`, `Bash(gh pr review:*)` and `Bash(gh api:*)`. New-task runs share the concurrency group `factory-<change_id>` with `cancel-in-progress: false`, and `run-spec` exits without changes when an open `factory:<id>` PR already exists.
+      Acceptance: the workflow passes `actionlint` locally; a static test asserts it references no `prd`, `PRODUCTION` or `NEON_API_KEY` secret, carries the deny-list, sets the per-change concurrency group, and grants no permission beyond those four.
+- [ ] 1.2a Add `.github/workflows/no-go-guard.yml` on `pull_request_target`. It uses `main`'s `scripts/check-no-go.js`, never checks out PR code, reads the file list with `gh pr diff --name-only`, and fails factory PRs (label `factory:*` or Claude App author) that touch a `no_go` path. Owner adds it to the `main` ruleset's required checks.
+      Acceptance: a static test asserts the trigger is `pull_request_target` and that no step checks out the PR head; a test PR touching `.claude/**` fails the check.
 - [ ] 1.3 Write the pilot change `add-agent-route-map-and-tooling-polish` (3 tasks, `merge: human`, no task touching a `no_go` path) and validate it with `--strict`.
 - [ ] 1.4 Dispatch the factory on the pilot. One PR is opened by the Claude App, CI runs on it, and `handover.md` is updated.
       Acceptance: the PR link and run link are recorded in `handover.md`.
