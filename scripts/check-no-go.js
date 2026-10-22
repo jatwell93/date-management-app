@@ -20,8 +20,11 @@
  * Usage:
  *   node scripts/check-no-go.js [--change <id>] [--base <ref>]   # diff mode
  *   node scripts/check-no-go.js [--change <id>] --files <path|->  # list mode, one path per line
+ *   node scripts/check-no-go.js scope   # guard: is $AUTHOR/$LABELS a factory PR, and for which change
  *
  * Exit codes: 0 no match, 1 matches (printed one per line), 2 usage error.
+ * The scope mode lives here, not in its own script, so it is protected by the
+ * same baseline entry.
  */
 
 const fs = require('node:fs');
@@ -97,8 +100,26 @@ function parseNoGo(proposal) {
     .filter(Boolean);
 }
 
+const CHANGE_ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
+const FACTORY_AUTHOR = 'claude[bot]';
+
+/**
+ * Whether a PR is a factory PR (authored by the Claude GitHub App, or labelled
+ * `factory:*`) and which change its `factory:<id>` label names. Lines for
+ * $GITHUB_OUTPUT. An id that is not a plain change id is ignored, so a label
+ * cannot point the check at a file outside openspec/changes/.
+ */
+function factoryScope(labels, author) {
+  const ids = labels
+    .filter((l) => l.startsWith('factory:'))
+    .map((l) => l.slice('factory:'.length))
+    .filter((id) => id !== 'run' && CHANGE_ID.test(id));
+  const factory = author === FACTORY_AUTHOR || labels.some((l) => l.startsWith('factory:'));
+  return `factory=${factory}\nchange_id=${ids[0] || ''}\n`;
+}
+
 function patternsFor(changeId, root) {
-  if (!changeId) return [...BASELINE];
+  if (!CHANGE_ID.test(changeId)) return [...BASELINE];
   const file = path.join(root, 'openspec', 'changes', changeId, 'proposal.md');
   const own = fs.existsSync(file) ? parseNoGo(fs.readFileSync(file, 'utf8')) : [];
   return [...new Set([...BASELINE, ...own])];
@@ -144,7 +165,11 @@ const defaultIo = {
   error: (s) => console.error(s),
 };
 
-function main(argv, io = defaultIo, root = process.cwd()) {
+function main(argv, io = defaultIo, root = process.cwd(), env = process.env) {
+  if (argv[0] === 'scope') {
+    io.log(factoryScope(JSON.parse(env.LABELS || '[]'), env.AUTHOR || '').trimEnd());
+    return 0;
+  }
   const opts = parseArgs(argv);
   if (!opts) {
     io.error(USAGE);
@@ -162,4 +187,13 @@ function main(argv, io = defaultIo, root = process.cwd()) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { BASELINE, globToRegExp, parseNoGo, patternsFor, findMatches, parseArgs, main };
+module.exports = {
+  BASELINE,
+  factoryScope,
+  globToRegExp,
+  parseNoGo,
+  patternsFor,
+  findMatches,
+  parseArgs,
+  main,
+};

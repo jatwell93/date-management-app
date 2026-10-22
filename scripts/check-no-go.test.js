@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const {
   BASELINE,
+  factoryScope,
   globToRegExp,
   parseNoGo,
   patternsFor,
@@ -152,4 +153,25 @@ test('bad arguments print usage and exit 2', () => {
   assert.equal(main(['--change'], io, tempRoot({})), 2);
   assert.equal(main(['--bogus', 'x'], io, tempRoot({})), 2);
   assert.match(io.out.error[0], /^usage:/);
+});
+
+test('factoryScope: Claude App author or factory:* label; change id from factory:<id>', () => {
+  assert.equal(factoryScope(['bug'], 'jatwell93'), 'factory=false\nchange_id=\n');
+  assert.equal(factoryScope([], 'claude[bot]'), 'factory=true\nchange_id=\n');
+  assert.equal(
+    factoryScope(['factory:run', 'factory:add-x'], 'jatwell93'),
+    'factory=true\nchange_id=add-x\n',
+  );
+  assert.equal(
+    factoryScope(['factory:../../etc'], 'jatwell93'),
+    'factory=true\nchange_id=\n',
+    'a label that is not a plain change id is ignored',
+  );
+});
+
+test('scope mode prints GITHUB_OUTPUT lines from LABELS and AUTHOR', () => {
+  const io = fakeIo();
+  const env = { LABELS: '["factory:pilot"]', AUTHOR: 'claude[bot]' };
+  assert.equal(main(['scope'], io, tempRoot({}), env), 0);
+  assert.deepEqual(io.out.log, ['factory=true\nchange_id=pilot']);
 });
