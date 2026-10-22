@@ -16,6 +16,7 @@ Two things still need a human at the keyboard:
   - `workflow_dispatch` (change id) or the `factory:run` label on a tracking issue starts the next unchecked task.
   - `pull_request_review`, `pull_request_review_comment` and `workflow_run: completed` (for the CI workflows) on a `factory:<id>` PR run a `babysit-pr` pass. Not `check_suite`: GitHub does not start workflows from check suites that Actions itself created, and all CI here is Actions. One pass per PR runs at a time (concurrency group). Each PR gets at most 5 fix rounds.
   - `pull_request: closed` with `merged == true` on a `factory:<id>` PR starts the next task.
+  - Each babysit pass runs `scripts/check-no-go.js` before pushing, like `run-spec`. Its round count survives between runs: every babysit commit carries a `Babysit-Round: N` trailer, the next pass reads the highest N from the PR's commits, and at 5 it stops with `needs-human`.
 - **A `run-spec` skill** used by the runner. It runs `/resume <id>` and implements exactly one task. It then runs the gate, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`.
 - **Escalation, not stalling.** A task that needs a decision, or that touches a `no_go` path, gets the `needs-human` label and an `@`-mention to the owner, and its decision is recorded in `handover.md`. Every later task waits for it, so the run stops until the owner answers. A run never merges.
 - **An `## Autonomy` block in `proposal.md`** (already described in AGENTS.md §5) is extended with `no_go` paths. `merge` defaults to `human`.
@@ -60,10 +61,10 @@ no_go:
 
 ## Pilot
 
-Phase 1 is proven on a new, small change written for the factory: `add-agent-navigation-and-lint-gate`. It has three low-risk tasks from the retro:
+Phase 1 is proven on a new, small change written for the factory: `add-agent-route-map-and-tooling-polish`. Its three low-risk tasks avoid every `no_go` path:
 
-- a route-to-line map for `workers/src/index-minimal.ts`
-- an ESLint job in the required checks
-- removing the missing `writing-for-agents` step from the retro skill
+- `scripts/route-map.js`, which prints a route-to-line map of `workers/src/index-minimal.ts`, with tests so the map cannot go stale
+- in `babysit-pr`, background waits run a pinned copy of `pr-feedback.js`, so a branch switch cannot change the script mid-wait
+- `cleanup-merged.js` prints the manual delete command for each branch it keeps
 
-Its setting is `merge: human`.
+Its setting is `merge: human`. The retro's ESLint required-check job is not a pilot task. It edits `.github/**`, so it stays interactive work for the owner. The retro skill is third-party (`skills-lock.json`), so it is not edited here.

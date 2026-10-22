@@ -46,6 +46,24 @@ Before pushing, the runner SHALL compare the branch diff against the change's `n
 - **THEN** it does not push
 - **AND** labels the tracking issue `needs-human` with the matching path
 
+### Requirement: Review-fix passes respect no_go and a persistent round cap
+
+Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHALL stop with `needs-human` instead of pushing once the PR already carries 5 babysit rounds, counted from `Babysit-Round: N` commit trailers so the cap holds across separate workflow runs.
+
+#### Scenario: Bot fix would touch a no_go path
+
+- **GIVEN** a babysit pass whose fix changes a file under `.github/**`
+- **WHEN** it reaches the push step
+- **THEN** it does not push
+- **AND** labels the PR `needs-human` with the matching path
+
+#### Scenario: Fifth round already used
+
+- **GIVEN** a factory PR whose commits include a `Babysit-Round: 5` trailer
+- **WHEN** a new review event starts a babysit pass
+- **THEN** the pass makes no commit
+- **AND** labels the PR `needs-human`
+
 ### Requirement: Factory escalates instead of guessing
 
 When a task needs a product decision, touches a `no_go` path, or is an operator task, the runner SHALL label the PR or tracking issue `needs-human`, mention the owner, record the decision in `handover.md`, and stop.
