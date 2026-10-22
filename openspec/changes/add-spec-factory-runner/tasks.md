@@ -1,0 +1,39 @@
+# Tasks: Spec factory runner
+
+## Phase 0 — Owner setup (manual)
+
+- [ ] 0.1 Owner stores `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) as a repository secret.
+- [ ] 0.2 Owner installs the Claude GitHub App on the repository and checks its permissions (Settings → GitHub Apps → Claude → Configure).
+      Acceptance: the app has no Workflows write permission on this repository; if it does, record that in `handover.md` so 1.2 uses its own `github_token` from an app without it.
+- [ ] 0.3 Owner creates labels `factory:run` and `needs-human`.
+- [ ] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path (workflow approves its own PR, or Dependabot joins the bypass).
+      Acceptance: a Claude-App-authored test PR cannot be merged without the owner's approval.
+
+## Phase 1 — One task, started by hand
+
+- [ ] 1.1 Add `.claude/skills/run-spec/SKILL.md`. It runs `/resume <id>`, implements exactly one unchecked task, gates, pushes, opens a PR labelled `factory:<id>`, ticks the task, and updates `handover.md`. It refuses operator tasks with `needs-human`, and before pushing runs `scripts/check-no-go.js`, which fails if `git diff --name-only --no-renames origin/main...HEAD` (merge base, not the moving tip; both sides of a rename) matches a `no_go` pattern. The patterns are a hard-coded baseline (`.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) plus the change's own `no_go` entries, which add to the baseline and never replace it.
+      Acceptance: the skill names every step above; `check-no-go.js` has tests for matching and non-matching paths, for a rename out of a protected path, and for a change whose `no_go` list omits `.github/**` still failing on a workflow edit.
+- [ ] 1.2 Add `.github/workflows/factory.yml` with a `workflow_dispatch` input `change_id`. It runs `claude-code-action@v1` with `prompt: /run-spec <change_id>`, with no production secrets, token permissions limited to contents, pull-requests and issues write plus `id-token: write` (required for the action's OIDC login) and `actions: read` (for `gh run view --log-failed`), and `--disallowedTools` for `Bash(gh pr merge:*)`, `Bash(gh pr review:*)` and `Bash(gh api:*)`. New-task runs share the concurrency group `factory-<change_id>` with `cancel-in-progress: false`, and `run-spec` exits without changes when an open `factory:<id>` PR already exists.
+      Acceptance: the workflow passes `actionlint` locally; a static test asserts it references no `prd`, `PRODUCTION` or `NEON_API_KEY` secret, carries the deny-list, sets the per-change concurrency group, and grants no permission beyond those five.
+- [ ] 1.2a Add `.github/workflows/no-go-guard.yml` on `pull_request_target`. It uses `main`'s `scripts/check-no-go.js`, never checks out PR code, reads the file list from the pulls files API, including each `previous_filename`, reads the change's `no_go` entries from `main`'s copy of its `proposal.md`, and fails factory PRs (label `factory:*` or Claude App author) that touch a `no_go` path. Owner adds it to the `main` ruleset's required checks.
+      Acceptance: a static test asserts the trigger is `pull_request_target` and that no step checks out the PR head; a test PR touching `.claude/**` fails the check.
+- [ ] 1.3 Write the pilot change `add-agent-route-map-and-tooling-polish` (3 tasks, `merge: human`, no task touching a `no_go` path) and validate it with `--strict`.
+- [ ] 1.4 Dispatch the factory on the pilot. One PR is opened by the Claude App, CI runs on it, and `handover.md` is updated.
+      Acceptance: the PR link and run link are recorded in `handover.md`.
+
+## Phase 2 — Chain and babysit on events
+
+- [ ] 2.1 Add a `pull_request: closed` trigger: when a `factory:<id>` PR merges, start the next task.
+- [ ] 2.2 Add `pull_request_review`, `pull_request_review_comment` and `workflow_run: completed` (listing the CI workflows; `check_suite` does not fire for Actions-created suites) triggers that run one `babysit-pr` pass for `factory:<id>` PRs. Use `allowed_bots: sentry[bot],codescene-delta-analysis[bot],copilot-pull-request-reviewer[bot]`, and a concurrency group per PR. Give `babysit-pr` a one-shot mode for the runner: it never waits, watches or schedules a check-back, and it ignores the quiet window (each late bot review starts its own pass). It exits without changes only while a GitHub Actions check is pending, because that check's `workflow_run: completed` event starts the next pass. Pending checks from other apps (CodeScene, Seer) do not hold the pass: they emit no `workflow_run`, and their results arrive as reviews, which start passes of their own. Add the check's `workflow` to `fetchChecks` in `pr-feedback.js` so the pass can tell the two apart (`gh pr checks` leaves `workflow` empty for non-Actions checks). Otherwise it acts on every actionable item. Update `babysit-pr` so each pass runs `scripts/check-no-go.js` before pushing, adds a `Babysit-Round: N` trailer to its commits, and stops with `needs-human` once the PR's highest trailer reaches 5.
+      Acceptance: a static test asserts the concurrency group and the bot allowlist; a test for the round reader covers no trailers, rounds 1–4, and 5; a `pr-feedback.js` test shows a pending non-Actions check does not count as an Actions check still running.
+- [ ] 2.3 Run the pilot's remaining two tasks through the chain without the owner typing anything except merges.
+
+## Phase 3 — Escalation and digest
+
+- [ ] 3.1 `needs-human`: label, `@`-mention the owner, record the decision in `handover.md`, and stop the run (later tasks wait for the decision).
+- [ ] 3.2 Add a daily scheduled job that posts open `factory:*` PRs and `needs-human` items as one comment on the tracking issue.
+
+## Phase 4 — Close out
+
+- [ ] 4.1 Update AGENTS.md §5 (factory usage, `no_go`) and the store of memories.
+- [ ] 4.2 `openspec validate add-spec-factory-runner --strict`; archive once merged.
