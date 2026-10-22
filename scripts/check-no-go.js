@@ -89,10 +89,11 @@ function parseNoGo(proposal) {
   const flow = yaml[key].match(/^no_go:\s*\[(.*)\]/);
   if (flow) return flow[1].split(',').map(scalar).filter(Boolean);
   const rest = yaml.slice(key + 1);
-  const end = rest.findIndex((l) => !isFiller(l) && !/^\s+-\s/.test(l));
+  // Items may be indented or not: YAML allows `- path` at the key's own column.
+  const end = rest.findIndex((l) => !isFiller(l) && !/^\s*-\s/.test(l));
   return (end === -1 ? rest : rest.slice(0, end))
     .filter((l) => !isFiller(l))
-    .map((l) => scalar(l.replace(/^\s+-\s+/, '')))
+    .map((l) => scalar(l.replace(/^\s*-\s+/, '')))
     .filter(Boolean);
 }
 

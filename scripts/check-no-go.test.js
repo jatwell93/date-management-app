@@ -88,6 +88,8 @@ test('parseNoGo keeps items after blank and comment lines, and reads flow lists'
   ]);
   const flow = PROPOSAL.replace(/no_go:[\s\S]*?other/, "no_go: [a/**, 'b.md'] # two\nother");
   assert.deepEqual(parseNoGo(flow), ['a/**', 'b.md']);
+  const unindented = PROPOSAL.replace(/^ {2}- /gm, '- ');
+  assert.deepEqual(parseNoGo(unindented), ['frontend/src/legacy/**', 'workers/wrangler.toml']);
 });
 
 test('patternsFor adds the change list to the baseline and never drops it', () => {
