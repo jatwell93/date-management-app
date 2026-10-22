@@ -1,10 +1,10 @@
 # Handover: add-spec-factory-runner
 
-Updated: 2026-10-23 · main at cdfb9974
+Updated: 2026-10-23 · main at bda65b02
 
 ## State
 
-The proposal merged (#678). Phase 0 is done except the ruleset: the secret, the Claude GitHub App (Workflows permission is read-only, so the app cannot push workflow files) and the labels are in place, and #680 settled Dependabot (7-day cooldown, owner merges). Task 1.1 (#686) adds the `run-spec` skill and `scripts/check-no-go.js`. Tasks 1.2 and 1.2a are on `feature/factory-workflow-and-no-go-guard`, stacked on #686: `factory.yml`, `no-go-guard.yml` and their static test.
+The proposal merged (#678). Phase 0 is done except the ruleset: the secret, the Claude GitHub App (Workflows permission is read-only, so the app cannot push workflow files) and the labels are in place, and #680 settled Dependabot (7-day cooldown, owner merges). Task 1.1 (#686, merged) added the `run-spec` skill and `scripts/check-no-go.js`. Tasks 1.2 and 1.2a are on `feature/factory-workflow-and-no-go-guard` (#687): `factory.yml`, `no-go-guard.yml` and their static test.
 
 ## Next
 
@@ -12,8 +12,8 @@ After both PRs merge: open a throwaway PR labelled `factory:test` that touches `
 
 ## Open PRs
 
-- #686 feat(tooling): add the run-spec skill and the no_go path check.
-- Tasks 1.2 and 1.2a PR, based on #686's branch (GitHub retargets it to `main` when #686 merges).
+- #687 feat(ci): add the factory workflow and the no-go guard.
+- #688 docs(openspec): add the factory pilot change (task 1.3).
 
 ## Waiting on the user
 
