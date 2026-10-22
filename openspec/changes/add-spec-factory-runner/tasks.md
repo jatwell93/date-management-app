@@ -6,7 +6,7 @@
 - [ ] 0.2 Owner installs the Claude GitHub App on the repository and checks its permissions (Settings → GitHub Apps → Claude → Configure).
       Acceptance: the app has no Workflows write permission on this repository; if it does, record that in `handover.md` so 1.2 uses its own `github_token` from an app without it.
 - [ ] 0.3 Owner creates labels `factory:run` and `needs-human`.
-- [ ] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path (workflow approves its own PR, or Dependabot joins the bypass).
+- [ ] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path. Decided 2026-10-23: owner merges Dependabot PRs; `dependabot-auto-merge.yml` removed and a 7-day `cooldown` added (interactive PR, since both files are under `.github/**`).
       Acceptance: a Claude-App-authored test PR cannot be merged without the owner's approval.
 
 ## Phase 1 — One task, started by hand
