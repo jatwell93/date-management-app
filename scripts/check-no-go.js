@@ -14,13 +14,14 @@
  *     under both its old and its new path.
  *   * .github/workflows/no-go-guard.yml (list mode). It runs main's copy of this
  *     script on the PR's file list from the pulls files API, including each
- *     file's previous_filename, and reads the proposal from main's checkout, so a
- *     PR can neither edit the check nor shrink its own change's list.
+ *     file's previous_filename, with `--change all`: every active change's list,
+ *     read from main's checkout. So a PR can neither edit the check, shrink a
+ *     list, nor pick which list applies (labels are editable by the factory).
  *
  * Usage:
- *   node scripts/check-no-go.js [--change <id>] [--base <ref>]   # diff mode
- *   node scripts/check-no-go.js [--change <id>] --files <path|->  # list mode, one path per line
- *   node scripts/check-no-go.js scope   # guard: is $AUTHOR/$LABELS a factory PR, and for which change
+ *   node scripts/check-no-go.js [--change <id|all>] [--base <ref>]   # diff mode
+ *   node scripts/check-no-go.js [--change <id|all>] --files <path|->  # list mode, one path per line
+ *   node scripts/check-no-go.js scope   # guard: is $AUTHOR/$LABELS a factory PR
  *
  * Exit codes: 0 no match, 1 matches (printed one per line), 2 usage error or an
  * unreadable no_go list. Callers must treat any non-zero exit as a failure.
@@ -123,26 +124,42 @@ function blockList(rest) {
 const CHANGE_ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
 const FACTORY_AUTHOR = 'claude[bot]';
 
+const ALL_CHANGES = 'all';
+
 /**
- * Whether a PR is a factory PR (authored by the Claude GitHub App, or labelled
- * `factory:*`) and which change its `factory:<id>` label names. Lines for
- * $GITHUB_OUTPUT. An id that is not a plain change id is ignored, so a label
- * cannot point the check at a file outside openspec/changes/.
+ * Whether a PR is a factory PR: authored by the Claude GitHub App, or labelled
+ * `factory:*`. A line for $GITHUB_OUTPUT. Labels only widen the check (they can
+ * mark a PR as a factory PR, never unmark one) and never choose which change's
+ * list applies: the factory can edit its own PR's labels.
  */
 function factoryScope(labels, author) {
-  const ids = labels
-    .filter((l) => l.startsWith('factory:'))
-    .map((l) => l.slice('factory:'.length))
-    .filter((id) => id !== 'run' && CHANGE_ID.test(id));
   const factory = author === FACTORY_AUTHOR || labels.some((l) => l.startsWith('factory:'));
-  return `factory=${factory}\nchange_id=${ids[0] || ''}\n`;
+  return `factory=${factory}\n`;
 }
 
-function patternsFor(changeId, root) {
-  if (!CHANGE_ID.test(changeId)) return [...BASELINE];
+function changeNoGo(changeId, root) {
   const file = path.join(root, 'openspec', 'changes', changeId, 'proposal.md');
-  const own = fs.existsSync(file) ? parseNoGo(fs.readFileSync(file, 'utf8')) : [];
-  return [...new Set([...BASELINE, ...own])];
+  return fs.existsSync(file) ? parseNoGo(fs.readFileSync(file, 'utf8')) : [];
+}
+
+function activeChanges(root) {
+  const dir = path.join(root, 'openspec', 'changes');
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== 'archive' && CHANGE_ID.test(d.name))
+    .map((d) => d.name);
+}
+
+/**
+ * BASELINE plus one change's no_go list, or with `--change all` every active
+ * change's list (the guard's mode: the PR cannot pick a narrower list).
+ */
+function patternsFor(changeId, root) {
+  let ids = [];
+  if (changeId === ALL_CHANGES) ids = activeChanges(root);
+  else if (CHANGE_ID.test(changeId)) ids = [changeId];
+  return [...new Set([...BASELINE, ...ids.flatMap((id) => changeNoGo(id, root))])];
 }
 
 /** Paths that match any pattern, each with the first pattern it matched. */

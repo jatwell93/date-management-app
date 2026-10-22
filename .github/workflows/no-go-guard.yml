@@ -5,9 +5,9 @@ name: No-go guard
 # is only an instruction; this workflow is the gate.
 #
 # pull_request_target runs main's copy of this workflow and of
-# scripts/check-no-go.js, so a PR cannot edit the check that judges it. The
-# change's no_go list is read from main's copy of its proposal.md for the same
-# reason. NEVER check out or run the PR's code here: this trigger has a
+# scripts/check-no-go.js, so a PR cannot edit the check that judges it. Every
+# active change's no_go list is read from main's copy of its proposal.md for the
+# same reason. NEVER check out or run the PR's code here: this trigger has a
 # write-capable token and runs on PRs from any branch.
 #
 # The result is posted as the commit status `factory/no-go-guard` on the PR head,
@@ -58,12 +58,12 @@ jobs:
 
       - name: Check the PR's files against no_go
         if: steps.scope.outputs.factory == 'true'
-        env:
-          CHANGE_ID: ${{ steps.scope.outputs.change_id }}
         run: |
           gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate \
             --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/pr-files.txt"
-          if node scripts/check-no-go.js --change "$CHANGE_ID" --files "$RUNNER_TEMP/pr-files.txt"; then
+          # --change all: every active change's no_go list applies. Labels are
+          # editable by the factory, so they must not choose a narrower list.
+          if node scripts/check-no-go.js --change all --files "$RUNNER_TEMP/pr-files.txt"; then
             gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=success \
               -f context=factory/no-go-guard -f description="No protected path touched"
           else

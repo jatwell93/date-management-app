@@ -87,7 +87,8 @@ test('no-go-guard.yml runs from main and never checks out the PR head', () => {
 
 test('no-go-guard.yml checks both sides of a rename and posts the head status', () => {
   assert.match(GUARD, /\.filename, \(\.previous_filename \/\/ empty\)/);
-  assert.match(GUARD, /node scripts\/check-no-go\.js --change "\$CHANGE_ID" --files/);
+  assert.match(GUARD, /node scripts\/check-no-go\.js --change all --files/);
+  assert.doesNotMatch(GUARD, /change_id|CHANGE_ID/, 'labels never choose which list applies');
   assert.match(GUARD, /statuses\/\$HEAD_SHA" -f state=failure/);
   assert.doesNotMatch(
     GUARD,
