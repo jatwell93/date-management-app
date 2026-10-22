@@ -20,4 +20,4 @@ Task 1.1, `scripts/route-map.js`. It is meant to be the factory's first run (`ad
 
 ## Learnings
 
-- `MINIMAL_API_ROUTES` is at `workers/src/index-minimal.ts:335`; path patterns are `RE_*` constants defined just above it. Some handlers are imported from other modules (for example `./minimal-api-routes`).
+- `MINIMAL_API_ROUTES` is at `workers/src/index-minimal.ts:335`; path patterns are `RE_*` constants defined just above it. Most handlers are declared in `index-minimal.ts` itself; some are imported from other modules (for example `./clerk/bootstrap-handler`, `./stripe/billing-handlers`, `./upload/upload-handlers`). `./minimal-api-routes` exports only the route type and the resolvers, not handlers.
