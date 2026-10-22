@@ -58,7 +58,8 @@ function globToRegExp(glob) {
       .join('[^/]*');
   const spans = (s) => s.split('**').map(segment).join('.*');
   const full = glob.endsWith('/') ? `${glob}**` : glob;
-  return new RegExp(`^${full.split('**/').map(spans).join('(?:.*/)?')}$`);
+  // `s`: a path may contain a newline, and `.*` must still span it.
+  return new RegExp(`^${full.split('**/').map(spans).join('(?:.*/)?')}$`, 's');
 }
 
 /** Lines of the first yaml fence under `## Autonomy`, or []. */
@@ -95,10 +96,19 @@ function parseNoGo(proposal) {
   const key = yaml.findIndex((l) => /^no_go:/.test(l));
   if (key === -1) return [];
   const inline = scalar(yaml[key].slice('no_go:'.length));
+  if (inline) return flowList(inline, yaml[key]);
+  return blockList(yaml.slice(key + 1));
+}
+
+/** `[a, b]` to its items; any other inline value is unrecognised. */
+function flowList(inline, line) {
   const flow = inline.match(/^\[(.*)\]$/);
-  if (flow) return flow[1].split(',').map(scalar).filter(Boolean);
-  if (inline) throw new NoGoFormatError(`unrecognised no_go value: ${yaml[key].trim()}`);
-  const rest = yaml.slice(key + 1);
+  if (!flow) throw new NoGoFormatError(`unrecognised no_go value: ${line.trim()}`);
+  return flow[1].split(',').map(scalar).filter(Boolean);
+}
+
+/** `- item` lines up to the next top-level key; an indented non-item is unrecognised. */
+function blockList(rest) {
   // Items may be indented or not: YAML allows `- path` at the key's own column.
   const end = rest.findIndex((l) => !isFiller(l) && !/^\s*-\s/.test(l));
   if (end !== -1 && /^\s/.test(rest[end])) {

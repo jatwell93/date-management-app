@@ -189,3 +189,8 @@ test('scope mode prints GITHUB_OUTPUT lines from LABELS and AUTHOR', () => {
   assert.equal(main(['scope'], io, tempRoot({}), env), 0);
   assert.deepEqual(io.out.log, ['factory=true\nchange_id=pilot']);
 });
+
+test('a protected path containing a newline still matches', () => {
+  const io = fakeIo({ diff: '.claude/a\nb.md\0' });
+  assert.equal(main([], io, tempRoot({})), 1);
+});
