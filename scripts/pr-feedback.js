@@ -23,7 +23,9 @@
  * The report's `settled` flag is true when every check has finished and no
  * feedback or commit is newer than the quiet window (default 10 minutes).
  * Seer posts several minutes after a push, so "checks are green" alone does
- * not mean the reviews are in.
+ * not mean the reviews are in. When it is false, `waitingOn` says why
+ * ("checks", "quiet window", "truncated threads") and `quietUntil` says when
+ * the quiet window ends.
  */
 
 const { execFileSync } = require('node:child_process');
@@ -168,6 +170,15 @@ function activityTimes(pr, head, checkRows) {
   ];
 }
 
+/** Why the PR is not settled yet; empty when it is. */
+function blockers({ checks, threadsTruncated, quietUntil, now }) {
+  const reasons = [];
+  if (checks.pending.length) reasons.push('checks');
+  if (quietUntil && now < Date.parse(quietUntil)) reasons.push('quiet window');
+  if (threadsTruncated) reasons.push('truncated threads');
+  return reasons;
+}
+
 /**
  * Reduce the GraphQL pull request and the checks rows to what an agent acts
  * on. Pure, so the tests can drive it with fixtures.
@@ -186,8 +197,10 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
   const threadsTruncated = (pr.reviewThreads?.totalCount ?? 0) > nodes(pr.reviewThreads).length;
 
   const lastActivityAt = latestTime(activityTimes(pr, head, checkRows));
-  const quietFor = lastActivityAt ? (now - Date.parse(lastActivityAt)) / 60000 : Infinity;
-  const settled = checks.pending.length === 0 && quietFor >= quietMinutes && !threadsTruncated;
+  const quietUntil = lastActivityAt
+    ? new Date(Date.parse(lastActivityAt) + quietMinutes * 60000).toISOString()
+    : null;
+  const waitingOn = blockers({ checks, threadsTruncated, quietUntil, now });
 
   return {
     pr: pr.number,
@@ -196,7 +209,9 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
     branch: pr.headRefName,
     head: head.oid,
     checks,
-    settled,
+    settled: waitingOn.length === 0,
+    waitingOn,
+    quietUntil,
     threadsTruncated,
     lastActivityAt,
     unresolvedThreads: threads,
@@ -273,6 +288,21 @@ function resolve(threadId, { gh = defaultGh } = {}) {
   ]);
 }
 
+/** `--quiet-minutes N` as a non-negative number, the default when absent, or null when invalid. */
+function parseQuietMinutes(args) {
+  const i = args.indexOf('--quiet-minutes');
+  if (i < 0) return DEFAULT_QUIET_MINUTES;
+  // A strict decimal match, because Number('') and Number(' ') are 0.
+  return /^\d+(\.\d+)?$/.test(args[i + 1] ?? '') ? Number(args[i + 1]) : null;
+}
+
+function usage() {
+  process.stderr.write(
+    'usage: pr-feedback.js <pr> [--quiet-minutes N] | reply <threadId> <body> | resolve <threadId>\n',
+  );
+  return 2;
+}
+
 function main(argv, { gh = defaultGh, out = process.stdout } = {}) {
   const [cmd, ...rest] = argv;
   if (cmd === 'reply' && rest.length >= 2) {
@@ -283,16 +313,10 @@ function main(argv, { gh = defaultGh, out = process.stdout } = {}) {
     resolve(rest[0], { gh });
     return 0;
   }
-  if (/^\d+$/.test(cmd || '')) {
-    const i = rest.indexOf('--quiet-minutes');
-    const quietMinutes = i >= 0 ? Number(rest[i + 1]) : DEFAULT_QUIET_MINUTES;
-    out.write(`${JSON.stringify(fetchReport(Number(cmd), { gh, quietMinutes }), null, 2)}\n`);
-    return 0;
-  }
-  process.stderr.write(
-    'usage: pr-feedback.js <pr> [--quiet-minutes N] | reply <threadId> <body> | resolve <threadId>\n',
-  );
-  return 2;
+  const quietMinutes = parseQuietMinutes(rest);
+  if (!/^\d+$/.test(cmd || '') || quietMinutes === null) return usage();
+  out.write(`${JSON.stringify(fetchReport(Number(cmd), { gh, quietMinutes }), null, 2)}\n`);
+  return 0;
 }
 
 if (require.main === module) {

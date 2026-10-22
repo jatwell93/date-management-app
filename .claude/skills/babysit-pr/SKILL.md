@@ -21,15 +21,16 @@ Goal: the user never pastes a bot comment or a CI failure into the session again
    woken when it exits.
 2. **Read the feedback:** `node scripts/pr-feedback.js <n>`. It prints JSON:
    `checks` (pass / fail / pending), `unresolvedThreads`, the latest `reviews` per
-   author, issue `comments`, `actionable` (a count), and `settled`.
+   author, issue `comments`, `actionable` (a count), `settled`, and when not
+   settled, `waitingOn` (why) and `quietUntil` (when the quiet window ends).
 3. **Act on each item** (rules below). Commit fixes with conventional messages,
    one logical fix per commit, run the diff-scoped gate, push.
 4. **Repeat from 1** after every push. Seer posts several minutes after a push, so
    green checks do not mean the reviews are in.
-5. **Stop when** `settled` is `true` and `actionable` is `0`. If `settled` is false
-   only because the quiet window has not passed, schedule one check-back
-   (`ScheduleWakeup` or a background `sleep 600 && node scripts/pr-feedback.js <n>`
-   run) instead of polling.
+5. **Stop when** `settled` is `true` and `actionable` is `0`. If `waitingOn` is only
+   `["quiet window"]`, schedule one check-back for just after `quietUntil`
+   (`ScheduleWakeup`, or a background `sleep <seconds> && node scripts/pr-feedback.js <n>`)
+   instead of polling.
 
 Cap: **5 fix rounds per PR.** After that, stop and report what is still open.
 
