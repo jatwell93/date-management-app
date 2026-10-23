@@ -276,6 +276,28 @@ module.exports = [
       'no-redeclare': 'off',
     },
   },
+  // Complexity guard for new code. CodeScene's PR gate fails on complex,
+  // deeply nested functions, and agents cannot run CodeScene locally, so lint
+  // catches the worst cases before a push. The limits are deliberately loose
+  // (ESLint counts differently from CodeScene): they stop 20+ complexity
+  // monsters, not borderline functions. Existing offenders are listed in
+  // eslint.complexity-baseline.js and skipped; tests are not checked.
+  {
+    files: ['scripts/**/*.js', 'shared/**/*.{js,ts}', 'frontend/src/**/*.{js,jsx,ts,tsx}', '*.js'],
+    ignores: [
+      ...require('./eslint.complexity-baseline.js'),
+      '**/*.test.{js,jsx,ts,tsx}',
+      '**/__tests__/**',
+      '**/__mocks__/**',
+      'frontend/src/tests/**',
+      'frontend/src/test-utils/**',
+      'frontend/src/setupTests.{js,jsx,ts,tsx}',
+    ],
+    rules: {
+      complexity: ['error', 8],
+      'max-depth': ['error', 3],
+    },
+  },
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
     rules: prettierConfig.rules,
