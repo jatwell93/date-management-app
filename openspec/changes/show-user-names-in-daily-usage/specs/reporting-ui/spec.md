@@ -28,3 +28,9 @@ The daily usage report API SHALL return, with each row, the display name of the 
 - **GIVEN** a daily usage row whose `user_name` is null
 - **WHEN** the page renders it
 - **THEN** the "User" column shows `Unknown user <id>`
+
+#### Scenario: Audit row with no user at all
+
+- **GIVEN** a daily usage row whose `user_name` and `user_id` are both null (`audit_log.user_id` is nullable)
+- **WHEN** the page renders it
+- **THEN** the "User" column shows `Unknown user`, not `Unknown user null`
