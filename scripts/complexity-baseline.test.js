@@ -24,6 +24,23 @@ test('the baseline has no duplicates and is sorted', () => {
   assert.deepEqual(BASELINE, [...new Set(BASELINE)].sort());
 });
 
+function sourceFiles(dir) {
+  return fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap((d) => {
+    const rel = `${dir}/${d.name}`;
+    if (d.isDirectory()) return d.name === 'node_modules' ? [] : sourceFiles(rel);
+    return /\.(js|jsx|ts|tsx)$/.test(d.name) ? [rel] : [];
+  });
+}
+
+test('no inline eslint-disable switches the complexity rules off', () => {
+  const disable = /eslint-disable[^\n]*\b(complexity|max-depth)\b/;
+  const offenders = ['scripts', 'shared', 'frontend/src']
+    .flatMap(sourceFiles)
+    .filter((f) => f !== 'scripts/complexity-baseline.test.js')
+    .filter((f) => disable.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+  assert.deepEqual(offenders, [], 'fix the function instead of disabling the rule');
+});
+
 test('the baseline never grows', () => {
   assert.ok(
     BASELINE.length <= MAX_ENTRIES,
