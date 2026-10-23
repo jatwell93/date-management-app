@@ -57,6 +57,7 @@ test('plan deletes verified gone branches, keeps open, local-only and dirty ones
     {
       branch: 'feature/dirty-wt',
       reason: 'worktree C:/repo/.claude/worktrees/agent-2 has uncommitted changes',
+      hint: 'to inspect: git -C C:/repo/.claude/worktrees/agent-2 status',
     },
   ]);
 });
@@ -70,7 +71,11 @@ test('a gone branch whose tip is not on GitHub is kept, even when clean', () => 
   });
   assert.deepEqual(actions, []);
   assert.deepEqual(kept, [
-    { branch: 'feature/merged', reason: 'local commits not in any merged PR or origin/main' },
+    {
+      branch: 'feature/merged',
+      reason: 'local commits not in any merged PR or origin/main',
+      hint: 'to delete anyway: git branch -D feature/merged',
+    },
   ]);
 });
 
@@ -173,6 +178,9 @@ test('a tip ahead of the merged PR head is kept; one behind it or in origin/main
   assert.ok(
     lines.includes('keep feature/ahead: local commits not in any merged PR or origin/main'),
   );
+  const at = lines.findIndex((l) => l.startsWith('keep feature/ahead'));
+  assert.equal(lines[at + 1], '  to delete anyway: git branch -D feature/ahead');
+  assert.ok(!calls.includes('branch -D feature/ahead'));
 });
 
 test('without --dry-run the planned actions run in order', () => {
@@ -201,4 +209,25 @@ test('refuses to run from a linked worktree', () => {
   assert.equal(main([], { git, gh: ghMerged([]), log: (l) => lines.push(l) }), 1);
   assert.equal(calls.length, 1);
   assert.match(lines[0], /main checkout/);
+});
+
+test('a dirty worktree prints an inspect hint and nothing is removed', () => {
+  const { git, calls } = fakeGit({
+    branches: 'feature/dirty\torigin/feature/dirty\t[gone]',
+    worktrees:
+      'worktree C:/repo\nHEAD a\nbranch refs/heads/main\n\nworktree C:/repo/wt\nHEAD b\nbranch refs/heads/feature/dirty',
+    tips: { 'feature/dirty': 's1' },
+  });
+  const dirtyGit = (args) =>
+    args.join(' ') === '-C C:/repo/wt status --porcelain' ? ' M f\n' : git(args);
+  const lines = [];
+  main([], {
+    git: dirtyGit,
+    gh: ghMerged([{ headRefName: 'feature/dirty', headRefOid: 's1' }]),
+    log: (l) => lines.push(l),
+  });
+  const at = lines.findIndex((l) => l.startsWith('keep feature/dirty'));
+  assert.ok(at >= 0);
+  assert.equal(lines[at + 1], '  to inspect: git -C C:/repo/wt status');
+  assert.ok(!calls.some((c) => /^(branch -D|worktree remove)/.test(c)));
 });

@@ -2,7 +2,8 @@
 /**
  * Tidy the local checkout after PRs merge: delete local branches whose remote
  * branch is gone, remove their clean worktrees, and move off a merged branch
- * back onto an up-to-date main.
+ * back onto an up-to-date main. Each kept branch prints a manual-command hint;
+ * the script never runs it.
  *
  * A branch is deleted only when BOTH hold:
  *
@@ -82,7 +83,12 @@ function deletableBranches(branches, verified, kept) {
   const gone = new Set();
   for (const b of branches.filter((x) => x.gone && !PROTECTED.has(x.name))) {
     if (verified.has(b.name)) gone.add(b.name);
-    else kept.push({ branch: b.name, reason: 'local commits not in any merged PR or origin/main' });
+    else
+      kept.push({
+        branch: b.name,
+        reason: 'local commits not in any merged PR or origin/main',
+        hint: `to delete anyway: git branch -D ${b.name}`,
+      });
   }
   return gone;
 }
@@ -100,7 +106,11 @@ function releaseWorktrees(worktrees, gone, dirty, kept) {
       continue;
     }
     const where = wt.main ? 'current branch' : `worktree ${wt.path}`;
-    kept.push({ branch: wt.branch, reason: `${where} has uncommitted changes` });
+    kept.push({
+      branch: wt.branch,
+      reason: `${where} has uncommitted changes`,
+      hint: `to inspect: git -C ${wt.path} status`,
+    });
     gone.delete(wt.branch);
   }
   return actions;
@@ -221,7 +231,10 @@ function main(argv, { git = defaultGit, gh = defaultGh, log = console.log } = {}
   const verified = new Set(goneNames.filter((name) => tipIsOnGitHub(git, name, heads)));
 
   const { actions, kept } = plan({ branches, worktrees, dirty, verified });
-  for (const k of kept) log(`keep ${k.branch}: ${k.reason}`);
+  for (const k of kept) {
+    log(`keep ${k.branch}: ${k.reason}`);
+    log(`  ${k.hint}`);
+  }
   if (!actions.length) {
     log('nothing to clean');
     return 0;
