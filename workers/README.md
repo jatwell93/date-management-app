@@ -201,6 +201,9 @@ npm run tail:prod
 - **Auth** is `authenticateApiRequest`: verify the Clerk token, then read `organization_id` and `role` from the `users` row and check the organization's subscription entitlement. The client never supplies `organizationId`.
 - **Errors** go to Sentry when `WORKERS_SENTRY_DSN` is set. Response bodies are sanitized.
 
+To find which handler serves a route, run `npm run route-map` from the repo root. It prints
+`METHOD<TAB>path<TAB>handler<TAB>file:line` for every `MINIMAL_API_ROUTES` entry; no need to page through `index-minimal.ts`.
+
 ### Scheduled jobs and queues
 
 An hourly cron (`0 * * * *`) runs `scheduled/dispatcher.ts`, which runs the jobs in `scheduled/jobs/`. The catalogue import and notification email queues are declared in `wrangler.toml`; create them in Cloudflare before deploying.
