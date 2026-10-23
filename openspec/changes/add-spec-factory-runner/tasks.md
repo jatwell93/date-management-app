@@ -6,7 +6,7 @@
 - [x] 0.2 Owner installs the Claude GitHub App on the repository and checks its permissions (Settings → GitHub Apps → Claude → Configure).
       Acceptance: the app has no Workflows write permission on this repository; if it does, record that in `handover.md` so 1.2 uses its own `github_token` from an app without it.
 - [x] 0.3 Owner creates labels `factory:run` and `needs-human`.
-- [ ] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path. Decided 2026-10-23: owner merges Dependabot PRs; `dependabot-auto-merge.yml` removed and a 7-day `cooldown` added (interactive PR, since both files are under `.github/**`).
+- [x] 0.4 Owner sets the `main` ruleset to require 1 approving review with an admin-role bypass, and picks the Dependabot path. Decided 2026-10-23: owner merges Dependabot PRs; `dependabot-auto-merge.yml` removed and a 7-day `cooldown` added (interactive PR, since both files are under `.github/**`).
       Acceptance: a Claude-App-authored test PR cannot be merged without the owner's approval.
 
 ## Phase 1 — One task, started by hand
@@ -28,7 +28,8 @@
 - [ ] 2.1 Add a `pull_request: closed` trigger: when a `factory:<id>` PR merges, start the next task.
 - [ ] 2.2 Add `pull_request_review`, `pull_request_review_comment` and `workflow_run: completed` (listing the CI workflows; `check_suite` does not fire for Actions-created suites) triggers that run one `babysit-pr` pass for `factory:<id>` PRs. Use `allowed_bots: sentry[bot],codescene-delta-analysis[bot],copilot-pull-request-reviewer[bot]`, and a concurrency group per PR. Give `babysit-pr` a one-shot mode for the runner: it never waits, watches or schedules a check-back, and it ignores the quiet window (each late bot review starts its own pass). It exits without changes only while a GitHub Actions check is pending, because that check's `workflow_run: completed` event starts the next pass. Pending checks from other apps (CodeScene, Seer) do not hold the pass: they emit no `workflow_run`, and their results arrive as reviews, which start passes of their own. Add the check's `workflow` to `fetchChecks` in `pr-feedback.js` so the pass can tell the two apart (`gh pr checks` leaves `workflow` empty for non-Actions checks). Otherwise it acts on every actionable item. Update `babysit-pr` so each pass runs `scripts/check-no-go.js` before pushing, adds a `Babysit-Round: N` trailer to its commits, and stops with `needs-human` once the PR's highest trailer reaches 5. While editing `babysit-pr`, also have it log `node scripts/pr-feedback.js <n> --summary` (added by the pilot, #693) as the one-line state of each pass; the pilot left this to the owner because `.claude/**` is protected.
       Acceptance: a static test asserts the concurrency group and the bot allowlist; a test for the round reader covers no trailers, rounds 1–4, and 5; a `pr-feedback.js` test shows a pending non-Actions check does not count as an Actions check still running.
-- [ ] 2.3 Run the pilot's remaining two tasks through the chain without the owner typing anything except merges.
+- [ ] 2.3 Write a new small change (the pilot is archived; its three tasks ran by hand-dispatch in phase 1) and run it through the chain: the owner dispatches the first task once, then types nothing except approvals and merges.
+      Acceptance: every task after the first starts from the merge trigger (2.1), every review or CI fix comes from a one-shot babysit pass (2.2), and the run, PR and fix-round count for each task are recorded in `handover.md`.
 
 ## Phase 3 — Escalation and digest
 

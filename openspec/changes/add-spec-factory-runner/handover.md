@@ -16,15 +16,17 @@ Phase 1 is done. The factory ran the pilot change `add-agent-route-map-and-tooli
 
 ## Next
 
-Phase 2, task 2.1 (2.2 also adds the pilot's `--summary` line to `babysit-pr`): a `pull_request: closed` trigger in `factory.yml` that starts the next task when a `factory:<id>` PR merges. Then 2.2 (one-shot `babysit-pr` passes on review and CI events) and 2.3 (a change run through the chain with the owner only merging). Both edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
+Phase 2, task 2.1 (2.2 also adds the pilot's `--summary` line to `babysit-pr`): a `pull_request: closed` trigger in `factory.yml` that starts the next task when a `factory:<id>` PR merges. Then 2.2 (one-shot `babysit-pr` passes on review and CI events) and 2.3 (a new small change, since the pilot is archived, run through the chain with the owner only approving and merging). 2.1 and 2.2 edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
 
 ## Open PRs
 
-- The PR carrying this handover, the 1.4 tick and the pilot archive.
+- #695: this handover, the 0.4 and 1.4 ticks, and the pilot archive.
 
 ## Waiting on the user
 
-- Nothing.
+- The new small change for 2.3: a real feature is a better test than more tooling.
+
+Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`): 1 required approval, Repository admin bypass, and `factory/no-go-guard` among the 7 required checks.
 
 ## Learnings
 
