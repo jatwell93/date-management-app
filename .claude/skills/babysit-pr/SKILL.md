@@ -34,6 +34,27 @@ Goal: the user never pastes a bot comment or a CI failure into the session again
 
 Cap: **5 fix rounds per PR.** After that, stop and report what is still open.
 
+Log the one-line state at each step with `node scripts/pr-feedback.js <n> --summary`.
+
+## One-shot mode (factory runner)
+
+`.github/workflows/factory.yml` starts one pass per review or CI event on a
+`factory:<id>` PR, and each workflow run ends after its pass. In that mode:
+
+- **Never wait.** No `--watch`, no background jobs, no scheduled check-backs.
+  Ignore the quiet window: every late bot review starts its own pass.
+- **Exit without changes** while `checks.pendingActions` in the report is not
+  empty. Those GitHub Actions checks end with a `workflow_run` event, which
+  starts the next pass. Pending checks from other apps (CodeScene, Seer,
+  CodeQL) do not hold the pass; their results arrive as reviews.
+- **Round cap across runs.** Run `node scripts/babysit-round.js` first. On exit 3
+  (5 rounds used), add `needs-human` to the PR, comment `@jatwell93` with what
+  is still open, and stop. Otherwise end every fix commit message with the
+  trailer `Babysit-Round: <next>` from its output, one round per pass.
+- **Check before pushing.** Run `node scripts/check-no-go.js --change <id>`. On
+  any non-zero exit, do not push: add `needs-human` and comment with the paths.
+- Act on every actionable item in this one pass, push once, and stop.
+
 ## Judging an item
 
 Bots are often right about the diagnosis and wrong about the remedy. Judge them

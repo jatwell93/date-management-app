@@ -1,8 +1,16 @@
 name: Factory
 
-# Runs one task of an OpenSpec change, unattended, with the run-spec skill
-# (OpenSpec change add-spec-factory-runner). Phase 1: started by hand with
-# workflow_dispatch; later phases add the merge, review and CI triggers.
+# Runs OpenSpec changes unattended (OpenSpec change add-spec-factory-runner).
+#
+#   workflow_dispatch(change_id)          -> run-spec: one task, one PR
+#   factory PR merged                      -> run-spec: the next task      (2.1)
+#   review, review comment or CI finished  -> babysit-pr: one-shot pass   (2.2)
+#     on a factory PR
+#
+# The `route` job (scripts/factory-route.js) decides which, if any, and skips
+# events with nothing to do (Actions checks still running, nothing actionable,
+# PR parked with needs-human) before a Claude run starts. Only PRs authored by
+# the Claude GitHub App AND labelled factory:<id> count.
 #
 # Why it cannot reach production:
 #   * Its only secret is CLAUDE_CODE_OAUTH_TOKEN. No Doppler, Neon, Stripe or
@@ -13,6 +21,8 @@ name: Factory
 #     The deny-list below also blocks gh pr merge, gh pr review and gh api.
 #   * Protected paths (scripts/check-no-go.js) are checked before every push and
 #     again by the no-go-guard workflow, which runs main's copy of the check.
+#   * The Claude GitHub App has no Workflows write permission, so a factory PR
+#     cannot change this file, which review events on its PR run from.
 #
 # The action pushes as the Claude GitHub App, so CI runs on factory PRs (a push
 # made with the default GITHUB_TOKEN would not trigger other workflows).
@@ -24,6 +34,25 @@ on:
         description: OpenSpec change id (a folder under openspec/changes/)
         required: true
         type: string
+  pull_request:
+    types: [closed]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  workflow_run:
+    # The CI workflows that run on pull requests. Not check_suite: GitHub does
+    # not start workflows from check suites that Actions itself created.
+    workflows:
+      - 'CodeQL Advanced'
+      - Database Conformance
+      - Deploy Frontend to Cloudflare Pages
+      - Frontend Test & Coverage
+      - Migrations E2E (real PostgreSQL)
+      - Secrets Scan
+      - Workers Bundle Size Check
+      - Workers Test
+    types: [completed]
 
 permissions:
   contents: write
@@ -32,35 +61,70 @@ permissions:
   id-token: write # the action's OIDC login to the Claude GitHub App
   actions: read # gh run view --log-failed
 
-# One task per change at a time: a second dispatch queues behind the first and
-# never cancels it; run-spec then exits if the first run's PR is still open.
-concurrency:
-  group: factory-${{ inputs.change_id }}
-  cancel-in-progress: false
-
 jobs:
-  run-spec:
-    name: Run one task
+  route:
+    name: Route the event
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.route.outputs.mode }}
+      change_id: ${{ steps.route.outputs.change_id }}
+      pr: ${{ steps.route.outputs.pr }}
+      ref: ${{ steps.route.outputs.ref }}
+    steps:
+      # Always main, never the PR: review events default to the PR's merge ref,
+      # and a factory PR must not be able to rewrite its own router.
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Decide what this event needs
+        id: route
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/factory-route.js | tee -a "$GITHUB_OUTPUT"
+
+  run:
+    name: Run one task or one babysit pass
+    needs: route
+    if: needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'babysit'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # New tasks queue per change and babysit passes per PR. A running job is
+    # never cancelled; GitHub keeps only the newest queued one, which sees the
+    # latest state anyway. run-spec exits if a factory PR is still open.
+    concurrency:
+      group: ${{ needs.route.outputs.mode == 'task' && format('factory-{0}', needs.route.outputs.change_id) || format('factory-babysit-{0}', needs.route.outputs.pr) }}
+      cancel-in-progress: false
     steps:
-      - name: Validate change id
-        env:
-          CHANGE_ID: ${{ inputs.change_id }}
-        run: |
-          if ! printf '%s' "$CHANGE_ID" | grep -Eq '^[a-z0-9][a-z0-9-]{0,99}$'; then
-            echo "::error::change_id must be a lowercase OpenSpec change id"
-            exit 1
-          fi
-
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          # The PR branch for a babysit pass; main for a new task.
+          ref: ${{ needs.route.outputs.ref }}
           fetch-depth: 0
+
+      # A babysit pass works on the PR branch, but follows main's skills and
+      # checks: a factory PR that edited them (which no-go-guard blocks from
+      # merging) must not steer its own review passes before the merge.
+      - name: Use main's copy of the factory's own rules
+        run: |
+          git fetch --quiet origin main
+          git checkout origin/main -- .claude AGENTS.md CLAUDE.md \
+            scripts/check-no-go.js scripts/babysit-round.js \
+            scripts/pr-feedback.js scripts/factory-route.js
 
       - name: Check the change exists
         env:
-          CHANGE_ID: ${{ inputs.change_id }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
         run: test -f "openspec/changes/$CHANGE_ID/tasks.md" || { echo "::error::no tasks.md for $CHANGE_ID"; exit 1; }
 
       - name: Setup Node.js
@@ -72,14 +136,18 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
-      - name: Run one task
+      - name: Run Claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Review events come from these bots; the action refuses other bot actors.
+          allowed_bots: 'sentry[bot],codescene-delta-analysis[bot],copilot-pull-request-reviewer[bot],claude[bot],github-actions[bot]'
+          # change_id and pr come from the route job, which accepts only a plain
+          # change id and a PR number.
           prompt: |
-            Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `${{ inputs.change_id }}`.
+            ${{ needs.route.outputs.mode == 'task' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`.', needs.route.outputs.change_id) || format('Use the babysit-pr skill (.claude/skills/babysit-pr/SKILL.md) in one-shot mode on PR #{0}, a factory PR for the OpenSpec change `{1}`.', needs.route.outputs.pr, needs.route.outputs.change_id) }}
             You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.
           claude_args: |
             --max-turns 200
-            --allowedTools "Read,Edit,Write,Glob,Grep,Skill,TodoWrite,Bash(git:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr checks:*),Bash(gh issue:*),Bash(gh label create:*),Bash(gh label list:*),Bash(gh run view:*),Bash(npm ci:*),Bash(npm run:*),Bash(npx openspec:*),Bash(npx prettier:*),Bash(node:*),Bash(cd:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Skill,TodoWrite,Bash(git:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr checks:*),Bash(gh issue:*),Bash(gh label create:*),Bash(gh label list:*),Bash(gh run view:*),Bash(npm ci:*),Bash(npm run:*),Bash(npx openspec:*),Bash(npx prettier:*),Bash(node:*),Bash(cd:*)"
             --disallowedTools "Bash(gh pr merge:*),Bash(gh pr review:*),Bash(gh api:*),Bash(git push --force:*),Bash(git push -f:*),Bash(npm run test:prod:*),Bash(doppler:*),Bash(curl:*),Bash(wget:*)"

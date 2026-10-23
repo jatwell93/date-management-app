@@ -191,8 +191,20 @@ test('checks are bucketed, and failures count as actionable', () => {
     pass: 1,
     fail: ['Workers CI Gate', 'Old'],
     pending: ['CodeQL'],
+    pendingActions: [],
     skipped: 1,
   });
+});
+
+test('pendingActions lists only pending checks run by GitHub Actions', () => {
+  const checks = summarizeChecks([
+    { name: 'Workers Tests', bucket: 'pending', workflow: 'Workers Test' },
+    { name: 'CodeScene Code Health Review (main)', bucket: 'pending', workflow: '' },
+    { name: 'Seer Code Review', bucket: 'pending' },
+    { name: 'Lint (changed files)', bucket: 'pass', workflow: 'Frontend Test & Coverage' },
+  ]);
+  assert.deepEqual(checks.pendingActions, ['Workers Tests']);
+  assert.equal(checks.pending.length, 3);
 });
 
 test('settled needs finished checks AND a quiet window since the last commit or feedback', () => {

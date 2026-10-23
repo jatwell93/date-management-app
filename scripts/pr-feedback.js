@@ -87,15 +87,24 @@ function latestTime(times) {
   return valid.length ? new Date(Math.max(...valid)).toISOString() : null;
 }
 
-/** Map `gh pr checks --json name,bucket,...` rows to pass/fail/pending counts. */
+/**
+ * Map `gh pr checks --json name,bucket,workflow,...` rows to pass/fail/pending
+ * counts. `pendingActions` lists the pending checks run by GitHub Actions
+ * (`workflow` is empty for other apps' checks, such as CodeScene, Seer and
+ * CodeQL). Only those end with a `workflow_run` event, so a one-shot babysit
+ * pass waits for them and not for the others, whose results arrive as reviews.
+ */
 function summarizeChecks(rows) {
-  const summary = { pass: 0, fail: [], pending: [], skipped: 0 };
+  const summary = { pass: 0, fail: [], pending: [], pendingActions: [], skipped: 0 };
   for (const row of rows || []) {
     if (row.bucket === 'pass') summary.pass += 1;
     else if (row.bucket === 'fail' || row.bucket === 'cancel') summary.fail.push(row.name);
     else if (row.bucket === 'skipping') summary.skipped += 1;
     else summary.pending.push(row.name);
   }
+  summary.pendingActions = (rows || [])
+    .filter((row) => row.workflow && summary.pending.includes(row.name))
+    .map((row) => row.name);
   return summary;
 }
 
@@ -259,12 +268,16 @@ function fetchReport(number, { gh = defaultGh, now, quietMinutes } = {}) {
 }
 
 // Stands in for checks GitHub has not registered yet, so the PR is not settled.
-const NO_CHECKS_YET = [{ name: '(no checks reported yet)', bucket: 'pending' }];
+// Right after a push no check exists yet; Actions checks are about to start, so
+// count the placeholder as one (a one-shot pass then waits for them).
+const NO_CHECKS_YET = [
+  { name: '(no checks reported yet)', bucket: 'pending', workflow: '(pending)' },
+];
 
 function fetchChecks(gh, number) {
   try {
     return JSON.parse(
-      gh(['pr', 'checks', String(number), '--json', 'name,bucket,startedAt,completedAt']),
+      gh(['pr', 'checks', String(number), '--json', 'name,bucket,workflow,startedAt,completedAt']),
     );
   } catch (err) {
     // `gh pr checks` exits 8 while checks are pending and 1 when one failed,

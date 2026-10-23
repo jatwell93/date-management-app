@@ -17,11 +17,11 @@ Devin (`devin.exe`, already installed and authenticated as Josh Atwell) is the
 
 The division of labour is fixed:
 
-| Who | Does |
-| --- | --- |
-| **Devin** | Writes code inside the repo. Nothing else. |
-| **You** | Task brief, quality gate, diff review, fix rounds, task ticking, commit, push + PR, `babysit-pr`. |
-| **User** | Merge, anything touching an external service other than GitHub. |
+| Who       | Does                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| **Devin** | Writes code inside the repo. Nothing else.                                                        |
+| **You**   | Task brief, quality gate, diff review, fix rounds, task ticking, commit, push + PR, `babysit-pr`. |
+| **User**  | Merge, anything touching an external service other than GitHub.                                   |
 
 ## Non-negotiables
 
@@ -35,7 +35,7 @@ The division of labour is fixed:
 3. **`--permission-mode smart`.** Auto-approves workspace edits plus commands a fast model
    judges safe, so Devin can run `npm test`/`lint` and fix its own failures before handing
    back. This is only acceptable because `.devin/hooks.v1.json` bridges `dcg` into Devin's
-   `exec` tool — the repo's `dcg` PreToolUse hook in `.claude/settings.json` guards *your*
+   `exec` tool — the repo's `dcg` PreToolUse hook in `.claude/settings.json` guards _your_
    Bash calls only, never tools run inside a Devin subprocess. **If `.devin/hooks.v1.json`
    is missing from the working tree, or `pwsh`/`dcg` is not on `PATH`, drop back to
    `accept-edits`** — the wrapper fails open, so a missing guard is silent.
@@ -44,23 +44,24 @@ The division of labour is fixed:
    Under `accept-edits` Devin cannot run any command: it exits 0 having verified nothing
    ("rejected a tool call that requires confirmation"). Treat that exit code as "session
    ended", never as "work is good".
+
 4. **Devin never touches the outside world.** No `git push`, `gh`, `doppler`, `wrangler`,
    `npx prisma migrate deploy`, no deploys. State this in every brief.
-5. **Devin never pushes, opens a PR, or merges.** After your review passes, *you* push
+5. **Devin never pushes, opens a PR, or merges.** After your review passes, _you_ push
    and open the PR, then run `babysit-pr` (AGENTS.md §4). The merge is the user's.
 
 ## Choosing the unit of work
 
 One Devin session = **roughly 1–3 hours of work that fits in 200K context**. Usually that's
 a `## N.` group heading, but not always: in `retire-express-unify-on-postgres` a heading is
-an entire *Phase* (1.1–1.11), far too big. There, the unit is a **single numbered task**
+an entire _Phase_ (1.1–1.11), far too big. There, the unit is a **single numbered task**
 (`/delegate <change-id> 1.8`). Judge by size, not by heading depth.
 
 **Screen the task before delegating.** Many tasks in this repo are operator-driven, not
 code — they run `neonctl`, `wrangler deploy`, `psql` against real Neon branches, or ask
 you to confirm a setting in a vendor console. Those are **not delegatable** and must stay
 with Claude + the user, regardless of which phase they sit in. Read the task text and
-check for external-service verbs before starting. If a task is *mixed* (code plus a
+check for external-service verbs before starting. If a task is _mixed_ (code plus a
 console check), delegate only the code portion and say so explicitly in the report.
 
 ## Procedure
@@ -136,16 +137,16 @@ Map changed paths to gates (`AGENTS.md` §6). There is no root `npm test`/`npm r
 git diff --name-only main...HEAD    # or: git status --porcelain for uncommitted work
 ```
 
-| Changed | Gate |
-| --- | --- |
-| `frontend/**` | `npm run test:frontend:diff` |
-| `workers/**`, `shared/**` | `npm run test:db` |
+| Changed                                                | Gate                                                                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `frontend/**`                                          | `npm run test:frontend:diff`                                                                                  |
+| `workers/**`, `shared/**`                              | `npm run test:db`                                                                                             |
 | `src/database/migrations/**`, `database/migrations/**` | `npm run test:migrations` (root `src/` — the Postgres runner. `node:test`, compiles first, no Doppler needed) |
-| any | `npx eslint <changed files>` (must exit 0) — **not** `npm run lint`, see below |
-| `openspec/**` | `openspec validate <change-id> --strict` |
+| any                                                    | `npx eslint <changed files>` (must exit 0) — **not** `npm run lint`, see below                                |
+| `openspec/**`                                          | `openspec validate <change-id> --strict`                                                                      |
 
 **The local gate is not the whole gate.** Some suites only run in CI because they need a
-live service — `npm run test:migrations:e2e` needs a real Postgres and is *not* part of
+live service — `npm run test:migrations:e2e` needs a real Postgres and is _not_ part of
 `test:migrations`. When a change tightens a shared schema or validator, grep for every
 in-repo construction site of that shape (fixtures and temp manifests included), not just
 the ones the local gate compiles. Task 1.8 shipped green locally and failed CI because
@@ -153,7 +154,7 @@ the ones the local gate compiles. Task 1.8 shipped green locally and failed CI b
 
 Doppler notes (both are real, previously-hit failure modes):
 
-- If the change is gated on a secret being **unset**, *also* run that test **without**
+- If the change is gated on a secret being **unset**, _also_ run that test **without**
   Doppler for CI parity. Doppler injects real secrets that mask env-absence bugs.
 
 ### 5. Review the diff yourself
@@ -180,7 +181,7 @@ verbatim and cite `path/file.ts:42`. Vague fix requests waste rounds.
 
 Re-run the gate after each round. **After 3 failed rounds, STOP.** Report to the user:
 what still fails, the verbatim output, and — importantly — your read on whether the
-*code* is wrong or the *spec* is wrong. Three rounds of failure on a clear brief usually
+_code_ is wrong or the _spec_ is wrong. Three rounds of failure on a clear brief usually
 means the tasks.md is underspecified, which is the user's call to make, not a thing to
 grind more tokens against.
 
@@ -216,5 +217,5 @@ Once the gate passes and the diff survives review:
 - The task is small enough to just do inline — the delegation overhead exceeds the work.
 - Anything touching secrets, migrations against a real database, deploys, or external
   services. Those stay with you and the user.
-- The user asked for *your* implementation specifically.
+- The user asked for _your_ implementation specifically.
 - `git status` is dirty, or `devin auth status` shows logged out.
