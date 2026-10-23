@@ -1,24 +1,24 @@
 # Handover: add-agent-route-map-and-tooling-polish
 
-Updated: 2026-10-22 · branch feature/factory-add-agent-route-map-and-tooling-polish-1.1
+Updated: 2026-10-23 · branch feature/factory-add-agent-route-map-and-tooling-polish-1.2
 
 ## State
 
-Task 1.1 done on the branch (`scripts/route-map.js`, its test, `route-map` root script, `workers/README.md` pointer); PR pending the owner's merge. Tasks 1.2 and 1.3 not started.
+Tasks 1.1 (merged, #691) and 1.2 done. Task 1.2 adds `--summary` to `scripts/pr-feedback.js` with tests in `scripts/pr-feedback.test.js`; PR pending the owner's merge. Task 1.3 not started.
 
 ## Next
 
-Task 1.2, `--summary` for `scripts/pr-feedback.js`, once 1.1 is merged.
+Task 1.3, the manual-command hints in `scripts/cleanup-merged.js`, once the 1.2 PR is merged.
 
 ## Open PRs
 
-- Task 1.1 factory PR (label `factory:add-agent-route-map-and-tooling-polish`).
+- Task 1.2 factory PR (label `factory:add-agent-route-map-and-tooling-polish`).
 
 ## Waiting on the user
 
-- Merge of the task 1.1 PR.
+- Merge of the task 1.2 PR.
+- Add `--summary` to `.claude/skills/babysit-pr/SKILL.md` (protected path, left untouched).
 
 ## Learnings
 
-- `MINIMAL_API_ROUTES` is at `workers/src/index-minimal.ts:335`; path patterns are `RE_*` constants defined just above it. Most handlers are declared in `index-minimal.ts` itself; some are imported from other modules (for example `./clerk/bootstrap-handler`). `./minimal-api-routes` exports only the route type and the resolvers, not handlers.
-- `route-map.js` tokenizes the table (strings, regex literals, comments) rather than using line regexes, so multi-line entries and `[^/]` classes parse. It takes `--root <dir>` for fixtures.
+- `--summary` is built by `formatSummary(report)` from the normal report, so the JSON output is unchanged. Tests drive `main` with a fake `gh`; the fixture commit date is days in the past, so use a huge `--quiet-minutes` to force the quiet window.

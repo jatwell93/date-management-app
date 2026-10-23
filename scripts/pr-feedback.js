@@ -17,6 +17,7 @@
  *
  * Usage:
  *   node scripts/pr-feedback.js <pr> [--quiet-minutes N]   # JSON report
+ *   node scripts/pr-feedback.js <pr> --summary              # one-line report
  *   node scripts/pr-feedback.js reply <threadId> <body>     # reply in a thread
  *   node scripts/pr-feedback.js resolve <threadId>          # resolve a thread
  *
@@ -25,7 +26,8 @@
  * Seer posts several minutes after a push, so "checks are green" alone does
  * not mean the reviews are in. When it is false, `waitingOn` says why
  * ("checks", "quiet window", "truncated threads") and `quietUntil` says when
- * the quiet window ends.
+ * the quiet window ends. `--summary` prints that state as one line instead:
+ * `#<pr> settled=<bool> waitingOn=<list or -> actionable=<n> checks=<p> pass/<f> fail/<n> pending`.
  */
 
 const { execFileSync } = require('node:child_process');
@@ -221,6 +223,16 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
   };
 }
 
+/** The one-line form of a report, for polling without reading JSON. */
+function formatSummary(report) {
+  const { checks } = report;
+  const waitingOn = report.waitingOn.length ? report.waitingOn.join(',') : '-';
+  return (
+    `#${report.pr} settled=${report.settled} waitingOn=${waitingOn} actionable=${report.actionable}` +
+    ` checks=${checks.pass} pass/${checks.fail.length} fail/${checks.pending.length} pending`
+  );
+}
+
 function repoSlug(gh) {
   const [owner, repo] = gh(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'])
     .trim()
@@ -298,7 +310,7 @@ function parseQuietMinutes(args) {
 
 function usage() {
   process.stderr.write(
-    'usage: pr-feedback.js <pr> [--quiet-minutes N] | reply <threadId> <body> | resolve <threadId>\n',
+    'usage: pr-feedback.js <pr> [--quiet-minutes N] [--summary] | reply <threadId> <body> | resolve <threadId>\n',
   );
   return 2;
 }
@@ -315,7 +327,12 @@ function main(argv, { gh = defaultGh, out = process.stdout } = {}) {
   }
   const quietMinutes = parseQuietMinutes(rest);
   if (!/^\d+$/.test(cmd || '') || quietMinutes === null) return usage();
-  out.write(`${JSON.stringify(fetchReport(Number(cmd), { gh, quietMinutes }), null, 2)}\n`);
+  const report = fetchReport(Number(cmd), { gh, quietMinutes });
+  out.write(
+    rest.includes('--summary')
+      ? `${formatSummary(report)}\n`
+      : `${JSON.stringify(report, null, 2)}\n`,
+  );
   return 0;
 }
 
@@ -323,4 +340,13 @@ if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));
 }
 
-module.exports = { summarize, summarizeChecks, fetchReport, reply, resolve, main, QUERY };
+module.exports = {
+  summarize,
+  summarizeChecks,
+  formatSummary,
+  fetchReport,
+  reply,
+  resolve,
+  main,
+  QUERY,
+};
