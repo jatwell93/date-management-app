@@ -722,6 +722,7 @@ export interface DailyUsageReportItem {
   date: string;
   user_id: number;
   user_role: string;
+  user_name: string | null;
   creations: number;
   updates: number;
   deletions: number;
@@ -1963,14 +1964,16 @@ export function createWorkersDatabase(env: Env): Database {
           al.created_at::date::text as date,
           COALESCE(u.id, al.user_id) as user_id,
           COALESCE(u.role, 'Unknown') as user_role,
+          COALESCE(u.username, u.email) as user_name,
           COUNT(CASE WHEN al.change_description LIKE '%created%' THEN 1 END)::int as creations,
           COUNT(CASE WHEN al.change_description LIKE '%updated%' THEN 1 END)::int as updates,
           COUNT(CASE WHEN al.change_description LIKE '%deleted%' THEN 1 END)::int as deletions
         FROM audit_log al
-        LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN users u ON al.user_id = u.id AND u.organization_id = al.organization_id
         WHERE al.created_at::date >= CURRENT_DATE - INTERVAL '90 days'
           AND al.organization_id = ${organizationId}
-        GROUP BY al.created_at::date, COALESCE(u.id, al.user_id), COALESCE(u.role, 'Unknown')
+        GROUP BY al.created_at::date, COALESCE(u.id, al.user_id), COALESCE(u.role, 'Unknown'),
+          COALESCE(u.username, u.email)
         ORDER BY al.created_at::date DESC
       `) as DailyUsageReportItem[];
     },
