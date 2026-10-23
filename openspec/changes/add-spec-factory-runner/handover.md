@@ -16,7 +16,7 @@ Phase 1 is done. The factory ran the pilot change `add-agent-route-map-and-tooli
 
 ## Next
 
-Phase 2, task 2.1: a `pull_request: closed` trigger in `factory.yml` that starts the next task when a `factory:<id>` PR merges. Then 2.2 (one-shot `babysit-pr` passes on review and CI events) and 2.3 (a change run through the chain with the owner only merging). Both edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
+Phase 2, task 2.1 (2.2 also adds the pilot's `--summary` line to `babysit-pr`): a `pull_request: closed` trigger in `factory.yml` that starts the next task when a `factory:<id>` PR merges. Then 2.2 (one-shot `babysit-pr` passes on review and CI events) and 2.3 (a change run through the chain with the owner only merging). Both edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
 
 ## Open PRs
 
