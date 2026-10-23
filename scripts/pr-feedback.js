@@ -93,7 +93,13 @@ function latestTime(times) {
  * (`workflow` is empty for other apps' checks, such as CodeScene, Seer and
  * CodeQL). Only those end with a `workflow_run` event, so a one-shot babysit
  * pass waits for them and not for the others, whose results arrive as reviews.
+ *
+ * The factory's own workflows are left out: a review starts a Factory run that
+ * shows up as a check on the PR, and a pass that waited for it would wait for
+ * itself. They are not CI, and the relay only listens to CI workflows.
  */
+const FACTORY_WORKFLOWS = new Set(['Factory', 'Factory CI relay', 'No-go guard']);
+
 function summarizeChecks(rows) {
   const summary = { pass: 0, fail: [], pending: [], pendingActions: [], skipped: 0 };
   for (const row of rows || []) {
@@ -103,7 +109,8 @@ function summarizeChecks(rows) {
     else summary.pending.push(row.name);
   }
   summary.pendingActions = (rows || [])
-    .filter((row) => row.workflow && summary.pending.includes(row.name))
+    .filter((row) => row.workflow && !FACTORY_WORKFLOWS.has(row.workflow))
+    .filter((row) => summary.pending.includes(row.name))
     .map((row) => row.name);
   return summary;
 }

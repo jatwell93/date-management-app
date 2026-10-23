@@ -202,9 +202,11 @@ test('pendingActions lists only pending checks run by GitHub Actions', () => {
     { name: 'CodeScene Code Health Review (main)', bucket: 'pending', workflow: '' },
     { name: 'Seer Code Review', bucket: 'pending' },
     { name: 'Lint (changed files)', bucket: 'pass', workflow: 'Frontend Test & Coverage' },
+    { name: 'Route the event', bucket: 'pending', workflow: 'Factory' },
+    { name: 'No-go guard', bucket: 'pending', workflow: 'No-go guard' },
   ]);
-  assert.deepEqual(checks.pendingActions, ['Workers Tests']);
-  assert.equal(checks.pending.length, 3);
+  assert.deepEqual(checks.pendingActions, ['Workers Tests'], "the factory's own runs never count");
+  assert.equal(checks.pending.length, 5);
 });
 
 test('settled needs finished checks AND a quiet window since the last commit or feedback', () => {
