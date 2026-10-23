@@ -32,27 +32,72 @@ const secretsUsed = (yaml) => [
   ...new Set([...yaml.matchAll(/secrets\.([A-Za-z0-9_]+)/g)].map((m) => m[1])),
 ];
 
-test('factory.yml uses no secret but the Claude OAuth token', () => {
-  assert.deepEqual(secretsUsed(FACTORY), ['CLAUDE_CODE_OAUTH_TOKEN']);
+test('factory.yml uses no secret but the Claude OAuth token and the job token', () => {
+  assert.deepEqual(secretsUsed(FACTORY).sort(), ['CLAUDE_CODE_OAUTH_TOKEN', 'GITHUB_TOKEN']);
   assert.doesNotMatch(FACTORY, /\bprd\b|PRODUCTION|NEON_API_KEY|DOPPLER_TOKEN|STRIPE_/);
 });
 
-test('factory.yml grants exactly the five permissions it needs', () => {
+test('factory.yml grants exactly the permissions it needs', () => {
   assert.deepEqual(topLevelBlock(FACTORY, 'permissions').sort(), [
     'actions: read',
+    'checks: read',
     'contents: write',
     'id-token: write',
     'issues: write',
     'pull-requests: write',
+    'statuses: read',
   ]);
   assert.doesNotMatch(FACTORY, /^[ \t]+permissions:/m, 'no job-level permissions widen the grant');
 });
 
-test('factory.yml queues one run per change and never cancels a running one', () => {
-  assert.deepEqual(topLevelBlock(FACTORY, 'concurrency'), [
-    'group: factory-${{ inputs.change_id }}',
-    'cancel-in-progress: false',
-  ]);
+test('factory.yml queues tasks per change and passes per PR, never cancelling a running one', () => {
+  assert.doesNotMatch(
+    FACTORY,
+    /^concurrency:/m,
+    'no workflow-wide group: events have no change id',
+  );
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'));
+  assert.match(
+    run,
+    /group: \$\{\{ needs\.route\.outputs\.mode == 'task' && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
+  );
+  assert.match(run, /^ {6}cancel-in-progress: false$/m);
+});
+
+test('factory.yml starts on dispatch, merges and reviews; CI runs come through the relay', () => {
+  const on = topLevelBlock(FACTORY, 'on');
+  for (const trigger of [
+    'workflow_dispatch:',
+    'pull_request:',
+    'pull_request_review:',
+    'pull_request_review_comment:',
+    'pr:',
+  ]) {
+    assert.ok(on.includes(trigger), `${trigger} present`);
+  }
+  assert.ok(!on.includes('workflow_run:'), 'no workflow_run job checks out PR code here');
+  assert.doesNotMatch(
+    FACTORY,
+    /^ {2}check_suite:/m,
+    'check_suite never fires for Actions-created suites',
+  );
+  assert.match(FACTORY, /allowed_bots: 'sentry\[bot\],codescene-delta-analysis\[bot\]/);
+});
+
+test("factory.yml routes from main and runs main's rules on a PR branch", () => {
+  const route = FACTORY.slice(FACTORY.indexOf('\n  route:\n'), FACTORY.indexOf('\n  run:\n'));
+  assert.match(route, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(route, /node scripts\/factory-route\.js/);
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'));
+  const restore = run.indexOf('git checkout origin/main -- "${rules[@]}"');
+  assert.ok(restore !== -1 && restore < run.indexOf('anthropics/claude-code-action@'));
+  for (const f of [
+    'scripts/check-no-go.js',
+    'scripts/babysit-round.js',
+    'scripts/factory-route.js',
+  ]) {
+    assert.ok(run.includes(f), `${f} restored from main`);
+  }
 });
 
 test('factory.yml denies merging, approving and raw API calls', () => {
@@ -67,10 +112,12 @@ test('factory.yml denies merging, approving and raw API calls', () => {
   }
 });
 
-test('factory.yml validates the change id before using it', () => {
-  const validate = FACTORY.indexOf('Validate change id');
-  const action = FACTORY.indexOf('anthropics/claude-code-action@');
-  assert.ok(validate !== -1 && validate < action);
+test('factory.yml runs Claude only after the router (which validates the change id)', () => {
+  assert.match(FACTORY, /^ {4}needs: route$/m);
+  assert.match(
+    FACTORY,
+    /if: needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.mode == 'babysit'/,
+  );
 });
 
 test('no-go-guard.yml runs from main and never checks out the PR head', () => {
@@ -95,4 +142,37 @@ test('no-go-guard.yml checks both sides of a rename and posts the head status', 
     /\$\{\{\s*github\.event\.pull_request\.(title|body)/,
     'no PR text in the workflow',
   );
+});
+
+const RELAY = read('factory-ci-relay.yml');
+
+test('factory-ci-relay.yml only dispatches: no checkout, no PR code, minimal token', () => {
+  assert.match(RELAY, /^on:\n {2}workflow_run:/m);
+  assert.doesNotMatch(RELAY, /actions\/checkout|npm |node /, 'nothing from the PR runs here');
+  assert.deepEqual(topLevelBlock(RELAY, 'permissions').sort(), [
+    'actions: write',
+    'pull-requests: read',
+  ]);
+  assert.deepEqual(secretsUsed(RELAY), ['GITHUB_TOKEN']);
+  assert.match(RELAY, /"\$author" != "app\/claude"/, 'only factory PRs are relayed');
+  assert.match(RELAY, /gh workflow run factory\.yml --repo "\$REPO" -f pr="\$PR"/);
+});
+
+test("the relay listens to exactly pr-feedback's CI_WORKFLOWS", () => {
+  const { CI_WORKFLOWS } = require('./pr-feedback.js');
+  const block = RELAY.slice(
+    RELAY.indexOf('    workflows:\n'),
+    RELAY.indexOf('    types: [completed]'),
+  );
+  const listed = [...block.matchAll(/^ {6}- '?([^'\n]+?)'?$/gm)].map((m) => m[1]);
+  assert.deepEqual(listed.sort(), [...CI_WORKFLOWS].sort());
+});
+
+test('factory.yml fails the route step on a router crash and keeps restored rules out of commits', () => {
+  const route = FACTORY.slice(FACTORY.indexOf('Decide what this event needs'));
+  assert.match(route.slice(0, 400), /shell: bash/, 'bash adds pipefail to the tee pipeline');
+  const restore = FACTORY.slice(FACTORY.indexOf("Use main's copy of the factory's own rules"));
+  assert.match(restore, /git reset --quiet -- "\$\{rules\[@\]\}"/);
+  assert.match(restore, /git update-index --skip-worktree/);
+  assert.match(restore, /\.git\/info\/exclude/);
 });

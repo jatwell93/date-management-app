@@ -47,6 +47,10 @@ const BASELINE = [
   'eslint.ignores.js',
   'eslint.complexity-baseline.js',
   'scripts/complexity-baseline.test.js',
+  // The scripts that decide when the factory runs and when it must stop.
+  'scripts/factory-route.js',
+  'scripts/babysit-round.js',
+  'scripts/pr-feedback.js',
 ];
 
 const USAGE = 'usage: check-no-go.js [--change <id>] [--base <ref>] [--files <path|->]';

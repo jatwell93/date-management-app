@@ -27,6 +27,10 @@ merge is the only gate before production.
 
 - Read the first unchecked task (`- [ ]`) in `openspec/changes/<id>/tasks.md`,
   the `proposal.md` sections it cites, and `AGENTS.md`.
+- **No unchecked task left:** the change is complete. Comment on its tracking
+  issue (create one titled `factory: <id>` if none) that every task is done and
+  the change is ready for the owner to archive, then stop. Never archive it
+  yourself.
 - **Operator tasks are not yours.** A task for the owner (phase 0 style "Owner
   ..."), a vendor console, a production migration, a deploy, or anything needing
   production credentials: escalate.
