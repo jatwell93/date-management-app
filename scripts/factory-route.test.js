@@ -20,7 +20,13 @@ function deps({ pr = {}, report = {} } = {}) {
     }),
     feedback: () => {
       calls.feedback += 1;
-      return { actionable: 2, checks: { pendingActions: [] }, ...report };
+      return {
+        headCommittedAt: '2026-10-23T01:00:00Z',
+        unresolvedThreads: [{ author: 'sentry', replies: [] }],
+        reviews: [],
+        ...report,
+        checks: { pendingActions: [], fail: [], ...report.checks },
+      };
     },
   };
 }
@@ -84,10 +90,35 @@ test('a review on a factory PR with actionable items starts a babysit pass', () 
   });
 });
 
-test('workflow_run reads the PR number from the run', () => {
-  const r = route('workflow_run', { workflow_run: { pull_requests: [{ number: 11 }] } }, deps());
+test('a dispatch relayed from a finished CI run babysits the PR it names', () => {
+  const r = route('workflow_dispatch', { inputs: { pr: '11' } }, deps());
+  assert.equal(r.mode, 'babysit');
   assert.equal(r.pr, 11);
-  assert.equal(route('workflow_run', { workflow_run: { pull_requests: [] } }, deps()).mode, 'none');
+  assert.equal(route('workflow_dispatch', { inputs: { pr: '11; x' } }, deps()).mode, 'none');
+});
+
+test('threads the factory already answered and reviews older than the head do not count', () => {
+  const ev = { pull_request: { number: 9 } };
+  const answered = deps({
+    report: { unresolvedThreads: [{ author: 'jatwell93', replies: [{ author: 'claude' }] }] },
+  });
+  assert.equal(route('pull_request_review', ev, answered).reason, 'nothing actionable');
+  const oldReview = deps({
+    report: {
+      unresolvedThreads: [],
+      reviews: [{ actionable: true, submittedAt: '2026-10-23T00:30:00Z' }],
+    },
+  });
+  assert.equal(route('pull_request_review', ev, oldReview).reason, 'nothing actionable');
+  const freshReview = deps({
+    report: {
+      unresolvedThreads: [],
+      reviews: [{ actionable: true, submittedAt: '2026-10-23T01:05:00Z' }],
+    },
+  });
+  assert.equal(route('pull_request_review', ev, freshReview).mode, 'babysit');
+  const failing = deps({ report: { unresolvedThreads: [], checks: { fail: ['Workers Tests'] } } });
+  assert.equal(route('pull_request_review', ev, failing).mode, 'babysit');
 });
 
 test('babysit is skipped while Actions checks run, when nothing is actionable, or on needs-human', () => {
@@ -101,7 +132,7 @@ test('babysit is skipped while Actions checks run, when nothing is actionable, o
     'Actions checks still running',
   );
   assert.equal(
-    route('pull_request_review', ev, deps({ report: { actionable: 0 } })).reason,
+    route('pull_request_review', ev, deps({ report: { unresolvedThreads: [] } })).reason,
     'nothing actionable',
   );
   const human = deps({ pr: { labels: [LABEL, { name: 'needs-human' }] } });

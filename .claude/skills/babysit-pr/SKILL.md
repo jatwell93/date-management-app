@@ -54,6 +54,12 @@ Log the one-line state at each step with `node scripts/pr-feedback.js <n> --summ
 - **Check before pushing.** Run `node scripts/check-no-go.js --change <id>`. On
   any non-zero exit, do not push: add `needs-human` and comment with the paths.
 - Act on every actionable item in this one pass, push once, and stop.
+- **A pass that pushes nothing parks the PR.** If you end without a push while
+  something is still open (a human thread you answered but may not resolve, a
+  check you cannot fix, a decision), add `needs-human` and comment `@jatwell93`
+  with the open items. The router counts a thread whose last reply is yours as
+  handled, and a review older than the head commit as seen; anything else would
+  start another pass on the next event, and the next, without end.
 
 ## Judging an item
 

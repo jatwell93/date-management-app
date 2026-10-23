@@ -6,10 +6,12 @@
  *
  *   mode=task|babysit|none  change_id=<id>  pr=<n>  ref=<branch>  reason=<text>
  *
- *   workflow_dispatch               task on inputs.change_id
+ *   workflow_dispatch(change_id)    task on that change
  *   pull_request closed, merged     task on the next unchecked task of the change
- *   pull_request_review(_comment),  babysit pass on the PR, when it has
- *   workflow_run completed          something to act on and no Actions check pending
+ *   pull_request_review(_comment),  babysit pass on the PR, when it has work the
+ *   workflow_dispatch(pr)           factory has not handled yet and no Actions
+ *     (a finished CI run, relayed   check pending
+ *     by factory-ci-relay.yml)
  *
  * Only PRs authored by the Claude GitHub App AND labelled `factory:<id>` count:
  * the factory can edit labels, so a label alone must never point the factory
@@ -53,23 +55,56 @@ function mergedRoute(event) {
   return { mode: 'task', change_id: id, reason: `#${pr.number} merged` };
 }
 
-/** PR number the event is about, or 0. */
+/**
+ * PR number the event is about, or 0. A finished CI run reaches this workflow
+ * as a dispatch with `inputs.pr` (from .github/workflows/factory-ci-relay.yml),
+ * so this workflow never checks out PR code under workflow_run.
+ */
 function prNumberOf(event) {
   if (event.pull_request) return event.pull_request.number;
-  return event.workflow_run?.pull_requests?.[0]?.number || 0;
+  const input = String(event.inputs?.pr || '');
+  return /^[1-9][0-9]*$/.test(input) ? Number(input) : 0;
 }
+
+const isFactoryPr = (pr, id) => pr.state === 'OPEN' && Boolean(id) && isAppAuthor(authorOf(pr));
 
 /** Why an open PR is not one the factory may babysit now, or ''. */
 function prBlocker(pr, id) {
-  if (pr.state !== 'OPEN' || !id || !isAppAuthor(authorOf(pr))) return 'not an open factory PR';
+  if (!isFactoryPr(pr, id)) return 'not an open factory PR';
   const parked = (pr.labels || []).some((l) => l.name === 'needs-human');
   return parked ? 'waiting on the owner' : '';
+}
+
+// GraphQL gives an app's login without the [bot] suffix.
+const FACTORY_LOGINS = new Set(['claude', 'claude[bot]', 'app/claude']);
+
+/** Threads whose last word is not the factory's: it has not answered them yet. */
+const awaitingThreads = (threads) =>
+  threads.filter((t) => !FACTORY_LOGINS.has((t.replies.at(-1) || t).author));
+
+/**
+ * Reviews posted since the head commit. An older actionable review (a human's
+ * CHANGES_REQUESTED, say) was already seen by the pass that made that commit;
+ * counting it again would start a pass on every later event.
+ */
+const freshReviews = (reviews, headCommittedAt) =>
+  reviews.filter(
+    (r) => r.actionable && Date.parse(r.submittedAt) > Date.parse(headCommittedAt || 0),
+  );
+
+/** Items a pass has not handled yet: unanswered threads, new reviews, failing checks. */
+function pendingWork(report) {
+  return (
+    awaitingThreads(report.unresolvedThreads || []).length +
+    freshReviews(report.reviews || [], report.headCommittedAt).length +
+    report.checks.fail.length
+  );
 }
 
 /** Why the PR's feedback gives a pass nothing to do yet, or ''. */
 function feedbackBlocker(report) {
   if (report.checks.pendingActions.length) return 'Actions checks still running';
-  return report.actionable ? '' : 'nothing actionable';
+  return pendingWork(report) ? '' : 'nothing actionable';
 }
 
 /** A babysit pass, if the open factory PR has something to act on now. */
@@ -89,6 +124,8 @@ function activeOnly(result, deps) {
 }
 
 function route(eventName, event, deps) {
+  const relayedPr = eventName === 'workflow_dispatch' && event.inputs?.pr;
+  if (relayedPr) return babysitRoute(prNumberOf(event), deps);
   if (eventName === 'workflow_dispatch') return activeOnly(dispatchRoute(event), deps);
   if (eventName === 'pull_request') return activeOnly(mergedRoute(event), deps);
   return babysitRoute(prNumberOf(event), deps);

@@ -37,13 +37,15 @@ test('factory.yml uses no secret but the Claude OAuth token and the job token', 
   assert.doesNotMatch(FACTORY, /\bprd\b|PRODUCTION|NEON_API_KEY|DOPPLER_TOKEN|STRIPE_/);
 });
 
-test('factory.yml grants exactly the five permissions it needs', () => {
+test('factory.yml grants exactly the permissions it needs', () => {
   assert.deepEqual(topLevelBlock(FACTORY, 'permissions').sort(), [
     'actions: read',
+    'checks: read',
     'contents: write',
     'id-token: write',
     'issues: write',
     'pull-requests: write',
+    'statuses: read',
   ]);
   assert.doesNotMatch(FACTORY, /^[ \t]+permissions:/m, 'no job-level permissions widen the grant');
 });
@@ -62,17 +64,18 @@ test('factory.yml queues tasks per change and passes per PR, never cancelling a 
   assert.match(run, /^ {6}cancel-in-progress: false$/m);
 });
 
-test('factory.yml starts on dispatch, merges, reviews and finished CI runs', () => {
+test('factory.yml starts on dispatch, merges and reviews; CI runs come through the relay', () => {
   const on = topLevelBlock(FACTORY, 'on');
   for (const trigger of [
     'workflow_dispatch:',
     'pull_request:',
     'pull_request_review:',
     'pull_request_review_comment:',
-    'workflow_run:',
+    'pr:',
   ]) {
     assert.ok(on.includes(trigger), `${trigger} present`);
   }
+  assert.ok(!on.includes('workflow_run:'), 'no workflow_run job checks out PR code here');
   assert.doesNotMatch(
     FACTORY,
     /^ {2}check_suite:/m,
@@ -139,4 +142,18 @@ test('no-go-guard.yml checks both sides of a rename and posts the head status', 
     /\$\{\{\s*github\.event\.pull_request\.(title|body)/,
     'no PR text in the workflow',
   );
+});
+
+const RELAY = read('factory-ci-relay.yml');
+
+test('factory-ci-relay.yml only dispatches: no checkout, no PR code, minimal token', () => {
+  assert.match(RELAY, /^on:\n {2}workflow_run:/m);
+  assert.doesNotMatch(RELAY, /actions\/checkout|npm |node /, 'nothing from the PR runs here');
+  assert.deepEqual(topLevelBlock(RELAY, 'permissions').sort(), [
+    'actions: write',
+    'pull-requests: read',
+  ]);
+  assert.deepEqual(secretsUsed(RELAY), ['GITHUB_TOKEN']);
+  assert.match(RELAY, /"\$author" != "app\/claude"/, 'only factory PRs are relayed');
+  assert.match(RELAY, /gh workflow run factory\.yml --repo "\$REPO" -f pr="\$PR"/);
 });

@@ -219,6 +219,7 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
     url: pr.url,
     branch: pr.headRefName,
     head: head.oid,
+    headCommittedAt: head.committedDate || null,
     checks,
     settled: waitingOn.length === 0,
     waitingOn,

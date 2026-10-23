@@ -4,8 +4,9 @@ name: Factory
 #
 #   workflow_dispatch(change_id)          -> run-spec: one task, one PR
 #   factory PR merged                      -> run-spec: the next task      (2.1)
-#   review, review comment or CI finished  -> babysit-pr: one-shot pass   (2.2)
-#     on a factory PR
+#   review, review comment, or CI finished -> babysit-pr: one-shot pass   (2.2)
+#     on a factory PR (CI runs arrive as a
+#     dispatch with `pr`, from factory-ci-relay.yml)
 #
 # The `route` job (scripts/factory-route.js) decides which, if any, and skips
 # events with nothing to do (Actions checks still running, nothing actionable,
@@ -31,8 +32,15 @@ on:
   workflow_dispatch:
     inputs:
       change_id:
-        description: OpenSpec change id (a folder under openspec/changes/)
-        required: true
+        description: OpenSpec change id (a folder under openspec/changes/) to start a task on
+        required: false
+        type: string
+      pr:
+        # Set by factory-ci-relay.yml when a CI run on a factory PR finishes.
+        # The relay exists so that no workflow_run job here checks out PR code
+        # with this workflow's write token.
+        description: Factory PR number for a babysit pass
+        required: false
         type: string
   pull_request:
     types: [closed]
@@ -40,19 +48,6 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
-  workflow_run:
-    # The CI workflows that run on pull requests. Not check_suite: GitHub does
-    # not start workflows from check suites that Actions itself created.
-    workflows:
-      - 'CodeQL Advanced'
-      - Database Conformance
-      - Deploy Frontend to Cloudflare Pages
-      - Frontend Test & Coverage
-      - Migrations E2E (real PostgreSQL)
-      - Secrets Scan
-      - Workers Bundle Size Check
-      - Workers Test
-    types: [completed]
 
 permissions:
   contents: write
@@ -60,6 +55,8 @@ permissions:
   issues: write
   id-token: write # the action's OIDC login to the Claude GitHub App
   actions: read # gh run view --log-failed
+  checks: read # gh pr checks (pr-feedback.js)
+  statuses: read # commit statuses such as factory/no-go-guard
 
 jobs:
   route:
