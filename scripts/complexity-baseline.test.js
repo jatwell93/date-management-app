@@ -32,12 +32,48 @@ function sourceFiles(dir) {
   });
 }
 
-test('no inline eslint-disable switches the complexity rules off', () => {
-  const disable = /eslint-disable[^\n]*\b(complexity|max-depth)\b/;
-  const offenders = ['scripts', 'shared', 'frontend/src']
-    .flatMap(sourceFiles)
+const rootFiles = () =>
+  fs.readdirSync(ROOT).filter((f) => /\.js$/.test(f) && fs.statSync(path.join(ROOT, f)).isFile());
+
+// Every comment, line or block, so a directive split over lines is seen whole.
+const comments = (text) => text.match(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g) || [];
+
+const RULES = /\b(complexity|max-depth)\b/;
+
+/**
+ * A comment that can switch the complexity rules off: a disable directive that
+ * names no rule (it disables every rule) or names one of them, or an inline
+ * `/* eslint ... *\/` configuration comment that mentions one of them.
+ */
+function switchesRulesOff(comment) {
+  const body = comment.replace(/^\/\/|^\/\*|\*\/$/g, '').trim();
+  const disable = body.match(/^eslint-disable(?:-next-line|-line)?(?![\w-])([\s\S]*)$/);
+  if (disable) {
+    const rules = disable[1].split('--')[0].trim();
+    return rules === '' || RULES.test(rules);
+  }
+  return /^eslint\s/.test(body) && RULES.test(body);
+}
+
+test('switchesRulesOff catches bare, named, multi-line and config-comment forms', () => {
+  for (const c of [
+    '// eslint-disable-next-line',
+    '/* eslint-disable */',
+    '// eslint-disable-line complexity -- reason',
+    '/* eslint-disable\n   max-depth */',
+    '/* eslint complexity: off */',
+  ]) {
+    assert.ok(switchesRulesOff(c), c);
+  }
+  for (const c of ['// eslint-disable-next-line no-console', '// plain comment about complexity']) {
+    assert.ok(!switchesRulesOff(c), c);
+  }
+});
+
+test('no inline comment switches the complexity rules off', () => {
+  const offenders = [...rootFiles(), ...['scripts', 'shared', 'frontend/src'].flatMap(sourceFiles)]
     .filter((f) => f !== 'scripts/complexity-baseline.test.js')
-    .filter((f) => disable.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    .filter((f) => comments(fs.readFileSync(path.join(ROOT, f), 'utf8')).some(switchesRulesOff));
   assert.deepEqual(offenders, [], 'fix the function instead of disabling the rule');
 });
 
