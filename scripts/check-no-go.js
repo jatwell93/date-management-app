@@ -41,6 +41,11 @@ const BASELINE = [
   '.claude/**',
   'AGENTS.md',
   'CLAUDE.md',
+  // The lint gates the factory is judged by: adding itself to the complexity
+  // baseline, or loosening the rules, would switch the check off.
+  'eslint.config.js',
+  'eslint.complexity-baseline.js',
+  'scripts/complexity-baseline.test.js',
 ];
 
 const USAGE = 'usage: check-no-go.js [--change <id>] [--base <ref>] [--files <path|->]';
