@@ -1,6 +1,6 @@
 # Handover: add-spec-factory-runner
 
-Updated: 2026-10-23 · main at 79849410
+Updated: 2026-10-23 · main at 87ee52ed
 
 ## State
 
@@ -16,11 +16,11 @@ Phase 1 is done. The factory ran the pilot change `add-agent-route-map-and-tooli
 
 ## Next
 
-Phase 2, task 2.1 (2.2 also adds the pilot's `--summary` line to `babysit-pr`): a `pull_request: closed` trigger in `factory.yml` that starts the next task when a `factory:<id>` PR merges. Then 2.2 (one-shot `babysit-pr` passes on review and CI events) and 2.3 (a new small change, since the pilot is archived, run through the chain with the owner only approving and merging). 2.1 and 2.2 edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
+Tasks 2.1 and 2.2 are on `feature/factory-phase-2-chain-and-babysit`: merge-triggered next tasks and one-shot babysit passes, routed by `scripts/factory-route.js`. Then 2.3 (a new small change, since the pilot is archived, run through the chain with the owner only approving and merging). 2.1 and 2.2 edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
 
 ## Open PRs
 
-- #695: this handover, the 0.4 and 1.4 ticks, and the pilot archive.
+- Phase 2 (2.1, 2.2) PR from `feature/factory-phase-2-chain-and-babysit`.
 
 ## Waiting on the user
 

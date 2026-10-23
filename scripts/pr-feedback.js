@@ -87,15 +87,48 @@ function latestTime(times) {
   return valid.length ? new Date(Math.max(...valid)).toISOString() : null;
 }
 
-/** Map `gh pr checks --json name,bucket,...` rows to pass/fail/pending counts. */
+/**
+ * The CI workflows whose finished runs start a babysit pass. This list and the
+ * `workflows:` list of .github/workflows/factory-ci-relay.yml must match
+ * (scripts/factory-workflows.test.js checks it): a pass may only wait for a
+ * check whose completion the relay will report, or it waits forever.
+ */
+const CI_WORKFLOWS = [
+  'CodeQL Advanced',
+  'Database Conformance',
+  'Deploy Frontend to Cloudflare Pages',
+  'Deploy Workers API',
+  'Frontend Test & Coverage',
+  'Migrations E2E (real PostgreSQL)',
+  'Secrets Scan',
+  'Workers Bundle Size Check',
+  'Workers Test',
+];
+
+// Right after a push no check exists yet; CI checks are about to start.
+const NO_CHECKS_WORKFLOW = '(no checks reported yet)';
+const WAITED_FOR = new Set([...CI_WORKFLOWS, NO_CHECKS_WORKFLOW]);
+
+/**
+ * Map `gh pr checks --json name,bucket,workflow,...` rows to pass/fail/pending
+ * counts. `pendingActions` lists the pending checks of CI_WORKFLOWS. Other
+ * apps' checks (CodeScene, Seer, CodeQL's own check; `workflow` empty) report
+ * through reviews, and the factory's own workflows (a review starts a Factory
+ * run that shows up as a check on the PR) are not CI, so a pass that waited for
+ * either would wait for something that never starts it.
+ */
 function summarizeChecks(rows) {
-  const summary = { pass: 0, fail: [], pending: [], skipped: 0 };
+  const summary = { pass: 0, fail: [], pending: [], pendingActions: [], skipped: 0 };
   for (const row of rows || []) {
     if (row.bucket === 'pass') summary.pass += 1;
     else if (row.bucket === 'fail' || row.bucket === 'cancel') summary.fail.push(row.name);
     else if (row.bucket === 'skipping') summary.skipped += 1;
     else summary.pending.push(row.name);
   }
+  summary.pendingActions = (rows || [])
+    .filter((row) => WAITED_FOR.has(row.workflow))
+    .filter((row) => summary.pending.includes(row.name))
+    .map((row) => row.name);
   return summary;
 }
 
@@ -210,6 +243,7 @@ function summarize(pr, checkRows, { now = Date.now(), quietMinutes = DEFAULT_QUI
     url: pr.url,
     branch: pr.headRefName,
     head: head.oid,
+    headCommittedAt: head.committedDate || null,
     checks,
     settled: waitingOn.length === 0,
     waitingOn,
@@ -259,12 +293,16 @@ function fetchReport(number, { gh = defaultGh, now, quietMinutes } = {}) {
 }
 
 // Stands in for checks GitHub has not registered yet, so the PR is not settled.
-const NO_CHECKS_YET = [{ name: '(no checks reported yet)', bucket: 'pending' }];
+// Counted in pendingActions (see NO_CHECKS_WORKFLOW): a one-shot pass waits for
+// the CI checks that are about to start.
+const NO_CHECKS_YET = [
+  { name: '(no checks reported yet)', bucket: 'pending', workflow: NO_CHECKS_WORKFLOW },
+];
 
 function fetchChecks(gh, number) {
   try {
     return JSON.parse(
-      gh(['pr', 'checks', String(number), '--json', 'name,bucket,startedAt,completedAt']),
+      gh(['pr', 'checks', String(number), '--json', 'name,bucket,workflow,startedAt,completedAt']),
     );
   } catch (err) {
     // `gh pr checks` exits 8 while checks are pending and 1 when one failed,
@@ -341,6 +379,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  CI_WORKFLOWS,
   summarize,
   summarizeChecks,
   formatSummary,
