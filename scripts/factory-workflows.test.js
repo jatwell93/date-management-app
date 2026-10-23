@@ -89,7 +89,7 @@ test("factory.yml routes from main and runs main's rules on a PR branch", () => 
   assert.match(route, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(route, /node scripts\/factory-route\.js/);
   const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'));
-  const restore = run.indexOf('git checkout origin/main -- .claude');
+  const restore = run.indexOf('git checkout origin/main -- "${rules[@]}"');
   assert.ok(restore !== -1 && restore < run.indexOf('anthropics/claude-code-action@'));
   for (const f of [
     'scripts/check-no-go.js',
@@ -156,4 +156,23 @@ test('factory-ci-relay.yml only dispatches: no checkout, no PR code, minimal tok
   assert.deepEqual(secretsUsed(RELAY), ['GITHUB_TOKEN']);
   assert.match(RELAY, /"\$author" != "app\/claude"/, 'only factory PRs are relayed');
   assert.match(RELAY, /gh workflow run factory\.yml --repo "\$REPO" -f pr="\$PR"/);
+});
+
+test("the relay listens to exactly pr-feedback's CI_WORKFLOWS", () => {
+  const { CI_WORKFLOWS } = require('./pr-feedback.js');
+  const block = RELAY.slice(
+    RELAY.indexOf('    workflows:\n'),
+    RELAY.indexOf('    types: [completed]'),
+  );
+  const listed = [...block.matchAll(/^ {6}- '?([^'\n]+?)'?$/gm)].map((m) => m[1]);
+  assert.deepEqual(listed.sort(), [...CI_WORKFLOWS].sort());
+});
+
+test('factory.yml fails the route step on a router crash and keeps restored rules out of commits', () => {
+  const route = FACTORY.slice(FACTORY.indexOf('Decide what this event needs'));
+  assert.match(route.slice(0, 400), /shell: bash/, 'bash adds pipefail to the tee pipeline');
+  const restore = FACTORY.slice(FACTORY.indexOf("Use main's copy of the factory's own rules"));
+  assert.match(restore, /git reset --quiet -- "\$\{rules\[@\]\}"/);
+  assert.match(restore, /git update-index --skip-worktree/);
+  assert.match(restore, /\.git\/info\/exclude/);
 });

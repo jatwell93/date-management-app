@@ -13,12 +13,15 @@ name: Factory CI relay
 
 on:
   workflow_run:
-    # The CI workflows that run on pull requests. Not check_suite: GitHub does
-    # not start workflows from check suites that Actions itself created.
+    # The CI workflows that run on pull requests. Must match CI_WORKFLOWS in
+    # scripts/pr-feedback.js (a test checks it): a babysit pass waits only for
+    # checks this relay reports. Not check_suite: GitHub does not start
+    # workflows from check suites that Actions itself created.
     workflows:
       - 'CodeQL Advanced'
       - Database Conformance
       - Deploy Frontend to Cloudflare Pages
+      - Deploy Workers API
       - Frontend Test & Coverage
       - Migrations E2E (real PostgreSQL)
       - Secrets Scan

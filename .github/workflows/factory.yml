@@ -84,6 +84,9 @@ jobs:
 
       - name: Decide what this event needs
         id: route
+        # bash, not the default `bash -e`: adds pipefail, so a crash in the
+        # router fails the step instead of being hidden by tee.
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -112,12 +115,22 @@ jobs:
       # A babysit pass works on the PR branch, but follows main's skills and
       # checks: a factory PR that edited them (which no-go-guard blocks from
       # merging) must not steer its own review passes before the merge.
+      # The restored files must never reach a commit: git checkout stages them,
+      # so unstage them and hide them from `git add` (skip-worktree for tracked
+      # files, .git/info/exclude for files only main has). Otherwise a pass on a
+      # branch behind main would commit main's newer rules, and check-no-go
+      # would park the PR for a protected-path edit it never made.
       - name: Use main's copy of the factory's own rules
+        shell: bash
         run: |
+          rules=(.claude AGENTS.md CLAUDE.md scripts/check-no-go.js scripts/babysit-round.js
+                 scripts/pr-feedback.js scripts/factory-route.js)
           git fetch --quiet origin main
-          git checkout origin/main -- .claude AGENTS.md CLAUDE.md \
-            scripts/check-no-go.js scripts/babysit-round.js \
-            scripts/pr-feedback.js scripts/factory-route.js
+          git checkout origin/main -- "${rules[@]}"
+          git reset --quiet -- "${rules[@]}"
+          git ls-files -z -- "${rules[@]}" | xargs -0 -r git update-index --skip-worktree
+          git ls-files --others --exclude-standard -- "${rules[@]}" | sed 's#^#/#' >> .git/info/exclude
+          git status --short
 
       - name: Check the change exists
         env:
