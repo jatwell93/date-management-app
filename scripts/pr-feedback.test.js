@@ -318,3 +318,44 @@ test('main routes reply and resolve to GraphQL mutations, and rejects bad usage'
     process.stderr.write = origWrite;
   }
 });
+
+function summaryOutput(checkRows, args = []) {
+  const gh = (a) => {
+    if (a[0] === 'repo') return 'o/r\n';
+    if (a[0] === 'api') return JSON.stringify({ data: { repository: { pullRequest: pr() } } });
+    return JSON.stringify(checkRows);
+  };
+  let written = '';
+  const out = { write: (s) => (written += s) };
+  assert.equal(main(['667', '--summary', ...args], { gh, out }), 0);
+  return written;
+}
+
+test('--summary prints one line for a settled PR', () => {
+  const line = summaryOutput([{ name: 'a', bucket: 'pass' }]);
+  assert.equal(line, '#667 settled=true waitingOn=- actionable=0 checks=1 pass/0 fail/0 pending\n');
+});
+
+test('--summary names the checks a PR is waiting on and counts failures as actionable', () => {
+  const line = summaryOutput([
+    { name: 'a', bucket: 'pass' },
+    { name: 'b', bucket: 'fail' },
+    { name: 'c', bucket: 'pending' },
+  ]);
+  assert.equal(
+    line,
+    '#667 settled=false waitingOn=checks actionable=1 checks=1 pass/1 fail/1 pending\n',
+  );
+});
+
+test('--summary combined with --quiet-minutes reports the quiet window', () => {
+  const rows = [{ name: 'a', bucket: 'pass' }];
+  assert.equal(
+    summaryOutput(rows, ['--quiet-minutes', '1000000']),
+    '#667 settled=false waitingOn=quiet window actionable=0 checks=1 pass/0 fail/0 pending\n',
+  );
+  assert.match(
+    summaryOutput([{ name: 'c', bucket: 'pending' }], ['--quiet-minutes', '1000000']),
+    /waitingOn=checks,quiet window /,
+  );
+});
