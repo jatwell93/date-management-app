@@ -20,7 +20,7 @@
       Acceptance: a static test asserts the trigger is `pull_request_target` and that no step checks out the PR head; a test PR touching `.claude/**` fails the check.
       Built: the workflow and its static test. The result is posted as the commit status `factory/no-go-guard` on the PR head, since a `pull_request_target` check run is attached to the base commit; that status is what the ruleset requires. The guard applies every active change's `no_go` list (`--change all`), not the one a `factory:<id>` label names, because the factory can edit its own PR's labels. Consequence: while a change is active, its list protects those paths from every factory PR; archive a change to lift it. Verified 2026-10-23 on throwaway PR #689 (label `factory:test`): `failure` with `.claude/no-go-guard-test.md`, `success` after the file moved to `docs/`.
 - [x] 1.3 Write the pilot change `add-agent-route-map-and-tooling-polish` (3 tasks, `merge: human`, no task touching a `no_go` path) and validate it with `--strict`.
-- [ ] 1.4 Dispatch the factory on the pilot. One PR is opened by the Claude App, CI runs on it, and `handover.md` is updated.
+- [x] 1.4 Dispatch the factory on the pilot. One PR is opened by the Claude App, CI runs on it, and `handover.md` is updated.
       Acceptance: the PR link and run link are recorded in `handover.md`.
 
 ## Phase 2 — Chain and babysit on events
