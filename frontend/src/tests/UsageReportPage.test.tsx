@@ -68,6 +68,7 @@ describe('UsageReportPage', () => {
           {
             date: '2025-01-30',
             user_id: 1,
+            user_name: 'Alice Nguyen',
             user_role: 'Manager',
             creations: 5,
             updates: 3,
@@ -133,6 +134,10 @@ describe('UsageReportPage', () => {
     expect(
       screen.getByRole('heading', { name: /Daily Stock Additions/i, level: 2 }),
     ).toBeInTheDocument();
+
+    const dailyTable = screen.getByRole('table', { name: /Daily activity by user/i });
+    expect(within(dailyTable).getByText('Alice Nguyen')).toBeInTheDocument();
+    expect(within(dailyList).getByText(/Alice Nguyen/)).toBeInTheDocument();
 
     // Manager 1 appears in both desktop table and mobile list
     const managerElements = screen.getAllByText(/Manager 1/i);
@@ -371,5 +376,35 @@ describe('UsageReportPage', () => {
       'test-session-value',
       expect.any(AbortSignal),
     );
+  });
+
+  it('falls back to an unknown-user label when a daily row has no name or id', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/daily-usage') {
+        const base = {
+          date: '2025-01-30',
+          user_role: 'Staff',
+          creations: 1,
+          updates: 0,
+          deletions: 0,
+        };
+        return Promise.resolve([
+          { ...base, user_id: 7, user_name: null },
+          { ...base, user_id: null, user_name: null },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+
+    const table = await screen.findByRole('table', { name: /Daily activity by user/i });
+    const list = screen.getByRole('list', { name: /^Daily activity$/i });
+    for (const scope of [table, list]) {
+      expect(within(scope).getByText(/Unknown user 7/)).toBeInTheDocument();
+      expect(within(scope).getByText(/Unknown user(?! \d)/)).toBeInTheDocument();
+      expect(scope).not.toHaveTextContent(/null/);
+    }
   });
 });
