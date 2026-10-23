@@ -9,5 +9,5 @@ Each task is one factory run and one PR. Task 2 needs task 1's API field, so it 
 
 ## 2. Frontend
 
-- [ ] 2.1 In `frontend/src/pages/UsageReportPage.tsx`, add `user_name: string | null` to `DailyUsageReportItem` and show it in the daily activity table's "User" column, falling back to `Unknown user <id>` when it is null or empty (the wording the page already uses at line 85).
-      Acceptance: `frontend/src/tests/UsageReportPage.test.tsx` covers a row with a name and a row with `user_name: null`; `npm run test:frontend:diff` and the frontend typecheck pass.
+- [ ] 2.1 In `frontend/src/pages/UsageReportPage.tsx`, add `user_name: string | null` to `DailyUsageReportItem` and show it in both views of the daily activity data: the desktop table's "User" column, and the mobile summary list (`<ul ... md:hidden aria-label="Daily activity">`), which today shows the date and role but no user at all; put the name in each card's header beside the role. Fall back to `Unknown user <id>` when it is null or empty (the wording the page already uses at line 85), through one shared helper so both views agree.
+      Acceptance: `frontend/src/tests/UsageReportPage.test.tsx` covers a row with a name and a row with `user_name: null`, and asserts the name in both the table and the mobile list; `npm run test:frontend:diff` and the frontend typecheck pass.

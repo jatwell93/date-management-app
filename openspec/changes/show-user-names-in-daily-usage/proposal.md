@@ -9,7 +9,7 @@ This is also the factory's first real change run end to end (`add-spec-factory-r
 ## What changes
 
 - **Worker:** `getDailyUsageReport` (`workers/src/database.ts:1960`) returns `user_name` with each row, as `COALESCE(u.username, u.email)`, the same choice `getItemsByUserReport` makes for its `userName`. The `users` join is scoped to the caller's organisation (`u.organization_id = al.organization_id`), so a row can never carry a name from another tenant; an unmatched user gives `user_name: null`. The `DailyUsageReportItem` type (`workers/src/database.ts:721`) gains the field.
-- **Frontend:** `UsageReportPage.tsx` shows `user_name` in the daily activity table, falling back to `Unknown user <id>`, the wording the page already uses for its other tables.
+- **Frontend:** `UsageReportPage.tsx` shows `user_name` in the daily activity table and in the mobile summary list (which today shows no user at all), falling back to `Unknown user <id>`, the wording the page already uses for its other tables.
 
 ## Out of scope
 
