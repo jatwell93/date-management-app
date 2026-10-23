@@ -41,6 +41,13 @@ merge is the only gate before production.
 - `git switch -c feature/factory-<id>-<task-number>` from an up-to-date `main`.
 - Do exactly this one task. Reuse existing code; add or adjust tests for what you
   touch, and make sure each new test fails without your change.
+- Keep functions small and flat. CodeScene's PR gate fails on complex or deeply
+  nested functions, and you cannot run it here; `npm run lint` only catches the
+  worst cases (`complexity` 8, `max-depth` 3). Aim for single-purpose functions
+  with one level of nesting, and early returns over nested branches.
+- Parse with an existing parser (the TypeScript compiler API, `JSON.parse`,
+  `URL`) instead of writing a tokenizer or a regex-driven parser. The first
+  factory PR (#691) needed two fix rounds because of a hand-written tokenizer.
 - Run the gate for the packages you changed (`AGENTS.md` §4):
   `npm run test:frontend:diff`, `npm run test:db`,
   `(cd workers && npm run typecheck)`, `npm run test:tooling`, and always

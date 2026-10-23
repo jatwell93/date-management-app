@@ -29,7 +29,7 @@
     "validate:stripe-config": "node scripts/validate-stripe-deployment-config.js",
     "test:stripe-config": "node --test scripts/validate-stripe-deployment-config.test.js",
     "test:neon-scripts": "node --test scripts/check-neon-pitr.test.js scripts/create-neon-snapshot.test.js scripts/neon-poll-operations.test.js",
-    "test:tooling": "node --test scripts/lint-diff.test.js scripts/memvid-exec.test.js scripts/mem-memory-scripts.test.js scripts/root-package-scripts.test.js scripts/workers-dev-local.test.js scripts/verify-scheduled-triggers.test.js scripts/backup-retention.test.js scripts/artillery-processor.test.js scripts/pr-feedback.test.js scripts/cleanup-merged.test.js scripts/check-no-go.test.js scripts/factory-workflows.test.js",
+    "test:tooling": "node --test scripts/lint-diff.test.js scripts/memvid-exec.test.js scripts/mem-memory-scripts.test.js scripts/root-package-scripts.test.js scripts/workers-dev-local.test.js scripts/verify-scheduled-triggers.test.js scripts/backup-retention.test.js scripts/artillery-processor.test.js scripts/pr-feedback.test.js scripts/cleanup-merged.test.js scripts/check-no-go.test.js scripts/factory-workflows.test.js scripts/complexity-baseline.test.js",
     "mem:log": "node scripts/mem-log.js",
     "mem:recall": "node scripts/mem-recall.js",
     "mem:rebuild": "node scripts/mem-rebuild.js",
