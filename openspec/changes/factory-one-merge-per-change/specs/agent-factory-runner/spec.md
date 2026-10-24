@@ -2,7 +2,7 @@
 
 ### Requirement: Owner tasks escalate without a Claude run
 
-When the next unchecked task of a change is marked `(owner)` in `tasks.md`, the router SHALL NOT start a task run. It SHALL add `needs-human` to the change's tracking issue and mention the owner with the task text, without a Claude run. The owner removing `needs-human` SHALL start the next task only when the owner task is ticked on `main`; otherwise the router SHALL escalate again.
+When the next unchecked task of a change is marked `(owner)` in the change's task list, the router SHALL NOT start a task run. It SHALL add `needs-human` to the change's tracking issue and mention the owner with the task text, without a Claude run. The owner removing `needs-human` SHALL start the next task only when the owner task is ticked in that task list; otherwise the router SHALL escalate again. The task list is `tasks.md` on the open `pr: per-change` PR's branch when there is one, else on `main`.
 
 #### Scenario: Merge reaches an owner task
 
@@ -13,25 +13,33 @@ When the next unchecked task of a change is marked `(owner)` in `tasks.md`, the 
 
 #### Scenario: Owner resumes without ticking the task
 
-- **GIVEN** an escalated owner task that is still unchecked on `main`
+- **GIVEN** an escalated owner task that is still unchecked in the change's task list
 - **WHEN** the owner removes `needs-human`
 - **THEN** no Claude run starts
 - **AND** the tracking issue gets `needs-human` again
 
 #### Scenario: Owner ticks the task, then resumes
 
-- **GIVEN** an owner task the owner has ticked on `main`
+- **GIVEN** an owner task the owner has ticked in the change's task list
 - **WHEN** the owner removes `needs-human`
 - **THEN** a task run starts on the next unchecked task
 
+#### Scenario: Owner task on a per-change PR
+
+- **GIVEN** a `pr: per-change` change with an open PR whose branch's `tasks.md` has tasks 1.1 and 1.2 ticked and 1.3 marked `(owner)`
+- **AND** `main`'s `tasks.md` still has 1.1 unchecked
+- **WHEN** the router or the sweep picks the next task
+- **THEN** it reads the branch's `tasks.md` and escalates task 1.3
+
 ### Requirement: A change can run as one PR
 
-A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks. Each task SHALL merge `origin/main` into that PR's branch without rewriting pushed commits, and SHALL mark its commits with a `Factory-Task: <n>` trailer. The next task SHALL start when the PR is settled with nothing actionable, found by an hourly sweep, and SHALL NOT wait for a merge. Task runs and babysit passes on that PR SHALL NOT run at the same time. After the last task the runner SHALL mark the PR ready for review and mention the owner. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push. The next task SHALL start when the PR is settled with nothing actionable, found by an hourly sweep, and SHALL NOT wait for a merge. The sweep SHALL NOT dispatch a change that has a factory run queued or running, or whose tracking issue has `factory-retry` or `needs-human`. Task runs and babysit passes on that PR SHALL NOT run at the same time. After the last task the runner SHALL mark the PR ready for review and mention the owner. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
 - **GIVEN** a `pr: per-change` change with an open factory PR that is settled with nothing actionable
 - **AND** an unchecked task left in the branch's `tasks.md`
+- **AND** no factory run of the change queued or running
 - **WHEN** the hourly sweep runs
 - **THEN** a task run starts and pushes the next task to the same PR
 
@@ -41,6 +49,19 @@ A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open fac
 - **WHEN** the sweep runs or the change is dispatched
 - **THEN** no task run starts
 
+#### Scenario: Task run still in flight
+
+- **GIVEN** a settled `pr: per-change` PR whose next task run has been running for over an hour without pushing
+- **WHEN** the hourly sweep runs
+- **THEN** it dispatches nothing for that change
+
+#### Scenario: Main has a workflow change the branch lacks
+
+- **GIVEN** a `pr: per-change` branch and a newer `main` that changes `.github/workflows/ci.yml`
+- **WHEN** the next task run starts
+- **THEN** it does not merge `origin/main` into the branch
+- **AND** it pushes the task on the older base and notes in the PR that the owner must update the branch before merging
+
 #### Scenario: Last task done
 
 - **GIVEN** a `pr: per-change` PR whose branch has every task ticked
@@ -48,21 +69,22 @@ A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open fac
 - **THEN** the PR is ready for review and the owner is mentioned
 - **AND** the owner's merge of it starts no task
 
-#### Scenario: Round cap per task
-
-- **GIVEN** a `pr: per-change` PR with `Babysit-Round: 5` on a commit before the newest `Factory-Task` commit, and none after it
-- **WHEN** a babysit pass starts
-- **THEN** it may commit, as round 1 of the current task
-
 ### Requirement: A failed task run is retried once
 
-When a task run fails, the factory SHALL mark the change's tracking issue for a retry, and the hourly sweep SHALL dispatch the change again once the mark is at least an hour old. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying.
+When a task run fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry`, and the hourly sweep SHALL dispatch the change again once the mark is at least an hour old, removing the mark. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A run the owner cancels SHALL NOT be retried.
 
 #### Scenario: First failure
 
 - **GIVEN** a task run that fails without opening a PR
 - **WHEN** the sweep runs more than an hour later
 - **THEN** one new task run starts on the change
+
+#### Scenario: Run times out
+
+- **GIVEN** a task run whose Claude step exceeds its timeout
+- **WHEN** the run ends
+- **THEN** it ends `failed`, not `cancelled`
+- **AND** the tracking issue gets `factory-retry`
 
 #### Scenario: Retry fails too
 
@@ -73,9 +95,77 @@ When a task run fails, the factory SHALL mark the change's tracking issue for a 
 
 ## MODIFIED Requirements
 
+### Requirement: Factory runs one OpenSpec task per run without production access
+
+The factory workflow SHALL implement at most one unchecked task of the named OpenSpec change per run, SHALL NOT start a task while an open `factory:<change-id>` PR exists unless the change is `pr: per-change` and that PR is its settled per-change PR, and SHALL run with no production secrets and with GitHub token permissions limited to contents, pull-requests and issues write. Only the route job, which runs no Claude step, MAY also hold `actions: write`, to dispatch runs from the sweep.
+
+#### Scenario: Dispatched on a change with unchecked tasks
+
+- **GIVEN** an OpenSpec change with at least one unchecked task in `tasks.md`
+- **WHEN** the factory workflow is dispatched with that change id
+- **THEN** the runner implements the first unchecked task only
+- **AND** pushes a feature branch and opens a PR labelled `factory:<change-id>`
+- **AND** updates `openspec/changes/<change-id>/handover.md`
+
+#### Scenario: Triggered again while a factory PR is open
+
+- **GIVEN** an open PR labelled `factory:<change-id>` for a change without `pr: per-change`
+- **WHEN** the factory is dispatched or labelled again for that change
+- **THEN** the run waits in the `factory-<change-id>` concurrency group behind any running task
+- **AND** exits without changes, because a factory PR is still open
+
+#### Scenario: Per-change PR open and settled
+
+- **GIVEN** a `pr: per-change` change whose open factory PR is settled with nothing actionable
+- **WHEN** the factory is dispatched for that change
+- **THEN** the runner implements the next unchecked task on that PR's branch
+
+#### Scenario: Workflow carries no production credentials
+
+- **GIVEN** the factory workflow file
+- **WHEN** a static test reads it
+- **THEN** it references no production Doppler, Neon or Stripe secret
+
+### Requirement: Review-fix passes respect no_go and a persistent round cap
+
+Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHALL stop with `needs-human` instead of pushing once the current task already carries 5 babysit rounds, counted from `Babysit-Round: N` commit trailers so the cap holds across separate workflow runs. For a PR of one task, the current task's rounds are all the PR's rounds. For a `pr: per-change` PR, they are the rounds on commits after the newest `Factory-Task` commit.
+
+#### Scenario: Bot fix would touch a no_go path
+
+- **GIVEN** a babysit pass whose fix changes a file under `.github/**`
+- **WHEN** it reaches the push step
+- **THEN** it does not push
+- **AND** labels the PR `needs-human` with the matching path
+
+#### Scenario: Bot review arrives inside the quiet window
+
+- **GIVEN** a factory PR whose checks have all finished
+- **WHEN** a bot review with an actionable thread starts a babysit pass seconds after it posts
+- **THEN** the pass acts on the thread in that run, without waiting for the quiet window
+
+#### Scenario: Only a non-Actions check is still pending
+
+- **GIVEN** a factory PR whose GitHub Actions checks have all finished
+- **AND** whose CodeScene check is still pending
+- **WHEN** a Seer review with an actionable thread starts a babysit pass
+- **THEN** the pass acts on the thread in that run
+
+#### Scenario: Fifth round already used
+
+- **GIVEN** a factory PR of one task whose commits include a `Babysit-Round: 5` trailer
+- **WHEN** a new review event starts a babysit pass
+- **THEN** the pass makes no commit
+- **AND** labels the PR `needs-human`
+
+#### Scenario: Round cap per task on a per-change PR
+
+- **GIVEN** a `pr: per-change` PR with `Babysit-Round: 5` on a commit before the newest `Factory-Task` commit, and none after it
+- **WHEN** a babysit pass starts
+- **THEN** it may commit, as round 1 of the current task
+
 ### Requirement: Merged factory PRs start the next task
 
-When a PR labelled `factory:<change-id>` merges and the change runs one PR per task, the factory SHALL start the next unchecked task of that change, and SHALL run at most one review-response pass per PR at a time, capped at 5 babysit rounds per PR as counted by `Babysit-Round: N` trailers. The merge of a `pr: per-change` PR SHALL start no task.
+When a PR labelled `factory:<change-id>` merges and the change runs one PR per task, the factory SHALL start the next unchecked task of that change, and SHALL run at most one review-response pass per PR at a time, capped at 5 babysit rounds per task as counted by `Babysit-Round: N` trailers. The merge of a `pr: per-change` PR SHALL start no task.
 
 #### Scenario: Factory PR merges
 

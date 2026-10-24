@@ -11,15 +11,17 @@
 
 ## What changes
 
-- **Owner tasks.** A task written `- [ ] 2.3 (owner) …` is never attempted. When it is the next unchecked task, the router escalates it on the tracking issue (`needs-human`, owner mentioned) without starting a Claude run. The owner does it in their own PR and ticks it on `main`, then removes `needs-human`. If the task is still unchecked when the label goes, the router escalates again.
+- **Owner tasks.** A task written `- [ ] 2.3 (owner) …` is never attempted. When it is the next unchecked task, the router escalates it on the tracking issue (`needs-human`, owner mentioned) without starting a Claude run. The owner does it in their own PR and ticks it on `main` (or on the open per-change PR's branch), then removes `needs-human`. If the task is still unchecked when the label goes, the router escalates again.
 - **One PR per change, opt-in.** A change whose Autonomy block says `pr: per-change` keeps one PR on `feature/factory-<id>`:
-  - The first task opens the PR. Every later task merges `origin/main` into the branch (never a rebase or force-push), adds its commits with a `Factory-Task: <n>` trailer, and pushes.
-  - The next task starts when the PR is settled (`pr-feedback.js` `settled=true`, nothing actionable), not when it merges. An hourly sweep (`schedule` on `factory.yml`, route job only, no Claude run) dispatches it, because no GitHub event fires when the quiet window ends.
+  - The first task opens the PR. Every later task adds its commits with a `Factory-Task: <n>` trailer and pushes, never rebasing or force-pushing.
+  - Each task merges `origin/main` into the branch first, unless that merge would bring in a `.github/**` change: the Claude App has no Workflows permission, so GitHub would reject the push. The branch then stays on its older base, and the owner uses "Update branch" before merging (the ruleset requires branches to be up to date).
+  - While the PR is open, the PR branch's `tasks.md` is the task list the router and sweep read, because the ticks land there, not on `main`.
+  - The next task starts when the PR is settled (`pr-feedback.js` `settled=true`, nothing actionable), not when it merges. An hourly sweep (`schedule` on `factory.yml`, route job only, no Claude run) dispatches it, because no GitHub event fires when the quiet window ends. The sweep skips a change with a factory run still queued or running, or with `factory-retry` or `needs-human` on its tracking issue, so a long run is never doubled.
   - Task runs and babysit passes of a per-change PR share one concurrency group, so they never work on the branch at once.
   - The babysit round cap of 5 counts per task: `scripts/babysit-round.js` counts `Babysit-Round` trailers after the newest `Factory-Task` commit.
   - After the last task, `run-spec` marks the PR ready (`gh pr ready`) and mentions the owner. The owner reviews and merges once. That merge starts no task.
   - Default stays `pr: per-task`. Migrations, billing, auth and production-data work stay per-task.
-- **Retry once.** When a task run fails, a `report-failure` job adds the label `factory-retry` to the tracking issue (no `factory:` prefix, so the router never reads it as a change id). The hourly sweep dispatches the change again once the label is at least an hour old, and removes the label. A failed retry escalates with both run links instead of retrying again.
+- **Retry once.** When a task run fails, a `report-failure` job adds the label `factory-retry` to the tracking issue (no `factory:` prefix, so the router never reads it as a change id). The hourly sweep dispatches the change again once the label is at least an hour old, and removes the label. A failed retry escalates with both run links instead of retrying again. A timeout counts as a failure: the Claude step gets a `timeout-minutes` below the job's, because a job that hits its own timeout can end `cancelled`, which `if: failure()` skips. A run the owner cancels is not retried.
 - **First real spec.** A small product change, written by the owner, runs end to end with the owner touching the keyboard only to merge and answer escalations. It shows whether the merges are the main remaining cost, and should prove the digest posting path.
 
 ## Safety
