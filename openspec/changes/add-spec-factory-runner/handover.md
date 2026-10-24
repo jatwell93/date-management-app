@@ -1,10 +1,10 @@
 # Handover: add-spec-factory-runner
 
-Updated: 2026-10-24 · main at 5b2994da
+Updated: 2026-10-24 · main at 3a4fb553
 
 ## State
 
-Phases 1 and 2 are done; phase 3 is built and waits for merge.
+Phases 1 to 3 are done (#705 merged); 4.1 is in the phase 4 docs PR.
 
 Phase 1: the factory ran the pilot change `add-agent-route-map-and-tooling-polish` end to end, one task per hand-started run, and the pilot is archived (its `no_go` list no longer applies to other factory PRs). Each factory PR was opened by the Claude App (`app/claude`), CI ran on it, and `factory/no-go-guard` passed.
 
@@ -26,22 +26,28 @@ Phase 2 (#696): merges of factory PRs start the next task, and relayed CI runs a
 
 Every relayed CI and review event on #701 and #702 routed to `mode=none` ("Actions checks still running", then "nothing actionable"), so no babysit pass ran. The babysit path has unit tests but has not yet fixed a real finding. #701's cross-tenant test was mutation-checked by hand: it fails with the join scoping removed.
 
-Phase 3 is on `feature/factory-phase-3-escalation-digest` (3.1, 3.2). It edits protected paths, so it is built interactively.
+Phase 3 (#705, 3.1 and 3.2) edits protected paths, so it was built interactively.
 
 - Escalation: `scripts/factory-issue.js` finds the tracking issue (labelled `factory:<id>`, else the `issue:` key in the proposal's `## Autonomy` block, else new; an issue cited in prose never counts). The router holds every task of a change while that issue has `needs-human`, and resumes it when the owner removes the label (`issues: unlabeled`; a removal by anyone else is ignored). The next run records the owner's answer under "Decisions" in its PR's `handover.md`.
 - Digest: `.github/workflows/factory-digest.yml`, daily at 21:00 UTC, comments on the `Factory digest` issue (label `factory-digest`; no `factory:` prefix, so the router never reads it as a change).
 
 ## Next
 
-Phase 4: AGENTS.md §5 and the memory store (4.1), then strict validation and archive (4.2). After merge, check both new paths live: dispatch `factory-digest.yml` once, and park a throwaway change to see the hold and the resume.
+4.2: after the phase 4 docs PR merges, run `openspec validate add-spec-factory-runner --strict` and archive the change, then close #707.
+
+Live checks on main after #705 (2026-10-24):
+
+- Digest: a dispatched `factory-digest.yml` run succeeded and posted nothing ("Nothing open: no digest posted."). The posting path has unit tests only.
+- Hold: tracking issue #707 (made by `factory-issue.js`) with `needs-human`; a dispatch routed to `mode=none`, "waiting on the owner: #707 has needs-human", and the task job was skipped.
+- Resume and escalation: the owner removed the label, an `issues` run started task 4.1, and run-spec escalated on #707 because 4.1 edits `AGENTS.md` (`no_go` baseline). It re-added `needs-human` and offered options. Decision: the owner chose option 1, 4.1 by hand.
 
 ## Open PRs
 
-- Phase 3 PR from `feature/factory-phase-3-escalation-digest`.
+- Phase 4 docs PR from `feature/factory-phase-4-docs` (4.1).
 
 ## Waiting on the user
 
-- Merge the phase 3 PR.
+- Merge the phase 4 docs PR. #707 keeps `needs-human` so the factory does not start 4.2 meanwhile.
 
 Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`): 1 required approval, Repository admin bypass, and `factory/no-go-guard` among the 7 required checks.
 
@@ -56,3 +62,4 @@ Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`
 - Squash merges break stacked PRs: after the base PR merges, merge `origin/main` into the stacked branch and keep its side of the add/add conflicts, rather than rebasing and force-pushing. When two PRs both append to the one-line `test:tooling` script, keep both entries.
 - `run-spec` found the tracking issue by the `factory:<id>` label only, so a change written for an existing issue (#671) got a second, label-made issue (#703). Phase 3's `scripts/factory-issue.js` adopts the proposal's issue first.
 - A PR parked by babysit-pr (`needs-human` on the PR, not the issue) does not hold new tasks. Removing that label starts nothing by itself; the next review or CI event on the PR starts a pass.
+- A task that only edits `no_go` paths (docs in `AGENTS.md`, skills) escalates every time. Mark such tasks for an interactive session in `tasks.md`, or the factory spends a run to say so.
