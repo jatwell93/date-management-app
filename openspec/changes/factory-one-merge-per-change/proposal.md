@@ -11,7 +11,7 @@
 
 ## What changes
 
-- **Owner tasks.** A task written `- [ ] 2.3 (owner) …` is never attempted. When it is the next unchecked task, the router escalates it on the tracking issue (`needs-human`, owner mentioned) without starting a Claude run. The owner does it in their own PR and ticks it on `main` (or on the open per-change PR's branch), then removes `needs-human`. If the task is still unchecked when the label goes, the router escalates again.
+- **Owner tasks.** A task written `- [ ] 2.3 (owner) …` is never attempted. When it is the next unchecked task, the router escalates it on the tracking issue (`needs-human`, owner mentioned) without starting a Claude run. The owner does it, ticks it in the task list the router reads, then removes `needs-human`. That list is `tasks.md` on the open per-change PR's branch while there is one, else on `main`, and the escalation comment names the branch to tick it on. If the task is still unchecked when the label goes, the router escalates again.
 - **One PR per change, opt-in.** A change whose Autonomy block says `pr: per-change` keeps one PR on `feature/factory-<id>`:
   - The first task opens the PR. Every later task adds its commits with a `Factory-Task: <n>` trailer and pushes, never rebasing or force-pushing.
   - Each task merges `origin/main` into the branch first, unless that merge would bring in a `.github/**` change: the Claude App has no Workflows permission, so GitHub would reject the push. The branch then stays on its older base, and the owner uses "Update branch" before merging (the ruleset requires branches to be up to date).

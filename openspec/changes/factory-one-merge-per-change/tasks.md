@@ -4,7 +4,7 @@ Numbered 5.x as phase 5 of the factory (phases 0 to 4 were `add-spec-factory-run
 
 ## 5.1 Owner tasks
 
-- [ ] 5.1 `(owner)` marker. `scripts/factory-route.js` reads the next unchecked task from `main`'s `tasks.md` (from the PR branch's copy once 5.3 adds per-change PRs); when it is marked `(owner)`, it routes `mode=escalate` instead of `task`. A new `escalate` job in `factory.yml` runs `scripts/factory-escalate.js <id> <task>`, which finds the tracking issue (`factory-issue.js`), adds `needs-human` and comments with the task text and how to resume. `run-spec` refuses an `(owner)` task too, in case it is reached another way. Add the script to the `no_go` baseline and to the rules a babysit pass restores from `main`.
+- [ ] 5.1 `(owner)` marker. `scripts/factory-route.js` reads the next unchecked task from `main`'s `tasks.md` (from the PR branch's copy once 5.3 adds per-change PRs); when it is marked `(owner)`, it routes `mode=escalate` instead of `task`. A new `escalate` job in `factory.yml` runs `scripts/factory-escalate.js <id> <task>`, which finds the tracking issue (`factory-issue.js`), adds `needs-human` and comments with the task text and how to resume, naming the branch whose `tasks.md` the owner must tick (`main`, or the open per-change PR's branch). `run-spec` refuses an `(owner)` task too, in case it is reached another way. Add the script to the `no_go` baseline and to the rules a babysit pass restores from `main`.
       Acceptance: router tests for an owner task on dispatch, on merge and on resume (still unchecked: escalates again; ticked: starts the next task); no Claude run on those routes; `factory-escalate.js` tests with a fake `gh`.
 
 ## 5.2 First real spec
