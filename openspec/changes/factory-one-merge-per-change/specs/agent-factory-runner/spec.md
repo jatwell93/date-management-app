@@ -33,7 +33,7 @@ When the next unchecked task of a change is marked `(owner)` in the change's tas
 
 ### Requirement: A change can run as one PR
 
-A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push. The next task SHALL start when the PR is settled with nothing actionable, found by an hourly sweep, and SHALL NOT wait for a merge. The sweep SHALL NOT dispatch a change that has a factory run queued or running, or whose tracking issue has `factory-retry` or `needs-human`. Task runs and babysit passes on that PR SHALL NOT run at the same time. After the last task the runner SHALL mark the PR ready for review and mention the owner. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push. The next task SHALL start when the PR is settled with nothing actionable, found by an hourly sweep, and SHALL NOT wait for a merge. The sweep SHALL NOT dispatch a change that has a factory run queued or running, whose tracking issue has `factory-retry` or `needs-human`, or whose per-change PR has `needs-human`, and SHALL dispatch at most once per PR head commit. A task run that ends without pushing SHALL escalate with `needs-human`. Task runs and babysit passes on that PR SHALL NOT run at the same time. Whenever a task run finds no unchecked task left, the runner SHALL mark the PR ready for review and mention the owner on it. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
@@ -55,6 +55,19 @@ A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open fac
 - **WHEN** the hourly sweep runs
 - **THEN** it dispatches nothing for that change
 
+#### Scenario: PR parked by a babysit pass
+
+- **GIVEN** a settled `pr: per-change` PR that carries `needs-human`, with no `needs-human` on the tracking issue
+- **WHEN** the hourly sweep runs
+- **THEN** it dispatches nothing for that change
+
+#### Scenario: Run ended without pushing
+
+- **GIVEN** a `pr: per-change` PR whose head commit the sweep already dispatched a task run for
+- **AND** that run ended without pushing, with no failure
+- **WHEN** the hourly sweep runs again
+- **THEN** it dispatches nothing for that change
+
 #### Scenario: Main has a workflow change the branch lacks
 
 - **GIVEN** a `pr: per-change` branch and a newer `main` that changes `.github/workflows/ci.yml`
@@ -68,6 +81,12 @@ A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open fac
 - **WHEN** the last task run finishes
 - **THEN** the PR is ready for review and the owner is mentioned
 - **AND** the owner's merge of it starts no task
+
+#### Scenario: Last task is an owner task
+
+- **GIVEN** a `pr: per-change` PR whose only unchecked task was `(owner)`, now ticked on the branch by the owner
+- **WHEN** the owner removes `needs-human` and a task run starts
+- **THEN** the PR is ready for review and the owner is mentioned on it
 
 ### Requirement: A failed task run is retried once
 
