@@ -1,10 +1,12 @@
 # Handover: add-spec-factory-runner
 
-Updated: 2026-10-23 · main at 87ee52ed
+Updated: 2026-10-24 · main at d48f91b0
 
 ## State
 
-Phase 1 is done. The factory ran the pilot change `add-agent-route-map-and-tooling-polish` end to end, one task per hand-started run, and the pilot is archived (its `no_go` list no longer applies to other factory PRs). Each factory PR was opened by the Claude App (`app/claude`), CI ran on it, and `factory/no-go-guard` passed.
+Phases 1 and 2 are done.
+
+Phase 1: the factory ran the pilot change `add-agent-route-map-and-tooling-polish` end to end, one task per hand-started run, and the pilot is archived (its `no_go` list no longer applies to other factory PRs). Each factory PR was opened by the Claude App (`app/claude`), CI ran on it, and `factory/no-go-guard` passed.
 
 | Task                        | Run                                                                       | PR   | Fix rounds after CI                   |
 | --------------------------- | ------------------------------------------------------------------------- | ---- | ------------------------------------- |
@@ -14,17 +16,27 @@ Phase 1 is done. The factory ran the pilot change `add-agent-route-map-and-tooli
 
 #692 added ESLint `complexity` 8 and `max-depth` 3 for new code (existing offenders baselined in `eslint.complexity-baseline.js`, capped at 61) and told `run-spec` to keep functions small and use existing parsers.
 
+Phase 2 (#696): merges of factory PRs start the next task, and relayed CI runs and review events start one-shot babysit passes, routed by `scripts/factory-route.js`. Task 2.3 ran `show-user-names-in-daily-usage` (issue #671) through the chain. The owner dispatched once, then only approved and merged.
+
+| Step                   | Started by | Run                                                                       | PR   | Fix rounds after CI |
+| ---------------------- | ---------- | ------------------------------------------------------------------------- | ---- | ------------------- |
+| 1.1 Worker `user_name` | dispatch   | https://github.com/jatwell93/date-management-app/actions/runs/39951529433 | #701 | 0                   |
+| 2.1 frontend label     | #701 merge | https://github.com/jatwell93/date-management-app/actions/runs/40034037190 | #702 | 0                   |
+| completion comment     | #702 merge | https://github.com/jatwell93/date-management-app/actions/runs/40051993463 | #703 | n/a                 |
+
+Every relayed CI and review event on #701 and #702 routed to `mode=none` ("Actions checks still running", then "nothing actionable"), so no babysit pass ran. The babysit path has unit tests but has not yet fixed a real finding. #701's cross-tenant test was mutation-checked by hand: it fails with the join scoping removed.
+
 ## Next
 
-Tasks 2.1 and 2.2 are on `feature/factory-phase-2-chain-and-babysit`: merge-triggered next tasks and one-shot babysit passes, routed by `scripts/factory-route.js`. Then 2.3 (a new small change, since the pilot is archived, run through the chain with the owner only approving and merging). 2.1 and 2.2 edit protected paths (`.github/**`, `.claude/**`), so they are built interactively, not by the factory.
+Phase 3, escalation and digest.
 
 ## Open PRs
 
-- Phase 2 (2.1, 2.2) PR from `feature/factory-phase-2-chain-and-babysit`.
+- None.
 
 ## Waiting on the user
 
-- The new small change for 2.3: a real feature is a better test than more tooling.
+- Nothing.
 
 Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`): 1 required approval, Repository admin bypass, and `factory/no-go-guard` among the 7 required checks.
 
@@ -37,3 +49,4 @@ Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`
 - The guard applies every active change's `no_go` list. Archive a change once done so its list stops protecting those paths from other factory PRs.
 - CodeScene's gate cannot run in the factory (the CLI needs a token). ESLint's `complexity` counts differ from CodeScene's (`main` 10 vs 9, `entryLine` 6 vs 9), so the lint rule catches the worst cases only; CodeScene is not a required check, and borderline findings can be answered instead of refactored.
 - Squash merges break stacked PRs: after the base PR merges, merge `origin/main` into the stacked branch and keep its side of the add/add conflicts, rather than rebasing and force-pushing. When two PRs both append to the one-line `test:tooling` script, keep both entries.
+- `run-spec` finds the tracking issue by the `factory:<id>` label only. A change written for an existing issue (here #671) gets a second, label-made issue (#703) for the completion comment. Phase 3's escalation work should look for the issue the proposal names first.
