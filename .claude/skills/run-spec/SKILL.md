@@ -87,7 +87,7 @@ merge is the only gate before production.
 
 1. Find the change's tracking issue: `n=$(node scripts/factory-issue.js <id>)`.
    It reuses the issue labelled `factory:<id>`, else adopts the issue the
-   proposal names, else creates one.
+   proposal names in its `## Autonomy` block (`issue: N`), else creates one.
 2. `gh issue edit "$n" --add-label needs-human`, then comment: `@jatwell93` and
    the task number, what blocks it, the options you see, and your
    recommendation. End with: "Answer here, then remove `needs-human` to resume."

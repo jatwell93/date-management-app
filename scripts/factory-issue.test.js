@@ -22,28 +22,37 @@ function fakeGh({
 
 const deps = (gh, proposal = '') => ({ gh, proposal: () => proposal });
 
-test('issueFromProposal reads the first "Issue #N"', () => {
-  assert.equal(issueFromProposal('## Why\n\nIssue #671. On the usage report...'), 671);
-  assert.equal(issueFromProposal('See PR #12 and issue #40.'), 40);
-  assert.equal(issueFromProposal('No issue here, only #5.'), 0);
+const proposal = (autonomy) =>
+  `## Why\n\nIssue #12 is related; see also issue #40.\n\n## Autonomy\n\n\`\`\`yaml\nmerge: human\n${autonomy}no_go:\n  - backend/**\n\`\`\`\n\n## Impact\n\nissue: 99\n`;
+const PROPOSAL = proposal('issue: 671 # the bug report\n');
+
+test("issueFromProposal reads only the Autonomy block's issue key", () => {
+  assert.equal(issueFromProposal(PROPOSAL), 671);
+  assert.equal(issueFromProposal(proposal('issue: #671\n')), 671);
+  assert.equal(
+    issueFromProposal(proposal('')),
+    0,
+    'issues cited in prose or other sections never count',
+  );
+  assert.equal(issueFromProposal('Issue #671. No Autonomy block.'), 0);
 });
 
 test('an open issue labelled factory:<id> wins, untouched', () => {
   const { gh, calls } = fakeGh({ labelled: [{ number: 703 }] });
-  assert.equal(trackingIssue('add-x', deps(gh, 'Issue #671.')), 703);
+  assert.equal(trackingIssue('add-x', deps(gh, PROPOSAL)), 703);
   assert.equal(calls.length, 1);
 });
 
 test("the proposal's open issue is adopted: labelled, never duplicated", () => {
   const { gh, calls } = fakeGh();
-  assert.equal(trackingIssue('add-x', deps(gh, 'Issue #671.')), 671);
+  assert.equal(trackingIssue('add-x', deps(gh, PROPOSAL)), 671);
   assert.ok(calls.includes('issue edit 671 --add-label factory:add-x'));
   assert.ok(!calls.some((c) => c.startsWith('issue create')));
 });
 
 test('a closed proposal issue is not reused; a new one is created', () => {
   const { gh, calls } = fakeGh({ state: 'CLOSED' });
-  assert.equal(trackingIssue('add-x', deps(gh, 'Issue #671.')), 90);
+  assert.equal(trackingIssue('add-x', deps(gh, PROPOSAL)), 90);
   assert.ok(!calls.some((c) => c.startsWith('issue edit')));
   assert.ok(
     calls.some((c) => c.startsWith('issue create --title factory: add-x --label factory:add-x')),

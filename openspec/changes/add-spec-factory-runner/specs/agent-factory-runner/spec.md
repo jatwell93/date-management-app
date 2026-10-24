@@ -106,7 +106,7 @@ Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHAL
 
 ### Requirement: Factory escalates instead of guessing
 
-When a task needs a product decision, touches a `no_go` path, or is an operator task, the runner SHALL label the PR or tracking issue `needs-human`, mention the owner, and stop. No task of the change SHALL start while its tracking issue has `needs-human`. The owner removing the label SHALL resume the change, and the next run SHALL record the owner's answer in `handover.md`. The tracking issue SHALL be the open issue labelled `factory:<change-id>`, else the open issue the proposal names, else a new one.
+When a task needs a product decision, touches a `no_go` path, or is an operator task, the runner SHALL label the PR or tracking issue `needs-human`, mention the owner, and stop. No task of the change SHALL start while its tracking issue has `needs-human`. The owner removing the label SHALL resume the change, and the next run SHALL record the owner's answer in `handover.md`. The tracking issue SHALL be the open issue labelled `factory:<change-id>`, else the open issue named by the `issue:` key of the proposal's `## Autonomy` block (never an issue cited in prose), else a new one.
 
 #### Scenario: Task touches a no_go path
 
@@ -136,9 +136,15 @@ When a task needs a product decision, touches a `no_go` path, or is an operator 
 
 #### Scenario: Change written for an existing issue
 
-- **GIVEN** a proposal that names open issue #671 and no issue labelled `factory:<change-id>`
+- **GIVEN** a proposal whose `## Autonomy` block says `issue: 671`, for an open issue, and no issue labelled `factory:<change-id>`
 - **WHEN** the runner needs the tracking issue
 - **THEN** it labels #671 `factory:<change-id>` and uses it, creating no new issue
+
+#### Scenario: Proposal cites an issue only in passing
+
+- **GIVEN** a proposal that mentions issue #40 in its prose and has no `issue:` key
+- **WHEN** the runner needs the tracking issue
+- **THEN** it does not touch #40
 
 ### Requirement: Factory posts a daily digest
 

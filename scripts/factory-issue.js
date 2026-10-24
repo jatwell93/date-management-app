@@ -6,8 +6,9 @@
  * holds every new task of the change while it carries `needs-human`.
  *
  *   1. an open issue labelled `factory:<id>`
- *   2. else the open issue the proposal names ("Issue #671"), which gets the
- *      label, so a change written for an existing issue reports there
+ *   2. else the open issue in the proposal's `## Autonomy` block (`issue: 671`),
+ *      which gets the label, so a change written for an existing issue reports
+ *      there
  *   3. else a new issue titled `factory: <id>`
  *
  * Usage: node scripts/factory-issue.js <change-id>
@@ -17,9 +18,15 @@ const { execFileSync } = require('node:child_process');
 
 const CHANGE_ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
 
-/** The first `Issue #N` the proposal names, or 0. */
+/**
+ * The `issue: N` key of the proposal's `## Autonomy` block, or 0. Only this
+ * explicit key counts: a proposal cites other issues in passing, and adopting
+ * one of those would post the factory's escalations on an unrelated issue.
+ */
 function issueFromProposal(text) {
-  const m = /\bIssue #([1-9][0-9]*)\b/i.exec(text || '');
+  const autonomy = (text || '').split(/^## Autonomy[ \t]*$/m)[1] || '';
+  const block = autonomy.split(/^## /m)[0];
+  const m = /^issue:[ \t]*#?([1-9][0-9]*)[ \t]*(#.*)?$/m.exec(block);
   return m ? Number(m[1]) : 0;
 }
 

@@ -28,7 +28,7 @@ Every relayed CI and review event on #701 and #702 routed to `mode=none` ("Actio
 
 Phase 3 is on `feature/factory-phase-3-escalation-digest` (3.1, 3.2). It edits protected paths, so it is built interactively.
 
-- Escalation: `scripts/factory-issue.js` finds the tracking issue (labelled `factory:<id>`, else the proposal's `Issue #N`, else new). The router holds every task of a change while that issue has `needs-human`, and resumes it when the owner removes the label (`issues: unlabeled`; a removal by anyone else is ignored). The next run records the owner's answer under "Decisions" in its PR's `handover.md`.
+- Escalation: `scripts/factory-issue.js` finds the tracking issue (labelled `factory:<id>`, else the `issue:` key in the proposal's `## Autonomy` block, else new; an issue cited in prose never counts). The router holds every task of a change while that issue has `needs-human`, and resumes it when the owner removes the label (`issues: unlabeled`; a removal by anyone else is ignored). The next run records the owner's answer under "Decisions" in its PR's `handover.md`.
 - Digest: `.github/workflows/factory-digest.yml`, daily at 21:00 UTC, comments on the `Factory digest` issue (label `factory-digest`; no `factory:` prefix, so the router never reads it as a change).
 
 ## Next
