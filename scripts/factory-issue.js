@@ -16,7 +16,7 @@
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 
-const CHANGE_ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
+const { factoryIdProblem } = require('./factory-route.js');
 
 /**
  * The `issue: N` key of the proposal's `## Autonomy` block, or 0. Only this
@@ -93,8 +93,9 @@ const defaultDeps = {
 
 function main(argv = process.argv.slice(2), deps = defaultDeps, out = console.log) {
   const id = argv[0] || '';
-  if (!CHANGE_ID.test(id)) {
-    console.error('usage: factory-issue.js <change-id>');
+  const problem = factoryIdProblem(id);
+  if (problem) {
+    console.error(`usage: factory-issue.js <change-id>: ${problem}`);
     return 2;
   }
   out(String(trackingIssue(id, deps)));

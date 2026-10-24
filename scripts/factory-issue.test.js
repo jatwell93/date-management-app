@@ -59,6 +59,15 @@ test('a closed proposal issue is not reused; a new one is created', () => {
   );
 });
 
+test("main rejects an id whose factory:<id> label would pass GitHub's 50 characters", () => {
+  const { gh, calls } = fakeGh();
+  assert.equal(
+    main(['a'.repeat(43)], deps(gh), () => {}),
+    2,
+  );
+  assert.equal(calls.length, 0, 'no label, issue or comment is attempted');
+});
+
 test('main rejects an unsafe change id', () => {
   const { gh, calls } = fakeGh();
   assert.equal(

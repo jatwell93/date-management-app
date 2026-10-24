@@ -31,8 +31,20 @@ const { execFileSync } = require('node:child_process');
 
 const FACTORY_AUTHOR = 'claude[bot]';
 const CHANGE_ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
+// GitHub caps label names at 50 characters, and every factory PR and tracking
+// issue carries `factory:<id>`, so a longer id cannot run through the factory.
+const MAX_FACTORY_ID = 50 - 'factory:'.length;
 
 const none = (reason) => ({ mode: 'none', reason });
+
+/** Why an id cannot run through the factory, or ''. */
+function factoryIdProblem(id) {
+  if (!CHANGE_ID.test(id)) return 'invalid change_id';
+  if (id.length > MAX_FACTORY_ID) {
+    return `change id is ${id.length} characters; factory:<id> labels allow ${MAX_FACTORY_ID}. Rename the change folder`;
+  }
+  return '';
+}
 
 /** The change id from a `factory:<id>` label, or ''. */
 function changeFromLabels(labels) {
@@ -49,7 +61,8 @@ const isAppAuthor = (login) => login === FACTORY_AUTHOR || login === 'app/claude
 
 function dispatchRoute(event) {
   const id = event.inputs?.change_id || '';
-  if (!CHANGE_ID.test(id)) return none('invalid change_id');
+  const problem = factoryIdProblem(id);
+  if (problem) return none(problem);
   return { mode: 'task', change_id: id, reason: 'dispatched' };
 }
 
@@ -200,4 +213,4 @@ function main(env = process.env, deps = defaultDeps, log = console.log) {
 
 if (require.main === module) process.exitCode = main();
 
-module.exports = { changeFromLabels, route, toOutput, main };
+module.exports = { changeFromLabels, factoryIdProblem, route, toOutput, main };

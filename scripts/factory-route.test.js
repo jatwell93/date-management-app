@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { changeFromLabels, route, toOutput } = require('./factory-route.js');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const { changeFromLabels, factoryIdProblem, route, toOutput } = require('./factory-route.js');
 
 const LABEL = { name: 'factory:add-x' };
 const APP = { login: 'claude[bot]' };
@@ -45,6 +48,27 @@ test('workflow_dispatch starts a task on a valid change id only', () => {
     reason: 'dispatched',
   });
   assert.equal(route('workflow_dispatch', { inputs: { change_id: 'A b' } }, deps()).mode, 'none');
+});
+
+test('a change id longer than 42 characters cannot be dispatched (factory:<id> label limit)', () => {
+  const at = (n) => route('workflow_dispatch', { inputs: { change_id: 'a'.repeat(n) } }, deps());
+  assert.equal(at(42).mode, 'task');
+  assert.equal(at(43).mode, 'none');
+  assert.match(at(43).reason, /43 characters; factory:<id> labels allow 42/);
+});
+
+// Changes written before the factory that it will never run: operator-heavy
+// migration work. A new change must fit, so the router can label its PRs.
+const NOT_FOR_THE_FACTORY = new Set(['use-cloudflare-r2-and-a-serverless-database']);
+
+test('every active change id fits the factory:<id> label limit', () => {
+  const dir = path.join(__dirname, '..', 'openspec', 'changes');
+  const ids = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== 'archive' && !NOT_FOR_THE_FACTORY.has(d.name))
+    .map((d) => d.name);
+  const tooLong = ids.filter((id) => /characters/.test(factoryIdProblem(id)));
+  assert.deepEqual(tooLong, [], 'rename these change folders before the factory runs them');
 });
 
 test('a task on an archived or missing change routes to none', () => {
