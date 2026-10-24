@@ -32,7 +32,8 @@ interface UsageReportPageProps {
 
 interface DailyUsageReportItem {
   date: string; // YYYY-MM-DD
-  user_id: number;
+  user_id: number | null;
+  user_name: string | null;
   user_role: string;
   creations: number;
   updates: number;
@@ -83,6 +84,11 @@ function formatUsageDate(value: string) {
 
 function formatUserLabel(item: ItemsByUserReportItem) {
   return item.userName || `Unknown user ${item.userId}`;
+}
+
+function formatDailyUserLabel(row: DailyUsageReportItem) {
+  if (row.user_name) return row.user_name;
+  return row.user_id === null ? 'Unknown user' : `Unknown user ${row.user_id}`;
 }
 
 function formatAuditFlagType(type: string) {
@@ -634,7 +640,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                   >
                     <div className="flex items-center justify-between border-b pb-2 mb-3">
                       <span className="font-heading font-bold">{formatUsageDate(row.date)}</span>
-                      <span className="text-sm text-semantic-text-secondary">{row.user_role}</span>
+                      <span className="text-sm text-semantic-text-secondary">
+                        {formatDailyUserLabel(row)} · {row.user_role}
+                      </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-sm">
                       <div className="rounded border bg-semantic-surface-2 p-2">
@@ -676,7 +684,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     {usageData.map((row) => (
                       <TableRow key={`${row.date}-${row.user_id}`}>
                         <TableCell className="font-medium">{formatUsageDate(row.date)}</TableCell>
-                        <TableCell>{row.user_id}</TableCell>
+                        <TableCell>{formatDailyUserLabel(row)}</TableCell>
                         <TableCell>{row.user_role}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {numberFormatter.format(row.creations)}

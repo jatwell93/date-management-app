@@ -1,25 +1,24 @@
 # Handover: show-user-names-in-daily-usage
 
-Updated: 2026-10-23 · main at f1430511
+Updated: 2026-10-23 · main at e5ad554e
 
 ## State
 
-Task 1.1 (Worker) is implemented on `feature/factory-show-user-names-in-daily-usage-1.1` and waits for the owner's merge. `getDailyUsageReport` now returns `user_name` (`COALESCE(u.username, u.email)`), and the `users` join is scoped to the audit row's organisation. `workers/src/database.daily-usage.pglite.node.test.ts` covers it; the cross-tenant case fails with the join scoping removed (checked). `npm run test:db`, the workers typecheck and `npm run lint` pass.
+Task 1.1 (Worker) is merged (#701). Task 2.1 (frontend) is implemented on `feature/factory-show-user-names-in-daily-usage-2.1` and waits for the owner's merge. `UsageReportPage.tsx` shows `user_name` in the daily table's "User" column and in each mobile card header beside the role, through one helper (`formatDailyUserLabel`): name, else `Unknown user <id>`, else `Unknown user` when `user_id` is null. `user_id` is now `number | null`. `UsageReportPage.test.tsx` covers a named row, a null-name row and a null-name/null-id row in both views; the new assertions fail with the page change reverted (checked). `npm run test:frontend:diff`, `npm run lint` and `npm run build:frontend` pass.
 
 ## Next
 
-Task 2.1, the frontend. It starts only after 1.1 merges.
+Every task is ticked. After the 2.1 PR merges, the owner archives the change (`openspec archive show-user-names-in-daily-usage --yes`).
 
 ## Open PRs
 
-- Factory PR for task 1.1 (label `factory:show-user-names-in-daily-usage`).
+- Factory PR for task 2.1 (label `factory:show-user-names-in-daily-usage`).
 
 ## Waiting on the user
 
-- Merge the task 1.1 PR.
+- Merge the task 2.1 PR, then archive the change.
 
 ## Learnings
 
-- The `LEFT JOIN users u ON al.user_id = u.id` in `getDailyUsageReport` had no organisation condition. Adding the name without scoping that join would let a cross-tenant `user_id` leak another organisation's username.
-- `getItemsByUserReport` already names users with `COALESCE(u.username, u.email, 'Unknown')`; this change returns null instead of `'Unknown'` so the page owns the fallback wording.
-- `workers/node_modules` is not installed on a fresh runner; run `npm ci --prefix workers` before `npm run test:db`.
+- `workers/node_modules` and `frontend/node_modules` are not installed on a fresh runner; run `npm ci --prefix <pkg>` first.
+- Mobile card key `${date}-${user_id}` can repeat when `user_id` is null; harmless for the current rows but worth a stable key if the query ever returns several null-user rows per day.
