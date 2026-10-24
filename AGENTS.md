@@ -80,7 +80,17 @@ openspec archive <change-id> --yes      # archive after all tasks complete + mer
 Flow: `list` → `proposal` → edit `proposal.md` + `tasks.md` → `validate --strict` → implement tasks sequentially (checking `[x]`) → `archive`. Don't archive with incomplete tasks; don't skip `--strict` validation.
 
 - **Handover:** each active change keeps `openspec/changes/<id>/handover.md` (state, next task, open PRs, decisions waiting on the user). Update it with the `handover` skill when a task merges or a session ends; start the next session with `/resume <id>`. It replaces pasted handover prompts.
-- **Autonomy:** `proposal.md` may carry an `## Autonomy` section with `merge: auto` (agent may run `gh pr merge --auto --squash` once `babysit-pr` is clean) or `merge: human` (default). Migrations, billing, auth and anything touching production data stay `merge: human`.
+- **Autonomy:** `proposal.md` may carry an `## Autonomy` section (a fenced `yaml` block) with `merge: auto` or `merge: human` (default), an optional `issue: N` and an optional `no_go` list. No agent merges, whatever `merge` says: every merge to `main` deploys production, so the owner merges. Migrations, billing, auth and anything touching production data stay `merge: human`.
+
+### Factory (unattended runs)
+
+`.github/workflows/factory.yml` runs one task of a change per run in the cloud (`run-spec` skill), opens a PR labelled `factory:<id>`, and babysits it. Start it with `gh workflow run factory.yml -f change_id=<id>`. Each merged factory PR starts the next unchecked task; the owner merges each one.
+
+- **Change id:** at most 42 characters, because every PR and tracking issue carries the label `factory:<id>` and GitHub caps labels at 50.
+- **`no_go`:** paths the factory must not edit. A fixed baseline (`.github/**`, `database/migrations/**`, `scripts/database-backup.sh`, `scripts/check-no-go.js`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`) always applies; a change's own entries add to it. The required `factory/no-go-guard` check fails a factory PR that touches one. A task that needs such a path, a product decision or operator access escalates instead.
+- **Tracking issue:** the open issue labelled `factory:<id>`, else the `issue:` key of the Autonomy block (write it for a change that answers an existing issue, so the factory reports there), else a new one (`node scripts/factory-issue.js <id>` prints it).
+- **Escalation:** the factory comments on the tracking issue, adds `needs-human` and stops. No task of the change starts while that label is on. Answer in a comment, then remove the label yourself to resume; the next run records the answer in `handover.md`.
+- **Digest:** `.github/workflows/factory-digest.yml` comments daily on the `Factory digest` issue with what waits on the owner, open factory PRs and failed runs; it posts nothing when all are empty.
 
 ---
 
