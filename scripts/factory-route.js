@@ -8,6 +8,12 @@
  *
  *   workflow_dispatch(change_id)    task on that change
  *   pull_request closed, merged     task on the next unchecked task of the change
+ *   issues unlabeled needs-human    task: the owner answered an escalation (3.1)
+ *     (by the owner, on an issue
+ *     labelled factory:<id>)
+ *
+ * Every task route becomes `none` while the change's tracking issue has
+ * `needs-human` (scripts/factory-issue.js finds that issue).
  *   pull_request_review(_comment),  babysit pass on the PR, when it has work the
  *   workflow_dispatch(pr)           factory has not handled yet and no Actions
  *     (a finished CI run, relayed   check pending
@@ -117,10 +123,43 @@ function babysitRoute(number, deps) {
   return { mode: 'babysit', change_id: id, pr: number, ref: pr.headRefName, reason: 'actionable' };
 }
 
-/** A task on a change that is not (or no longer) active becomes `none`. */
+/**
+ * The owner taking `needs-human` off a change's tracking issue resumes it.
+ * Only the owner: the factory can edit labels too, and must not unpark itself.
+ */
+function resumeRoute(event) {
+  const issue = event.issue || {};
+  const id = changeFromLabels(issue.labels || []);
+  const blocked = resumeBlocker(event, id);
+  if (blocked) return none(blocked);
+  return { mode: 'task', change_id: id, reason: `#${issue.number} resumed by the owner` };
+}
+
+/** True when the event's sender is the repository owner. */
+function sentByOwner({ sender = {}, repository = {} }) {
+  const owner = (repository.owner || {}).login;
+  return Boolean(owner) && sender.login === owner;
+}
+
+/** Why an `issues` event does not resume a change, or ''. */
+function resumeBlocker(event, id) {
+  const removedLabel = event.action === 'unlabeled' ? (event.label || {}).name : '';
+  if (removedLabel !== 'needs-human') return 'not a needs-human removal';
+  if (!id) return 'not a tracking issue';
+  return sentByOwner(event) ? '' : 'needs-human removed by someone other than the owner';
+}
+
+/**
+ * A task on a change that is not (or no longer) active, or whose tracking issue
+ * waits on the owner (task 3.1), becomes `none`. Later tasks wait for the answer.
+ */
 function activeOnly(result, deps) {
-  if (result.mode !== 'task' || deps.changeExists(result.change_id)) return result;
-  return none(`${result.change_id} has no tasks.md (archived or missing)`);
+  if (result.mode !== 'task') return result;
+  if (!deps.changeExists(result.change_id)) {
+    return none(`${result.change_id} has no tasks.md (archived or missing)`);
+  }
+  const parked = deps.parkedIssue(result.change_id);
+  return parked ? none(`waiting on the owner: #${parked} has needs-human`) : result;
 }
 
 function route(eventName, event, deps) {
@@ -128,6 +167,7 @@ function route(eventName, event, deps) {
   if (relayedPr) return babysitRoute(prNumberOf(event), deps);
   if (eventName === 'workflow_dispatch') return activeOnly(dispatchRoute(event), deps);
   if (eventName === 'pull_request') return activeOnly(mergedRoute(event), deps);
+  if (eventName === 'issues') return activeOnly(resumeRoute(event), deps);
   return babysitRoute(prNumberOf(event), deps);
 }
 
@@ -141,6 +181,11 @@ const gh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
 
 const defaultDeps = {
   changeExists: (id) => fs.existsSync(`openspec/changes/${id}/tasks.md`),
+  parkedIssue: (id) => {
+    const args = ['issue', 'list', '--state', 'open', '--label', `factory:${id}`];
+    const list = JSON.parse(gh([...args, '--label', 'needs-human', '--json', 'number']));
+    return list.length ? list[0].number : 0;
+  },
   prView: (n) =>
     JSON.parse(gh(['pr', 'view', String(n), '--json', 'state,labels,author,headRefName'])),
   feedback: (n) =>

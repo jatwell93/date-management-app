@@ -7,6 +7,10 @@ name: Factory
 #   review, review comment, or CI finished -> babysit-pr: one-shot pass   (2.2)
 #     on a factory PR (CI runs arrive as a
 #     dispatch with `pr`, from factory-ci-relay.yml)
+#   owner removes needs-human from the     -> run-spec: the held task     (3.1)
+#     change's tracking issue
+#
+# No task starts while the tracking issue has needs-human.
 #
 # The `route` job (scripts/factory-route.js) decides which, if any, and skips
 # events with nothing to do (Actions checks still running, nothing actionable,
@@ -48,6 +52,10 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
+  # The owner removing needs-human from a tracking issue resumes the change
+  # (task 3.1). The router ignores the removal unless the owner made it.
+  issues:
+    types: [unlabeled]
 
 permissions:
   contents: write
@@ -124,7 +132,7 @@ jobs:
         shell: bash
         run: |
           rules=(.claude AGENTS.md CLAUDE.md scripts/check-no-go.js scripts/babysit-round.js
-                 scripts/pr-feedback.js scripts/factory-route.js)
+                 scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js)
           git fetch --quiet origin main
           git checkout origin/main -- "${rules[@]}"
           git reset --quiet -- "${rules[@]}"

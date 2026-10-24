@@ -72,6 +72,7 @@ test('factory.yml starts on dispatch, merges and reviews; CI runs come through t
     'pull_request_review:',
     'pull_request_review_comment:',
     'pr:',
+    'issues:',
   ]) {
     assert.ok(on.includes(trigger), `${trigger} present`);
   }
@@ -95,6 +96,7 @@ test("factory.yml routes from main and runs main's rules on a PR branch", () => 
     'scripts/check-no-go.js',
     'scripts/babysit-round.js',
     'scripts/factory-route.js',
+    'scripts/factory-issue.js',
   ]) {
     assert.ok(run.includes(f), `${f} restored from main`);
   }
@@ -166,6 +168,30 @@ test("the relay listens to exactly pr-feedback's CI_WORKFLOWS", () => {
   );
   const listed = [...block.matchAll(/^ {6}- '?([^'\n]+?)'?$/gm)].map((m) => m[1]);
   assert.deepEqual(listed.sort(), [...CI_WORKFLOWS].sort());
+});
+
+test('factory.yml resumes a change only from a needs-human removal', () => {
+  assert.match(FACTORY, /^ {2}issues:\n {4}types: \[unlabeled\]$/m);
+});
+
+const DIGEST = read('factory-digest.yml');
+
+test('factory-digest.yml runs main daily with the job token only, and no Claude run', () => {
+  assert.match(DIGEST, /^on:\n {2}schedule:\n {4}# [^\n]*\n {4}- cron: '0 21 \* \* \*'$/m);
+  assert.match(DIGEST, /^ {2}workflow_dispatch:$/m);
+  assert.deepEqual(secretsUsed(DIGEST), ['GITHUB_TOKEN']);
+  assert.doesNotMatch(DIGEST, /claude-code-action/);
+  assert.match(DIGEST, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(DIGEST, /persist-credentials: false/);
+  assert.deepEqual(topLevelBlock(DIGEST, 'permissions').sort(), [
+    'actions: read',
+    'checks: read',
+    'contents: read',
+    'issues: write',
+    'pull-requests: read',
+    'statuses: read',
+  ]);
+  assert.match(DIGEST, /run: node scripts\/factory-digest\.js$/m);
 });
 
 test('factory.yml fails the route step on a router crash and keeps restored rules out of commits', () => {

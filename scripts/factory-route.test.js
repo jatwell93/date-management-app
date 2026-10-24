@@ -6,11 +6,12 @@ const { changeFromLabels, route, toOutput } = require('./factory-route.js');
 const LABEL = { name: 'factory:add-x' };
 const APP = { login: 'claude[bot]' };
 
-function deps({ pr = {}, report = {} } = {}) {
+function deps({ pr = {}, report = {}, parked = 0 } = {}) {
   const calls = { feedback: 0 };
   return {
     calls,
     changeExists: (id) => id !== 'gone',
+    parkedIssue: () => parked,
     prView: () => ({
       state: 'OPEN',
       labels: [LABEL],
@@ -152,4 +153,49 @@ test('toOutput prints one key=value line each, without newlines in values', () =
     toOutput({ mode: 'none', reason: 'a\nb' }),
     'mode=none\nchange_id=\npr=\nref=\nreason=a b',
   );
+});
+
+const OWNER = { login: 'jatwell93' };
+const unlabeled = ({ label = 'needs-human', sender = OWNER, labels = [LABEL] } = {}) => ({
+  action: 'unlabeled',
+  label: { name: label },
+  sender,
+  repository: { owner: OWNER },
+  issue: { number: 703, labels },
+});
+
+test('every task route waits while the tracking issue has needs-human', () => {
+  const parked = deps({ parked: 703 });
+  const merged = {
+    action: 'closed',
+    pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
+  };
+  for (const [name, event] of [
+    ['workflow_dispatch', { inputs: { change_id: 'add-x' } }],
+    ['pull_request', merged],
+  ]) {
+    const r = route(name, event, parked);
+    assert.equal(r.mode, 'none', name);
+    assert.match(r.reason, /waiting on the owner: #703/);
+  }
+});
+
+test('the owner removing needs-human from a tracking issue resumes the change', () => {
+  assert.deepEqual(route('issues', unlabeled(), deps()), {
+    mode: 'task',
+    change_id: 'add-x',
+    reason: '#703 resumed by the owner',
+  });
+});
+
+test('only the owner can resume, and only by removing needs-human', () => {
+  const byBot = route('issues', unlabeled({ sender: { login: 'claude[bot]' } }), deps());
+  assert.equal(byBot.mode, 'none');
+  assert.match(byBot.reason, /someone other than the owner/);
+  assert.equal(route('issues', unlabeled({ label: 'bug' }), deps()).mode, 'none');
+  assert.equal(route('issues', unlabeled({ labels: [{ name: 'bug' }] }), deps()).mode, 'none');
+});
+
+test('a resume still waits if another needs-human issue holds the change', () => {
+  assert.equal(route('issues', unlabeled(), deps({ parked: 704 })).mode, 'none');
 });

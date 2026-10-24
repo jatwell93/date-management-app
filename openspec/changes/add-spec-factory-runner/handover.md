@@ -1,10 +1,10 @@
 # Handover: add-spec-factory-runner
 
-Updated: 2026-10-24 · main at d48f91b0
+Updated: 2026-10-24 · main at 5b2994da
 
 ## State
 
-Phases 1 and 2 are done.
+Phases 1 and 2 are done; phase 3 is built and waits for merge.
 
 Phase 1: the factory ran the pilot change `add-agent-route-map-and-tooling-polish` end to end, one task per hand-started run, and the pilot is archived (its `no_go` list no longer applies to other factory PRs). Each factory PR was opened by the Claude App (`app/claude`), CI ran on it, and `factory/no-go-guard` passed.
 
@@ -26,17 +26,22 @@ Phase 2 (#696): merges of factory PRs start the next task, and relayed CI runs a
 
 Every relayed CI and review event on #701 and #702 routed to `mode=none` ("Actions checks still running", then "nothing actionable"), so no babysit pass ran. The babysit path has unit tests but has not yet fixed a real finding. #701's cross-tenant test was mutation-checked by hand: it fails with the join scoping removed.
 
+Phase 3 is on `feature/factory-phase-3-escalation-digest` (3.1, 3.2). It edits protected paths, so it is built interactively.
+
+- Escalation: `scripts/factory-issue.js` finds the tracking issue (labelled `factory:<id>`, else the proposal's `Issue #N`, else new). The router holds every task of a change while that issue has `needs-human`, and resumes it when the owner removes the label (`issues: unlabeled`; a removal by anyone else is ignored). The next run records the owner's answer under "Decisions" in its PR's `handover.md`.
+- Digest: `.github/workflows/factory-digest.yml`, daily at 21:00 UTC, comments on the `Factory digest` issue (label `factory-digest`; no `factory:` prefix, so the router never reads it as a change).
+
 ## Next
 
-Phase 3, escalation and digest.
+Phase 4: AGENTS.md §5 and the memory store (4.1), then strict validation and archive (4.2). After merge, check both new paths live: dispatch `factory-digest.yml` once, and park a throwaway change to see the hold and the resume.
 
 ## Open PRs
 
-- None.
+- Phase 3 PR from `feature/factory-phase-3-escalation-digest`.
 
 ## Waiting on the user
 
-- Nothing.
+- Merge the phase 3 PR.
 
 Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`): 1 required approval, Repository admin bypass, and `factory/no-go-guard` among the 7 required checks.
 
@@ -49,4 +54,5 @@ Phase 0 is verified (2026-10-23, `gh api repos/{owner}/{repo}/rulesets/14671588`
 - The guard applies every active change's `no_go` list. Archive a change once done so its list stops protecting those paths from other factory PRs.
 - CodeScene's gate cannot run in the factory (the CLI needs a token). ESLint's `complexity` counts differ from CodeScene's (`main` 10 vs 9, `entryLine` 6 vs 9), so the lint rule catches the worst cases only; CodeScene is not a required check, and borderline findings can be answered instead of refactored.
 - Squash merges break stacked PRs: after the base PR merges, merge `origin/main` into the stacked branch and keep its side of the add/add conflicts, rather than rebasing and force-pushing. When two PRs both append to the one-line `test:tooling` script, keep both entries.
-- `run-spec` finds the tracking issue by the `factory:<id>` label only. A change written for an existing issue (here #671) gets a second, label-made issue (#703) for the completion comment. Phase 3's escalation work should look for the issue the proposal names first.
+- `run-spec` found the tracking issue by the `factory:<id>` label only, so a change written for an existing issue (#671) got a second, label-made issue (#703). Phase 3's `scripts/factory-issue.js` adopts the proposal's issue first.
+- A PR parked by babysit-pr (`needs-human` on the PR, not the issue) does not hold new tasks. Removing that label starts nothing by itself; the next review or CI event on the PR starts a pass.
