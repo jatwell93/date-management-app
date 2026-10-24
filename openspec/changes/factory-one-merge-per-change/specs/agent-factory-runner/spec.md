@@ -104,7 +104,7 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 
 ### Requirement: A failed task run is retried once
 
-When a task run or a babysit pass fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry`. While the mark is under an hour old, the sweep SHALL dispatch nothing for the change; once it is older, the sweep SHALL dispatch the change as a retry and remove the mark. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A cancelled run SHALL NOT mark the issue for a retry.
+When a task run or a babysit pass fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry` and record the failed run's link on it. The sweep SHALL find retries from the tracking issues that carry the mark, whether or not the change has a PR. While the mark is under an hour old, the sweep SHALL dispatch nothing for the change; once it is older, the sweep SHALL replace it with `factory-retrying` and dispatch the change. `factory-retrying` SHALL stay until a run of the change succeeds. When a run fails while the issue has `factory-retrying`, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A cancelled run SHALL NOT mark the issue for a retry.
 
 #### Scenario: First failure
 
@@ -131,6 +131,19 @@ When a task run or a babysit pass fails or times out, the factory SHALL mark the
 - **WHEN** the run ends
 - **THEN** it ends `failed`, not `cancelled`
 - **AND** the tracking issue gets `factory-retry`
+
+#### Scenario: Failure before any PR exists
+
+- **GIVEN** a change with no factory PR whose first task run fails on a usage limit
+- **WHEN** the sweep runs more than an hour later
+- **THEN** it finds the change through its tracking issue's `factory-retry` label and starts one task run
+
+#### Scenario: Queued retry replaced
+
+- **GIVEN** a tracking issue with `factory-retrying` and a queued retry that GitHub cancels for a newer run in the change's group
+- **WHEN** that newer run fails
+- **THEN** the tracking issue gets `needs-human` with both run links
+- **AND** no further retry starts
 
 #### Scenario: Retry fails too
 
