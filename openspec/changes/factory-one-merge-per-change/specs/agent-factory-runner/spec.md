@@ -35,7 +35,7 @@ When the next unchecked task of a change is marked `(owner)` in the change's tas
 
 A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
 
-Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL dispatch an advance run for each open per-change PR, except one with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
@@ -53,14 +53,21 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 #### Scenario: Per-change PR still waiting
 
 - **GIVEN** a `pr: per-change` PR with an Actions check still running
-- **WHEN** a run starts on it
-- **THEN** it exits without changes and without escalating
+- **WHEN** an event or the hourly sweep reaches it
+- **THEN** the router routes it to nothing and no Claude run starts
+- **AND** nothing escalates
 
 #### Scenario: Pending run replaced
 
 - **GIVEN** a running task run on a `pr: per-change` PR, a pending babysit run behind it, and a newer dispatch from the sweep
 - **WHEN** GitHub cancels the older pending run in the change's concurrency group
 - **THEN** the remaining run reads the PR's state when it starts and makes the babysit pass if an item is still actionable
+
+#### Scenario: Finished PR already ready
+
+- **GIVEN** a `pr: per-change` PR marked ready, with every task ticked and nothing actionable
+- **WHEN** the hourly sweep runs
+- **THEN** it dispatches nothing and no Claude run starts
 
 #### Scenario: PR parked by a babysit pass
 
@@ -84,16 +91,16 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 
 #### Scenario: Last task done
 
-- **GIVEN** a `pr: per-change` PR whose branch has every task ticked
-- **WHEN** a run starts on it
-- **THEN** the PR is ready for review and the owner is mentioned
+- **GIVEN** a draft `pr: per-change` PR whose branch has every task ticked
+- **WHEN** an event or the hourly sweep reaches it
+- **THEN** the route job marks the PR ready for review and mentions the owner, with no Claude run
 - **AND** the owner's merge of it starts no task
 
 #### Scenario: Last task is an owner task
 
 - **GIVEN** a `pr: per-change` PR whose only unchecked task was `(owner)`, now ticked on the branch by the owner
-- **WHEN** the owner removes `needs-human` and a run starts
-- **THEN** the PR is ready for review and the owner is mentioned on it
+- **WHEN** the owner removes `needs-human`
+- **THEN** the PR is ready for review and the owner is mentioned on it, with no Claude run
 
 ### Requirement: A failed task run is retried once
 
