@@ -104,13 +104,20 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 
 ### Requirement: A failed task run is retried once
 
-When a task run fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry`. While the mark is under an hour old, the sweep SHALL dispatch nothing for the change; once it is older, the sweep SHALL dispatch the change as a retry and remove the mark. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A cancelled run SHALL NOT mark the issue for a retry.
+When a task run or a babysit pass fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry`. While the mark is under an hour old, the sweep SHALL dispatch nothing for the change; once it is older, the sweep SHALL dispatch the change as a retry and remove the mark. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A cancelled run SHALL NOT mark the issue for a retry.
 
 #### Scenario: First failure
 
 - **GIVEN** a task run that fails without opening a PR
 - **WHEN** the sweep runs more than an hour later
 - **THEN** one new task run starts on the change
+
+#### Scenario: Babysit pass fails on a per-change PR
+
+- **GIVEN** a `pr: per-change` PR with an actionable thread whose babysit pass fails before pushing or replying
+- **WHEN** the sweep runs within the next hour
+- **THEN** it dispatches nothing, because the tracking issue has `factory-retry`
+- **AND** a second failure escalates with `needs-human` instead of a third pass
 
 #### Scenario: Retry mark still fresh
 
