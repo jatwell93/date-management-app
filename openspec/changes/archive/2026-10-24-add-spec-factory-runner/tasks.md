@@ -44,4 +44,4 @@
 
 - [x] 4.1 Update AGENTS.md §5 (factory usage, `no_go`) and the store of memories.
   - Done by hand: the factory escalated it on #707 (`AGENTS.md` is on the `no_go` baseline). §5 gains a Factory subsection (id limit, `no_go`, tracking issue and the Autonomy `issue:` key, escalation and resume, digest); `memory.jsonl` gains a DECISION entry.
-- [ ] 4.2 `openspec validate add-spec-factory-runner --strict`; archive once merged.
+- [x] 4.2 `openspec validate add-spec-factory-runner --strict`; archive once merged.
