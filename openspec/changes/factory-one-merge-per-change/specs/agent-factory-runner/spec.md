@@ -33,27 +33,34 @@ When the next unchecked task of a change is marked `(owner)` in the change's tas
 
 ### Requirement: A change can run as one PR
 
-A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push. The next task SHALL start when the PR is settled with nothing actionable, found by an hourly sweep, and SHALL NOT wait for a merge. The sweep SHALL NOT dispatch a change that has a factory run queued or running, whose tracking issue has `factory-retry` or `needs-human`, or whose per-change PR has `needs-human`, and SHALL dispatch at most once per PR head commit. A task run that ends without pushing SHALL escalate with `needs-human`. Task runs and babysit passes on that PR SHALL NOT run at the same time. Whenever a task run finds no unchecked task left, the runner SHALL mark the PR ready for review and mention the owner on it. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
+
+Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL dispatch an advance run for each open per-change PR, except one with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
 - **GIVEN** a `pr: per-change` change with an open factory PR that is settled with nothing actionable
 - **AND** an unchecked task left in the branch's `tasks.md`
-- **AND** no factory run of the change queued or running
 - **WHEN** the hourly sweep runs
-- **THEN** a task run starts and pushes the next task to the same PR
+- **THEN** a run starts and pushes the next task to the same PR
 
-#### Scenario: Per-change PR still has work
+#### Scenario: Per-change PR has an unanswered thread
 
-- **GIVEN** a `pr: per-change` PR with an unanswered bot thread or a check still running
-- **WHEN** the sweep runs or the change is dispatched
-- **THEN** no task run starts
+- **GIVEN** a `pr: per-change` PR with an unanswered bot thread and all Actions checks finished
+- **WHEN** a run starts on it
+- **THEN** the run makes a babysit pass and starts no task
 
-#### Scenario: Task run still in flight
+#### Scenario: Per-change PR still waiting
 
-- **GIVEN** a settled `pr: per-change` PR whose next task run has been running for over an hour without pushing
-- **WHEN** the hourly sweep runs
-- **THEN** it dispatches nothing for that change
+- **GIVEN** a `pr: per-change` PR with an Actions check still running
+- **WHEN** a run starts on it
+- **THEN** it exits without changes and without escalating
+
+#### Scenario: Pending run replaced
+
+- **GIVEN** a running task run on a `pr: per-change` PR, a pending babysit run behind it, and a newer dispatch from the sweep
+- **WHEN** GitHub cancels the older pending run in the change's concurrency group
+- **THEN** the remaining run reads the PR's state when it starts and makes the babysit pass if an item is still actionable
 
 #### Scenario: PR parked by a babysit pass
 
@@ -61,12 +68,12 @@ A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open fac
 - **WHEN** the hourly sweep runs
 - **THEN** it dispatches nothing for that change
 
-#### Scenario: Run ended without pushing
+#### Scenario: Branch task list read by the route job
 
-- **GIVEN** a `pr: per-change` PR whose head commit the sweep already dispatched a task run for
-- **AND** that run ended without pushing, with no failure
-- **WHEN** the hourly sweep runs again
-- **THEN** it dispatches nothing for that change
+- **GIVEN** an open `pr: per-change` PR and a route job that has checked out only `main`
+- **WHEN** the router or the sweep needs the change's next unchecked task
+- **THEN** it reads `tasks.md` from the PR branch through the GitHub contents API
+- **AND** does not fail for the branch being absent locally
 
 #### Scenario: Main has a workflow change the branch lacks
 
@@ -78,25 +85,31 @@ A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open fac
 #### Scenario: Last task done
 
 - **GIVEN** a `pr: per-change` PR whose branch has every task ticked
-- **WHEN** the last task run finishes
+- **WHEN** a run starts on it
 - **THEN** the PR is ready for review and the owner is mentioned
 - **AND** the owner's merge of it starts no task
 
 #### Scenario: Last task is an owner task
 
 - **GIVEN** a `pr: per-change` PR whose only unchecked task was `(owner)`, now ticked on the branch by the owner
-- **WHEN** the owner removes `needs-human` and a task run starts
+- **WHEN** the owner removes `needs-human` and a run starts
 - **THEN** the PR is ready for review and the owner is mentioned on it
 
 ### Requirement: A failed task run is retried once
 
-When a task run fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry`, and the hourly sweep SHALL dispatch the change again once the mark is at least an hour old, removing the mark. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A run the owner cancels SHALL NOT be retried.
+When a task run fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry`. While the mark is under an hour old, the sweep SHALL dispatch nothing for the change; once it is older, the sweep SHALL dispatch the change as a retry and remove the mark. When the failed run was itself a retry, the factory SHALL escalate with `needs-human` and both run links instead of retrying. A cancelled run SHALL NOT mark the issue for a retry.
 
 #### Scenario: First failure
 
 - **GIVEN** a task run that fails without opening a PR
 - **WHEN** the sweep runs more than an hour later
 - **THEN** one new task run starts on the change
+
+#### Scenario: Retry mark still fresh
+
+- **GIVEN** a tracking issue that got `factory-retry` 20 minutes ago
+- **WHEN** the sweep runs
+- **THEN** it dispatches nothing for the change
 
 #### Scenario: Run times out
 
@@ -116,7 +129,7 @@ When a task run fails or times out, the factory SHALL mark the change's tracking
 
 ### Requirement: Factory runs one OpenSpec task per run without production access
 
-The factory workflow SHALL implement at most one unchecked task of the named OpenSpec change per run, SHALL NOT start a task while an open `factory:<change-id>` PR exists unless the change is `pr: per-change` and that PR is its settled per-change PR, and SHALL run with no production secrets and with GitHub token permissions limited to contents, pull-requests and issues write. Only the route job, which runs no Claude step, MAY also hold `actions: write`, to dispatch runs from the sweep.
+The factory workflow SHALL implement at most one unchecked task of the named OpenSpec change per run, SHALL NOT start a task while an open `factory:<change-id>` PR exists unless the change is `pr: per-change` and that PR is its per-change PR, which the run advances instead, and SHALL run with no production secrets and with GitHub token permissions limited to contents, pull-requests and issues write. Only the route job, which runs no Claude step, MAY also hold `actions: write`, to dispatch runs from the sweep.
 
 #### Scenario: Dispatched on a change with unchecked tasks
 
