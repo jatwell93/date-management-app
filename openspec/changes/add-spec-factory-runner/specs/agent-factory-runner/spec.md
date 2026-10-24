@@ -106,7 +106,7 @@ Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHAL
 
 ### Requirement: Factory escalates instead of guessing
 
-When a task needs a product decision, touches a `no_go` path, or is an operator task, the runner SHALL label the PR or tracking issue `needs-human`, mention the owner, record the decision in `handover.md`, and stop.
+When a task needs a product decision, touches a `no_go` path, or is an operator task, the runner SHALL label the PR or tracking issue `needs-human`, mention the owner, and stop. No task of the change SHALL start while its tracking issue has `needs-human`. The owner removing the label SHALL resume the change, and the next run SHALL record the owner's answer in `handover.md`. The tracking issue SHALL be the open issue labelled `factory:<change-id>`, else the open issue named by the `issue:` key of the proposal's `## Autonomy` block (never an issue cited in prose), else a new one.
 
 #### Scenario: Task touches a no_go path
 
@@ -114,6 +114,53 @@ When a task needs a product decision, touches a `no_go` path, or is an operator 
 - **WHEN** the runner reaches that task
 - **THEN** it makes no edit to that path
 - **AND** labels the tracking issue `needs-human` with the reason
+
+#### Scenario: A merge arrives while the change waits on the owner
+
+- **GIVEN** a change whose tracking issue has `needs-human`
+- **WHEN** a factory PR of that change merges, or the factory is dispatched on it
+- **THEN** the router starts no task
+
+#### Scenario: Owner answers and removes needs-human
+
+- **GIVEN** a tracking issue with `needs-human` and the owner's answer in a comment
+- **WHEN** the owner removes `needs-human`
+- **THEN** a task run starts on the change
+- **AND** its PR records the answer under "Decisions" in `handover.md`
+
+#### Scenario: The factory removes needs-human itself
+
+- **GIVEN** a tracking issue with `needs-human`
+- **WHEN** anyone but the owner removes the label
+- **THEN** the router starts no task
+
+#### Scenario: Change written for an existing issue
+
+- **GIVEN** a proposal whose `## Autonomy` block says `issue: 671`, for an open issue, and no issue labelled `factory:<change-id>`
+- **WHEN** the runner needs the tracking issue
+- **THEN** it labels #671 `factory:<change-id>` and uses it, creating no new issue
+
+#### Scenario: Proposal cites an issue only in passing
+
+- **GIVEN** a proposal that mentions issue #40 in its prose and has no `issue:` key
+- **WHEN** the runner needs the tracking issue
+- **THEN** it does not touch #40
+
+### Requirement: Factory posts a daily digest
+
+A scheduled workflow SHALL post, once a day, one comment on the `Factory digest` issue listing open `needs-human` issues and PRs, open factory PRs with their `pr-feedback --summary` verdict, and factory runs that failed in the last 24 hours, mentioning the owner. It SHALL post nothing when all three are empty, and SHALL run without a Claude run or any secret but the job token.
+
+#### Scenario: Something waits on the owner
+
+- **GIVEN** an open tracking issue with `needs-human` and one open factory PR
+- **WHEN** the digest runs
+- **THEN** one comment lists both and mentions the owner
+
+#### Scenario: Nothing open
+
+- **GIVEN** no `needs-human` item, no open factory PR and no failed factory run in 24 hours
+- **WHEN** the digest runs
+- **THEN** it posts no comment
 
 ### Requirement: Merged factory PRs start the next task
 

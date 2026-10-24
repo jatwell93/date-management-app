@@ -21,15 +21,22 @@ merge is the only gate before production.
   listed, print "factory:<id> PR already open: <url>" and stop. One task per change
   at a time.
 - Read `openspec/changes/<id>/handover.md`. If "Waiting on the user" lists a
-  decision that blocks the next task, stop and say which.
+  decision that blocks the next task, and the tracking issue (below) has no
+  answer to it, stop and say which.
+- Read the tracking issue: `n=$(node scripts/factory-issue.js <id>)`, then
+  `gh issue view "$n" --comments`. If it still has `needs-human`, stop: the
+  owner has not answered. If the owner (`jatwell93`) commented after the
+  factory's last escalation, that comment is the decision. Follow it for this
+  task, and record it in `handover.md` under "Decisions" (the question, the
+  answer, and a link to the comment) in this task's PR.
 
 ## 2. Pick the task
 
 - Read the first unchecked task (`- [ ]`) in `openspec/changes/<id>/tasks.md`,
   the `proposal.md` sections it cites, and `AGENTS.md`.
 - **No unchecked task left:** the change is complete. Comment on its tracking
-  issue (create one titled `factory: <id>` if none) that every task is done and
-  the change is ready for the owner to archive, then stop. Never archive it
+  issue (`node scripts/factory-issue.js <id>`) that every task is done and the
+  change is ready for the owner to archive, then stop. Never archive it
   yourself.
 - **Operator tasks are not yours.** A task for the owner (phase 0 style "Owner
   ..."), a vendor console, a production migration, a deploy, or anything needing
@@ -78,13 +85,16 @@ merge is the only gate before production.
 
 ## Escalate
 
-1. Find the change's tracking issue:
-   `gh issue list --state open --label "factory:<id>" --json number`. If none,
-   create one titled `factory: <id>` with the label `factory:<id>`.
-2. `gh issue edit <n> --add-label needs-human`, then comment: `@jatwell93` and
-   the task number, what blocks it, the options you see, and your recommendation.
+1. Find the change's tracking issue: `n=$(node scripts/factory-issue.js <id>)`.
+   It reuses the issue labelled `factory:<id>`, else adopts the issue the
+   proposal names in its `## Autonomy` block (`issue: N`), else creates one.
+2. `gh issue edit "$n" --add-label needs-human`, then comment: `@jatwell93` and
+   the task number, what blocks it, the options you see, and your
+   recommendation. End with: "Answer here, then remove `needs-human` to resume."
 3. If a PR already exists for the task, add `needs-human` to it as well.
-4. Stop. Later tasks wait for the answer.
+4. Stop. No task of this change starts while the issue has `needs-human`
+   (`scripts/factory-route.js`); the owner removing it resumes the change, and
+   the next run reads the answer (section 1).
 
 ## Never
 

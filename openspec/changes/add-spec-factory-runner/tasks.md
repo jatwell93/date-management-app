@@ -35,8 +35,10 @@
 
 ## Phase 3 — Escalation and digest
 
-- [ ] 3.1 `needs-human`: label, `@`-mention the owner, record the decision in `handover.md`, and stop the run (later tasks wait for the decision).
-- [ ] 3.2 Add a daily scheduled job that posts open `factory:*` PRs and `needs-human` items as one comment on the tracking issue.
+- [x] 3.1 `needs-human`: label, `@`-mention the owner, record the decision in `handover.md`, and stop the run (later tasks wait for the decision).
+      Done: `scripts/factory-issue.js` finds the tracking issue (labelled, else the proposal's Autonomy `issue:` key, else new). `scripts/factory-route.js` starts no task while that issue has `needs-human`, and resumes the change when the owner removes the label (`issues: unlabeled` in `factory.yml`). `run-spec` reads the owner's answer from the issue and records it under "Decisions" in the next task PR's `handover.md` (the runner cannot write `main`, so the escalation comment is the record until then).
+- [x] 3.2 Add a daily scheduled job that posts open `factory:*` PRs and `needs-human` items as one comment on the tracking issue.
+      Done: `.github/workflows/factory-digest.yml` (21:00 UTC, plus dispatch) runs `scripts/factory-digest.js`, which comments on a `Factory digest` issue (label `factory-digest`): `needs-human` issues and PRs, open factory PRs with their `pr-feedback --summary`, and failed factory runs in 24 hours. Posts nothing when all are empty.
 
 ## Phase 4 — Close out
 

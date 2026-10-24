@@ -51,6 +51,8 @@ const BASELINE = [
   'scripts/factory-route.js',
   'scripts/babysit-round.js',
   'scripts/pr-feedback.js',
+  'scripts/factory-issue.js',
+  'scripts/factory-digest.js',
 ];
 
 const USAGE = 'usage: check-no-go.js [--change <id>] [--base <ref>] [--files <path|->]';

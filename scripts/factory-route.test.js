@@ -1,16 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { changeFromLabels, route, toOutput } = require('./factory-route.js');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const { changeFromLabels, factoryIdProblem, route, toOutput } = require('./factory-route.js');
 
 const LABEL = { name: 'factory:add-x' };
 const APP = { login: 'claude[bot]' };
 
-function deps({ pr = {}, report = {} } = {}) {
+function deps({ pr = {}, report = {}, parked = 0 } = {}) {
   const calls = { feedback: 0 };
   return {
     calls,
     changeExists: (id) => id !== 'gone',
+    parkedIssue: () => parked,
     prView: () => ({
       state: 'OPEN',
       labels: [LABEL],
@@ -44,6 +48,27 @@ test('workflow_dispatch starts a task on a valid change id only', () => {
     reason: 'dispatched',
   });
   assert.equal(route('workflow_dispatch', { inputs: { change_id: 'A b' } }, deps()).mode, 'none');
+});
+
+test('a change id longer than 42 characters cannot be dispatched (factory:<id> label limit)', () => {
+  const at = (n) => route('workflow_dispatch', { inputs: { change_id: 'a'.repeat(n) } }, deps());
+  assert.equal(at(42).mode, 'task');
+  assert.equal(at(43).mode, 'none');
+  assert.match(at(43).reason, /43 characters; factory:<id> labels allow 42/);
+});
+
+// Changes written before the factory that it will never run: operator-heavy
+// migration work. A new change must fit, so the router can label its PRs.
+const NOT_FOR_THE_FACTORY = new Set(['use-cloudflare-r2-and-a-serverless-database']);
+
+test('every active change id fits the factory:<id> label limit', () => {
+  const dir = path.join(__dirname, '..', 'openspec', 'changes');
+  const ids = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== 'archive' && !NOT_FOR_THE_FACTORY.has(d.name))
+    .map((d) => d.name);
+  const tooLong = ids.filter((id) => /characters/.test(factoryIdProblem(id)));
+  assert.deepEqual(tooLong, [], 'rename these change folders before the factory runs them');
 });
 
 test('a task on an archived or missing change routes to none', () => {
@@ -152,4 +177,49 @@ test('toOutput prints one key=value line each, without newlines in values', () =
     toOutput({ mode: 'none', reason: 'a\nb' }),
     'mode=none\nchange_id=\npr=\nref=\nreason=a b',
   );
+});
+
+const OWNER = { login: 'jatwell93' };
+const unlabeled = ({ label = 'needs-human', sender = OWNER, labels = [LABEL] } = {}) => ({
+  action: 'unlabeled',
+  label: { name: label },
+  sender,
+  repository: { owner: OWNER },
+  issue: { number: 703, labels },
+});
+
+test('every task route waits while the tracking issue has needs-human', () => {
+  const parked = deps({ parked: 703 });
+  const merged = {
+    action: 'closed',
+    pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
+  };
+  for (const [name, event] of [
+    ['workflow_dispatch', { inputs: { change_id: 'add-x' } }],
+    ['pull_request', merged],
+  ]) {
+    const r = route(name, event, parked);
+    assert.equal(r.mode, 'none', name);
+    assert.match(r.reason, /waiting on the owner: #703/);
+  }
+});
+
+test('the owner removing needs-human from a tracking issue resumes the change', () => {
+  assert.deepEqual(route('issues', unlabeled(), deps()), {
+    mode: 'task',
+    change_id: 'add-x',
+    reason: '#703 resumed by the owner',
+  });
+});
+
+test('only the owner can resume, and only by removing needs-human', () => {
+  const byBot = route('issues', unlabeled({ sender: { login: 'claude[bot]' } }), deps());
+  assert.equal(byBot.mode, 'none');
+  assert.match(byBot.reason, /someone other than the owner/);
+  assert.equal(route('issues', unlabeled({ label: 'bug' }), deps()).mode, 'none');
+  assert.equal(route('issues', unlabeled({ labels: [{ name: 'bug' }] }), deps()).mode, 'none');
+});
+
+test('a resume still waits if another needs-human issue holds the change', () => {
+  assert.equal(route('issues', unlabeled(), deps({ parked: 704 })).mode, 'none');
 });
