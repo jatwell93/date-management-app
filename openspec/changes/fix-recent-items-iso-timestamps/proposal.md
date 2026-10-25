@@ -14,14 +14,16 @@ This is also the first real product change for the factory (task 5.2 of `factory
   - `findRecentInventoryItemsByProductId` `createdAt` (`workers/src/database.ts:3025`), the read #672 is about.
   - The user reads: `listUsers` (`:3752`), the role-change read (`:994`) and the user-create read (`:1105`), all `createdAt`.
   - The expired-item transaction write's `transactionDate` (`:2723`).
-- A static test fails if `workers/src/database.ts` casts a timestamp column (`*_at`, `transaction_date`) to text again.
+  - The credit-claim reads in `workers/src/credit-claim-database.ts`: `sentAt`, `nextFollowUpAt`, `settledAt`, `supplier_policy_updated_at` (`:216`-`:231`) and the claim events' `createdAt` (`:276`). `SupplierCreditsPage` passes the event `createdAt` to `new Date()` (`frontend/src/pages/SupplierCreditsPage.tsx:1024`), so Safari shows Invalid Date today. `parseDbTimestamp` (`workers/src/credit-claim-service.ts:91`) already accepts both shapes, so the follow-up schedule keeps working.
+- A static test fails if any non-test file in `workers/src` casts a timestamp column (`*_at`, `transaction_date`, `trial_end_date`) to text again, except the exemption below.
 - Date-only columns (`expiry_date`, `created_at::date::text`) keep `::text`: `YYYY-MM-DD` is already ISO-8601.
+- Exempt: the `trial_end_date::text` reads in `workers/src/notifications/trial-email-database.ts` and `workers/src/scheduled/jobs/saas-metrics-snapshot.ts`. They are trial and billing jobs, not API responses, and the trial-email queue compares the value it enqueued with a later read to detect a stale message (`workers/src/notifications/messages.ts:8`), so changing one side alone would break that check. The static test lists these lines by file, so a new cast elsewhere still fails.
 
 Not changed: the frontend, the database schema, response field names. The pglite harness needs no change: it applies the real migrations (`workers/src/__tests__/pglite-db.ts:13`), so #672's third to-do is already covered.
 
 ## Impact
 
-- `workers/src/database.ts` and its tests only.
+- `workers/src/database.ts`, `workers/src/credit-claim-database.ts` and their tests only.
 - API consumers get `T` and `Z` where they got a space and no zone. `new Date()` reads both on Chromium, so the visible change is that Safari parses the value, and every engine reads it as UTC.
 
 ## Autonomy
