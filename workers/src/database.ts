@@ -917,6 +917,9 @@ export interface UserListItem {
  * The race itself is not reproducible under pglite, which serialises these
  * tests on one connection — so this is reasoned, not test-proven, and the tests
  * cover only the non-concurrent behaviour.
+ *
+ * `createdAt` is ISO 8601 with T and Z: Safari/JSC rejects the `::text` form,
+ * and the column is naive UTC, so the zone is stated explicitly.
  */
 async function applyUserRoleChange(
   sql: NeonQueryFunction<false, false>,
@@ -991,8 +994,6 @@ async function applyUserRoleChange(
            username,
            role,
            clerk_user_id as "clerkUserId",
-           -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
-           -- column is naive UTC, so state the zone explicitly.
            to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
            previous_role as "previousRole"
     FROM updated
