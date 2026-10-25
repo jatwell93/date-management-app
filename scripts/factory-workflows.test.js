@@ -170,10 +170,35 @@ test('factory-ci-relay.yml only dispatches: no checkout, no PR code, minimal tok
   assert.deepEqual(topLevelBlock(RELAY, 'permissions').sort(), [
     'actions: write',
     'pull-requests: read',
+    'statuses: read',
   ]);
   assert.deepEqual(secretsUsed(RELAY), ['GITHUB_TOKEN']);
   assert.match(RELAY, /"\$author" != "app\/claude"/, 'only factory PRs are relayed');
   assert.match(RELAY, /gh workflow run factory\.yml --repo "\$REPO" -f pr="\$PR"/);
+});
+
+test('the relay re-runs the guard from main when a factory head has no guard status', () => {
+  const step = RELAY.slice(RELAY.indexOf('Re-run the no-go guard'));
+  assert.match(step, /\[ "\$author" = "app\/claude" \] \|\| exit 0/, 'factory PRs only');
+  assert.match(step, /select\(\.context == "factory\/no-go-guard"\)/);
+  assert.match(step, /gh workflow run no-go-guard\.yml --repo "\$REPO" --ref main -f pr="\$PR"/);
+});
+
+test('no-go-guard.yml accepts a dispatch only on main, and reads the PR from the API', () => {
+  assert.match(GUARD, /^ {2}workflow_dispatch:\n {4}inputs:\n {6}pr:/m);
+  assert.match(
+    GUARD,
+    /if: github\.event_name == 'pull_request_target' \|\| github\.ref == 'refs\/heads\/main'/,
+  );
+  assert.match(GUARD, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \|\| inputs\.pr \}\}/);
+  assert.match(
+    GUARD,
+    /group: no-go-guard-\$\{\{ github\.event\.pull_request\.number \|\| inputs\.pr \}\}/,
+  );
+  const read = GUARD.slice(GUARD.indexOf("Read the PR's head"));
+  assert.match(read, /\[\[ "\$PR_NUMBER" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/, 'pr is validated');
+  assert.match(read, /HEAD_SHA=\$\(jq -r \.head\.sha/);
+  assert.match(GUARD, /moved past \$HEAD_SHA; not posting a status/, 'no status for a stale head');
 });
 
 test("the relay listens to exactly pr-feedback's CI_WORKFLOWS", () => {
