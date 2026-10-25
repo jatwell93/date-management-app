@@ -10,8 +10,9 @@ Numbered 5.x as phase 5 of the factory (phases 0 to 4 were `add-spec-factory-run
 
 ## 5.2 First real spec
 
-- [ ] 5.2 (owner) Write a small frontend or workers change (three or four tasks, no migration, billing or auth), dispatch it, and touch the keyboard only to merge and to answer escalations.
+- [x] 5.2 (owner) Write a small frontend or workers change (three or four tasks, no migration, billing or auth), dispatch it, and touch the keyboard only to merge and to answer escalations.
       Acceptance: `handover.md` records each task's run, PR, fix rounds and every owner touch, and whether the digest posted and a babysit pass fixed a finding. Decide from the merge count whether 5.3 is worth building.
+      Done: `fix-recent-items-iso-timestamps` (#672, proposal #715, five tasks) ran end to end on 2026-10-25 in 94 minutes, PRs #716-#720, with no escalation. Owner touches: five merges and one label toggle to work around a missed no-go guard run on #717 (fixed in #721). One babysit pass fixed a CodeScene finding on #717. The record is in `handover.md`; the digest is the one item not yet seen for this change.
 
 ## 5.3 One PR per change
 
