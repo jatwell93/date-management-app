@@ -3022,7 +3022,9 @@ export function createWorkersDatabase(env: Env): Database {
           i.location_id as "locationId",
           s.name as "locationName",
           i.status,
-          i.created_at::text as "createdAt"
+          -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+          -- column is naive UTC, so state the zone explicitly.
+          to_char(i.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt"
         FROM inventory_items i
         LEFT JOIN store_areas s ON i.location_id = s.id AND s.organization_id = i.organization_id
         WHERE i.organization_id = ${organizationId} AND i.product_id = ${productId}
