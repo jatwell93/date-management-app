@@ -33,9 +33,9 @@ When the next unchecked task of a change is marked `(owner)` in the change's tas
 
 ### Requirement: A change can run as one PR
 
-A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
+A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, opened as a draft (or with a `WIP:` title where a review bot skips drafts), and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
 
-Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. Every escalation on a per-change PR SHALL put `needs-human` on the tracking issue only, so the owner removing it there resumes the change. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
@@ -69,11 +69,25 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 - **WHEN** the hourly sweep runs
 - **THEN** it dispatches nothing and no Claude run starts
 
-#### Scenario: PR parked by a babysit pass
+#### Scenario: Babysit pass hits the round cap on a per-change PR
 
-- **GIVEN** a settled `pr: per-change` PR that carries `needs-human`, with no `needs-human` on the tracking issue
-- **WHEN** the hourly sweep runs
-- **THEN** it dispatches nothing for that change
+- **GIVEN** a `pr: per-change` PR whose current task already has 5 babysit rounds
+- **WHEN** a babysit pass would need another round
+- **THEN** the tracking issue gets `needs-human` and the PR does not
+- **AND** the hourly sweep dispatches nothing for that change
+
+#### Scenario: Owner resumes a parked per-change PR
+
+- **GIVEN** a `pr: per-change` change parked with `needs-human` on its tracking issue only
+- **WHEN** the owner removes the label from the issue
+- **THEN** the router advances the PR
+
+#### Scenario: First task opens a draft
+
+- **GIVEN** a `pr: per-change` change with no open factory PR
+- **WHEN** its first task run pushes
+- **THEN** it opens the PR as a draft
+- **AND** the PR is marked ready only when no unchecked task is left
 
 #### Scenario: Branch task list read by the route job
 
