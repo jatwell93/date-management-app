@@ -12,13 +12,13 @@ Updated: 2026-10-26 · main at 9e850736
 
 Issue #672, proposal #715 (two Seer findings, both fixed before merge), archived in the 5.2 record PR. Dispatched 2026-10-25 21:13 UTC; last merge 22:47 UTC (94 minutes).
 
-| Task | PR | Opened to merged | Commits | Fix rounds | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 1.1 | #716 | 18 min | 1 | 0 | |
-| 1.2 | #717 | 29 min | 2 | 1 | Babysit pass fixed a CodeScene "Large Method" gate (moved a SQL comment into the docblock). The guard missed the fix push. |
-| 1.3 | #718 | 5 min | 1 | 0 | |
-| 1.4 | #719 | 10 min | 1 | 0 | |
-| 1.5 | #720 | 7 min | 1 | 0 | Final run commented "every task done" on #672. |
+| Task | PR   | Opened to merged | Commits | Fix rounds | Notes                                                                                                                      |
+| ---- | ---- | ---------------- | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1.1  | #716 | 18 min           | 1       | 0          |                                                                                                                            |
+| 1.2  | #717 | 29 min           | 2       | 1          | Babysit pass fixed a CodeScene "Large Method" gate (moved a SQL comment into the docblock). The guard missed the fix push. |
+| 1.3  | #718 | 5 min            | 1       | 0          |                                                                                                                            |
+| 1.4  | #719 | 10 min           | 1       | 0          |                                                                                                                            |
+| 1.5  | #720 | 7 min            | 1       | 0          | Final run commented "every task done" on #672.                                                                             |
 
 - **Runs:** 64 `factory.yml` runs; 53 stopped in the route job, 11 started Claude (6 task runs, 5 babysit passes; 31 Claude minutes in all, 1 to 6 minutes each). Every one succeeded.
 - **Owner touches:** five merges, and one label toggle on #717. No escalation, no `needs-human`.
