@@ -991,7 +991,9 @@ async function applyUserRoleChange(
            username,
            role,
            clerk_user_id as "clerkUserId",
-           created_at::text as "createdAt",
+           -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+           -- column is naive UTC, so state the zone explicitly.
+           to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
            previous_role as "previousRole"
     FROM updated
   `;
@@ -1102,7 +1104,9 @@ async function insertOrganizationUser(
     )
     SELECT id, email, username, role,
            clerk_user_id as "clerkUserId",
-           created_at::text as "createdAt"
+           -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+           -- column is naive UTC, so state the zone explicitly.
+           to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt"
     FROM created
   `;
   return (rows[0] as UserListItem) || null;
@@ -3751,7 +3755,9 @@ export function createWorkersDatabase(env: Env): Database {
         SELECT
           id, email, username, role,
           clerk_user_id as "clerkUserId",
-          created_at::text as "createdAt"
+          -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+          -- column is naive UTC, so state the zone explicitly.
+          to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt"
         FROM users
         WHERE organization_id = ${organizationId}
           AND deleted_at IS NULL

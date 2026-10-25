@@ -820,3 +820,69 @@ describe('organization RBAC audit trail — admin promotion (real SQL)', () => {
     expect(LIVE_ORG_AUDIT_EVENT_TYPES).toEqual([ORG_AUDIT_EVENT_TYPES.ROLE_ASSIGNED]);
   });
 });
+
+describe('user reads return ISO-8601 UTC createdAt (real SQL)', () => {
+  const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  const STORED = '2026-10-19 03:12:45.123';
+  const STORED_INSTANT = Date.parse('2026-10-19T03:12:45.123Z');
+  let harness: PgliteHarness;
+  let sql: NeonQueryFunction<false, false>;
+
+  beforeAll(async () => {
+    harness = await createPgliteHarness();
+    sql = createTaggedSql(harness.pg);
+    sqlHolder.current = sql;
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  beforeEach(async () => {
+    await sql`DELETE FROM org_audit_log`;
+    await sql`DELETE FROM users`;
+    await sql`DELETE FROM organizations`;
+    await sql`
+      INSERT INTO organizations (id, name, slug, updated_at)
+      VALUES (${ORG}, ${'Org ' + ORG}, ${ORG}, NOW())`;
+  });
+
+  const seedUser = async (username: string): Promise<number> => {
+    const rows = await sql`
+      INSERT INTO users (organization_id, username, email, role, created_at, updated_at)
+      VALUES (${ORG}, ${username}, ${username + '@a.test'}, 'team_member', ${STORED}, NOW())
+      RETURNING id`;
+    return Number(rows[0].id);
+  };
+
+  it('listUsers', async () => {
+    await seedUser('lister');
+
+    const [user] = await makeDb().listUsers(ORG);
+
+    expect(user.createdAt).toMatch(ISO_UTC);
+    expect(Date.parse(user.createdAt)).toBe(STORED_INSTANT);
+  });
+
+  it('updateUserRole', async () => {
+    const id = await seedUser('promoted');
+
+    const result = await makeDb().updateUserRole(ORG, id, 'manager', ACTOR);
+
+    expect(result?.createdAt).toMatch(ISO_UTC);
+    expect(Date.parse(String(result?.createdAt))).toBe(STORED_INSTANT);
+  });
+
+  it('createOrganizationUser', async () => {
+    const result = await makeDb().createOrganizationUser(ORG, {
+      username: 'fresh',
+      role: 'team_member',
+      seatCap: 5,
+      actor: ACTOR,
+    });
+
+    // Created now, so the instant is not fixed: check the shape and that it is current.
+    expect(result?.createdAt).toMatch(ISO_UTC);
+    expect(Math.abs(Date.now() - Date.parse(String(result?.createdAt)))).toBeLessThan(60_000);
+  });
+});
