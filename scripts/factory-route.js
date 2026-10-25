@@ -4,7 +4,8 @@
  * add-spec-factory-runner, tasks 2.1 and 2.2). Run by the `route` job of
  * .github/workflows/factory.yml; prints $GITHUB_OUTPUT lines:
  *
- *   mode=task|babysit|none  change_id=<id>  pr=<n>  ref=<branch>  reason=<text>
+ *   mode=task|babysit|escalate|none  change_id=<id>  pr=<n>  ref=<branch>
+ *   task=<n>  reason=<text>
  *
  *   workflow_dispatch(change_id)    task on that change
  *   pull_request closed, merged     task on the next unchecked task of the change
@@ -13,7 +14,9 @@
  *     labelled factory:<id>)
  *
  * Every task route becomes `none` while the change's tracking issue has
- * `needs-human` (scripts/factory-issue.js finds that issue).
+ * `needs-human` (scripts/factory-issue.js finds that issue), and `escalate`
+ * when the next unchecked task is marked `(owner)`: the escalate job asks the
+ * owner without a Claude run (factory-one-merge-per-change, task 5.1).
  *   pull_request_review(_comment),  babysit pass on the PR, when it has work the
  *   workflow_dispatch(pr)           factory has not handled yet and no Actions
  *     (a finished CI run, relayed   check pending
@@ -44,6 +47,23 @@ function factoryIdProblem(id) {
     return `change id is ${id.length} characters; factory:<id> labels allow ${MAX_FACTORY_ID}. Rename the change folder`;
   }
   return '';
+}
+
+const TASK_NUMBER = /^[0-9][0-9A-Za-z.]{0,19}$/;
+
+/**
+ * The first unchecked numbered task of a tasks.md, as { number, text, owner },
+ * or null. Unnumbered checkboxes (sub-items, notes) are skipped. `owner` is true
+ * when `(owner)` follows the task number.
+ */
+function nextTask(tasksMd) {
+  const m = (tasksMd || '')
+    .split(/\r?\n/)
+    .map((l) => /^\s*- \[ \] (\S+)\s+(.*)$/.exec(l))
+    .find((x) => x && TASK_NUMBER.test(x[1]));
+  if (!m) return null;
+  const owner = /^\(owner\)(\s|$)/.test(m[2]);
+  return { number: m[1], text: m[2].replace(/^\(owner\)\s*/, ''), owner };
 }
 
 /** The change id from a `factory:<id>` label, or ''. */
@@ -172,7 +192,19 @@ function activeOnly(result, deps) {
     return none(`${result.change_id} has no tasks.md (archived or missing)`);
   }
   const parked = deps.parkedIssue(result.change_id);
-  return parked ? none(`waiting on the owner: #${parked} has needs-human`) : result;
+  if (parked) return none(`waiting on the owner: #${parked} has needs-human`);
+  return ownerTaskRoute(result, deps.nextTask(result.change_id));
+}
+
+/** An `(owner)` next task is escalated by the route job, never given to Claude. */
+function ownerTaskRoute(result, task) {
+  if (!task || !task.owner) return result;
+  return {
+    mode: 'escalate',
+    change_id: result.change_id,
+    task: task.number,
+    reason: `task ${task.number} is an owner task`,
+  };
 }
 
 function route(eventName, event, deps) {
@@ -186,7 +218,7 @@ function route(eventName, event, deps) {
 
 /** $GITHUB_OUTPUT lines; values are ids, numbers and branch names only. */
 function toOutput(result) {
-  const keys = ['mode', 'change_id', 'pr', 'ref', 'reason'];
+  const keys = ['mode', 'change_id', 'pr', 'ref', 'task', 'reason'];
   return keys.map((k) => `${k}=${String(result[k] ?? '').replace(/[\r\n]/g, ' ')}`).join('\n');
 }
 
@@ -194,6 +226,7 @@ const gh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
 
 const defaultDeps = {
   changeExists: (id) => fs.existsSync(`openspec/changes/${id}/tasks.md`),
+  nextTask: (id) => nextTask(fs.readFileSync(`openspec/changes/${id}/tasks.md`, 'utf8')),
   parkedIssue: (id) => {
     const args = ['issue', 'list', '--state', 'open', '--label', `factory:${id}`];
     const list = JSON.parse(gh([...args, '--label', 'needs-human', '--json', 'number']));
@@ -213,4 +246,4 @@ function main(env = process.env, deps = defaultDeps, log = console.log) {
 
 if (require.main === module) process.exitCode = main();
 
-module.exports = { changeFromLabels, factoryIdProblem, route, toOutput, main };
+module.exports = { changeFromLabels, factoryIdProblem, nextTask, route, toOutput, main };

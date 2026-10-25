@@ -40,7 +40,10 @@ merge is the only gate before production.
   yourself.
 - **Operator tasks are not yours.** A task for the owner (phase 0 style "Owner
   ..."), a vendor console, a production migration, a deploy, or anything needing
-  production credentials: escalate.
+  production credentials: escalate. A task marked `(owner)` right after its
+  number (`- [ ] 2.3 (owner) ...`) is the owner's by definition: escalate it
+  without reading further. The router normally escalates these itself
+  (`scripts/factory-escalate.js`) and never starts a run for them.
 - **no_go paths are not yours.** If the task can only be done by editing a path
   that `node scripts/check-no-go.js --change <id>` protects (the baseline plus the
   change's `## Autonomy` list), escalate before writing code.
