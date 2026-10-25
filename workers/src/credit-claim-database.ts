@@ -213,10 +213,12 @@ export function createCreditClaimDatabase(
              cc.expected_credit_units AS "expectedCreditUnits",
              cc.expected_credit_value AS "expectedCreditValue",
              cc.credited_value AS "creditedValue",
-             cc.sent_at::text AS "sentAt",
-             cc.next_follow_up_at::text AS "nextFollowUpAt",
+             -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+             -- columns are naive UTC, so state the zone explicitly.
+             to_char(cc.sent_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "sentAt",
+             to_char(cc.next_follow_up_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "nextFollowUpAt",
              cc.follow_up_count AS "followUpCount",
-             cc.settled_at::text AS "settledAt",
+             to_char(cc.settled_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "settledAt",
              s.id AS "supplier_id",
              s.name AS "supplier_name",
              s.credit_type AS "supplier_credit_type",
@@ -228,7 +230,7 @@ export function createCreditClaimDatabase(
              s.follow_up_days AS "supplier_follow_up_days",
              s.representative_name AS "supplier_representative_name",
              s.representative_email AS "supplier_representative_email",
-             s.policy_updated_at::text AS "supplier_policy_updated_at"
+             to_char(s.policy_updated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "supplier_policy_updated_at"
       FROM credit_claims cc
       JOIN suppliers s ON s.id = cc.supplier_id
       WHERE cc.organization_id = ${organizationId}
@@ -273,7 +275,7 @@ export function createCreditClaimDatabase(
                claim_id AS "claimId",
                type,
                note,
-               created_at::text AS "createdAt"
+               to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt"
         FROM credit_claim_events
         WHERE organization_id = ${organizationId}
           AND claim_id = ANY(${claimIds})
