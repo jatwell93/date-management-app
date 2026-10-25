@@ -1,0 +1,10 @@
+# Tasks: Return ISO-8601 timestamps from the Worker API
+
+Each task is one PR. Use the `to_char(<col>, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` pattern from `listOrgAuditLog` (`workers/src/database.ts:3788`), with the same comment. Each test asserts the exact format (`/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`) and that `Date.parse` of the value equals the stored instant, and fails before the change. Real-SQL tests go in a `*.pglite.node.test.ts` beside the read's existing one; run them with `npm run test:db`.
+
+## 1. Timestamps
+
+- [ ] 1.1 `findRecentInventoryItemsByProductId` (`workers/src/database.ts:3025`): return `createdAt` as ISO-8601 UTC. Add the format test to `workers/src/database.inventory-reads-and-status.pglite.node.test.ts`. Search `frontend/src` for consumers of `GET /api/inventory-items/recent/product/:productId` and note in the PR that `formatTimestampSafe` (`frontend/src/pages/scan/ScanPageSections.tsx:374`) still reads the new value; do not edit the frontend.
+- [ ] 1.2 The user reads: `listUsers` (`:3752`), the role-change read (`:994`) and the user-create read (`:1105`) return `createdAt` as ISO-8601 UTC. One real-SQL test per read.
+- [ ] 1.3 The expired-item transaction write (`:2723`) returns `transactionDate` as ISO-8601 UTC, with a real-SQL test.
+- [ ] 1.4 Add a static test (a `*.node.test.ts` in `workers/src`) that fails if `workers/src/database.ts` contains `_at::text` or `transaction_date::text`. Check it fails on a reverted line before committing. Comment on #672 that every to-do is done, with the PR links.
