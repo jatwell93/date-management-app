@@ -2725,7 +2725,9 @@ export function createWorkersDatabase(env: Env): Database {
           units_discarded as "unitsDiscarded",
           financial_loss as "financialLoss",
           markdown_level as "markdownLevel",
-          transaction_date::text as "transactionDate"
+          -- ISO 8601 with T and Z: Safari/JSC rejects the ::text form, and the
+          -- column is naive UTC, so state the zone explicitly.
+          to_char(transaction_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "transactionDate"
       `;
 
       return rows[0] as ExpiredItemTransaction;

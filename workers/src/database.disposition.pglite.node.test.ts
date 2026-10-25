@@ -92,6 +92,19 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     expect(stored[0].markdown_level).toBe(expected);
   });
 
+  it('returns transactionDate as ISO-8601 UTC matching the stored instant', async () => {
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const itemId = await seedItem(-5, 'SKU-ISO');
+
+    const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'expired', 1);
+
+    expect(txn.transactionDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    const stored = await sql`
+      SELECT (extract(epoch FROM transaction_date) * 1000)::bigint AS ms
+      FROM expired_item_transactions WHERE id = ${txn.id}`;
+    expect(Date.parse(txn.transactionDate)).toBe(Number(stored[0].ms));
+  });
+
   it('records no markdown level when writing off expired stock', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const itemId = await seedItem(-5, 'SKU-EXPIRED');
