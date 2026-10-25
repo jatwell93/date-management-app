@@ -35,7 +35,7 @@ When the next unchecked task of a change is marked `(owner)` in the change's tas
 
 A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, opened as a draft (or with a `WIP:` title where a review bot skips drafts), and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
 
-Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. Every escalation on a per-change PR SHALL put `needs-human` on the tracking issue only, so the owner removing it there resumes the change. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. Every escalation on a per-change PR SHALL put `needs-human` on the tracking issue only, so the owner removing it there resumes the change. Every route of a change, whether started by an event (review, review comment, relayed CI run, merge, dispatch) or by the sweep, SHALL start no Claude run while the tracking issue has `needs-human` or `factory-retry`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
@@ -75,6 +75,19 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 - **WHEN** a babysit pass would need another round
 - **THEN** the tracking issue gets `needs-human` and the PR does not
 - **AND** the hourly sweep dispatches nothing for that change
+
+#### Scenario: Review event on a parked per-change PR
+
+- **GIVEN** a `pr: per-change` PR whose tracking issue has `needs-human` after a round-cap escalation
+- **WHEN** a bot review or a relayed CI run arrives on the PR
+- **THEN** the router starts no Claude run and posts no new escalation
+
+#### Scenario: Event during the retry backoff
+
+- **GIVEN** a tracking issue that got `factory-retry` 20 minutes ago after a babysit pass failed
+- **WHEN** a review comment or a relayed CI run arrives on the change's PR
+- **THEN** the router starts no Claude run
+- **AND** the retry waits for the sweep
 
 #### Scenario: Owner resumes a parked per-change PR
 
@@ -201,14 +214,14 @@ The factory workflow SHALL implement at most one unchecked task of the named Ope
 
 ### Requirement: Review-fix passes respect no_go and a persistent round cap
 
-Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHALL stop with `needs-human` instead of pushing once the current task already carries 5 babysit rounds, counted from `Babysit-Round: N` commit trailers so the cap holds across separate workflow runs. For a PR of one task, the current task's rounds are all the PR's rounds. For a `pr: per-change` PR, they are the rounds on commits after the newest `Factory-Task` commit.
+Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHALL stop with `needs-human` instead of pushing on a match or once the current task already carries 5 babysit rounds, counted from `Babysit-Round: N` commit trailers so the cap holds across separate workflow runs. For a PR of one task, the current task's rounds are all the PR's rounds. For a `pr: per-change` PR, they are the rounds on commits after the newest `Factory-Task` commit. The pass SHALL put `needs-human` on the PR of a one-task change and on the tracking issue of a `pr: per-change` change.
 
 #### Scenario: Bot fix would touch a no_go path
 
 - **GIVEN** a babysit pass whose fix changes a file under `.github/**`
 - **WHEN** it reaches the push step
 - **THEN** it does not push
-- **AND** labels the PR `needs-human` with the matching path
+- **AND** labels the PR `needs-human` with the matching path, or for a `pr: per-change` PR, labels the tracking issue instead
 
 #### Scenario: Bot review arrives inside the quiet window
 
