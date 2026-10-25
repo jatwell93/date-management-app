@@ -4,17 +4,24 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { changeFromLabels, factoryIdProblem, route, toOutput } = require('./factory-route.js');
+const {
+  changeFromLabels,
+  factoryIdProblem,
+  nextTask,
+  route,
+  toOutput,
+} = require('./factory-route.js');
 
 const LABEL = { name: 'factory:add-x' };
 const APP = { login: 'claude[bot]' };
 
-function deps({ pr = {}, report = {}, parked = 0 } = {}) {
+function deps({ pr = {}, report = {}, parked = 0, tasks = '- [ ] 1.1 Do it\n' } = {}) {
   const calls = { feedback: 0 };
   return {
     calls,
     changeExists: (id) => id !== 'gone',
     parkedIssue: () => parked,
+    nextTask: () => nextTask(tasks),
     prView: () => ({
       state: 'OPEN',
       labels: [LABEL],
@@ -175,7 +182,7 @@ test('a label alone never routes the factory onto an owner PR', () => {
 test('toOutput prints one key=value line each, without newlines in values', () => {
   assert.equal(
     toOutput({ mode: 'none', reason: 'a\nb' }),
-    'mode=none\nchange_id=\npr=\nref=\nreason=a b',
+    'mode=none\nchange_id=\npr=\nref=\ntask=\nreason=a b',
   );
 });
 
@@ -222,4 +229,51 @@ test('only the owner can resume, and only by removing needs-human', () => {
 
 test('a resume still waits if another needs-human issue holds the change', () => {
   assert.equal(route('issues', unlabeled(), deps({ parked: 704 })).mode, 'none');
+});
+
+test('nextTask reads the first unchecked task and its (owner) marker', () => {
+  const md = '- [x] 1.1 Done\n  - [ ] note\n- [ ] 1.2 (owner) Rotate the key\n- [ ] 1.3 Next\n';
+  assert.deepEqual(nextTask(md), { number: '1.2', text: 'Rotate the key', owner: true });
+  assert.deepEqual(nextTask('- [ ] 5.3a Check drafts\n'), {
+    number: '5.3a',
+    text: 'Check drafts',
+    owner: false,
+  });
+  assert.equal(nextTask('- [ ] 5.1 `(owner)` marker\n').owner, false, 'a quoted marker is prose');
+  assert.equal(nextTask('- [x] 1.1 Done\n'), null);
+  assert.equal(nextTask('- [ ] ../x (owner) bad number\n'), null);
+});
+
+const OWNER_NEXT = '- [x] 2.1 Add the API\n- [ ] 2.2 (owner) Rotate the vendor key\n';
+
+test('an (owner) next task escalates from the router on dispatch, merge and resume', () => {
+  const owner = deps({ tasks: OWNER_NEXT });
+  const merged = {
+    action: 'closed',
+    pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
+  };
+  for (const [name, event] of [
+    ['workflow_dispatch', { inputs: { change_id: 'add-x' } }],
+    ['pull_request', merged],
+    ['issues', unlabeled()],
+  ]) {
+    assert.deepEqual(route(name, event, owner), {
+      mode: 'escalate',
+      change_id: 'add-x',
+      task: '2.2',
+      reason: 'task 2.2 is an owner task',
+    });
+  }
+});
+
+test('once the owner ticks the owner task, a resume starts the next task', () => {
+  const ticked = deps({
+    tasks: OWNER_NEXT.replace('- [ ] 2.2', '- [x] 2.2') + '- [ ] 2.3 Use it\n',
+  });
+  assert.equal(route('issues', unlabeled(), ticked).mode, 'task');
+});
+
+test('a held change waits before its owner task is escalated again', () => {
+  const held = deps({ tasks: OWNER_NEXT, parked: 703 });
+  assert.equal(route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, held).mode, 'none');
 });

@@ -9,6 +9,8 @@ name: Factory
 #     dispatch with `pr`, from factory-ci-relay.yml)
 #   owner removes needs-human from the     -> run-spec: the held task     (3.1)
 #     change's tracking issue
+#   any task route whose next task is      -> escalate job, no Claude run  (5.1)
+#     marked (owner)
 #
 # No task starts while the tracking issue has needs-human.
 #
@@ -76,6 +78,7 @@ jobs:
       change_id: ${{ steps.route.outputs.change_id }}
       pr: ${{ steps.route.outputs.pr }}
       ref: ${{ steps.route.outputs.ref }}
+      task: ${{ steps.route.outputs.task }}
     steps:
       # Always main, never the PR: review events default to the PR's merge ref,
       # and a factory PR must not be able to rewrite its own router.
@@ -132,7 +135,8 @@ jobs:
         shell: bash
         run: |
           rules=(.claude AGENTS.md CLAUDE.md scripts/check-no-go.js scripts/babysit-round.js
-                 scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js)
+                 scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js
+                 scripts/factory-escalate.js)
           git fetch --quiet origin main
           git checkout origin/main -- "${rules[@]}"
           git reset --quiet -- "${rules[@]}"
@@ -169,3 +173,33 @@ jobs:
             --max-turns 200
             --allowedTools "Read,Edit,Write,Glob,Grep,Skill,TodoWrite,Bash(git:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr checks:*),Bash(gh issue:*),Bash(gh label create:*),Bash(gh label list:*),Bash(gh run view:*),Bash(npm ci:*),Bash(npm run:*),Bash(npx openspec:*),Bash(npx prettier:*),Bash(node:*),Bash(cd:*)"
             --disallowedTools "Bash(gh pr merge:*),Bash(gh pr review:*),Bash(gh api:*),Bash(git push --force:*),Bash(git push -f:*),Bash(npm run test:prod:*),Bash(doppler:*),Bash(curl:*),Bash(wget:*)"
+
+  escalate:
+    name: Ask the owner to do an owner task
+    needs: route
+    if: needs.route.outputs.mode == 'escalate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Same group as the change's task runs, so it never races one.
+    concurrency:
+      group: ${{ format('factory-{0}', needs.route.outputs.change_id) }}
+      cancel-in-progress: false
+    steps:
+      # main's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Label the tracking issue and comment the task
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          TASK: ${{ needs.route.outputs.task }}
+        run: node scripts/factory-escalate.js "$CHANGE_ID" "$TASK"

@@ -97,9 +97,25 @@ test("factory.yml routes from main and runs main's rules on a PR branch", () => 
     'scripts/babysit-round.js',
     'scripts/factory-route.js',
     'scripts/factory-issue.js',
+    'scripts/factory-escalate.js',
   ]) {
     assert.ok(run.includes(f), `${f} restored from main`);
   }
+});
+
+test('factory.yml escalates an owner task from main with the job token, no Claude run', () => {
+  const escalate = FACTORY.slice(FACTORY.indexOf('\n  escalate:\n'));
+  assert.ok(escalate.length > 1, 'escalate job present');
+  assert.match(escalate, /^ {4}needs: route$/m);
+  assert.match(escalate, /if: needs\.route\.outputs\.mode == 'escalate'/);
+  assert.match(escalate, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(
+    escalate,
+    /group: \$\{\{ format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \}\}/,
+  );
+  assert.match(escalate, /node scripts\/factory-escalate\.js "\$CHANGE_ID" "\$TASK"/);
+  assert.doesNotMatch(escalate, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.match(FACTORY, /task: \$\{\{ steps\.route\.outputs\.task \}\}/);
 });
 
 test('factory.yml denies merging, approving and raw API calls', () => {
