@@ -20,13 +20,14 @@ Deferred after 5.2 (the merges cost minutes each, and 5.3 is the largest task he
 
 ## 5.4 Retry once
 
-- [ ] 5.4 Retry a failed Claude run once.
+- [x] 5.4 Retry a failed Claude run once.
   - A `report` job (`needs: [route, run]`, `if: always()` and `run` ended `failure` or `success`, so a cancelled run does nothing) runs `scripts/factory-retry.js report <id> <run-url>` on a failure: it adds `factory-retry` to the tracking issue and comments the run's link with a marker; when the issue already has `factory-retrying`, it removes that label, adds `needs-human` and comments both run links (the first from the marker comment) instead. On a success it runs `factory-retry.js clear <id>`, which removes `factory-retrying` if present.
   - An hourly `schedule` trigger on `factory.yml`. On it, `factory-route.js` lists open issues labelled `factory-retry` and takes the first whose label was added more than an hour ago (the issue's `labeled` event time), skipping one that also has `needs-human`. It swaps the label for `factory-retrying` and routes, in the same workflow run, a babysit pass when the change has an open factory PR, else a task. One retry per scheduled run; nothing due routes to `none`. No `actions: write` is needed, because nothing is dispatched.
   - Every route of a change, babysit included, starts no Claude run while its tracking issue has `needs-human` or `factory-retry` (extend `parkedIssue`, and call it from `babysitRoute`).
   - A job that hits its `timeout-minutes` can end `cancelled` rather than `failed`, and then starts no retry. So the Claude step gets its own `timeout-minutes` below the job's: a step timeout fails the step, and the job ends `failed`.
-  - Add `scripts/factory-retry.js` to the `no_go` baseline and to the rules a babysit pass restores from `main`. Checkout steps that read `github.event.repository.default_branch` fall back to `main`, because a `schedule` event may not carry it.
+  - Add `scripts/factory-retry.js` to the `no_go` baseline and to the rules a babysit pass restores from `main`. (Checkout steps can keep `github.event.repository.default_branch`: `factory-digest.yml` shows a `schedule` event carries it.)
     Acceptance: router tests for a label under an hour old (none), over an hour (task, or babysit when a factory PR is open), a label beside `needs-human` (none), and a review or relayed CI event during the backoff (none); `factory-retry.js` tests with a fake `gh` for a first failure (label and marker comment), a failure under `factory-retrying` (escalation with both links, label removed) and a success (label cleared); static tests for the schedule, the `report` job's condition and the Claude step's timeout below the job's. Live: dispatch a run whose Claude step times out (a short step timeout on a branch run) and see `factory-retry`, then the scheduled retry.
+    Done: `scripts/factory-retry.js` (`fail`/`ok`, on the `no_go` baseline and the restored rules); the router's `schedule` route (`retryRoute`) and `changeHold`, which now also holds babysit routes; the `report` job and an hourly `schedule` in `factory.yml`; the Claude step's `timeout-minutes: 80` under the job's 90. `test:tooling` 191 pass; actionlint 1.7.7 clean. The live check runs after merge (see `handover.md`): `report` needs `main`'s copy of the script.
 
 ## 5.5 Close out
 

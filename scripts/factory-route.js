@@ -13,8 +13,11 @@
  *     (by the owner, on an issue
  *     labelled factory:<id>)
  *
- * Every task route becomes `none` while the change's tracking issue has
- * `needs-human` (scripts/factory-issue.js finds that issue), and `escalate`
+ *   schedule (hourly)               the one retry of a failed run (5.4): babysit
+ *                                   if the change has an open factory PR, else task
+ *
+ * Every route becomes `none` while the change's tracking issue has
+ * `needs-human` or `factory-retry` (scripts/factory-issue.js finds that issue), and `escalate`
  * when the next unchecked task is marked `(owner)`: the escalate job asks the
  * owner without a Claude run (factory-one-merge-per-change, task 5.1).
  *   pull_request_review(_comment),  babysit pass on the PR, when it has work the
@@ -146,12 +149,25 @@ function feedbackBlocker(report) {
   return pendingWork(report) ? '' : 'nothing actionable';
 }
 
+/**
+ * Why the change's tracking issue holds every Claude run, or '': `needs-human`
+ * (waiting on the owner, task 3.1) or `factory-retry` (a failed run waiting for
+ * its retry, task 5.4).
+ */
+function changeHold(id, deps) {
+  const parked = deps.parkedIssue(id);
+  if (parked) return `waiting on the owner: #${parked} has needs-human`;
+  const retry = deps.retryIssue(id);
+  return retry ? `waiting to retry: #${retry} has factory-retry` : '';
+}
+
 /** A babysit pass, if the open factory PR has something to act on now. */
 function babysitRoute(number, deps) {
   if (!number) return none('no pull request');
   const pr = deps.prView(number);
   const id = changeFromLabels(pr.labels || []);
-  const blocked = prBlocker(pr, id) || feedbackBlocker(deps.feedback(number));
+  const blocked =
+    prBlocker(pr, id) || changeHold(id, deps) || feedbackBlocker(deps.feedback(number));
   if (blocked) return none(blocked);
   return { mode: 'babysit', change_id: id, pr: number, ref: pr.headRefName, reason: 'actionable' };
 }
@@ -191,9 +207,35 @@ function activeOnly(result, deps) {
   if (!deps.changeExists(result.change_id)) {
     return none(`${result.change_id} has no tasks.md (archived or missing)`);
   }
-  const parked = deps.parkedIssue(result.change_id);
-  if (parked) return none(`waiting on the owner: #${parked} has needs-human`);
+  const held = changeHold(result.change_id, deps);
+  if (held) return none(held);
   return ownerTaskRoute(result, deps.nextTask(result.change_id));
+}
+
+const HOUR = 60 * 60 * 1000;
+
+/**
+ * The hourly schedule retries one failed run (task 5.4): the first open
+ * tracking issue whose `factory-retry` label is over an hour old and that does
+ * not also wait on the owner. Its label becomes `factory-retrying`, and the
+ * retry runs in this workflow run: a babysit pass when the change has an open
+ * factory PR, else a task.
+ */
+function retryRoute(deps) {
+  const due = deps
+    .retryCandidates()
+    .map((issue) => ({ ...issue, id: changeFromLabels(issue.labels || []) }))
+    .find(
+      (issue) =>
+        issue.id &&
+        !(issue.labels || []).some((l) => (l.name || l) === 'needs-human') &&
+        deps.now() - Date.parse(issue.labelledAt) > HOUR,
+    );
+  if (!due) return none('no retry due');
+  deps.startRetry(due.number);
+  const pr = deps.openFactoryPr(due.id);
+  if (pr) return babysitRoute(pr, deps);
+  return activeOnly({ mode: 'task', change_id: due.id, reason: `retry from #${due.number}` }, deps);
 }
 
 /** An `(owner)` next task is escalated by the route job, never given to Claude. */
@@ -213,6 +255,7 @@ function route(eventName, event, deps) {
   if (eventName === 'workflow_dispatch') return activeOnly(dispatchRoute(event), deps);
   if (eventName === 'pull_request') return activeOnly(mergedRoute(event), deps);
   if (eventName === 'issues') return activeOnly(resumeRoute(event), deps);
+  if (eventName === 'schedule') return retryRoute(deps);
   return babysitRoute(prNumberOf(event), deps);
 }
 
@@ -224,14 +267,65 @@ function toOutput(result) {
 
 const gh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
 
+/** Number of the change's open tracking issue that carries `label`, or 0. */
+function issueWith(id, label) {
+  const args = ['issue', 'list', '--state', 'open', '--label', `factory:${id}`];
+  const list = JSON.parse(gh([...args, '--label', label, '--json', 'number']));
+  return list.length ? list[0].number : 0;
+}
+
+/** When `factory-retry` was last added to issue `n` (ISO time), or ''. */
+function retryLabelledAt(n) {
+  const events = JSON.parse(
+    gh(['api', '--paginate', '--slurp', `repos/{owner}/{repo}/issues/${n}/events`]),
+  ).flat();
+  const added = events.filter((e) => e.event === 'labeled' && e.label?.name === 'factory-retry');
+  return added.length ? added.at(-1).created_at : '';
+}
+
 const defaultDeps = {
   changeExists: (id) => fs.existsSync(`openspec/changes/${id}/tasks.md`),
   nextTask: (id) => nextTask(fs.readFileSync(`openspec/changes/${id}/tasks.md`, 'utf8')),
-  parkedIssue: (id) => {
-    const args = ['issue', 'list', '--state', 'open', '--label', `factory:${id}`];
-    const list = JSON.parse(gh([...args, '--label', 'needs-human', '--json', 'number']));
-    return list.length ? list[0].number : 0;
+  parkedIssue: (id) => issueWith(id, 'needs-human'),
+  retryIssue: (id) => issueWith(id, 'factory-retry'),
+  retryCandidates: () =>
+    JSON.parse(
+      gh([
+        'issue',
+        'list',
+        '--state',
+        'open',
+        '--label',
+        'factory-retry',
+        '--json',
+        'number,labels',
+      ]),
+    ).map((issue) => ({ ...issue, labelledAt: retryLabelledAt(issue.number) })),
+  startRetry: (n) =>
+    gh([
+      'issue',
+      'edit',
+      String(n),
+      '--remove-label',
+      'factory-retry',
+      '--add-label',
+      'factory-retrying',
+    ]),
+  openFactoryPr: (id) => {
+    const args = [
+      'pr',
+      'list',
+      '--state',
+      'open',
+      '--label',
+      `factory:${id}`,
+      '--json',
+      'number,author',
+    ];
+    const pr = JSON.parse(gh(args)).find((p) => isAppAuthor(authorOf(p)));
+    return pr ? pr.number : 0;
   },
+  now: () => Date.now(),
   prView: (n) =>
     JSON.parse(gh(['pr', 'view', String(n), '--json', 'state,labels,author,headRefName'])),
   feedback: (n) =>

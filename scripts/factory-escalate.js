@@ -81,4 +81,4 @@ function escalate(id, task, deps, log) {
 
 if (require.main === module) process.exitCode = main();
 
-module.exports = { comment, main };
+module.exports = { OWNER, comment, main };
