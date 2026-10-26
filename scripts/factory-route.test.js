@@ -15,12 +15,26 @@ const {
 const LABEL = { name: 'factory:add-x' };
 const APP = { login: 'claude[bot]' };
 
-function deps({ pr = {}, report = {}, parked = 0, tasks = '- [ ] 1.1 Do it\n' } = {}) {
-  const calls = { feedback: 0 };
+function deps({
+  pr = {},
+  report = {},
+  parked = 0,
+  retry = 0,
+  tasks = '- [ ] 1.1 Do it\n',
+  candidates = [],
+  openPr = 0,
+} = {}) {
+  const calls = { feedback: 0, startRetry: [], dropRetry: [] };
   return {
     calls,
     changeExists: (id) => id !== 'gone',
     parkedIssue: () => parked,
+    retryIssue: () => retry,
+    retryCandidates: () => candidates,
+    startRetry: (n) => calls.startRetry.push(n),
+    dropRetry: (n) => calls.dropRetry.push(n),
+    openFactoryPr: () => openPr,
+    now: () => Date.parse('2026-10-26T12:00:00Z'),
     nextTask: () => nextTask(tasks),
     prView: () => ({
       state: 'OPEN',
@@ -182,7 +196,7 @@ test('a label alone never routes the factory onto an owner PR', () => {
 test('toOutput prints one key=value line each, without newlines in values', () => {
   assert.equal(
     toOutput({ mode: 'none', reason: 'a\nb' }),
-    'mode=none\nchange_id=\npr=\nref=\ntask=\nreason=a b',
+    'mode=none\nchange_id=\npr=\nref=\ntask=\nretry=\nreason=a b',
   );
 });
 
@@ -276,4 +290,96 @@ test('once the owner ticks the owner task, a resume starts the next task', () =>
 test('a held change waits before its owner task is escalated again', () => {
   const held = deps({ tasks: OWNER_NEXT, parked: 703 });
   assert.equal(route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, held).mode, 'none');
+});
+
+const RETRY_ISSUE = (labelledAt, extra = []) => ({
+  number: 714,
+  labels: [LABEL, { name: 'factory-retry' }, ...extra],
+  labelledAt,
+});
+
+test('the hourly schedule retries a failed task once its label is over an hour old', () => {
+  const d = deps({ candidates: [RETRY_ISSUE('2026-10-26T10:30:00Z')] });
+  assert.deepEqual(route('schedule', {}, d), {
+    mode: 'task',
+    change_id: 'add-x',
+    reason: 'retry from #714',
+    retry: 714,
+  });
+  assert.deepEqual(d.calls.startRetry, [714], 'factory-retry swapped for factory-retrying');
+  assert.equal(
+    route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, deps()).retry,
+    undefined,
+  );
+});
+
+test('a fresh retry label, or one beside needs-human, starts nothing', () => {
+  for (const issue of [
+    RETRY_ISSUE('2026-10-26T11:40:00Z'),
+    RETRY_ISSUE('2026-10-26T10:00:00Z', [{ name: 'needs-human' }]),
+  ]) {
+    const d = deps({ candidates: [issue] });
+    assert.equal(route('schedule', {}, d).reason, 'no retry due');
+    assert.deepEqual(d.calls.startRetry, []);
+  }
+  assert.equal(route('schedule', {}, deps()).mode, 'none', 'no candidates');
+});
+
+test('labels change only after the retry route is decided', () => {
+  const due = [RETRY_ISSUE('2026-10-26T10:30:00Z')];
+  // The issue's own factory-retry label does not hold its retry.
+  const held = deps({ candidates: due, retry: 714 });
+  assert.equal(route('schedule', {}, held).mode, 'task');
+  assert.deepEqual(held.calls.startRetry, [714]);
+
+  // Checks still running: keep factory-retry, try again next hour.
+  const pending = deps({
+    candidates: due,
+    openPr: 9,
+    report: { checks: { pendingActions: ['Workers Tests'] } },
+  });
+  assert.match(route('schedule', {}, pending).reason, /retry from #714 waits/);
+  assert.deepEqual([pending.calls.startRetry, pending.calls.dropRetry], [[], []]);
+
+  // Nothing to retry: drop the label, never leave factory-retrying behind.
+  const idle = deps({ candidates: due, openPr: 9, report: { unresolvedThreads: [] } });
+  assert.match(route('schedule', {}, idle).reason, /not needed: nothing actionable/);
+  assert.deepEqual([idle.calls.startRetry, idle.calls.dropRetry], [[], [714]]);
+
+  // The next task is the owner's: drop the label and escalate.
+  const owner = deps({ candidates: due, tasks: OWNER_NEXT });
+  assert.equal(route('schedule', {}, owner).mode, 'escalate');
+  assert.deepEqual([owner.calls.startRetry, owner.calls.dropRetry], [[], [714]]);
+});
+
+test('a retry on a change with an open factory PR is a babysit pass', () => {
+  const d = deps({ candidates: [RETRY_ISSUE('2026-10-26T10:30:00Z')], openPr: 9 });
+  const r = route('schedule', {}, d);
+  assert.equal(r.mode, 'babysit');
+  assert.equal(r.pr, 9);
+});
+
+test('no Claude run starts on any route while the tracking issue has factory-retry', () => {
+  const waiting = deps({ retry: 714 });
+  const merged = {
+    action: 'closed',
+    pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
+  };
+  for (const [name, event] of [
+    ['workflow_dispatch', { inputs: { change_id: 'add-x' } }],
+    ['pull_request', merged],
+    ['pull_request_review', { pull_request: { number: 9 } }],
+    ['pull_request_review_comment', { pull_request: { number: 9 } }],
+    ['workflow_dispatch', { inputs: { pr: '9' } }],
+  ]) {
+    const r = route(name, event, waiting);
+    assert.equal(r.mode, 'none', name);
+    assert.match(r.reason, /waiting to retry: #714 has factory-retry/);
+  }
+  assert.equal(waiting.calls.feedback, 0, 'no feedback fetch while waiting');
+});
+
+test('a babysit route waits while the tracking issue has needs-human', () => {
+  const r = route('pull_request_review', { pull_request: { number: 9 } }, deps({ parked: 703 }));
+  assert.match(r.reason, /waiting on the owner: #703/);
 });

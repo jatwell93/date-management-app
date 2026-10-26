@@ -73,6 +73,7 @@ test('factory.yml starts on dispatch, merges and reviews; CI runs come through t
     'pull_request_review_comment:',
     'pr:',
     'issues:',
+    'schedule:',
   ]) {
     assert.ok(on.includes(trigger), `${trigger} present`);
   }
@@ -98,9 +99,40 @@ test("factory.yml routes from main and runs main's rules on a PR branch", () => 
     'scripts/factory-route.js',
     'scripts/factory-issue.js',
     'scripts/factory-escalate.js',
+    'scripts/factory-retry.js',
   ]) {
     assert.ok(run.includes(f), `${f} restored from main`);
   }
+});
+
+test('factory.yml checks for a due retry hourly and records every finished Claude run', () => {
+  assert.match(FACTORY, /^ {2}schedule:\n {4}- cron: '23 \* \* \* \*'$/m);
+  const report = FACTORY.slice(FACTORY.indexOf('\n  report:\n'));
+  assert.ok(report.length > 1, 'report job present');
+  assert.match(report, /^ {4}needs: \[route, run\]$/m);
+  assert.match(
+    report,
+    /if: always\(\) && \(needs\.run\.result == 'failure' \|\| needs\.run\.result == 'success'\)/,
+    'a cancelled run records nothing',
+  );
+  assert.match(report, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(report, /node scripts\/factory-retry\.js fail "\$CHANGE_ID" "\$RUN_URL"/);
+  assert.match(
+    report,
+    /elif \[ -n "\$RETRY" \]; then\n(?: *#[^\n]*\n)* *node scripts\/factory-retry\.js ok "\$CHANGE_ID"/,
+    'only the retry run clears factory-retrying',
+  );
+  assert.match(report, /RETRY: \$\{\{ needs\.route\.outputs\.retry \}\}/);
+  assert.match(FACTORY, /retry: \$\{\{ steps\.route\.outputs\.retry \}\}/);
+  assert.doesNotMatch(report, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
+});
+
+test("the Claude step's timeout is below its job's, so a timeout fails the job", () => {
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'), FACTORY.indexOf('\n  escalate:\n'));
+  const job = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(run)[1]);
+  const claude = run.slice(run.indexOf('- name: Run Claude'));
+  const step = Number(/^ {8}timeout-minutes: (\d+)$/m.exec(claude)[1]);
+  assert.ok(step < job, `step ${step} < job ${job}`);
 });
 
 test('factory.yml escalates an owner task from main with the job token, no Claude run', () => {

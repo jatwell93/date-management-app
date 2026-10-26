@@ -1,12 +1,16 @@
 # Handover: factory-one-merge-per-change
 
-Updated: 2026-10-26 · main at 9e850736
+Updated: 2026-10-26 · main at 37455ce2
 
 ## State
 
 5.1 (owner tasks, #713) is merged and was proven live: run 40179440871 routed `mode=escalate task=5.2`, skipped the Claude job, created tracking issue #714 and labelled it `needs-human`.
 
-5.2 is done: the first real product spec ran unattended. Record below. #714 still has `needs-human`, so the factory holds this change until the owner decides on 5.3.
+5.2 is done: the first real product spec ran unattended. Record below.
+
+5.3 (one PR per change) is deferred by the owner after 5.2: its design moved unchanged to the change `factory-per-change-pr`.
+
+5.4 (retry once) is built on `feature/factory-retry-once`, without the 5.3 sweep: an hourly `schedule` route finds a due `factory-retry` issue and routes the retry in the same workflow run, so nothing is dispatched. #714 keeps `needs-human`: the remaining tasks (5.5, 5.6) edit `no_go` paths and are built interactively.
 
 ## 5.2 record: `fix-recent-items-iso-timestamps`
 
@@ -28,18 +32,16 @@ Issue #672, proposal #715 (two Seer findings, both fixed before merge), archived
 
 ## Next
 
-- The owner decides whether 5.3 (one PR per change) is worth building, from the record above. If not, drop 5.3a/5.3b from `tasks.md` before resuming.
-- Then remove `needs-human` from #714 to resume: the next task is 5.3a, or 5.4 if 5.3 is dropped.
+- Live check of 5.4 after its PR merges (`report` runs `main`'s `factory-retry.js`): dispatch `factory.yml` from a throwaway branch whose Claude step is replaced by `sleep 120` with `timeout-minutes: 1`, on a change that is not held (for example `factory-per-change-pr`). Expect the run job to end `failure`, and the `report` job to label that change's tracking issue `factory-retry` with the run link. Then add `needs-human` to that issue (or remove the label) before the hourly retry would start a real task, and check the next scheduled run routes `none` ("no retry due").
+- 5.5: AGENTS.md §5 and a DECISION in `memory.jsonl`. 5.6: validate and archive.
 
 ## Open PRs
 
-- #721 (re-run the no-go guard when a factory head has no status).
-- The 5.2 record PR (this handover, 5.2 ticked, the change archived).
+- The 5.4 PR from `feature/factory-retry-once` (also defers 5.3).
 
 ## Waiting on the user
 
-- Merge #721 and the 5.2 record PR.
-- The 5.3 decision.
+- Merge the 5.4 PR. Keep `needs-human` on #714.
 
 ## Learnings
 
@@ -48,3 +50,4 @@ Issue #672, proposal #715 (two Seer findings, both fixed before merge), archived
 - `nextTask` skips unnumbered checkboxes, so sub-items under a task never count as the next task.
 - `pull_request_target` can silently skip a push that `pull_request` workflows see. A required status posted by such a workflow needs a second trigger.
 - Seer's findings on the 5.2 proposal (a missed file, a comment that would trip the guard test) were real and cheap to fix before dispatch: one review round on the spec saved a failing task.
+- A `schedule` event carries `github.event.repository` (the digest checks out `default_branch` on it), so scheduled jobs can use the same checkout as event-driven ones.

@@ -11,8 +11,13 @@ name: Factory
 #     change's tracking issue
 #   any task route whose next task is      -> escalate job, no Claude run  (5.1)
 #     marked (owner)
+#   hourly schedule                        -> the one retry of a failed run (5.4):
+#                                             babysit-pr if the change has an open
+#                                             factory PR, else run-spec
 #
-# No task starts while the tracking issue has needs-human.
+# No Claude run starts while the tracking issue has needs-human or
+# factory-retry. The report job labels a failed run's issue factory-retry
+# (scripts/factory-retry.js); a failed retry escalates instead.
 #
 # The `route` job (scripts/factory-route.js) decides which, if any, and skips
 # events with nothing to do (Actions checks still running, nothing actionable,
@@ -58,6 +63,10 @@ on:
   # (task 3.1). The router ignores the removal unless the owner made it.
   issues:
     types: [unlabeled]
+  # The retry check (task 5.4): routes one failed run whose factory-retry label
+  # is over an hour old. Route job only unless a retry is due.
+  schedule:
+    - cron: '23 * * * *'
 
 permissions:
   contents: write
@@ -79,6 +88,7 @@ jobs:
       pr: ${{ steps.route.outputs.pr }}
       ref: ${{ steps.route.outputs.ref }}
       task: ${{ steps.route.outputs.task }}
+      retry: ${{ steps.route.outputs.retry }}
     steps:
       # Always main, never the PR: review events default to the PR's merge ref,
       # and a factory PR must not be able to rewrite its own router.
@@ -136,7 +146,7 @@ jobs:
         run: |
           rules=(.claude AGENTS.md CLAUDE.md scripts/check-no-go.js scripts/babysit-round.js
                  scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js
-                 scripts/factory-escalate.js)
+                 scripts/factory-escalate.js scripts/factory-retry.js)
           git fetch --quiet origin main
           git checkout origin/main -- "${rules[@]}"
           git reset --quiet -- "${rules[@]}"
@@ -160,6 +170,9 @@ jobs:
 
       - name: Run Claude
         uses: anthropics/claude-code-action@v1
+        # Below the job's 90: a step timeout fails the job, so the report job
+        # records it for a retry. A job timeout can end the run `cancelled`.
+        timeout-minutes: 80
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Review events come from these bots; the action refuses other bot actors.
@@ -203,3 +216,40 @@ jobs:
           CHANGE_ID: ${{ needs.route.outputs.change_id }}
           TASK: ${{ needs.route.outputs.task }}
         run: node scripts/factory-escalate.js "$CHANGE_ID" "$TASK"
+
+  report:
+    name: Record the run for a retry
+    needs: [route, run]
+    # A cancelled or skipped run records nothing.
+    if: always() && (needs.run.result == 'failure' || needs.run.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # main's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Label the tracking issue for a retry, or clear it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          RESULT: ${{ needs.run.result }}
+          # Set only when this run is the scheduled retry (the route's `retry`).
+          RETRY: ${{ needs.route.outputs.retry }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$RESULT" = failure ]; then
+            node scripts/factory-retry.js fail "$CHANGE_ID" "$RUN_URL"
+          elif [ -n "$RETRY" ]; then
+            # Only the retry itself ends factory-retrying; a parallel success
+            # must not reset the one-retry budget.
+            node scripts/factory-retry.js ok "$CHANGE_ID"
+          fi
