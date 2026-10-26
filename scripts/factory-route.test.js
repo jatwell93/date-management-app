@@ -196,7 +196,7 @@ test('a label alone never routes the factory onto an owner PR', () => {
 test('toOutput prints one key=value line each, without newlines in values', () => {
   assert.equal(
     toOutput({ mode: 'none', reason: 'a\nb' }),
-    'mode=none\nchange_id=\npr=\nref=\ntask=\nreason=a b',
+    'mode=none\nchange_id=\npr=\nref=\ntask=\nretry=\nreason=a b',
   );
 });
 
@@ -304,8 +304,13 @@ test('the hourly schedule retries a failed task once its label is over an hour o
     mode: 'task',
     change_id: 'add-x',
     reason: 'retry from #714',
+    retry: 714,
   });
   assert.deepEqual(d.calls.startRetry, [714], 'factory-retry swapped for factory-retrying');
+  assert.equal(
+    route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, deps()).retry,
+    undefined,
+  );
 });
 
 test('a fresh retry label, or one beside needs-human, starts nothing', () => {

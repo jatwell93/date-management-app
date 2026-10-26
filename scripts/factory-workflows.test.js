@@ -117,7 +117,13 @@ test('factory.yml checks for a due retry hourly and records every finished Claud
   );
   assert.match(report, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(report, /node scripts\/factory-retry\.js fail "\$CHANGE_ID" "\$RUN_URL"/);
-  assert.match(report, /node scripts\/factory-retry\.js ok "\$CHANGE_ID"/);
+  assert.match(
+    report,
+    /elif \[ -n "\$RETRY" \]; then\n(?: *#[^\n]*\n)* *node scripts\/factory-retry\.js ok "\$CHANGE_ID"/,
+    'only the retry run clears factory-retrying',
+  );
+  assert.match(report, /RETRY: \$\{\{ needs\.route\.outputs\.retry \}\}/);
+  assert.match(FACTORY, /retry: \$\{\{ steps\.route\.outputs\.retry \}\}/);
   assert.doesNotMatch(report, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
 });
 

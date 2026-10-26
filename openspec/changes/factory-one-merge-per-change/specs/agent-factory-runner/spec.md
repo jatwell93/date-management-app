@@ -26,7 +26,7 @@ When the next unchecked task of a change is marked `(owner)` in the change's tas
 
 ### Requirement: A failed task run is retried once
 
-When a task run or a babysit pass fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry` and record the failed run's link on it. An hourly scheduled route, with no Claude step of its own, SHALL find retries from the open tracking issues that carry the mark, whether or not the change has a PR. While the mark is under an hour old, it SHALL start nothing for the change; once it is older, it SHALL replace the mark with `factory-retrying` and start one run in the same workflow run: a babysit pass when the change has an open factory PR, else a task. It SHALL start at most one retry per scheduled run. `factory-retrying` SHALL stay until a run of the change succeeds. When a run fails while the issue has `factory-retrying`, the factory SHALL remove `factory-retrying` and escalate with `needs-human` and both run links instead of retrying. Every route of a change, task or babysit, SHALL start no Claude run while the tracking issue has `needs-human` or `factory-retry`. A cancelled run SHALL NOT mark the issue for a retry.
+When a task run or a babysit pass fails or times out, the factory SHALL mark the change's tracking issue with `factory-retry` and record the failed run's link on it. An hourly scheduled route, with no Claude step of its own, SHALL find retries from the open tracking issues that carry the mark, whether or not the change has a PR. While the mark is under an hour old, it SHALL start nothing for the change; once it is older, it SHALL replace the mark with `factory-retrying` and start one run in the same workflow run: a babysit pass when the change has an open factory PR, else a task. It SHALL start at most one retry per scheduled run. `factory-retrying` SHALL stay until the retry run itself succeeds; another run of the change succeeding SHALL NOT remove it. When a run fails while the issue has `factory-retrying`, the factory SHALL remove `factory-retrying` and escalate with `needs-human` and both run links instead of retrying. Every route of a change, task or babysit, SHALL start no Claude run while the tracking issue has `needs-human` or `factory-retry`. A cancelled run SHALL NOT mark the issue for a retry.
 
 #### Scenario: First failure
 
@@ -64,8 +64,15 @@ When a task run or a babysit pass fails or times out, the factory SHALL mark the
 #### Scenario: Retry succeeds
 
 - **GIVEN** a tracking issue with `factory-retrying`
-- **WHEN** a run of the change succeeds
+- **WHEN** the retry run succeeds
 - **THEN** the issue no longer has `factory-retrying`, so a later failure gets its own retry
+
+#### Scenario: Another run succeeds during the retry
+
+- **GIVEN** a tracking issue with `factory-retrying` and its retry still running
+- **WHEN** a different run of the change succeeds
+- **THEN** the issue keeps `factory-retrying`
+- **AND** a failure of the retry escalates with `needs-human`
 
 #### Scenario: Retry fails too
 

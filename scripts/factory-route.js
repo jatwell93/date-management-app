@@ -255,7 +255,9 @@ function retryTarget(due, deps) {
 function settleRetry(number, result, deps) {
   if (result.mode === 'task' || result.mode === 'babysit') {
     deps.startRetry(number);
-    return result;
+    // Marks this run as the retry: only it clears factory-retrying when it
+    // succeeds, so a parallel success cannot reset the one-retry budget.
+    return { ...result, retry: number };
   }
   if (isRetryWait(result)) return none(`retry from #${number} waits: ${result.reason}`);
   deps.dropRetry(number);
@@ -291,7 +293,7 @@ function route(eventName, event, deps) {
 
 /** $GITHUB_OUTPUT lines; values are ids, numbers and branch names only. */
 function toOutput(result) {
-  const keys = ['mode', 'change_id', 'pr', 'ref', 'task', 'reason'];
+  const keys = ['mode', 'change_id', 'pr', 'ref', 'task', 'retry', 'reason'];
   return keys.map((k) => `${k}=${String(result[k] ?? '').replace(/[\r\n]/g, ' ')}`).join('\n');
 }
 

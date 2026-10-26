@@ -88,6 +88,7 @@ jobs:
       pr: ${{ steps.route.outputs.pr }}
       ref: ${{ steps.route.outputs.ref }}
       task: ${{ steps.route.outputs.task }}
+      retry: ${{ steps.route.outputs.retry }}
     steps:
       # Always main, never the PR: review events default to the PR's merge ref,
       # and a factory PR must not be able to rewrite its own router.
@@ -241,10 +242,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHANGE_ID: ${{ needs.route.outputs.change_id }}
           RESULT: ${{ needs.run.result }}
+          # Set only when this run is the scheduled retry (the route's `retry`).
+          RETRY: ${{ needs.route.outputs.retry }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ "$RESULT" = failure ]; then
             node scripts/factory-retry.js fail "$CHANGE_ID" "$RUN_URL"
-          else
+          elif [ -n "$RETRY" ]; then
+            # Only the retry itself ends factory-retrying; a parallel success
+            # must not reset the one-retry budget.
             node scripts/factory-retry.js ok "$CHANGE_ID"
           fi
