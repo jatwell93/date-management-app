@@ -24,7 +24,7 @@ function deps({
   candidates = [],
   openPr = 0,
 } = {}) {
-  const calls = { feedback: 0, startRetry: [] };
+  const calls = { feedback: 0, startRetry: [], dropRetry: [] };
   return {
     calls,
     changeExists: (id) => id !== 'gone',
@@ -32,6 +32,7 @@ function deps({
     retryIssue: () => retry,
     retryCandidates: () => candidates,
     startRetry: (n) => calls.startRetry.push(n),
+    dropRetry: (n) => calls.dropRetry.push(n),
     openFactoryPr: () => openPr,
     now: () => Date.parse('2026-10-26T12:00:00Z'),
     nextTask: () => nextTask(tasks),
@@ -317,6 +318,33 @@ test('a fresh retry label, or one beside needs-human, starts nothing', () => {
     assert.deepEqual(d.calls.startRetry, []);
   }
   assert.equal(route('schedule', {}, deps()).mode, 'none', 'no candidates');
+});
+
+test('labels change only after the retry route is decided', () => {
+  const due = [RETRY_ISSUE('2026-10-26T10:30:00Z')];
+  // The issue's own factory-retry label does not hold its retry.
+  const held = deps({ candidates: due, retry: 714 });
+  assert.equal(route('schedule', {}, held).mode, 'task');
+  assert.deepEqual(held.calls.startRetry, [714]);
+
+  // Checks still running: keep factory-retry, try again next hour.
+  const pending = deps({
+    candidates: due,
+    openPr: 9,
+    report: { checks: { pendingActions: ['Workers Tests'] } },
+  });
+  assert.match(route('schedule', {}, pending).reason, /retry from #714 waits/);
+  assert.deepEqual([pending.calls.startRetry, pending.calls.dropRetry], [[], []]);
+
+  // Nothing to retry: drop the label, never leave factory-retrying behind.
+  const idle = deps({ candidates: due, openPr: 9, report: { unresolvedThreads: [] } });
+  assert.match(route('schedule', {}, idle).reason, /not needed: nothing actionable/);
+  assert.deepEqual([idle.calls.startRetry, idle.calls.dropRetry], [[], [714]]);
+
+  // The next task is the owner's: drop the label and escalate.
+  const owner = deps({ candidates: due, tasks: OWNER_NEXT });
+  assert.equal(route('schedule', {}, owner).mode, 'escalate');
+  assert.deepEqual([owner.calls.startRetry, owner.calls.dropRetry], [[], [714]]);
 });
 
 test('a retry on a change with an open factory PR is a babysit pass', () => {

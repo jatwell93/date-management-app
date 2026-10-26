@@ -232,11 +232,41 @@ function retryRoute(deps) {
         deps.now() - Date.parse(issue.labelledAt) > HOUR,
     );
   if (!due) return none('no retry due');
-  deps.startRetry(due.number);
-  const pr = deps.openFactoryPr(due.id);
-  if (pr) return babysitRoute(pr, deps);
-  return activeOnly({ mode: 'task', change_id: due.id, reason: `retry from #${due.number}` }, deps);
+  const result = retryTarget(due, deps);
+  return settleRetry(due.number, result, deps);
 }
+
+/** What the retry would run, decided before any label changes. */
+function retryTarget(due, deps) {
+  // This issue's own factory-retry label must not hold the retry it asks for.
+  const unheld = { ...deps, retryIssue: () => 0 };
+  const pr = deps.openFactoryPr(due.id);
+  if (pr) return babysitRoute(pr, unheld);
+  const task = { mode: 'task', change_id: due.id, reason: `retry from #${due.number}` };
+  return activeOnly(task, unheld);
+}
+
+/**
+ * Labels follow the route: a run swaps factory-retry for factory-retrying; a
+ * wait (checks running, owner hold) keeps factory-retry for the next hour; any
+ * other outcome (nothing actionable, an owner task, an archived change) needs
+ * no retry, so the label goes and no stale factory-retrying is left behind.
+ */
+function settleRetry(number, result, deps) {
+  if (result.mode === 'task' || result.mode === 'babysit') {
+    deps.startRetry(number);
+    return result;
+  }
+  if (isRetryWait(result)) return none(`retry from #${number} waits: ${result.reason}`);
+  deps.dropRetry(number);
+  if (result.mode === 'escalate') return result;
+  return none(`retry from #${number} not needed: ${result.reason}`);
+}
+
+const isRetryWait = (result) =>
+  result.mode === 'none' &&
+  (result.reason === 'Actions checks still running' ||
+    result.reason.startsWith('waiting on the owner'));
 
 /** An `(owner)` next task is escalated by the route job, never given to Claude. */
 function ownerTaskRoute(result, task) {
@@ -311,6 +341,7 @@ const defaultDeps = {
       '--add-label',
       'factory-retrying',
     ]),
+  dropRetry: (n) => gh(['issue', 'edit', String(n), '--remove-label', 'factory-retry']),
   openFactoryPr: (id) => {
     const args = [
       'pr',
