@@ -60,6 +60,11 @@ Log the one-line state at each step with `node scripts/pr-feedback.js <n> --summ
   with the open items. The router counts a thread whose last reply is yours as
   handled, and a review older than the head commit as seen; anything else would
   start another pass on the next event, and the next, without end.
+- **On a per-change PR** (the prompt says `pr: per-change`), every `needs-human`
+  above goes on the change's tracking issue (`node scripts/factory-issue.js <id>`),
+  never on the PR, and the comment goes there too. The owner's one removal from
+  the issue then resumes the change. Do not start the next task: the router does
+  that once the PR has settled.
 
 ## Judging an item
 

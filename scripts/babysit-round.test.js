@@ -3,10 +3,12 @@ const assert = require('node:assert/strict');
 
 const { highestRound, parseArgs, main } = require('./babysit-round.js');
 
-function run(argv, trailers) {
+/** A fake git: `taskSha` answers the Factory-Task lookup, `trailers` the round log. */
+function run(argv, trailers, taskSha = '') {
   const out = { log: [], error: [], gitArgs: null };
   const code = main(argv, {
     git: (args) => {
+      if (args.includes('-1')) return taskSha ? `${taskSha}\n` : '';
       out.gitArgs = args;
       return trailers;
     },
@@ -56,4 +58,14 @@ test('--base and --max are honoured; bad arguments exit 2', () => {
   assert.equal(r.code, 3);
   assert.equal(run(['--max', 'x'], '').code, 2);
   assert.equal(run(['--bogus'], '').code, 2);
+});
+
+test('rounds count only after the newest Factory-Task commit (one PR per change)', () => {
+  const r = run([], '2\n', 'abc123');
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.gitArgs, [
+    'log',
+    'abc123..HEAD',
+    '--format=%(trailers:key=Babysit-Round,valueonly)',
+  ]);
 });

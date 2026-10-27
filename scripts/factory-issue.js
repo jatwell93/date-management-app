@@ -18,16 +18,29 @@ const { execFileSync } = require('node:child_process');
 
 const { factoryIdProblem } = require('./factory-route.js');
 
+/** The body of the proposal's `## Autonomy` block, or ''. */
+function autonomyBlock(text) {
+  const autonomy = (text || '').split(/^## Autonomy[ \t]*$/m)[1] || '';
+  return autonomy.split(/^## /m)[0];
+}
+
 /**
  * The `issue: N` key of the proposal's `## Autonomy` block, or 0. Only this
  * explicit key counts: a proposal cites other issues in passing, and adopting
  * one of those would post the factory's escalations on an unrelated issue.
  */
 function issueFromProposal(text) {
-  const autonomy = (text || '').split(/^## Autonomy[ \t]*$/m)[1] || '';
-  const block = autonomy.split(/^## /m)[0];
-  const m = /^issue:[ \t]*#?([1-9][0-9]*)[ \t]*(#.*)?$/m.exec(block);
+  const m = /^issue:[ \t]*#?([1-9][0-9]*)[ \t]*(#.*)?$/m.exec(autonomyBlock(text));
   return m ? Number(m[1]) : 0;
+}
+
+/**
+ * True when the Autonomy block says `pr: per-change` (factory-per-change-pr,
+ * task 1.2): every task of the change goes on one PR, which the owner merges
+ * once. Without the key, each task gets its own PR.
+ */
+function perChangeFromProposal(text) {
+  return /^pr:[ \t]*per-change[ \t]*(#.*)?$/m.test(autonomyBlock(text));
 }
 
 function labelled(id, gh) {
@@ -104,4 +117,4 @@ function main(argv = process.argv.slice(2), deps = defaultDeps, out = console.lo
 
 if (require.main === module) process.exitCode = main();
 
-module.exports = { issueFromProposal, trackingIssue, main };
+module.exports = { issueFromProposal, perChangeFromProposal, trackingIssue, main };

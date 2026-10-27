@@ -47,10 +47,65 @@ test('factory.yml grants exactly the permissions it needs', () => {
     'pull-requests: write',
     'statuses: read',
   ]);
-  assert.doesNotMatch(FACTORY, /^[ \t]+permissions:/m, 'no job-level permissions widen the grant');
+  const jobGrants = [...FACTORY.matchAll(/^ {4}permissions:$/gm)];
+  assert.equal(jobGrants.length, 1, 'only the route job has its own permissions');
 });
 
-test('factory.yml queues tasks per change and passes per PR, never cancelling a running one', () => {
+test("the route job adds only actions: write, for the sweep's dispatch; no Claude run there", () => {
+  const route = FACTORY.slice(FACTORY.indexOf('\n  route:\n'), FACTORY.indexOf('\n  run:\n'));
+  const grant = route.slice(route.indexOf('    permissions:\n'), route.indexOf('    outputs:\n'));
+  const lines = grant
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+  assert.deepEqual(lines.sort(), [
+    'actions: write',
+    'checks: read',
+    'contents: read',
+    'issues: write',
+    'pull-requests: write',
+    'statuses: read',
+  ]);
+  assert.doesNotMatch(route, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
+});
+
+test('the hourly schedule sweeps the per-change PRs after routing', () => {
+  const route = FACTORY.slice(FACTORY.indexOf('\n  route:\n'), FACTORY.indexOf('\n  run:\n'));
+  const sweep = route.indexOf('- name: Sweep the per-change PRs');
+  assert.ok(sweep > route.indexOf('node scripts/factory-route.js'), 'after the router');
+  assert.match(route.slice(sweep), /if: github\.event_name == 'schedule'/);
+  assert.match(route.slice(sweep), /run: node scripts\/factory-sweep\.js/);
+  assert.match(FACTORY, /per_change: \$\{\{ steps\.route\.outputs\.per_change \}\}/);
+});
+
+test('a task on a per-change PR merges main first, unless main changed .github', () => {
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'), FACTORY.indexOf('\n  escalate:\n'));
+  const merge = run.slice(run.indexOf('- name: Merge main into a per-change PR branch'));
+  assert.ok(
+    run.indexOf('- name: Merge main into a per-change PR branch') <
+      run.indexOf("- name: Use main's copy of the factory's own rules"),
+    'before the rules are restored',
+  );
+  assert.match(
+    merge,
+    /if: needs\.route\.outputs\.mode == 'task' && needs\.route\.outputs\.pr != ''/,
+  );
+  assert.match(merge, /git diff --name-only HEAD\.\.\.origin\/main \| grep -q '\^\[\.\]github\/'/);
+  assert.match(merge, /merge --no-edit origin\/main; then\n\s+git merge --abort/);
+  assert.match(run, /steps\.base\.outputs\.note/, 'the prompt says when the base is older');
+});
+
+test('an owner task on a per-change PR is escalated from its branch', () => {
+  const escalate = FACTORY.slice(FACTORY.indexOf('\n  escalate:\n'));
+  assert.match(
+    escalate,
+    /REF: \$\{\{ needs\.route\.outputs\.per_change == 'true' && needs\.route\.outputs\.ref \|\| '' \}\}/,
+  );
+  assert.match(escalate, /factory-escalate\.js "\$CHANGE_ID" "\$TASK" \$\{REF:\+"\$REF"\}/);
+});
+
+test('factory.yml queues tasks and per-change PRs per change, other passes per PR, never cancelling', () => {
   assert.doesNotMatch(
     FACTORY,
     /^concurrency:/m,
@@ -59,7 +114,7 @@ test('factory.yml queues tasks per change and passes per PR, never cancelling a 
   const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'));
   assert.match(
     run,
-    /group: \$\{\{ needs\.route\.outputs\.mode == 'task' && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
+    /group: \$\{\{ \(needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.per_change == 'true'\) && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
   );
   assert.match(run, /^ {6}cancel-in-progress: false$/m);
 });

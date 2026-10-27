@@ -1,7 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { issueFromProposal, trackingIssue, main } = require('./factory-issue.js');
+const {
+  issueFromProposal,
+  perChangeFromProposal,
+  trackingIssue,
+  main,
+} = require('./factory-issue.js');
 
 /** A fake `gh`: answers by subcommand and records every call. */
 function fakeGh({
@@ -35,6 +40,13 @@ test("issueFromProposal reads only the Autonomy block's issue key", () => {
     'issues cited in prose or other sections never count',
   );
   assert.equal(issueFromProposal('Issue #671. No Autonomy block.'), 0);
+});
+
+test('perChangeFromProposal reads only the Autonomy block\'s "pr: per-change"', () => {
+  assert.equal(perChangeFromProposal(proposal('pr: per-change # one merge\n')), true);
+  assert.equal(perChangeFromProposal(proposal('pr: per-task\n')), false);
+  assert.equal(perChangeFromProposal(proposal('')), false);
+  assert.equal(perChangeFromProposal('## Impact\n\npr: per-change\n'), false, 'outside the block');
 });
 
 test('an open issue labelled factory:<id> wins, untouched', () => {

@@ -23,10 +23,18 @@ function deps({
   tasks = '- [ ] 1.1 Do it\n',
   candidates = [],
   openPr = 0,
+  perChange = false,
+  branchTasks = '- [x] 1.1 Do it\n- [ ] 1.2 Next\n',
 } = {}) {
-  const calls = { feedback: 0, startRetry: [], dropRetry: [] };
+  const calls = { feedback: 0, startRetry: [], dropRetry: [], branchTask: [], markReady: [] };
   return {
     calls,
+    perChange: () => perChange,
+    branchTask: (id, ref) => {
+      calls.branchTask.push([id, ref]);
+      return nextTask(branchTasks);
+    },
+    markReady: (p, n) => calls.markReady.push(n),
     changeExists: (id) => id !== 'gone',
     parkedIssue: () => parked,
     retryIssue: () => retry,
@@ -196,7 +204,7 @@ test('a label alone never routes the factory onto an owner PR', () => {
 test('toOutput prints one key=value line each, without newlines in values', () => {
   assert.equal(
     toOutput({ mode: 'none', reason: 'a\nb' }),
-    'mode=none\nchange_id=\npr=\nref=\ntask=\nretry=\nreason=a b',
+    'mode=none\nchange_id=\npr=\nref=\ntask=\nretry=\nper_change=\nreason=a b',
   );
 });
 
@@ -382,4 +390,123 @@ test('no Claude run starts on any route while the tracking issue has factory-ret
 test('a babysit route waits while the tracking issue has needs-human', () => {
   const r = route('pull_request_review', { pull_request: { number: 9 } }, deps({ parked: 703 }));
   assert.match(r.reason, /waiting on the owner: #703/);
+});
+
+// One PR per change (factory-per-change-pr, task 1.2).
+const SETTLED = { settled: true, waitingOn: [], unresolvedThreads: [] };
+const WIP = { title: 'WIP: feat(x): add x', headRefName: 'feature/factory-add-x' };
+const perChange = (opts = {}) =>
+  deps({ perChange: true, report: SETTLED, ...opts, pr: { ...WIP, ...opts.pr } });
+const REVIEW = { pull_request: { number: 9 } };
+const QUIET = { settled: false, waitingOn: ['quiet window'], unresolvedThreads: [] };
+const DONE = '- [x] 1.1 Do it\n- [x] 1.2 (owner) Rotate the key\n';
+
+test('a merged per-change PR starts nothing: the change is complete', () => {
+  const event = {
+    action: 'closed',
+    pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
+  };
+  const r = route('pull_request', event, perChange());
+  assert.equal(r.mode, 'none');
+  assert.match(r.reason, /per-change PR, change complete/);
+});
+
+test('an actionable per-change PR gets a babysit pass in the change group', () => {
+  const thread = { author: 'sentry', replies: [] };
+  const d = perChange({ report: { ...SETTLED, unresolvedThreads: [thread] } });
+  assert.deepEqual(route('pull_request_review', REVIEW, d), {
+    mode: 'babysit',
+    change_id: 'add-x',
+    pr: 9,
+    ref: 'feature/factory-add-x',
+    per_change: true,
+    reason: 'actionable',
+  });
+  assert.deepEqual(d.calls.branchTask, [], 'babysit first, the next task waits');
+});
+
+test('a waiting per-change PR starts nothing and reads no task list', () => {
+  const quiet = perChange({ report: QUIET });
+  assert.equal(route('pull_request_review', REVIEW, quiet).reason, 'waiting on quiet window');
+  const running = perChange({
+    report: { ...SETTLED, checks: { pendingActions: ['Workers Test'] } },
+  });
+  assert.equal(
+    route('pull_request_review', REVIEW, running).reason,
+    'Actions checks still running',
+  );
+  assert.deepEqual([quiet.calls.branchTask, running.calls.branchTask], [[], []]);
+});
+
+test("a settled per-change PR gets the next task from its branch's tasks.md", () => {
+  const d = perChange();
+  assert.deepEqual(route('workflow_dispatch', { inputs: { pr: '9' } }, d), {
+    mode: 'task',
+    change_id: 'add-x',
+    pr: 9,
+    ref: 'feature/factory-add-x',
+    per_change: true,
+    task: '1.2',
+    reason: 'task 1.2 on #9',
+  });
+  assert.deepEqual(d.calls.branchTask, [['add-x', 'feature/factory-add-x']]);
+});
+
+test("an (owner) next task on a per-change PR escalates with the PR's branch", () => {
+  const d = perChange({ branchTasks: '- [x] 1.1 Do it\n- [ ] 1.2 (owner) Rotate the key\n' });
+  assert.deepEqual(route('pull_request_review', REVIEW, d), {
+    mode: 'escalate',
+    change_id: 'add-x',
+    task: '1.2',
+    ref: 'feature/factory-add-x',
+    per_change: true,
+    reason: 'task 1.2 is an owner task',
+  });
+});
+
+test('a per-change PR with no task left is marked ready once, then left for the merge', () => {
+  // The last task was an (owner) task the owner ticked on the branch.
+  const wip = perChange({ branchTasks: DONE });
+  assert.equal(route('pull_request_review', REVIEW, wip).reason, '#9 marked ready for the owner');
+  assert.deepEqual(wip.calls.markReady, [9]);
+
+  const draft = perChange({ branchTasks: DONE, pr: { title: 'feat(x): add x', isDraft: true } });
+  route('pull_request_review', REVIEW, draft);
+  assert.deepEqual(draft.calls.markReady, [9], 'a draft counts as unfinished too');
+
+  const ready = perChange({ branchTasks: DONE, pr: { title: 'feat(x): add x' } });
+  const r = route('pull_request_review', REVIEW, ready);
+  assert.match(r.reason, /finished: waiting for the owner's merge/);
+  assert.deepEqual(ready.calls.markReady, []);
+});
+
+test('dispatch and resume continue an open per-change PR; without one, the first task starts', () => {
+  const open = perChange({ openPr: 9 });
+  assert.equal(route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, open).task, '1.2');
+  assert.equal(route('issues', unlabeled(), open).pr, 9);
+  assert.deepEqual(route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, perChange()), {
+    mode: 'task',
+    change_id: 'add-x',
+    reason: 'dispatched',
+  });
+});
+
+test('a per-change PR is held by its tracking issue and by a needs-human added to the PR', () => {
+  const parked = perChange({ parked: 703 });
+  assert.match(route('pull_request_review', REVIEW, parked).reason, /waiting on the owner: #703/);
+  const retry = perChange({ retry: 714 });
+  assert.match(route('pull_request_review', REVIEW, retry).reason, /factory-retry/);
+  const byHand = perChange({ pr: { labels: [LABEL, { name: 'needs-human' }] } });
+  assert.equal(route('pull_request_review', REVIEW, byHand).reason, 'waiting on the owner');
+  for (const d of [parked, retry, byHand]) assert.equal(d.calls.feedback, 0);
+});
+
+test('a retry on a waiting per-change PR keeps factory-retry for the next hour', () => {
+  const d = perChange({
+    candidates: [RETRY_ISSUE('2026-10-26T10:30:00Z')],
+    openPr: 9,
+    report: QUIET,
+  });
+  assert.match(route('schedule', {}, d).reason, /retry from #714 waits/);
+  assert.deepEqual([d.calls.startRetry, d.calls.dropRetry], [[], []]);
 });
