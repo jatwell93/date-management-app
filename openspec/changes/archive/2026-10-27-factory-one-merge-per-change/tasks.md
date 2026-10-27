@@ -33,4 +33,5 @@ Deferred after 5.2 (the merges cost minutes each, and 5.3 is the largest task he
 
 - [x] 5.5 Update AGENTS.md §5 (Factory) for `(owner)` tasks and retries (and note `pr: per-change` is deferred to `factory-per-change-pr`), and log a DECISION in `memory.jsonl`.
       Done: AGENTS.md §5 gains owner tasks, retry once (with the `schedule` delay) and the deferral; the DECISION is logged. 5.4's live check passed (`handover.md`).
-- [ ] 5.6 `openspec validate factory-one-merge-per-change --strict`; archive once merged.
+- [x] 5.6 `openspec validate factory-one-merge-per-change --strict`; archive once merged.
+      Done: valid under `--strict` after #727 merged; archived, and its spec deltas applied.
