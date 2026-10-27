@@ -1,8 +1,12 @@
 # Handover: factory-one-merge-per-change
 
-Updated: 2026-10-26 · main at 37455ce2
+Updated: 2026-10-27 · main at 34b19378
 
 ## State
+
+5.4 is merged (#724) and proven live (record below). 5.5 (this close-out) is on `feature/factory-5-5-close-out`. 5.6 archives the change once it merges.
+
+Earlier state, kept for the record:
 
 5.1 (owner tasks, #713) is merged and was proven live: run 40179440871 routed `mode=escalate task=5.2`, skipped the Claude job, created tracking issue #714 and labelled it `needs-human`.
 
@@ -30,18 +34,25 @@ Issue #672, proposal #715 (two Seer findings, both fixed before merge), archived
 - **Digest:** not yet seen for this change. The 2026-10-25 21:00 UTC schedule had not started by 22:53 UTC (the 2026-10-24 one ran at 22:58).
 - **Merge cost:** five of six owner touches were merges, and PRs waited 5 to 29 minutes for one (69 of the 94 minutes). Agent work per task was 1 to 6 minutes.
 
+## 5.4 live check (2026-10-26/27)
+
+- **Failure recorded:** run 40398194932, dispatched on `factory-per-change-pr` from the throwaway branch `feature/factory-retry-live-check` (Claude step replaced by `sleep 120`, `timeout-minutes: 1`). The `run` job ended `failure`, not `cancelled`, so a step timeout below the job's works. The `report` job created tracking issue #726 and labelled it `factory-retry`, with the run link and the marker comment.
+- **Hold respected:** `needs-human` added to #726 at about 20:47 UTC. The next scheduled run, 40427465118 at 00:36 UTC (label about four hours old), routed `mode=none`, "no retry due", with no Claude run.
+- **Cleanup:** `factory-retry` removed from #726; that `issues` event routed `none` ("not a needs-human removal"). #726 keeps `needs-human`, so the deferred change stays held. The owner deletes the throwaway branch.
+- **Not exercised live:** a real retry run and a failed-retry escalation (router and `factory-retry.js` tests cover them).
+- **Schedule reliability:** GitHub ran one of about six expected hourly `schedule` runs between 21:00 and 03:00 UTC, 13 minutes after its cron minute. Expect a retry hours after a failure, not one hour.
+
 ## Next
 
-- Live check of 5.4 after its PR merges (`report` runs `main`'s `factory-retry.js`): dispatch `factory.yml` from a throwaway branch whose Claude step is replaced by `sleep 120` with `timeout-minutes: 1`, on a change that is not held (for example `factory-per-change-pr`). Expect the run job to end `failure`, and the `report` job to label that change's tracking issue `factory-retry` with the run link. Then add `needs-human` to that issue (or remove the label) before the hourly retry would start a real task, and check the next scheduled run routes `none` ("no retry due").
-- 5.5: AGENTS.md §5 and a DECISION in `memory.jsonl`. 5.6: validate and archive.
+- 5.6: `openspec validate factory-one-merge-per-change --strict`, then archive after the 5.5 PR merges.
 
 ## Open PRs
 
-- The 5.4 PR from `feature/factory-retry-once` (also defers 5.3).
+- The 5.5 PR from `feature/factory-5-5-close-out`.
 
 ## Waiting on the user
 
-- Merge the 5.4 PR. Keep `needs-human` on #714.
+- Merge the 5.5 PR. Keep `needs-human` on #714 and #726. Delete `feature/factory-retry-live-check` (local and remote).
 
 ## Learnings
 
