@@ -4,7 +4,7 @@ Deferred from `factory-one-merge-per-change` (was 5.3). Build after that change 
 
 ## 1. One PR per change
 
-- [ ] 1.1 Check whether the required checks and each bot (Seer, CodeScene, Copilot) run on draft PRs. Record it in `handover.md`. If a bot skips drafts, 1.2 opens a ready PR titled `WIP:` instead of a draft.
+- [x] 1.1 Check whether the required checks and each bot (Seer, CodeScene, Copilot) run on draft PRs. Record it in `handover.md`. If a bot skips drafts, 1.2 opens a ready PR titled `WIP:` instead of a draft.
 - [ ] 1.2 `pr: per-change` in the Autonomy block (read beside `issue:` in `scripts/factory-issue.js`).
   - **Every run on a per-change PR advances it by one step**, chosen from the PR's state when the run starts: actionable items get a babysit pass; settled with a task left gets the next task (commits with a `Factory-Task: <n>` trailer); settled with no task left marks the PR ready and mentions the owner on it (also when the last task was an `(owner)` task the owner ticked); still waiting (Actions checks running, quiet window) exits quietly. A run that found work but could neither push nor reply escalates with `needs-human`.
   - **The first task opens the PR as a draft** (`gh pr create --draft`), or with a `WIP:` title if 1.1 found a bot that skips drafts. The router's `prView` fetches `isDraft` and `title`. Marking ready is `gh pr ready` or dropping the `WIP:` prefix, and a finished PR that is no longer a draft or `WIP:` routes to `none`.
