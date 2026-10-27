@@ -1,6 +1,6 @@
 # Handover: factory-one-merge-per-change
 
-Updated: 2026-10-27 · main at 34b19378
+Updated: 2026-10-27 · main at bafda837
 
 ## State
 
@@ -44,15 +44,15 @@ Issue #672, proposal #715 (two Seer findings, both fixed before merge), archived
 
 ## Next
 
-- 5.6: `openspec validate factory-one-merge-per-change --strict`, then archive after the 5.5 PR merges.
+- None: 5.5 merged (#727) and 5.6 archives the change. One PR per change continues in `factory-per-change-pr`.
 
 ## Open PRs
 
-- The 5.5 PR from `feature/factory-5-5-close-out`.
+- The 5.6 archive PR from `feature/factory-5-6-archive`.
 
 ## Waiting on the user
 
-- Merge the 5.5 PR. Keep `needs-human` on #714 and #726. Delete `feature/factory-retry-live-check` (local and remote).
+- Merge the 5.6 PR. Keep `needs-human` on #714 and #726. Delete `feature/factory-retry-live-check` (local and remote).
 
 ## Learnings
 
