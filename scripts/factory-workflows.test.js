@@ -48,12 +48,32 @@ test('factory.yml grants exactly the permissions it needs', () => {
     'statuses: read',
   ]);
   const jobGrants = [...FACTORY.matchAll(/^ {4}permissions:$/gm)];
-  assert.equal(jobGrants.length, 1, 'only the route job has its own permissions');
+  assert.equal(jobGrants.length, 1, 'only the sweep job has its own permissions');
 });
 
-test("the route job adds only actions: write, for the sweep's dispatch; no Claude run there", () => {
-  const route = FACTORY.slice(FACTORY.indexOf('\n  route:\n'), FACTORY.indexOf('\n  run:\n'));
-  const grant = route.slice(route.indexOf('    permissions:\n'), route.indexOf('    outputs:\n'));
+/** The text of one job, from its `  <name>:` line to the next job. */
+const job = (name, next) =>
+  FACTORY.slice(FACTORY.indexOf(`\n  ${name}:\n`), FACTORY.indexOf(`\n  ${next}:\n`));
+
+test('the hourly sweep is its own job after the router, so its failure skips no run', () => {
+  const sweep = job('sweep', 'run');
+  assert.match(sweep, /^ {4}needs: route$/m);
+  assert.match(sweep, /^ {4}if: github\.event_name == 'schedule'$/m);
+  assert.match(sweep, /run: node scripts\/factory-sweep\.js/);
+  assert.match(sweep, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.doesNotMatch(sweep, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.doesNotMatch(job('route', 'sweep'), /factory-sweep/, 'not a step of the route job');
+  assert.doesNotMatch(
+    job('run', 'escalate'),
+    /^ {4}needs: \[?[^\n]*sweep/m,
+    'run never waits on it',
+  );
+  assert.match(FACTORY, /per_change: \$\{\{ steps\.route\.outputs\.per_change \}\}/);
+});
+
+test("the sweep job's grant adds actions: write, for its dispatch, and nothing else to write", () => {
+  const sweep = job('sweep', 'run');
+  const grant = sweep.slice(sweep.indexOf('    permissions:\n'), sweep.indexOf('    steps:\n'));
   const lines = grant
     .split('\n')
     .slice(1)
@@ -63,20 +83,17 @@ test("the route job adds only actions: write, for the sweep's dispatch; no Claud
     'actions: write',
     'checks: read',
     'contents: read',
-    'issues: write',
+    'issues: read',
     'pull-requests: write',
     'statuses: read',
   ]);
-  assert.doesNotMatch(route, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
 });
 
-test('the hourly schedule sweeps the per-change PRs after routing', () => {
-  const route = FACTORY.slice(FACTORY.indexOf('\n  route:\n'), FACTORY.indexOf('\n  run:\n'));
-  const sweep = route.indexOf('- name: Sweep the per-change PRs');
-  assert.ok(sweep > route.indexOf('node scripts/factory-route.js'), 'after the router');
-  assert.match(route.slice(sweep), /if: github\.event_name == 'schedule'/);
-  assert.match(route.slice(sweep), /run: node scripts\/factory-sweep\.js/);
-  assert.match(FACTORY, /per_change: \$\{\{ steps\.route\.outputs\.per_change \}\}/);
+test('the first task of a per-change change is told to open the PR', () => {
+  assert.match(
+    job('run', 'escalate'),
+    /needs\.route\.outputs\.per_change == 'true' && needs\.route\.outputs\.pr == '' && 'The change runs as one PR/,
+  );
 });
 
 test('a task on a per-change PR merges main first, unless main changed .github', () => {

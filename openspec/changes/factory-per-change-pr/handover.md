@@ -20,7 +20,7 @@ So a per-change PR opens ready, titled `WIP:`.
 - `pr: per-change` is read from `main`'s proposal: `perChangeFromProposal` in `scripts/factory-issue.js`.
 - `babysitRoute` hands a per-change PR to `advanceRoute`, then `nextStepRoute` (`scripts/factory-route.js`). It reads the branch's `tasks.md` through the contents API (`branchFile`). `markReady` drops `WIP:` and comments.
 - `activeOnly` sends dispatch, resume and retry on a per-change change with an open PR to that PR. `mergedRoute` returns `none` for a per-change merge.
-- `scripts/factory-sweep.js` runs hourly in the route job. Only the route job has `actions: write`.
+- `scripts/factory-sweep.js` runs hourly in its own `sweep` job (after `route`, so a sweep failure never skips a retry run). Only that job has `actions: write`.
 - The run job merges `main` into the branch before a later task, unless main changed `.github/**` or the merge conflicts. In those cases the prompt tells Claude it is working on the older base.
 - An owner task escalates with the branch (`factory-escalate.js <id> <task> <branch>`).
 
@@ -30,12 +30,12 @@ So a per-change PR opens ready, titled `WIP:`.
 
 ## Open PRs
 
-- #729 docs(openspec): record draft-PR bot check (1.1): green, clean.
+- #729 (1.1): merged.
 - 1.2 PR: just opened.
 
 ## Waiting on the user
 
-- Merge #729, then the 1.2 PR.
+- Merge #730 (1.2).
 - Copilot on per-change PRs: with `review_on_push: false`, Copilot reviews only the first task. Options: (a) accept that, because Seer reviews every push; (b) turn on "Review new pushes" in the `main` ruleset (more Copilot requests). Recommendation: (a). This does not block 1.3.
 
 ## Learnings

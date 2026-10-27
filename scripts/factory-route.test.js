@@ -484,11 +484,17 @@ test('dispatch and resume continue an open per-change PR; without one, the first
   const open = perChange({ openPr: 9 });
   assert.equal(route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, open).task, '1.2');
   assert.equal(route('issues', unlabeled(), open).pr, 9);
+  // The first task is marked per_change, so its prompt says to open the WIP: PR.
   assert.deepEqual(route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, perChange()), {
     mode: 'task',
     change_id: 'add-x',
+    per_change: true,
     reason: 'dispatched',
   });
+  assert.equal(route('issues', unlabeled(), perChange()).per_change, true);
+  const ownerFirst = perChange({ tasks: '- [ ] 1.1 (owner) Rotate the key\n' });
+  const r = route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, ownerFirst);
+  assert.deepEqual([r.mode, r.per_change], ['escalate', true]);
 });
 
 test('a per-change PR is held by its tracking issue and by a needs-human added to the PR', () => {

@@ -259,10 +259,12 @@ function activeOnly(result, deps) {
   }
   const held = changeHold(result.change_id, deps);
   if (held) return none(held);
-  // A per-change change with its PR open continues on that PR.
-  const open = deps.perChange(result.change_id) && deps.openFactoryPr(result.change_id);
-  if (open) return babysitRoute(open, deps);
-  return ownerTaskRoute(result, deps.nextTask(result.change_id));
+  const next = ownerTaskRoute(result, deps.nextTask(result.change_id));
+  if (!deps.perChange(result.change_id)) return next;
+  // A per-change change continues on its open PR; without one, this first
+  // task opens it, and the prompt must say so (per_change).
+  const open = deps.openFactoryPr(result.change_id);
+  return open ? babysitRoute(open, deps) : { ...next, per_change: true };
 }
 
 const HOUR = 60 * 60 * 1000;

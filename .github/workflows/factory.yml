@@ -90,15 +90,6 @@ jobs:
     name: Route the event
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # The workflow's grant, except actions: write for the sweep's
-    # `gh workflow run`. No Claude run happens in this job.
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      actions: write
-      checks: read
-      statuses: read
     outputs:
       mode: ${{ steps.route.outputs.mode }}
       change_id: ${{ steps.route.outputs.change_id }}
@@ -131,8 +122,38 @@ jobs:
         run: |
           node scripts/factory-route.js | tee -a "$GITHUB_OUTPUT"
 
-      - name: Sweep the per-change PRs
-        if: github.event_name == 'schedule'
+  # Its own job, so a failed sweep never fails the route job: that would skip
+  # a retry run whose label the router already swapped to factory-retrying.
+  # After the route job, so the sweep sees that label and leaves the change to
+  # the retry.
+  sweep:
+    name: Sweep the per-change PRs
+    needs: route
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # actions: write for `gh workflow run`; no Claude run happens in this job.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      actions: write
+      checks: read
+      statuses: read
+    steps:
+      # main's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Dispatch a run for each per-change PR with a step to take
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/factory-sweep.js
@@ -223,7 +244,8 @@ jobs:
           # change id and a PR number.
           prompt: |
             ${{ needs.route.outputs.mode == 'task' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`.', needs.route.outputs.change_id) || format('Use the babysit-pr skill (.claude/skills/babysit-pr/SKILL.md) in one-shot mode on PR #{0}, a factory PR for the OpenSpec change `{1}`.', needs.route.outputs.pr, needs.route.outputs.change_id) }}
-            ${{ needs.route.outputs.per_change == 'true' && format('The change runs as one PR (`pr: per-change`): this run is on PR #{0}, branch `{1}`, and its PR rules apply.', needs.route.outputs.pr, needs.route.outputs.ref) || '' }} ${{ needs.route.outputs.mode == 'task' && needs.route.outputs.per_change == 'true' && format('Do task {0}. {1}', needs.route.outputs.task, steps.base.outputs.note) || '' }}
+            ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr == '' && 'The change runs as one PR (`pr: per-change`): this is its first task, so open that PR as the skill says for a first task.' || '' }}
+            ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('The change runs as one PR (`pr: per-change`): this run is on PR #{0}, branch `{1}`, and its PR rules apply.', needs.route.outputs.pr, needs.route.outputs.ref) || '' }} ${{ needs.route.outputs.mode == 'task' && needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('Do task {0}. {1}', needs.route.outputs.task, steps.base.outputs.note) || '' }}
             You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.
           claude_args: |
             --max-turns 200
