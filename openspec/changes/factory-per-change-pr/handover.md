@@ -1,6 +1,6 @@
 # Handover: factory-per-change-pr
 
-Updated: 2026-10-27 · main at bd56cdd0
+Updated: 2026-10-28 · main at b65d3d93
 
 ## State
 
@@ -24,18 +24,25 @@ So a per-change PR opens ready, titled `WIP:`.
 - The run job merges `main` into the branch before a later task, unless main changed `.github/**` or the merge conflicts. In those cases the prompt tells Claude it is working on the older base.
 - An owner task escalates with the branch (`factory-escalate.js <id> <task> <branch>`).
 
+## 1.3 so far (2026-10-28)
+
+- The test change `factory-per-change-proof` is on `main` (c3242422, pushed straight to `main` by mistake; the owner chose to keep it).
+- The first run opened #733 as `WIP:`, on branch `feature/factory-factory-per-change-proof-1.1` (run-spec's per-task naming). The router follows `headRefName`, so that works.
+- Relayed CI runs routed `none` ("Actions checks still running", then "waiting on quiet window"), as designed.
+- No hourly sweep fired from 10:43 to 11:44 UTC, so the sweep never got to start 1.2.
+- The owner merged #733 while still `WIP:` at 11:44. The router said "change complete" with 1.2 unticked: a silent stall. #734 fixes `mergedRoute` (a per-change merge with a task left routes that task) and adds task 1.3 to the proof change.
+
 ## Next
 
-1.3, once #729 and the 1.2 PR merge: write a throwaway two-task change with `pr: per-change`, then `gh workflow run factory.yml -f change_id=<id>`. Watch for: a `WIP:` PR, a second commit on the same branch with `Factory-Task: 1.2`, then `WIP:` dropped and a mention.
+After #734 merges: `gh workflow run factory.yml -f change_id=factory-per-change-proof`. 1.2 opens a new `WIP:` PR; watch for 1.3 as a `Factory-Task: 1.3` commit on the same branch (started by the sweep, or by hand if no schedule fires), then `WIP:` dropped and a mention. Then archive the proof change.
 
 ## Open PRs
 
-- #729 (1.1): merged.
-- 1.2 PR: just opened.
+- #734: early-merge router fix. CI green, settled. Copilot out of quota.
 
 ## Waiting on the user
 
-- Merge #730 (1.2).
+- Merge #734. Leave the next `WIP:` proof PR unmerged until `WIP:` is dropped.
 - Copilot on per-change PRs: with `review_on_push: false`, Copilot reviews only the first task. Options: (a) accept that, because Seer reviews every push; (b) turn on "Review new pushes" in the `main` ruleset (more Copilot requests). Recommendation: (a). This does not block 1.3.
 
 ## Learnings
