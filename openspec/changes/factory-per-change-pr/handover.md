@@ -4,7 +4,7 @@ Updated: 2026-10-28 · main at b65d3d93
 
 ## State
 
-1.1 (#729) and 1.2 (this branch, `feature/factory-per-change-1-2`, stacked on #729) are done. 1.3, the live proof, needs 1.2 on `main`, because the factory runs `main`'s workflow and router.
+1.1 (#729) and 1.2 (#730) are merged. 1.3, the live proof, is in progress (see below).
 
 What 1.1 found on draft PRs:
 
