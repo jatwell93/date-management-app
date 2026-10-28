@@ -21,7 +21,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 3. Tickets
 
-- [ ] 3.1 `.claude/skills/to-tickets/SKILL.md`, adapted from mattpocock/skills `to-tickets`: read the change's `proposal.md`, `design.md` and spec deltas; slice into vertical tasks (expand-migrate-contract for wide refactors); quiz the owner (granularity, real blocking edges, a demo per task); then write `tasks.md` and publish the issues, blockers first, as sub-issues of the tracking issue (`node scripts/factory-issue.js <id>`) with `--blocked-by`. Each task line ends with its issue, e.g. `(#812)`. Last step: add `factory:ready` to the tracking issue (task 4.1).
+- [ ] 3.1 `.claude/skills/to-tickets/SKILL.md`, adapted from mattpocock/skills `to-tickets`: read the change's `proposal.md`, `design.md` and spec deltas; slice into vertical tasks (expand-migrate-contract for wide refactors); quiz the owner (granularity, real blocking edges, a demo per task); then write `tasks.md` and publish the issues, blockers first, as sub-issues of the tracking issue (`node scripts/factory-issue.js <id>`) with `--blocked-by`. Each task line ends with its issue, e.g. `(#812)`. Last step: add `factory-ready` to the tracking issue (task 4.1).
       Demo: run on a small change; `tasks.md` and the sub-issues match, blocking links visible on GitHub.
       Blocked by: 1.1.
 - [ ] 3.2 `run-spec` adds `Closes #<n>` to the PR body for each task line it lands that carries an issue number; on a per-change PR, each task adds its line to the body.
@@ -31,7 +31,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 4. Auto-start
 
-- [ ] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The router routes `factory:ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
+- [ ] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The label is `factory-ready`, not `factory:ready`: `changeFromLabels` would read `factory:ready` as the change id `ready`. The router routes `factory-ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
       Demo: adding the label starts the first task with no `gh workflow run`.
       Acceptance: router tests for each case; `factory-workflows.test.js` for the trigger. AGENTS.md "Factory" names the label as the way to start a change.
 
@@ -39,7 +39,8 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 - [ ] 5.1 When no unchecked task is left, the router routes `mode: archive` (a Claude run) instead of marking the PR ready. `run-spec` gets an archive section: reconcile the spec delta with `openspec/specs/` and what was built, `openspec validate <id>`, `openspec archive <id> -y`, `Closes #<tracking issue>` in the PR body. Per-change: commit on the PR branch, then the route job drops `WIP:` as today. Per-task: open one archive PR labelled `factory:<id>`. A failed validate escalates.
       Demo: the last task of a change leads to an archive commit without an owner session.
-      Acceptance: router tests for both modes and for an already-archived change (`none`); the per-change spec requirement's "marking the PR ready" is updated to follow the archive step (MODIFIED delta re-checked against `openspec/specs/agent-factory-runner/spec.md` at build time).
+      Archiving moves the change folder, so `tasks.md` leaves `openspec/changes/<id>/`: `nextTask` (contents API on the PR branch, file on `main`), the sweep, the `(owner)` check, `factory-escalate.js` and `mergedRoute` treat an existing `openspec/changes/archive/*-<id>/` as "finished, no task left" instead of failing on the 404.
+      Acceptance: router tests for both modes, for an already-archived change (`none`), for an archived per-change branch (marked ready, no task) and for a merged archive PR on `main` (`none`); a sweep test for an archived branch; the per-change spec requirement's "marking the PR ready" is updated to follow the archive step (MODIFIED delta re-checked against `openspec/specs/agent-factory-runner/spec.md` at build time).
 
 ## 6. Live proof
 
