@@ -10,32 +10,36 @@
  * and comments the task. The router holds the change until the owner removes the
  * label; if the task is still unticked then, the router escalates again.
  *
- * Usage: node scripts/factory-escalate.js <change-id> <task-number>
+ * On a per-change PR (factory-per-change-pr, task 1.2) the task list is the PR
+ * branch's, so the router passes that branch and the owner ticks the task there.
+ *
+ * Usage: node scripts/factory-escalate.js <change-id> <task-number> [<branch>]
  * Exit codes: 0 escalated, or nothing to do (the task is no longer next);
  * 2 usage error.
  */
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 
-const { factoryIdProblem, nextTask } = require('./factory-route.js');
+const { OWNER, branchFile, factoryIdProblem, nextTask } = require('./factory-route.js');
 const { trackingIssue } = require('./factory-issue.js');
 
-const OWNER = '@jatwell93';
 const TASK_NUMBER = /^[0-9][0-9A-Za-z.]{0,19}$/;
+const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
 
 /** Why the arguments are unusable, or ''. */
-function usageProblem(id, number) {
+function usageProblem(id, number, ref) {
+  if (ref && !BRANCH.test(ref)) return 'invalid branch';
   return factoryIdProblem(id) || (TASK_NUMBER.test(number) ? '' : 'invalid task number');
 }
 
 /** Markdown body of the escalation comment. */
-function comment(id, task) {
+function comment(id, task, ref = '') {
   return [
     `${OWNER} Task ${task.number} of \`${id}\` is an owner task, so the factory will not attempt it:`,
     '',
     `> ${task.text}`,
     '',
-    `Do it, tick it in \`openspec/changes/${id}/tasks.md\` on \`main\`, then remove \`needs-human\` to resume.`,
+    `Do it, tick it in \`openspec/changes/${id}/tasks.md\` on \`${ref || 'main'}\`, then remove \`needs-human\` to resume.`,
     'If the task is still unticked when the label goes, the factory asks again.',
   ].join('\n');
 }
@@ -46,7 +50,10 @@ const defaultDeps = {
     const file = `openspec/changes/${id}/proposal.md`;
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   },
-  tasks: (id) => fs.readFileSync(`openspec/changes/${id}/tasks.md`, 'utf8'),
+  tasks: (id, ref) => {
+    const file = `openspec/changes/${id}/tasks.md`;
+    return ref ? branchFile(file, ref) : fs.readFileSync(file, 'utf8');
+  },
 };
 
 /** The next task, if it is still owner task `number`; the list can change after routing. */
@@ -56,25 +63,25 @@ function stillNextOwnerTask(tasksMd, number) {
 }
 
 function main(argv = process.argv.slice(2), deps = defaultDeps, log = console.log) {
-  const [id = '', number = ''] = argv;
-  const problem = usageProblem(id, number);
+  const [id, number, ref] = [0, 1, 2].map((i) => argv[i] || '');
+  const problem = usageProblem(id, number, ref);
   if (problem) {
-    console.error(`usage: factory-escalate.js <change-id> <task-number>: ${problem}`);
+    console.error(`usage: factory-escalate.js <change-id> <task-number> [<branch>]: ${problem}`);
     return 2;
   }
-  const task = stillNextOwnerTask(deps.tasks(id), number);
+  const task = stillNextOwnerTask(deps.tasks(id, ref), number);
   if (!task) {
     log(`Task ${number} of ${id} is no longer the next owner task; nothing to do.`);
     return 0;
   }
-  return escalate(id, task, deps, log);
+  return escalate(id, task, ref, deps, log);
 }
 
-function escalate(id, task, deps, log) {
+function escalate(id, task, ref, deps, log) {
   const issue = String(trackingIssue(id, deps));
   // Label first: the hold matters more than the comment.
   deps.gh(['issue', 'edit', issue, '--add-label', 'needs-human']);
-  deps.gh(['issue', 'comment', issue, '--body', comment(id, task)]);
+  deps.gh(['issue', 'comment', issue, '--body', comment(id, task, ref)]);
   log(`Escalated task ${task.number} of ${id} on #${issue}.`);
   return 0;
 }

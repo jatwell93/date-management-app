@@ -35,6 +35,24 @@ test('labels the tracking issue needs-human, then comments the task for the owne
   assert.match(body, /tick it in `openspec\/changes\/add-x\/tasks\.md` on `main`/);
 });
 
+test("on a per-change PR, reads the branch's task list and asks for the tick there", () => {
+  const { gh, calls } = fakeGh();
+  const refs = [];
+  const d = { ...deps(gh), tasks: (id, ref) => (refs.push(ref), TASKS) };
+  assert.equal(
+    main(['add-x', '2.2', 'feature/factory-add-x'], d, () => {}),
+    0,
+  );
+  assert.deepEqual(refs, ['feature/factory-add-x']);
+  const body = calls.find((c) => c[1] === 'comment')[4];
+  assert.match(body, /tasks\.md` on `feature\/factory-add-x`, then remove/);
+  assert.equal(
+    main(['add-x', '2.2', 'x;rm -rf'], d, () => {}),
+    2,
+    'unsafe branch rejected',
+  );
+});
+
 test('does nothing when the task is no longer the next owner task', () => {
   for (const tasks of [
     TASKS.replace('- [ ] 2.2', '- [x] 2.2'), // ticked meanwhile

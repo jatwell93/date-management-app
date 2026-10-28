@@ -9,6 +9,10 @@
  *
  *   round=<highest> next=<highest + 1> capped=<true|false>
  *
+ * On a per-change PR (factory-per-change-pr, task 1.2) each task commit carries a
+ * `Factory-Task: <n>` trailer, and rounds count only after the newest one: every
+ * task gets its own 5 rounds.
+ *
  * Usage: node scripts/babysit-round.js [--base <ref>] [--max <n>]
  * Exit codes: 0 another round is allowed, 3 the cap is reached, 2 usage error.
  */
@@ -40,6 +44,19 @@ function parseArgs(argv) {
 
 const defaultGit = (args) => execFileSync('git', args, { encoding: 'utf8' });
 
+/** The newest `Factory-Task` commit on the branch, else `base`. */
+function roundsBase(base, git) {
+  const sha = git([
+    'log',
+    '-1',
+    '--format=%H',
+    '--extended-regexp',
+    '--grep=^Factory-Task: ',
+    `${base}..HEAD`,
+  ]).trim();
+  return sha || base;
+}
+
 function main(argv, { git = defaultGit, log = console.log, error = console.error } = {}) {
   const opts = parseArgs(argv);
   if (!opts) {
@@ -48,7 +65,7 @@ function main(argv, { git = defaultGit, log = console.log, error = console.error
   }
   const trailers = git([
     'log',
-    `${opts.base}..HEAD`,
+    `${roundsBase(opts.base, git)}..HEAD`,
     '--format=%(trailers:key=Babysit-Round,valueonly)',
   ]);
   const round = highestRound(trailers);

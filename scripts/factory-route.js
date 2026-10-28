@@ -5,7 +5,7 @@
  * .github/workflows/factory.yml; prints $GITHUB_OUTPUT lines:
  *
  *   mode=task|babysit|escalate|none  change_id=<id>  pr=<n>  ref=<branch>
- *   task=<n>  reason=<text>
+ *   task=<n>  retry=<issue>  per_change=true|  reason=<text>
  *
  *   workflow_dispatch(change_id)    task on that change
  *   pull_request closed, merged     task on the next unchecked task of the change
@@ -24,6 +24,14 @@
  *   workflow_dispatch(pr)           factory has not handled yet and no Actions
  *     (a finished CI run, relayed   check pending
  *     by factory-ci-relay.yml)
+ *
+ *
+ * A change with `pr: per-change` in its Autonomy block keeps every task on one
+ * PR (factory-per-change-pr, task 1.2). Every route that lands on that PR
+ * advances it by one step: a babysit pass on actionable items, else, once the
+ * PR is settled, the next task of the branch's tasks.md (escalated if it is an
+ * `(owner)` task), else marking the PR ready for the owner. A merge of that
+ * PR starts nothing: the change is complete.
  *
  * Only PRs authored by the Claude GitHub App AND labelled `factory:<id>` count:
  * the factory can edit labels, so a label alone must never point the factory
@@ -89,11 +97,12 @@ function dispatchRoute(event) {
   return { mode: 'task', change_id: id, reason: 'dispatched' };
 }
 
-function mergedRoute(event) {
+function mergedRoute(event, deps) {
   const pr = event.pull_request || {};
   if (event.action !== 'closed' || !pr.merged) return none('not a merge');
   const id = changeFromLabels(pr.labels || []);
   if (!id || !isAppAuthor(authorOf(pr))) return none('not a factory PR');
+  if (deps.perChange(id)) return none(`#${pr.number} merged: per-change PR, change complete`);
   return { mode: 'task', change_id: id, reason: `#${pr.number} merged` };
 }
 
@@ -161,15 +170,56 @@ function changeHold(id, deps) {
   return retry ? `waiting to retry: #${retry} has factory-retry` : '';
 }
 
-/** A babysit pass, if the open factory PR has something to act on now. */
+/**
+ * A babysit pass, if the open factory PR has something to act on now. A
+ * per-change PR advances by one step instead (advanceRoute).
+ */
 function babysitRoute(number, deps) {
   if (!number) return none('no pull request');
   const pr = deps.prView(number);
   const id = changeFromLabels(pr.labels || []);
-  const blocked =
-    prBlocker(pr, id) || changeHold(id, deps) || feedbackBlocker(deps.feedback(number));
+  const held = prBlocker(pr, id) || changeHold(id, deps);
+  if (held) return none(held);
+  if (deps.perChange(id)) return advanceRoute(number, pr, id, deps);
+  const blocked = feedbackBlocker(deps.feedback(number));
   if (blocked) return none(blocked);
   return { mode: 'babysit', change_id: id, pr: number, ref: pr.headRefName, reason: 'actionable' };
+}
+
+/** True while a per-change PR still has tasks to come: a draft or a `WIP:` title. */
+const isWip = (pr) => Boolean(pr.isDraft) || /^WIP:/i.test(pr.title || '');
+
+/**
+ * One step on a per-change PR, chosen from its state now: a babysit pass on
+ * actionable items; nothing while it waits (checks running, quiet window);
+ * else the next task on its branch.
+ */
+function advanceRoute(number, pr, id, deps) {
+  const report = deps.feedback(number);
+  const base = { change_id: id, pr: number, ref: pr.headRefName, per_change: true };
+  if (report.checks.pendingActions.length) return none('Actions checks still running');
+  if (pendingWork(report)) return { mode: 'babysit', ...base, reason: 'actionable' };
+  if (!report.settled) return none(`waiting on ${(report.waitingOn || []).join(', ')}`);
+  return nextStepRoute(pr, base, deps);
+}
+
+/**
+ * On a settled per-change PR: the branch's next task (escalated if it is the
+ * owner's), else mark the PR ready and tell the owner, once.
+ */
+function nextStepRoute(pr, base, deps) {
+  const task = deps.branchTask(base.change_id, pr.headRefName);
+  if (task && task.owner) return { ...ownerTaskRoute(base, task), ref: base.ref, per_change: true };
+  if (task)
+    return {
+      mode: 'task',
+      ...base,
+      task: task.number,
+      reason: `task ${task.number} on #${base.pr}`,
+    };
+  if (!isWip(pr)) return none(`#${base.pr} is finished: waiting for the owner's merge`);
+  deps.markReady(pr, base.pr);
+  return none(`#${base.pr} marked ready for the owner`);
 }
 
 /**
@@ -209,7 +259,12 @@ function activeOnly(result, deps) {
   }
   const held = changeHold(result.change_id, deps);
   if (held) return none(held);
-  return ownerTaskRoute(result, deps.nextTask(result.change_id));
+  const next = ownerTaskRoute(result, deps.nextTask(result.change_id));
+  if (!deps.perChange(result.change_id)) return next;
+  // A per-change change continues on its open PR; without one, this first
+  // task opens it, and the prompt must say so (per_change).
+  const open = deps.openFactoryPr(result.change_id);
+  return open ? babysitRoute(open, deps) : { ...next, per_change: true };
 }
 
 const HOUR = 60 * 60 * 1000;
@@ -267,8 +322,7 @@ function settleRetry(number, result, deps) {
 
 const isRetryWait = (result) =>
   result.mode === 'none' &&
-  (result.reason === 'Actions checks still running' ||
-    result.reason.startsWith('waiting on the owner'));
+  (result.reason === 'Actions checks still running' || result.reason.startsWith('waiting on '));
 
 /** An `(owner)` next task is escalated by the route job, never given to Claude. */
 function ownerTaskRoute(result, task) {
@@ -285,7 +339,7 @@ function route(eventName, event, deps) {
   const relayedPr = eventName === 'workflow_dispatch' && event.inputs?.pr;
   if (relayedPr) return babysitRoute(prNumberOf(event), deps);
   if (eventName === 'workflow_dispatch') return activeOnly(dispatchRoute(event), deps);
-  if (eventName === 'pull_request') return activeOnly(mergedRoute(event), deps);
+  if (eventName === 'pull_request') return activeOnly(mergedRoute(event, deps), deps);
   if (eventName === 'issues') return activeOnly(resumeRoute(event), deps);
   if (eventName === 'schedule') return retryRoute(deps);
   return babysitRoute(prNumberOf(event), deps);
@@ -293,7 +347,7 @@ function route(eventName, event, deps) {
 
 /** $GITHUB_OUTPUT lines; values are ids, numbers and branch names only. */
 function toOutput(result) {
-  const keys = ['mode', 'change_id', 'pr', 'ref', 'task', 'retry', 'reason'];
+  const keys = ['mode', 'change_id', 'pr', 'ref', 'task', 'retry', 'per_change', 'reason'];
   return keys.map((k) => `${k}=${String(result[k] ?? '').replace(/[\r\n]/g, ' ')}`).join('\n');
 }
 
@@ -360,10 +414,43 @@ const defaultDeps = {
   },
   now: () => Date.now(),
   prView: (n) =>
-    JSON.parse(gh(['pr', 'view', String(n), '--json', 'state,labels,author,headRefName'])),
+    JSON.parse(
+      gh(['pr', 'view', String(n), '--json', 'state,labels,author,headRefName,title,isDraft']),
+    ),
   feedback: (n) =>
     JSON.parse(execFileSync('node', ['scripts/pr-feedback.js', String(n)], { encoding: 'utf8' })),
+  // Required lazily: factory-issue.js requires this file.
+  perChange: (id) => {
+    const file = `openspec/changes/${id}/proposal.md`;
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    return require('./factory-issue.js').perChangeFromProposal(text);
+  },
+  branchTask: (id, ref) => nextTask(branchFile(`openspec/changes/${id}/tasks.md`, ref)),
+  markReady: (pr, n) => {
+    if (pr.isDraft) gh(['pr', 'ready', String(n)]);
+    const title = pr.title.replace(/^WIP:\s*/i, '');
+    if (title !== pr.title) gh(['pr', 'edit', String(n), '--title', title]);
+    gh(['pr', 'comment', String(n), '--body', readyComment()]);
+  },
 };
+
+/**
+ * A file on a branch, through the contents API: the route job checks out only
+ * main, so `git show origin/<branch>:<path>` has nothing to read.
+ */
+function branchFile(file, ref) {
+  const url = `repos/{owner}/{repo}/contents/${file}?ref=${encodeURIComponent(ref)}`;
+  return gh(['api', '-H', 'Accept: application/vnd.github.raw', url]);
+}
+
+const OWNER = '@jatwell93';
+
+function readyComment() {
+  return [
+    `${OWNER} Every task of this change is done and its reviews have settled, so this PR is ready for your review.`,
+    'If GitHub says the branch is out of date, use "Update branch" before merging.',
+  ].join('\n');
+}
 
 function main(env = process.env, deps = defaultDeps, log = console.log) {
   const event = JSON.parse(fs.readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
@@ -373,4 +460,15 @@ function main(env = process.env, deps = defaultDeps, log = console.log) {
 
 if (require.main === module) process.exitCode = main();
 
-module.exports = { changeFromLabels, factoryIdProblem, nextTask, route, toOutput, main };
+module.exports = {
+  OWNER,
+  babysitRoute,
+  branchFile,
+  changeFromLabels,
+  defaultDeps,
+  factoryIdProblem,
+  nextTask,
+  route,
+  toOutput,
+  main,
+};

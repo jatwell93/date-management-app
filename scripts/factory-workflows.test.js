@@ -47,10 +47,82 @@ test('factory.yml grants exactly the permissions it needs', () => {
     'pull-requests: write',
     'statuses: read',
   ]);
-  assert.doesNotMatch(FACTORY, /^[ \t]+permissions:/m, 'no job-level permissions widen the grant');
+  const jobGrants = [...FACTORY.matchAll(/^ {4}permissions:$/gm)];
+  assert.equal(jobGrants.length, 1, 'only the sweep job has its own permissions');
 });
 
-test('factory.yml queues tasks per change and passes per PR, never cancelling a running one', () => {
+/** The text of one job, from its `  <name>:` line to the next job. */
+const job = (name, next) =>
+  FACTORY.slice(FACTORY.indexOf(`\n  ${name}:\n`), FACTORY.indexOf(`\n  ${next}:\n`));
+
+test('the hourly sweep is its own job after the router, so its failure skips no run', () => {
+  const sweep = job('sweep', 'run');
+  assert.match(sweep, /^ {4}needs: route$/m);
+  assert.match(sweep, /^ {4}if: github\.event_name == 'schedule'$/m);
+  assert.match(sweep, /run: node scripts\/factory-sweep\.js/);
+  assert.match(sweep, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.doesNotMatch(sweep, /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.doesNotMatch(job('route', 'sweep'), /factory-sweep/, 'not a step of the route job');
+  assert.doesNotMatch(
+    job('run', 'escalate'),
+    /^ {4}needs: \[?[^\n]*sweep/m,
+    'run never waits on it',
+  );
+  assert.match(FACTORY, /per_change: \$\{\{ steps\.route\.outputs\.per_change \}\}/);
+});
+
+test("the sweep job's grant adds actions: write, for its dispatch, and nothing else to write", () => {
+  const sweep = job('sweep', 'run');
+  const grant = sweep.slice(sweep.indexOf('    permissions:\n'), sweep.indexOf('    steps:\n'));
+  const lines = grant
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+  assert.deepEqual(lines.sort(), [
+    'actions: write',
+    'checks: read',
+    'contents: read',
+    'issues: read',
+    'pull-requests: write',
+    'statuses: read',
+  ]);
+});
+
+test('the first task of a per-change change is told to open the PR', () => {
+  assert.match(
+    job('run', 'escalate'),
+    /needs\.route\.outputs\.per_change == 'true' && needs\.route\.outputs\.pr == '' && 'The change runs as one PR/,
+  );
+});
+
+test('a task on a per-change PR merges main first, unless main changed .github', () => {
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'), FACTORY.indexOf('\n  escalate:\n'));
+  const merge = run.slice(run.indexOf('- name: Merge main into a per-change PR branch'));
+  assert.ok(
+    run.indexOf('- name: Merge main into a per-change PR branch') <
+      run.indexOf("- name: Use main's copy of the factory's own rules"),
+    'before the rules are restored',
+  );
+  assert.match(
+    merge,
+    /if: needs\.route\.outputs\.mode == 'task' && needs\.route\.outputs\.pr != ''/,
+  );
+  assert.match(merge, /git diff --name-only HEAD\.\.\.origin\/main \| grep -q '\^\[\.\]github\/'/);
+  assert.match(merge, /merge --no-edit origin\/main; then\n\s+git merge --abort/);
+  assert.match(run, /steps\.base\.outputs\.note/, 'the prompt says when the base is older');
+});
+
+test('an owner task on a per-change PR is escalated from its branch', () => {
+  const escalate = FACTORY.slice(FACTORY.indexOf('\n  escalate:\n'));
+  assert.match(
+    escalate,
+    /REF: \$\{\{ needs\.route\.outputs\.per_change == 'true' && needs\.route\.outputs\.ref \|\| '' \}\}/,
+  );
+  assert.match(escalate, /factory-escalate\.js "\$CHANGE_ID" "\$TASK" \$\{REF:\+"\$REF"\}/);
+});
+
+test('factory.yml queues tasks and per-change PRs per change, other passes per PR, never cancelling', () => {
   assert.doesNotMatch(
     FACTORY,
     /^concurrency:/m,
@@ -59,7 +131,7 @@ test('factory.yml queues tasks per change and passes per PR, never cancelling a 
   const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'));
   assert.match(
     run,
-    /group: \$\{\{ needs\.route\.outputs\.mode == 'task' && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
+    /group: \$\{\{ \(needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.per_change == 'true'\) && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
   );
   assert.match(run, /^ {6}cancel-in-progress: false$/m);
 });

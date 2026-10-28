@@ -19,7 +19,7 @@ merge is the only gate before production.
 
 - `gh pr list --state open --label "factory:<id>" --json number,url`. If any PR is
   listed, print "factory:<id> PR already open: <url>" and stop. One task per change
-  at a time.
+  at a time. Exception: a per-change run (below) continues the PR it names.
 - Read `openspec/changes/<id>/handover.md`. If "Waiting on the user" lists a
   decision that blocks the next task, and the tracking issue (below) has no
   answer to it, stop and say which.
@@ -86,6 +86,28 @@ merge is the only gate before production.
 5. Print the PR URL and stop. Review handling runs as separate `babysit-pr`
    passes started by review and CI events; do not wait for CI here.
 
+## One PR per change (`pr: per-change`)
+
+A change whose `## Autonomy` block says `pr: per-change` keeps every task on one
+PR, which the owner merges once. The prompt says when a run is one of these, and
+names the PR, its branch and the task.
+
+- **First task** (no PR named): as above, but title the PR `WIP: <conventional
+title>` and say in the body that later tasks land on this PR. Not a draft:
+  Seer and Copilot skip drafts. The router drops `WIP:` when the last task is
+  done and reviews have settled.
+- **Later task** (PR named): re-check the state first, because the run may have
+  waited in the queue. The PR must still be open, and the task named in the
+  prompt must still be the first unchecked task in the branch's `tasks.md`. If
+  not, print why and stop. Work on the checked-out PR branch; do not create a
+  branch or a new PR. The workflow has already merged `main` into it when it
+  could; if the prompt says the base is older, say so in the PR body.
+- **Every task commit** ends with the trailer `Factory-Task: <task-number>`
+  (beside `Co-Authored-By`). `scripts/babysit-round.js` counts babysit rounds
+  only after the newest one, so each task gets its own 5 rounds.
+- Push with `git push`, then update the PR body (`gh pr edit <n> --body-file`)
+  to list the tasks done so far.
+
 ## Escalate
 
 1. Find the change's tracking issue: `n=$(node scripts/factory-issue.js <id>)`.
@@ -94,7 +116,9 @@ merge is the only gate before production.
 2. `gh issue edit "$n" --add-label needs-human`, then comment: `@jatwell93` and
    the task number, what blocks it, the options you see, and your
    recommendation. End with: "Answer here, then remove `needs-human` to resume."
-3. If a PR already exists for the task, add `needs-human` to it as well.
+3. If a PR already exists for the task, add `needs-human` to it as well, except
+   on a per-change PR: there the tracking issue's label alone holds the change,
+   so the owner's one removal resumes it.
 4. Stop. No task of this change starts while the issue has `needs-human`
    (`scripts/factory-route.js`); the owner removing it resumes the change, and
    the next run reads the answer (section 1).
