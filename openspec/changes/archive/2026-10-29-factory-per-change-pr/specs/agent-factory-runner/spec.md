@@ -2,9 +2,9 @@
 
 ### Requirement: A change can run as one PR
 
-A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, opened as a draft (or with a `WIP:` title where a review bot skips drafts), and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
+A change whose `## Autonomy` block says `pr: per-change` SHALL keep one open factory PR for all its tasks, opened ready with a `WIP:` title (Seer and Copilot skip draft PRs), and its tasks SHALL be read from that PR's branch while it is open, without needing that branch checked out. Each task SHALL mark its commits with a `Factory-Task: <n>` trailer and SHALL NOT rewrite pushed commits. Each task SHALL merge `origin/main` into the branch first, except when the merge would bring in a `.github/**` change, which the factory's GitHub App cannot push.
 
-Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. Every escalation on a per-change PR SHALL put `needs-human` on the tracking issue only, so the owner removing it there resumes the change. Every route of a change, whether started by an event (review, review comment, relayed CI run, merge, dispatch) or by the sweep, SHALL start no Claude run while the tracking issue has `needs-human` or `factory-retry`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task. A change without the key SHALL run one PR per task.
+Every run on the PR SHALL advance it by one step, chosen from the PR's state when the run starts: a babysit pass while an item is actionable; the next task once the PR is settled with nothing actionable; marking the PR ready for review and mentioning the owner on it once no unchecked task is left; nothing while an Actions check runs or the quiet window lasts. The step SHALL be chosen before any Claude run starts: only a babysit pass or a task SHALL start one, marking the PR ready SHALL need none, and a waiting or finished PR SHALL route to nothing. A run that finds work but can neither push nor reply SHALL escalate with `needs-human`. Every escalation on a per-change PR SHALL put `needs-human` on the tracking issue only, so the owner removing it there resumes the change. Every route of a change, whether started by an event (review, review comment, relayed CI run, merge, dispatch) or by the sweep, SHALL start no Claude run while the tracking issue has `needs-human` or `factory-retry`. All runs of the change SHALL share one concurrency group, so no two work on the branch at once. An hourly sweep SHALL apply the same step choice to each open per-change PR and dispatch a run only for a babysit pass or a task, except for a PR with `needs-human` on the PR or the tracking issue, or with `factory-retry` on the tracking issue. The PR's merge SHALL start no task once `main` has no unchecked task left; if the owner merged it with a task left, the merge SHALL start that task, which opens a new per-change PR. A change without the key SHALL run one PR per task.
 
 #### Scenario: Settled per-change PR with tasks left
 
@@ -64,12 +64,12 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 - **WHEN** the owner removes the label from the issue
 - **THEN** the router advances the PR
 
-#### Scenario: First task opens a draft
+#### Scenario: First task opens a WIP PR
 
 - **GIVEN** a `pr: per-change` change with no open factory PR
 - **WHEN** its first task run pushes
-- **THEN** it opens the PR as a draft
-- **AND** the PR is marked ready only when no unchecked task is left
+- **THEN** it opens a ready PR titled `WIP:`
+- **AND** the `WIP:` prefix is dropped only when no unchecked task is left
 
 #### Scenario: Branch task list read by the route job
 
@@ -87,7 +87,7 @@ Every run on the PR SHALL advance it by one step, chosen from the PR's state whe
 
 #### Scenario: Last task done
 
-- **GIVEN** a draft `pr: per-change` PR whose branch has every task ticked
+- **GIVEN** a `WIP:` `pr: per-change` PR whose branch has every task ticked
 - **WHEN** an event or the hourly sweep reaches it
 - **THEN** the route job marks the PR ready for review and mentions the owner, with no Claude run
 - **AND** the owner's merge of it starts no task
@@ -177,7 +177,7 @@ Each babysit pass SHALL run the same `no_go` diff check before pushing, and SHAL
 
 ### Requirement: Merged factory PRs start the next task
 
-When a PR labelled `factory:<change-id>` merges and the change runs one PR per task, the factory SHALL start the next unchecked task of that change, and SHALL run at most one review-response pass per PR at a time, capped at 5 babysit rounds per task as counted by `Babysit-Round: N` trailers. The merge of a `pr: per-change` PR SHALL start no task.
+When a PR labelled `factory:<change-id>` merges and the change runs one PR per task, the factory SHALL start the next unchecked task of that change, and SHALL run at most one review-response pass per PR at a time, capped at 5 babysit rounds per task as counted by `Babysit-Round: N` trailers. The merge of a `pr: per-change` PR SHALL start no task once `main` has no unchecked task of the change left, and SHALL start the next one otherwise.
 
 #### Scenario: Factory PR merges
 
@@ -188,6 +188,12 @@ When a PR labelled `factory:<change-id>` merges and the change runs one PR per t
 
 #### Scenario: Per-change PR merges
 
-- **GIVEN** a merged PR labelled `factory:<change-id>` for a `pr: per-change` change
+- **GIVEN** a merged PR labelled `factory:<change-id>` for a `pr: per-change` change whose tasks on `main` are all ticked
 - **WHEN** the `pull_request: closed` event fires
 - **THEN** no factory run starts
+
+#### Scenario: Per-change PR merged with a task left
+
+- **GIVEN** the owner merged a `WIP:` `pr: per-change` PR while `main` still has an unchecked task of the change
+- **WHEN** the `pull_request: closed` event fires
+- **THEN** the factory starts that task, which opens a new per-change PR

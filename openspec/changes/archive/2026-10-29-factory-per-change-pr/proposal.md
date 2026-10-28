@@ -8,7 +8,7 @@ With one PR per task, the next task starts only when the owner merges the last o
 
 ## What changes
 
-- **One PR per change, opt-in.** A change whose Autonomy block says `pr: per-change` keeps one PR on `feature/factory-<id>`:
+- **One PR per change, opt-in.** A change whose Autonomy block says `pr: per-change` keeps one PR, on the branch its first task opens (`feature/factory-<id>-<first task>`):
   - The first task opens the PR as a draft (or with a `WIP:` title, if task 1.1 finds a bot skips drafts). Every later task adds its commits with a `Factory-Task: <n>` trailer and pushes, never rebasing or force-pushing.
   - Escalations on a per-change PR, including a babysit pass hitting its round cap, put `needs-human` on the tracking issue only, never on the PR. Removing that one label resumes the change. Every route checks the tracking issue before starting a Claude run, so a review or CI event on a parked or backing-off change starts nothing either.
   - Every run on the PR advances it by one step, chosen from the PR's state when the run starts: a babysit pass while something is actionable; the next task once the PR is settled (`pr-feedback.js` `settled=true`, nothing actionable); marking it ready when no task is left; nothing while checks run or the quiet window lasts. The route job picks the step, so only a babysit pass or a task costs a Claude run: it marks the PR ready itself (`gh pr ready` and a comment) and routes a waiting or finished PR to `none`. The Claude run re-checks the state when it starts, in case it changed while queued. A run that found work but could neither push nor reply escalates.
