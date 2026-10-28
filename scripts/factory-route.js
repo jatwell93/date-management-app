@@ -102,9 +102,17 @@ function mergedRoute(event, deps) {
   if (event.action !== 'closed' || !pr.merged) return none('not a merge');
   const id = changeFromLabels(pr.labels || []);
   if (!id || !isAppAuthor(authorOf(pr))) return none('not a factory PR');
-  if (deps.perChange(id)) return none(`#${pr.number} merged: per-change PR, change complete`);
+  if (perChangeComplete(id, deps))
+    return none(`#${pr.number} merged: per-change PR, change complete`);
   return { mode: 'task', change_id: id, reason: `#${pr.number} merged` };
 }
+
+/**
+ * True when a per-change change has no task left on main. A per-change PR
+ * merged before its last task (the owner merged a WIP: PR) carries on: the
+ * next task opens a new per-change PR.
+ */
+const perChangeComplete = (id, deps) => deps.perChange(id) && !deps.nextTask(id);
 
 /**
  * PR number the event is about, or 0. A finished CI run reaches this workflow

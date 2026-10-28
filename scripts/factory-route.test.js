@@ -401,14 +401,27 @@ const REVIEW = { pull_request: { number: 9 } };
 const QUIET = { settled: false, waitingOn: ['quiet window'], unresolvedThreads: [] };
 const DONE = '- [x] 1.1 Do it\n- [x] 1.2 (owner) Rotate the key\n';
 
+const PER_CHANGE_MERGE = {
+  action: 'closed',
+  pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
+};
+
 test('a merged per-change PR starts nothing: the change is complete', () => {
-  const event = {
-    action: 'closed',
-    pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
-  };
-  const r = route('pull_request', event, perChange());
+  const r = route('pull_request', PER_CHANGE_MERGE, perChange({ tasks: DONE }));
   assert.equal(r.mode, 'none');
   assert.match(r.reason, /per-change PR, change complete/);
+});
+
+test('a per-change PR merged with a task left opens a new per-change PR for it', () => {
+  // #733: the owner merged a WIP: PR after 1.1; 1.2 must not stall.
+  const r = route(
+    'pull_request',
+    PER_CHANGE_MERGE,
+    perChange({ tasks: '- [x] 1.1 Do it\n- [ ] 1.2 Next\n' }),
+  );
+  assert.equal(r.mode, 'task');
+  assert.equal(r.per_change, true);
+  assert.match(r.reason, /#7 merged/);
 });
 
 test('an actionable per-change PR gets a babysit pass in the change group', () => {
