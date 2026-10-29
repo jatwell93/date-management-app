@@ -75,7 +75,7 @@ const COPIED_SECRETS = fs.readFileSync(path.join(__dirname, 'pre-commit-secrets.
  * Fake git, directory listing and file reads for the installer. Hooks named in
  * `secrets` hold what `git secrets --install` writes; the rest are someone's own.
  */
-function installDeps({ hooksPath = '', files = [], secrets = [] } = {}) {
+function installDeps({ hooksPath = '', files = [], secrets = [], own = '#!/bin/sh\nmine\n' } = {}) {
   const calls = [];
   // Like git: the hooks directory follows core.hooksPath when it is set.
   const answers = {
@@ -87,8 +87,10 @@ function installDeps({ hooksPath = '', files = [], secrets = [] } = {}) {
     return (answers[args.slice(0, 2).join(' ')] || (() => 'true'))();
   };
   const listings = { '.githooks': ['pre-commit', 'pre-push'] };
-  const read = (file) =>
-    secrets.includes(path.basename(file)) ? SECRETS_HOOK : '#!/bin/sh\nmy-own-hook\n';
+  const read = (file) => {
+    if (file.endsWith('pre-commit-secrets.sh')) return COPIED_SECRETS;
+    return secrets.includes(path.basename(file)) ? SECRETS_HOOK : own;
+  };
   return { calls, git, list: (dir) => listings[dir] || [...files, ...secrets], read };
 }
 
@@ -120,9 +122,13 @@ test('install replaces the git-secrets hooks, which .githooks runs itself', () =
   assert.match(install(secrets), /^git hooks installed/);
   const mixed = installDeps({ files: ['pre-push'], secrets: ['pre-commit'] });
   assert.match(install(mixed), /already has hooks \(pre-push\)/);
-  const copied = installDeps({ files: ['pre-commit'] });
-  copied.read = () => COPIED_SECRETS;
+  const copied = installDeps({ files: ['pre-commit'], own: COPIED_SECRETS });
   assert.match(install(copied), /^git hooks installed/);
+  // A hook that calls git-secrets but does more is someone's own: kept.
+  const extended = `${SECRETS_HOOK}./run-my-linter\n`;
+  assert.match(install(installDeps({ files: ['pre-commit'], own: extended })), /already has/);
+  const edited = `${COPIED_SECRETS}\n./run-my-linter\n`;
+  assert.match(install(installDeps({ files: ['pre-commit'], own: edited })), /already has/);
   for (const hook of ['pre-commit', 'commit-msg', 'prepare-commit-msg']) {
     const text = fs.readFileSync(path.join(HOOKS, hook), 'utf8');
     assert.match(text, /git-secrets --\w+_hook -- "\$@"/, hook);

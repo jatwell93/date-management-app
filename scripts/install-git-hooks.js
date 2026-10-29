@@ -15,8 +15,10 @@
  */
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
+const path = require('node:path');
 
 const HOOKS_PATH = '.githooks';
+const COPIED_SECRETS = path.join(__dirname, 'pre-commit-secrets.sh');
 
 const defaultDeps = {
   git: (args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' }).trim(),
@@ -24,13 +26,17 @@ const defaultDeps = {
   read: (file) => fs.readFileSync(file, 'utf8'),
 };
 
+// The whole of a hook `git secrets --install` writes: a shebang and one call.
+const GIT_SECRETS_TEMPLATE = /^#![^\n]*\n+git secrets --\w+_hook -- "\$@"\s*$/;
+
 /**
- * True for a hook scripts/setup-git-secrets.sh installed: one `git secrets
- * --install` wrote (`git secrets --<name>_hook`), or its copy of
- * scripts/pre-commit-secrets.sh (`git secrets --scan`). .githooks/ runs the
- * same git-secrets checks, so replacing either loses nothing.
+ * True only for an unmodified hook scripts/setup-git-secrets.sh installed: the
+ * exact template `git secrets --install` writes, or an exact copy of
+ * scripts/pre-commit-secrets.sh. .githooks/ runs the same git-secrets checks,
+ * so replacing either loses nothing; a hook with anything added is kept.
  */
-const isGitSecretsHook = (text) => /^\s*(if )?git secrets --(\w+_hook|scan)\b/m.test(text);
+const isGitSecretsHook = (text, copied) =>
+  GIT_SECRETS_TEMPLATE.test(text.trim()) || text.trim() === copied.trim();
 
 /** The configured core.hooksPath, or ''. */
 function configuredPath(git) {
@@ -47,10 +53,11 @@ function existingHooks(deps) {
   if (current === HOOKS_PATH) return '';
   if (current) return `core.hooksPath is already ${current}`;
   const dir = deps.git(['rev-parse', '--git-path', 'hooks']);
+  const copied = deps.read(COPIED_SECRETS);
   const real = deps
     .list(dir)
     .filter((name) => !name.endsWith('.sample'))
-    .filter((name) => !isGitSecretsHook(deps.read(`${dir}/${name}`)));
+    .filter((name) => !isGitSecretsHook(deps.read(`${dir}/${name}`), copied));
   return real.length ? `${dir} already has hooks (${real.join(', ')})` : '';
 }
 
