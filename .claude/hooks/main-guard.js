@@ -12,18 +12,27 @@
  *   - `git push` with no refspec, or `HEAD`, while the branch is main
  *   - `git push` whose refspec targets main (`main`, `x:main`, `:main`,
  *     `refs/heads/main`, `+main`)
- * A `git switch`/`git checkout` earlier in the same command line counts, so
- * `git switch -c feature/x && git commit ...` on main is allowed.
+ * The branch is read where the command runs: after a `cd`, in a `git -C <dir>`
+ * directory, and after a `git switch`/`git checkout` earlier in the same line
+ * (so `git switch -c feature/x && git commit ...` on main is allowed). A plain
+ * `git checkout <name>` counts only when <name> is a branch or commit, not a
+ * file. It is a guard against accidents, not a sandbox: it does not expand
+ * variables, aliases or subshells.
  */
 const { execFileSync } = require('child_process');
+const path = require('path');
 
 const MAIN = 'main';
-const HEREDOC = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1/;
-const GLOBALS = new Set(['-c', '-C']);
+const HEREDOC = /(?<!<)<<-?\s*(['"]?)([A-Za-z_]\w*)\1/;
+const WRAPPERS = new Set(['rtk', 'command', 'env', 'exec', 'sudo', 'time', 'nohup']);
+const ASSIGNMENT = /^\w+=/;
+const VALUE_GLOBALS = new Set(['-c', '-C', '--git-dir', '--work-tree', '--namespace']);
 const SWITCHES = new Set(['switch', 'checkout']);
 const CREATE = new Set(['-c', '-C', '-b', '-B']);
 
 const heredocEnd = (line) => line.match(HEREDOC)?.[2] ?? null;
+const unquote = (word) => word.replace(/^(['"])(.*)\1$/, '$2');
+const wordsOf = (segment) => segment.trim().split(/\s+/).filter(Boolean).map(unquote);
 
 /** The command with heredoc bodies removed, so their text is not parsed. */
 function stripHeredocs(command) {
@@ -40,37 +49,46 @@ function stripHeredocs(command) {
   return out.join('\n');
 }
 
-/** Where `git` starts the words (directly or after `rtk`), or -1. */
+/** Where `git` starts the words, after env assignments and wrappers, or -1. */
 function gitIndex(words) {
-  const at = words.indexOf('git');
-  if (at <= 0) return at;
-  return words[at - 1] === 'rtk' ? at : -1;
+  const at = words.findIndex((w) => !WRAPPERS.has(w) && !ASSIGNMENT.test(w));
+  return words[at] === 'git' ? at : -1;
 }
 
-/** The words after `git`, without its `-c`/`-C` globals, or null. */
-function gitArgs(words) {
+/** The git subcommand and its arguments, with the `-C` directory if given. */
+function splitGlobals(rest) {
+  let dir = null;
+  let i = 0;
+  while (rest[i]?.startsWith('-')) {
+    if (rest[i] === '-C') dir = rest[i + 1];
+    i += VALUE_GLOBALS.has(rest[i]) ? 2 : 1;
+  }
+  return { dir, args: rest.slice(i) };
+}
+
+/** One step of the command line: `{ cd }`, `{ dir, args }` for git, or null. */
+function stepOf(words) {
+  if (words[0] === 'cd') return { cd: words[1] || '~' };
   const at = gitIndex(words);
-  if (at === -1) return null;
-  const rest = words.slice(at + 1);
-  while (GLOBALS.has(rest[0])) rest.splice(0, 2);
-  return rest;
+  return at === -1 ? null : splitGlobals(words.slice(at + 1));
 }
 
-/** Each simple command's git arguments, in order. */
-function gitCalls(command) {
+/** The command's `cd` and git steps, in order. */
+function steps(command) {
   return stripHeredocs(command)
     .split(/&&|\|\||[;|\n]/)
-    .map((segment) => gitArgs(segment.trim().split(/\s+/).filter(Boolean)))
+    .map((segment) => stepOf(wordsOf(segment)))
     .filter(Boolean);
 }
 
 /** The branch a `git switch` or `git checkout` moves to, or ''. */
-function switchTarget(args) {
+function switchTarget(args, isBranch) {
   const [sub, ...rest] = args;
   if (!SWITCHES.has(sub) || rest.includes('--')) return '';
   const create = rest.findIndex((a) => CREATE.has(a));
   if (create !== -1) return rest[create + 1] || '';
-  return rest.find((a) => !a.startsWith('-')) || '';
+  const name = rest.find((a) => !a.startsWith('-')) || '';
+  return name && isBranch(name) ? name : '';
 }
 
 const targetsMain = (refspec) => {
@@ -99,23 +117,52 @@ function callProblem(args, branch) {
   return problem && `git push ${problem}`;
 }
 
-/** Why the command must not run, or '' to allow it. */
-function verdict(command, branch) {
-  let current = branch;
-  for (const args of gitCalls(command)) {
-    current = switchTarget(args) || current;
-    const problem = callProblem(args, current);
-    if (problem) return problem;
+/** Apply one step to `state` ({ cwd, branch }); why it lands on main, or ''. */
+function advance(state, step, ctx) {
+  if (step.cd) {
+    state.cwd = path.resolve(state.cwd, step.cd);
+    state.branch = ctx.branchOf(state.cwd);
+    return '';
   }
-  return '';
+  const dir = step.dir ? path.resolve(state.cwd, step.dir) : state.cwd;
+  const here = step.dir ? ctx.branchOf(dir) : state.branch;
+  const moved = switchTarget(step.args, (name) => ctx.isBranch(name, dir));
+  if (!step.dir) state.branch = moved || state.branch;
+  return callProblem(step.args, moved || here);
 }
 
-function currentBranch(cwd) {
+/**
+ * Why the command must not run, or '' to allow it. `ctx` gives the starting
+ * `cwd`, `branchOf(dir)` and `isBranch(name, dir)`.
+ */
+function verdict(command, ctx) {
+  const state = { cwd: ctx.cwd, branch: ctx.branchOf(ctx.cwd) };
+  let problem = '';
+  steps(command).some((step) => (problem = advance(state, step, ctx)));
+  return problem;
+}
+
+const git = (args, cwd) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+
+function branchOf(cwd) {
   try {
-    return execFileSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf8' }).trim();
+    return git(['branch', '--show-current'], cwd).trim();
   } catch {
     return '';
   }
+}
+
+/** True when `name` is a commit, a local branch or an origin branch. */
+function isBranch(name, cwd) {
+  return [name, `origin/${name}`].some((rev) => {
+    try {
+      git(['rev-parse', '--verify', '--quiet', `${rev}^{commit}`], cwd);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** The hook's exit code for one PreToolUse payload (2 blocks). */
@@ -128,7 +175,7 @@ function guard(input) {
   }
   const command = payload.tool_input?.command || '';
   if (!/\bgit\b/.test(command)) return 0;
-  const reason = verdict(command, currentBranch(payload.cwd || process.cwd()));
+  const reason = verdict(command, { cwd: payload.cwd || process.cwd(), branchOf, isBranch });
   if (!reason) return 0;
   process.stderr.write(
     `main-guard: blocked (${reason}). Work on a feature branch: ` +
@@ -143,4 +190,4 @@ if (require.main === module) {
   process.stdin.on('end', () => process.exit(guard(input)));
 }
 
-module.exports = { gitCalls, stripHeredocs, switchTarget, verdict };
+module.exports = { steps, stripHeredocs, switchTarget, verdict };
