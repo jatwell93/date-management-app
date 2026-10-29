@@ -88,23 +88,31 @@ decision (a schema, a state machine) more exactly than prose can.
    ```
 
    Body: `## What to build` (end-to-end behaviour), `## Demo`, `## Acceptance
-   criteria` as a checklist, and the line `Task <number> of OpenSpec change
-   <id>; tasks.md is the source of truth.` The blocking edges are native, so
+criteria` as a checklist, and the line `Task <number> of OpenSpec change
+<id>; tasks.md is the source of truth.` The blocking edges are native, so
    the body has no `Blocked by` section.
 
    **Never label a ticket `factory:<id>`.** That label marks the tracking
    issue; `scripts/factory-issue.js` and the router take the first open issue
    carrying it.
-3. Append each ticket's number to its task line: `- [ ] 1.2 <title> (#812): ...`.
-   `run-spec` writes `Closes #812` into the PR that lands the task.
+
+3. Append each ticket's number to its task line as soon as the issue exists,
+   before creating the next one: `- [ ] 1.2 <title> (#812): ...`. `run-spec`
+   writes `Closes #812` into the PR that lands the task.
+
+If a run stops partway, re-run this step: skip every task whose line already
+carries `(#<n>)`, and pass those numbers to `--blocked-by` for the tasks still
+to publish. Never create a second issue for a task.
 
 Do not close or edit the tracking issue.
 
 ## 6. Hand the plan to the owner
 
 Commit the change folder on a `feature/*` branch
-(`docs(openspec): tickets for <id>`), push, open the PR labelled
-`factory:<id>` and `factory-ready`, then run `babysit-pr`. The owner merging it
+(`docs(openspec): tickets for <id>`) and push. Make sure the label exists
+(`gh label create factory-ready --color 0e8a16 --description "Owner approved: the factory may start this change" --force`;
+`factory-issue.js` already made `factory:<id>`), then open the PR labelled
+`factory:<id>` and `factory-ready` and run `babysit-pr`. The owner merging it
 is the approval that starts the build: the factory picks up the first task once
 the plan is on `main`. Report the PR, the tracking issue and the ticket numbers.
 
