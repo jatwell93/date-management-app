@@ -4,11 +4,11 @@ Updated: 2026-10-29
 
 ## State
 
-Throwaway change for `factory-tickets-and-autostart` task 6.1. Planned with `/to-tickets`: tracking issue #752, tickets #753 (1.1) and #754 (1.2, blocked by #753). Task 1.1 is done: `proof.md` exists with its heading and first line, on the per-change `WIP:` PR (branch `feature/factory-factory-tickets-proof-1.1`).
+Throwaway change for `factory-tickets-and-autostart` task 6.1. Planned with `/to-tickets`: tracking issue #752, tickets #753 (1.1) and #754 (1.2, blocked by #753). Tasks 1.1 and 1.2 are done: `proof.md` has its heading and both lines, on the per-change `WIP:` PR #756 (branch `feature/factory-factory-tickets-proof-1.1`).
 
 ## Next
 
-1.2 on the same per-change PR, then the archive run.
+The archive run on the same PR.
 
 ## Waiting on the user
 
