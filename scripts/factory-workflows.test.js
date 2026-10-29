@@ -170,6 +170,7 @@ test("factory.yml routes from main and runs main's rules on a PR branch", () => 
     'scripts/babysit-round.js',
     'scripts/factory-route.js',
     'scripts/factory-issue.js',
+    'scripts/factory-ticket.js',
     'scripts/factory-escalate.js',
     'scripts/factory-retry.js',
   ]) {

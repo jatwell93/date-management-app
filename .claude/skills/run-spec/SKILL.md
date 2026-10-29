@@ -82,7 +82,9 @@ merge is the only gate before production.
 4. `gh pr create --base main --label "factory:<id>" --title "<conventional title>" --body-file <file>`,
    with the body written in the `pr` skill's template. Say in the body that this
    is a factory PR for task `<task-number>` of `<id>` and that it waits for the
-   owner's merge.
+   owner's merge. Add the line that
+   `node scripts/factory-ticket.js <id> <task-number>` prints (`Closes #<n>`, or
+   nothing when the task has no ticket), so the merge closes the task's ticket.
 5. Print the PR URL and stop. Review handling runs as separate `babysit-pr`
    passes started by review and CI events; do not wait for CI here.
 
@@ -106,7 +108,8 @@ title>` and say in the body that later tasks land on this PR. Not a draft:
   (beside `Co-Authored-By`). `scripts/babysit-round.js` counts babysit rounds
   only after the newest one, so each task gets its own 5 rounds.
 - Push with `git push`, then update the PR body (`gh pr edit <n> --body-file`)
-  to list the tasks done so far.
+  to list the tasks done so far. Keep each task's `Closes #<n>` line from
+  `scripts/factory-ticket.js`: the PR closes every ticket it lands.
 
 ## Escalate
 

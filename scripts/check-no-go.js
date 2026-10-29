@@ -55,6 +55,7 @@ const BASELINE = [
   'scripts/babysit-round.js',
   'scripts/pr-feedback.js',
   'scripts/factory-issue.js',
+  'scripts/factory-ticket.js',
   'scripts/factory-digest.js',
   'scripts/factory-escalate.js',
   'scripts/factory-retry.js',

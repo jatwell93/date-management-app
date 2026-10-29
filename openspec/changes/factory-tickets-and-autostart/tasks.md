@@ -24,7 +24,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 - [x] 3.1 `.claude/skills/to-tickets/SKILL.md`, adapted from mattpocock/skills `to-tickets`: read the change's `proposal.md`, `design.md` and spec deltas; slice into vertical tasks (expand-migrate-contract for wide refactors); quiz the owner (granularity, real blocking edges, a demo per task); then write `tasks.md` and publish the issues, blockers first, as sub-issues of the tracking issue (`node scripts/factory-issue.js <id>`) with `--blocked-by`. Each task line ends with its issue, e.g. `(#812)`. Last step: open the plan PR labelled `factory:<id>` and `factory-ready` (task 4.2 makes its merge start the build). Tickets never carry `factory:<id>`, which marks the tracking issue.
       Demo: run on a small change; `tasks.md` and the sub-issues match, blocking links visible on GitHub (exercised by 6.1).
       Blocked by: 1.1.
-- [ ] 3.2 `run-spec` adds `Closes #<n>` to the PR body for each task line it lands that carries an issue number; on a per-change PR, each task adds its line to the body.
+- [x] 3.2 `run-spec` adds `Closes #<n>` to the PR body for each task line it lands that carries an issue number; on a per-change PR, each task adds its line to the body.
       Demo: merging a factory PR closes its ticket.
       Acceptance: a test of the issue-number parse (in `scripts/factory-issue.js` beside `issueFromProposal`).
       Blocked by: 3.1.
