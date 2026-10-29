@@ -17,10 +17,6 @@
           {
             "type": "command",
             "command": "dcg"
-          },
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/main-guard.js\""
           }
         ]
       }
