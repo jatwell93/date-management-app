@@ -32,6 +32,24 @@ test('pre-commit refuses a commit on main and allows one on a feature branch', (
   assert.equal(git('commit', '-q', '--allow-empty', '-m', 'x').status, 0);
 });
 
+test('pre-commit runs the git-secrets scan when git-secrets is installed', () => {
+  const { git, repo } = makeRepo();
+  git('config', 'core.hooksPath', HOOKS);
+  git('switch', '-q', '-c', 'feature/x');
+  const bin = path.join(repo, '..', 'bin');
+  fs.mkdirSync(bin);
+  const fake = path.join(bin, 'git-secrets');
+  fs.writeFileSync(fake, '#!/bin/sh\necho "git-secrets: found a secret" >&2\nexit 1\n');
+  fs.chmodSync(fake, 0o755);
+  const r = spawnSync('git', ['commit', '-q', '--allow-empty', '-m', 'x'], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+  });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /found a secret/);
+});
+
 test('pre-push refuses any push that updates main, however it is spelled', () => {
   const { git } = makeRepo();
   git('switch', '-q', '-c', 'feature/x');
@@ -45,20 +63,24 @@ test('pre-push refuses any push that updates main, however it is spelled', () =>
   assert.equal(git('push', '-q', 'origin', 'feature/x').status, 0);
 });
 
+const unset = () => {
+  throw new Error('unset');
+};
+
 /** Fake git and directory listing for the installer. */
 function installDeps({ hooksPath = '', files = [] } = {}) {
   const calls = [];
+  // Like git: the hooks directory follows core.hooksPath when it is set.
+  const answers = {
+    'config --get': hooksPath ? () => hooksPath : unset,
+    'rev-parse --git-path': () => hooksPath || '.git/hooks',
+  };
   const git = (args) => {
     calls.push(args);
-    if (args[0] === 'config' && args[1] === '--get') {
-      if (!hooksPath) throw new Error('unset');
-      return hooksPath;
-    }
-    // Like git: the hooks directory follows core.hooksPath when it is set.
-    const hooksDir = hooksPath || '.git/hooks';
-    return args[0] === 'rev-parse' && args[1] === '--git-path' ? hooksDir : 'true';
+    return (answers[args.slice(0, 2).join(' ')] || (() => 'true'))();
   };
-  return { calls, git, list: (dir) => (dir === '.githooks' ? ['pre-commit', 'pre-push'] : files) };
+  const listings = { '.githooks': ['pre-commit', 'pre-push'] };
+  return { calls, git, list: (dir) => listings[dir] || files };
 }
 
 test('install sets core.hooksPath in a checkout and skips outside one', () => {

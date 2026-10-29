@@ -6,4 +6,9 @@ if [ "$(git branch --show-current)" = "main" ]; then
   echo "pre-commit: refusing to commit on main. Run: git switch -c feature/<name>" >&2
   exit 1
 fi
+# With core.hooksPath set, git no longer runs the git-secrets hook that
+# scripts/setup-git-secrets.sh installs in .git/hooks, so run its scan here.
+if command -v git-secrets >/dev/null 2>&1; then
+  git-secrets --pre_commit_hook -- "$@" || exit 1
+fi
 exit 0

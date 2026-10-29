@@ -386,6 +386,8 @@ bash scripts/setup-git-secrets.sh
 # Creates pre-commit hook and configures patterns
 ```
 
+`npm install` points git at `.githooks/` (`core.hooksPath`), so git skips the hook this script writes to `.git/hooks`. `.githooks/pre-commit` runs the git-secrets scan itself whenever `git-secrets` is on `PATH`, so installing git-secrets and registering its patterns is enough.
+
 **Patterns Scanned**:
 
 - AWS access keys: `AKIA*`
