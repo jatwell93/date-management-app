@@ -45,15 +45,41 @@ test('pre-push refuses any push that updates main, however it is spelled', () =>
   assert.equal(git('push', '-q', 'origin', 'feature/x').status, 0);
 });
 
-test('install sets core.hooksPath in a checkout and skips outside one', () => {
+/** Fake git and directory listing for the installer. */
+function installDeps({ hooksPath = '', files = [] } = {}) {
   const calls = [];
-  assert.match(
-    install((args) => calls.push(args)),
-    /installed/,
-  );
-  assert.deepEqual(calls.at(-1), ['config', 'core.hooksPath', '.githooks']);
-  const skipped = install(() => {
-    throw new Error('not a repo');
+  const git = (args) => {
+    calls.push(args);
+    if (args[0] === 'config' && args[1] === '--get') {
+      if (!hooksPath) throw new Error('unset');
+      return hooksPath;
+    }
+    // Like git: the hooks directory follows core.hooksPath when it is set.
+    const hooksDir = hooksPath || '.git/hooks';
+    return args[0] === 'rev-parse' && args[1] === '--git-path' ? hooksDir : 'true';
+  };
+  return { calls, git, list: (dir) => (dir === '.githooks' ? ['pre-commit', 'pre-push'] : files) };
+}
+
+test('install sets core.hooksPath in a checkout and skips outside one', () => {
+  const deps = installDeps({ files: ['pre-commit.sample'] });
+  assert.match(install(deps), /^git hooks installed/);
+  assert.deepEqual(deps.calls.at(-1), ['config', 'core.hooksPath', '.githooks']);
+  assert.match(install(installDeps({ hooksPath: '.githooks' })), /^git hooks installed/);
+  const skipped = install({
+    git: () => {
+      throw new Error('not a repo');
+    },
+    list: () => [],
   });
   assert.match(skipped, /not a git checkout/);
+});
+
+test('install never replaces hooks someone set up already', () => {
+  const elsewhere = installDeps({ hooksPath: '.husky' });
+  assert.match(install(elsewhere), /already \.husky/);
+  assert.ok(!elsewhere.calls.some((a) => a[0] === 'config' && a[1] === 'core.hooksPath'));
+  const local = installDeps({ files: ['pre-commit', 'pre-push.sample'] });
+  assert.match(install(local), /already has hooks \(pre-commit\)/);
+  assert.ok(!local.calls.some((a) => a[0] === 'config' && a[1] === 'core.hooksPath'));
 });

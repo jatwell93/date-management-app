@@ -6,18 +6,53 @@
  * so `npm install` / `npm ci` installs them. Outside a git checkout (a
  * tarball install) it does nothing, and it never fails the install.
  *
+ * It never replaces hooks someone set up already: when `core.hooksPath` points
+ * elsewhere, or the default hooks directory holds a real (non-sample) hook,
+ * it leaves git alone and says how to chain the repository's hooks instead.
+ *
  * Usage: node scripts/install-git-hooks.js
  */
 const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
 
-function main(git = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' })) {
+const HOOKS_PATH = '.githooks';
+
+const defaultDeps = {
+  git: (args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' }).trim(),
+  list: (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []),
+};
+
+/** The configured core.hooksPath, or ''. */
+function configuredPath(git) {
   try {
-    git(['rev-parse', '--is-inside-work-tree']);
+    return git(['config', '--get', 'core.hooksPath']);
+  } catch {
+    return '';
+  }
+}
+
+/** Why installing would replace someone's hooks, or ''. */
+function existingHooks(deps) {
+  const current = configuredPath(deps.git);
+  if (current === HOOKS_PATH) return '';
+  if (current) return `core.hooksPath is already ${current}`;
+  const dir = deps.git(['rev-parse', '--git-path', 'hooks']);
+  const real = deps.list(dir).filter((name) => !name.endsWith('.sample'));
+  return real.length ? `${dir} already has hooks (${real.join(', ')})` : '';
+}
+
+function main(deps = defaultDeps) {
+  try {
+    deps.git(['rev-parse', '--is-inside-work-tree']);
   } catch {
     return 'not a git checkout: hooks not installed';
   }
-  git(['config', 'core.hooksPath', '.githooks']);
-  return 'git hooks installed (core.hooksPath=.githooks)';
+  const existing = existingHooks(deps);
+  if (existing) {
+    return `git hooks not installed: ${existing}. Call ${HOOKS_PATH}/pre-commit and ${HOOKS_PATH}/pre-push from your own hooks.`;
+  }
+  deps.git(['config', 'core.hooksPath', HOOKS_PATH]);
+  return `git hooks installed (core.hooksPath=${HOOKS_PATH})`;
 }
 
 if (require.main === module) {
