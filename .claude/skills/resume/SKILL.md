@@ -34,6 +34,7 @@ description: >-
 
 ## When the task is done
 
-Push, open the PR, run `babysit-pr`, tick the task in `tasks.md`, and update the
-handover with the `handover` skill. Then go on to the next task if it does not
+Tick the task in `tasks.md` and update the handover with the `handover` skill on
+the task's branch, in the task's commit (`mem-log` refuses to write on `main`).
+Then push, open the PR and run `babysit-pr`. Then go on to the next task if it does not
 depend on an unmerged PR. If it does, stop and say which PR has to merge first.
