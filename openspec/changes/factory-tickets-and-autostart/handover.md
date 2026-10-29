@@ -1,10 +1,10 @@
 # Handover: factory-tickets-and-autostart
 
-Updated: 2026-10-29 · main at c54f34ea
+Updated: 2026-10-29 · main at d3941c77
 
 ## State
 
-Proposal merged (#738). Task 1.1 done on `feature/factory-tickets-1-1`. Every dependency holds, so the plan needs no change.
+Merged: 1.1 (#742), 2.1 git hooks (#743), 2.2 mem-log (#744), 4.1 factory-ready label (#745), 3.1 to-tickets skill (#746). 4.2 (plan-PR merge starts the build) is #747; 3.2 (`scripts/factory-ticket.js` writes `Closes #n`) is #748.
 
 ## 1.1 findings (2026-10-29)
 
@@ -15,12 +15,14 @@ Proposal merged (#738). Task 1.1 done on `feature/factory-tickets-1-1`. Every de
 
 ## Next
 
-2.1 (main-guard hook) and 2.2 (`mem-log` on feature branches only). Neither depends on 1.1. Then 3.1.
+5.1 (archive mode; also handle `openspec/changes/archive/*-<id>/` in nextTask, the sweep, the escalate check and mergedRoute). 5.1 touches `scripts/factory-route.js` like 4.2, so start it after the 4.2 PR merges. Then 6.1, the live proof.
+
+Once 2.1 is proven in use, delete the `verify-branch-before-commit` auto-memory: the pre-commit hook now refuses commits on main.
 
 ## Open PRs
 
-- The 1.1 PR (this branch).
+- #747 (4.2), #748 (3.2).
 
 ## Waiting on the user
 
-- Merge the 1.1 PR.
+- Merge #747 and #748.

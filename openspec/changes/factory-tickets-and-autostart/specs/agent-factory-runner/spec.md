@@ -16,6 +16,22 @@ The factory SHALL start a change's first unchecked task when the owner adds the 
 - **WHEN** an account other than the owner adds `factory-ready`
 - **THEN** the router routes to nothing and no Claude run starts
 
+### Requirement: The owner merging a plan PR starts a change
+
+The factory SHALL start a change's first unchecked task when a pull request labelled both `factory:<change-id>` and `factory-ready` merges with the owner as `merged_by`, whoever authored it: that merge puts the change's `tasks.md` on `main`, where the router reads it. It SHALL start nothing when the PR closes unmerged, when someone other than the owner merged it, when it lacks either label, when the tracking issue has `needs-human` or `factory-retry`, and when the change already has an open factory PR. A merged factory PR (authored by the Claude GitHub App) keeps its own merge route.
+
+#### Scenario: Owner merges the plan PR
+
+- **GIVEN** a plan PR labelled `factory:<change-id>` and `factory-ready`, and no open factory PR for the change
+- **WHEN** the owner merges it
+- **THEN** a run starts the change's first unchecked task
+
+#### Scenario: Someone else merges the plan PR
+
+- **GIVEN** a plan PR labelled `factory:<change-id>` and `factory-ready`
+- **WHEN** an account other than the owner merges it
+- **THEN** the router routes to nothing and no Claude run starts
+
 ### Requirement: The factory archives a finished change
 
 When a change has no unchecked task left, the factory SHALL archive it before handing it to the owner: reconcile the change's spec deltas with `openspec/specs/` and with what its tasks built, pass `openspec validate`, and run `openspec archive`. On a `pr: per-change` change it SHALL commit the archive on the open PR's branch before the PR is marked ready. On a per-task change it SHALL open one archive PR. The archive PR SHALL close the tracking issue on merge. A failed validation SHALL escalate with `needs-human`.
