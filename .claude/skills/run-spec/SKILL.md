@@ -133,9 +133,12 @@ The prompt says when a run is an archive run: every numbered task in
    on behaviour and you cannot tell which is right, escalate with both.
 5. **Validate:** `npx openspec validate <id> --strict`. Fix what it reports in
    the delta, at most twice. If it still fails, escalate with its output and
-   push nothing.
-6. **Archive:** `npx openspec archive <id> -y`. Check that `git status` shows
-   the folder moved under `openspec/changes/archive/` and the merged
+   push nothing. A change with no `openspec/changes/<id>/specs/` folder (a
+   tooling or doc-only change) has no delta to validate: skip this step,
+   because strict validation rejects a change without deltas.
+6. **Archive:** `npx openspec archive <id> -y`, or with no `specs/` folder
+   `npx openspec archive <id> -y --skip-specs`. Check that `git status` shows
+   the folder moved under `openspec/changes/archive/` and any merged
    `openspec/specs/` files, then `npx openspec validate --specs --strict`.
 7. **Commit** `docs(openspec): archive <id>`. On a per-change PR, add the
    trailer `Factory-Task: archive` (beside `Co-Authored-By`), so the archive
