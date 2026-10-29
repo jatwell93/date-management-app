@@ -38,9 +38,12 @@
  * `(owner)` task), else marking the PR ready for the owner. A merge of that
  * PR starts nothing: the change is complete.
  *
- * Only PRs authored by the Claude GitHub App AND labelled `factory:<id>` count:
- * the factory can edit labels, so a label alone must never point the factory
- * at an owner's branch. Deciding "nothing to do" here, before the Claude step,
+ * Only PRs authored by the Claude GitHub App AND labelled `factory:<id>` count
+ * as factory PRs, which the factory babysits and continues: the factory can
+ * edit labels, so a label alone must never point the factory at an owner's
+ * branch. The one exception is a plan PR (task 4.2): its labels count only once
+ * the owner has merged it, and it starts a task from main, never from its
+ * branch. Deciding "nothing to do" here, before the Claude step,
  * keeps most events from spending a Claude run.
  *
  * Usage: node scripts/factory-route.js   (reads GITHUB_EVENT_NAME, GITHUB_EVENT_PATH)
