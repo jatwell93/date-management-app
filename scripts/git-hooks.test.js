@@ -67,8 +67,13 @@ const unset = () => {
   throw new Error('unset');
 };
 
-/** Fake git and directory listing for the installer. */
-function installDeps({ hooksPath = '', files = [] } = {}) {
+const SECRETS_HOOK = '#!/usr/bin/env bash\ngit secrets --pre_commit_hook -- "$@"\n';
+
+/**
+ * Fake git, directory listing and file reads for the installer. Hooks named in
+ * `secrets` hold what `git secrets --install` writes; the rest are someone's own.
+ */
+function installDeps({ hooksPath = '', files = [], secrets = [] } = {}) {
   const calls = [];
   // Like git: the hooks directory follows core.hooksPath when it is set.
   const answers = {
@@ -80,7 +85,9 @@ function installDeps({ hooksPath = '', files = [] } = {}) {
     return (answers[args.slice(0, 2).join(' ')] || (() => 'true'))();
   };
   const listings = { '.githooks': ['pre-commit', 'pre-push'] };
-  return { calls, git, list: (dir) => listings[dir] || files };
+  const read = (file) =>
+    secrets.includes(path.basename(file)) ? SECRETS_HOOK : '#!/bin/sh\nmy-own-hook\n';
+  return { calls, git, list: (dir) => listings[dir] || [...files, ...secrets], read };
 }
 
 test('install sets core.hooksPath in a checkout and skips outside one', () => {
@@ -104,4 +111,15 @@ test('install never replaces hooks someone set up already', () => {
   const local = installDeps({ files: ['pre-commit', 'pre-push.sample'] });
   assert.match(install(local), /already has hooks \(pre-commit\)/);
   assert.ok(!local.calls.some((a) => a[0] === 'config' && a[1] === 'core.hooksPath'));
+});
+
+test('install replaces the git-secrets hooks, which .githooks runs itself', () => {
+  const secrets = installDeps({ secrets: ['pre-commit', 'commit-msg', 'prepare-commit-msg'] });
+  assert.match(install(secrets), /^git hooks installed/);
+  const mixed = installDeps({ files: ['pre-push'], secrets: ['pre-commit'] });
+  assert.match(install(mixed), /already has hooks \(pre-push\)/);
+  for (const hook of ['pre-commit', 'commit-msg', 'prepare-commit-msg']) {
+    const text = fs.readFileSync(path.join(HOOKS, hook), 'utf8');
+    assert.match(text, /git-secrets --\w+_hook -- "\$@"/, hook);
+  }
 });

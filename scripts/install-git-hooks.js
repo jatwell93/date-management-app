@@ -9,6 +9,7 @@
  * It never replaces hooks someone set up already: when `core.hooksPath` points
  * elsewhere, or the default hooks directory holds a real (non-sample) hook,
  * it leaves git alone and says how to chain the repository's hooks instead.
+ * The git-secrets hooks are the exception: .githooks/ runs the same checks.
  *
  * Usage: node scripts/install-git-hooks.js
  */
@@ -20,7 +21,14 @@ const HOOKS_PATH = '.githooks';
 const defaultDeps = {
   git: (args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' }).trim(),
   list: (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []),
+  read: (file) => fs.readFileSync(file, 'utf8'),
 };
+
+/**
+ * True for a hook that `git secrets --install` wrote (scripts/setup-git-secrets.sh).
+ * .githooks/ runs the same git-secrets checks, so replacing it loses nothing.
+ */
+const isGitSecretsHook = (text) => /^git secrets --\w+_hook\b/m.test(text);
 
 /** The configured core.hooksPath, or ''. */
 function configuredPath(git) {
@@ -37,7 +45,10 @@ function existingHooks(deps) {
   if (current === HOOKS_PATH) return '';
   if (current) return `core.hooksPath is already ${current}`;
   const dir = deps.git(['rev-parse', '--git-path', 'hooks']);
-  const real = deps.list(dir).filter((name) => !name.endsWith('.sample'));
+  const real = deps
+    .list(dir)
+    .filter((name) => !name.endsWith('.sample'))
+    .filter((name) => !isGitSecretsHook(deps.read(`${dir}/${name}`)));
   return real.length ? `${dir} already has hooks (${real.join(', ')})` : '';
 }
 
