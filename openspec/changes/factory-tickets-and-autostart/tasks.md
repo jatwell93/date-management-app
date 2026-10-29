@@ -15,7 +15,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 - [ ] 2.1 `.claude/hooks/main-guard.sh`, registered as a Bash PreToolUse hook in `.claude/settings.json`: block `git commit` and `git push` while `HEAD` is `main`, and any `git push` whose refspec targets `main` (`origin main`, `HEAD:main`, `:main`). Exit with a message naming the branch to create.
       Demo: on `main`, `git commit --allow-empty -m x` is refused; on a feature branch it runs.
       Acceptance: a test runs the hook on a `main` and a feature checkout and on each refspec form; removing the `main` check fails it. Remove the `verify-branch-before-commit` memory once merged.
-- [ ] 2.2 `scripts/mem-log.js` refuses to write while `HEAD` is `main` (exit 1, message: switch to the feature branch first). The `handover` skill (step 4 before step 5) and the `resume` skill's "When the task is done" log before committing, so the entry is in the task's commit.
+- [x] 2.2 `scripts/mem-log.js` refuses to write while `HEAD` is `main` (exit 1, message: switch to the feature branch first). The `handover` skill (step 4 before step 5) and the `resume` skill's "When the task is done" log before committing, so the entry is in the task's commit.
       Demo: on `main`, `node scripts/mem-log.js WORKFLOW a b` exits 1 and `memory.jsonl` is unchanged.
       Acceptance: mem-log test for `main` (refused, file untouched) and a feature branch (appended).
 

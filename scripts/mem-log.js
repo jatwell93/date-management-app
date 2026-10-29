@@ -65,6 +65,23 @@ function ensureMemvidAvailable(env) {
   }
 }
 
+/**
+ * The branch of the checkout holding memory.jsonl, or '' (not a git checkout,
+ * detached HEAD). Read from the file's own directory, not the cwd, so a test
+ * writing to a temp file is not judged by the repository's branch.
+ */
+function jsonlBranch() {
+  try {
+    return execFileSync('git', ['branch', '--show-current'], {
+      cwd: path.dirname(MEMORY_JSONL),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
 function appendMemoryJsonl(kind, title, message) {
   const record = {
     ts: new Date().toISOString(),
@@ -96,6 +113,15 @@ function logMemory(kind, title, message) {
   if (sensitive.length > 0) {
     console.error(`❌ Refusing to log: text looks like it contains ${sensitive.join(', ')}.`);
     console.error('   memory.jsonl is public. Remove the value and describe it instead.');
+    process.exit(1);
+  }
+
+  // memory.jsonl is tracked: an entry written on main stays uncommitted and
+  // ends up stashed. Log on the feature branch, before its commit, so the
+  // entry lands with the work (factory-tickets-and-autostart, task 2.2).
+  if (jsonlBranch() === 'main') {
+    console.error('❌ Refusing to log on main: memory.jsonl would be left uncommitted.');
+    console.error('   Switch to the feature branch first, then log before you commit.');
     process.exit(1);
   }
 
