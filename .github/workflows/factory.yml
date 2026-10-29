@@ -211,7 +211,7 @@ jobs:
         shell: bash
         run: |
           rules=(.claude AGENTS.md CLAUDE.md scripts/check-no-go.js scripts/babysit-round.js
-                 scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js
+                 scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js scripts/factory-ticket.js
                  scripts/factory-escalate.js scripts/factory-retry.js)
           git fetch --quiet origin main
           git checkout origin/main -- "${rules[@]}"
