@@ -21,8 +21,8 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 3. Tickets
 
-- [ ] 3.1 `.claude/skills/to-tickets/SKILL.md`, adapted from mattpocock/skills `to-tickets`: read the change's `proposal.md`, `design.md` and spec deltas; slice into vertical tasks (expand-migrate-contract for wide refactors); quiz the owner (granularity, real blocking edges, a demo per task); then write `tasks.md` and publish the issues, blockers first, as sub-issues of the tracking issue (`node scripts/factory-issue.js <id>`) with `--blocked-by`. Each task line ends with its issue, e.g. `(#812)`. Last step: add `factory-ready` to the tracking issue (task 4.1).
-      Demo: run on a small change; `tasks.md` and the sub-issues match, blocking links visible on GitHub.
+- [x] 3.1 `.claude/skills/to-tickets/SKILL.md`, adapted from mattpocock/skills `to-tickets`: read the change's `proposal.md`, `design.md` and spec deltas; slice into vertical tasks (expand-migrate-contract for wide refactors); quiz the owner (granularity, real blocking edges, a demo per task); then write `tasks.md` and publish the issues, blockers first, as sub-issues of the tracking issue (`node scripts/factory-issue.js <id>`) with `--blocked-by`. Each task line ends with its issue, e.g. `(#812)`. Last step: open the plan PR labelled `factory:<id>` and `factory-ready` (task 4.2 makes its merge start the build). Tickets never carry `factory:<id>`, which marks the tracking issue.
+      Demo: run on a small change; `tasks.md` and the sub-issues match, blocking links visible on GitHub (exercised by 6.1).
       Blocked by: 1.1.
 - [ ] 3.2 `run-spec` adds `Closes #<n>` to the PR body for each task line it lands that carries an issue number; on a per-change PR, each task adds its line to the body.
       Demo: merging a factory PR closes its ticket.
@@ -34,6 +34,10 @@ Built in interactive sessions: every task touches a `no_go` path.
 - [x] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The label is `factory-ready`, not `factory:ready`: `changeFromLabels` would read `factory:ready` as the change id `ready`. The router routes `factory-ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
       Demo: adding the label starts the first task with no `gh workflow run`.
       Acceptance: router tests for each case; `factory-workflows.test.js` for the trigger. AGENTS.md "Factory" names the label as the way to start a change.
+- [ ] 4.2 The owner merging the plan PR starts the build. `tasks.md` must be on `main` before the router can read it, so a `factory-ready` label on the tracking issue added before the plan merges finds no task. Instead `to-tickets` labels its plan PR `factory:<id>` and `factory-ready`, and `mergedRoute` starts change `<id>` when such a PR merges with the owner as `merged_by`, whoever authored it. A factory PR keeps its current merge route; an unmerged or non-owner merge starts nothing. Found while writing 3.1 (2026-10-29).
+      Demo: merging a labelled plan PR starts the first task with no other owner action.
+      Acceptance: router tests for an owner merge, a non-owner merge, a closed-unmerged PR and a plan PR without `factory-ready`; AGENTS.md "Factory" names both ways to start.
+      Blocked by: 4.1.
 
 ## 5. Archive
 
@@ -45,4 +49,4 @@ Built in interactive sessions: every task touches a `no_go` path.
 ## 6. Live proof
 
 - [ ] 6.1 A throwaway two-task `pr: per-change` change goes from `/to-tickets` to an archived change: the owner approves the slices, the label starts it, both tasks and the archive land on one PR, the merge closes both tickets and the tracking issue. Owner input: the quiz and one merge.
-      Blocked by: 2.1, 2.2, 3.2, 4.1, 5.1.
+      Blocked by: 2.1, 2.2, 3.2, 4.1, 4.2, 5.1.
