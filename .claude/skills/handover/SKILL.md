@@ -26,7 +26,9 @@ used to copy between sessions. The next session reads it with `/resume`.
    - the first unchecked task in `tasks.md`
 3. Rewrite `handover.md` in full with the template below. It is a snapshot, not a log:
    replace stale content, do not append. History is in git.
-4. Log one `WORKFLOW` memory entry pointing at it:
+4. Log one `WORKFLOW` memory entry pointing at it, on the feature branch and before
+   the commit in step 5, so `memory.jsonl` goes into that commit (`mem-log` refuses
+   to write on `main`):
    `node scripts/mem-log.js WORKFLOW "<change-id> handover" "State in openspec/changes/<id>/handover.md; next: <task>"`
 5. Commit it on the current feature branch with the work it describes
    (`docs(openspec): update <change-id> handover`), or in its own small PR if the

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Refuse pushes that update main on the remote (OpenSpec change
+# factory-tickets-and-autostart, 2.1). Git passes one line per ref being
+# pushed: <local ref> <local sha> <remote ref> <remote sha>. Main changes only
+# through a merged PR.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "pre-push: refusing to push to main ($local_ref). Push a feature branch and open a PR." >&2
+    exit 1
+  fi
+done
+exit 0
