@@ -346,6 +346,8 @@ test('missingAsEmpty turns a 404 into an empty file and rethrows anything else',
     'text',
   );
   assert.throws(() => missingAsEmpty(fail('HTTP 401: Bad credentials')), /Command failed/);
+  // Only the 404 status counts, not the phrase in another error.
+  assert.throws(() => missingAsEmpty(fail('HTTP 502: upstream Not Found')), /Command failed/);
 });
 
 test('nextTask reads the first unchecked task and its (owner) marker', () => {

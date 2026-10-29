@@ -567,7 +567,7 @@ function missingAsEmpty(read) {
   try {
     return read();
   } catch (error) {
-    if (/HTTP 404|Not Found/.test(String(error.stderr || error.message))) return '';
+    if (/HTTP 404\b/.test(String(error.stderr || error.message))) return '';
     throw error;
   }
 }
