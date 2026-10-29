@@ -7,15 +7,15 @@ const TASKS = [
   '## 1. Work',
   '',
   '- [x] 1.1 Add the column (#812): migrate, then backfill.',
-  '- [ ] 1.2 Show it, after #734 (#813) (#900)',
-  '  - [ ] 1.3 a sub-item (#814)',
-  '- [ ] 1.3 No ticket, see #735',
-  '- [ ] 1.10 Tenth (#815)',
+  '- [ ] 1.2 Follow up (#734) after #735 (#813): show it (#900):',
+  '  - [ ] 1.3 a sub-item (#814):',
+  '- [ ] 1.3 No ticket, see (#735)',
+  '- [ ] 1.10 Tenth (#815): done',
 ].join('\n');
 
-test('taskTicket reads the first (#n) on the task line, ticked or not', () => {
+test('taskTicket reads the first (#n): on the task line, ticked or not', () => {
   assert.equal(taskTicket(TASKS, '1.1'), 812);
-  assert.equal(taskTicket(TASKS, '1.2'), 813, 'a bare #734 is a reference, not the ticket');
+  assert.equal(taskTicket(TASKS, '1.2'), 813, '(#734) and #735 in the title are references');
   assert.equal(taskTicket(TASKS, '1.10'), 815);
 });
 

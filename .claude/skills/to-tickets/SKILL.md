@@ -98,10 +98,12 @@ criteria` as a checklist, and the line `Task <number> of OpenSpec change
 
 3. Append each ticket's number to its task line as soon as the issue exists,
    before creating the next one: `- [ ] 1.2 <title> (#812): ...`. `run-spec`
-   writes `Closes #812` into the PR that lands the task.
+   writes `Closes #812` into the PR that lands the task. Keep this exact
+   `(#<n>):` form: `scripts/factory-ticket.js` reads only the first `(#<n>):` on
+   the line, so an issue cited in the title as `(#734)` is never closed.
 
 If a run stops partway, re-run this step: skip every task whose line already
-carries `(#<n>)`, and pass those numbers to `--blocked-by` for the tasks still
+carries `(#<n>):`, and pass those numbers to `--blocked-by` for the tasks still
 to publish. Never create a second issue for a task.
 
 Do not close or edit the tracking issue.

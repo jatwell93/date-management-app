@@ -5,9 +5,10 @@
  * task 3.2). run-spec puts the line in the PR body, so the owner's merge closes
  * the ticket that `to-tickets` published for the task.
  *
- * The ticket is the first `(#<n>)` on the task's own line, where to-tickets
- * writes it: `- [ ] 1.2 <title> (#812): ...`. A bare `#734` cited in the text is
- * a reference, not the ticket, and sub-item lines are never read.
+ * The ticket is the first `(#<n>):` on the task's own line, the form to-tickets
+ * writes: `- [ ] 1.2 <title> (#812): ...`. A `#734` or `(#734)` cited in the
+ * title or text is a reference, not the ticket: closing it would close an
+ * unrelated issue. Sub-item lines are never read.
  *
  * Usage: node scripts/factory-ticket.js <change-id> <task-number>
  */
@@ -23,7 +24,7 @@ function taskTicket(tasksMd, number) {
     .split(/\r?\n/)
     .map((l) => /^- \[[ x]\] (\S+)\s+(.*)$/.exec(l))
     .find((m) => m && m[1] === number);
-  const ticket = line && /\(#([1-9][0-9]*)\)/.exec(line[2]);
+  const ticket = line && /\(#([1-9][0-9]*)\):/.exec(line[2]);
   return ticket ? Number(ticket[1]) : 0;
 }
 
