@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
+const os = require('node:os');
 const path = require('node:path');
 
 const HOOK = path.join(__dirname, '..', '.claude', 'hooks', 'main-guard.js');
@@ -8,17 +9,23 @@ const { verdict } = require(HOOK);
 
 const ROOT = path.resolve('/repo');
 const OTHER = path.resolve('/other');
+const HOME = os.homedir();
 
 /**
- * The verdict for `command` started in /repo on `branch`. /other is a checkout
- * on `otherBranch`. Names starting `feature/`, and `main`, are branches; any
- * other name (a file path) is not.
+ * The verdict for `command` started in /repo on `branch`. /other and the home
+ * directory are checkouts on `otherBranch`; a path with an unexpanded `$` has
+ * no readable branch. Names starting `feature/`, `main` and `HEAD~1` are
+ * revisions; any other name (a file path) is not.
  */
 function check(command, branch, otherBranch = 'feature/o') {
+  const branchOf = (dir) => {
+    if (dir === OTHER || dir === HOME) return otherBranch;
+    return dir.includes('$') ? '' : branch;
+  };
   return verdict(command, {
     cwd: ROOT,
-    branchOf: (dir) => (dir === OTHER ? otherBranch : branch),
-    isBranch: (name) => name === 'main' || name.startsWith('feature/'),
+    branchOf,
+    isBranch: (name) => ['main', 'HEAD~1'].includes(name) || name.startsWith('feature/'),
   });
 }
 
@@ -42,6 +49,14 @@ test('a switch earlier in the same command line counts, a file checkout does not
   assert.equal(check('git switch feature/y && git commit -m x', 'main'), '');
   assert.match(check('git switch main && git commit -m x', 'feature/x'), /commit on main/);
   assert.match(check('git checkout src/a.js && git commit -m x', 'main'), /commit on main/);
+  assert.match(check('git checkout HEAD~1 src/a.js && git commit -m x', 'main'), /commit on main/);
+  assert.equal(check('git checkout HEAD~1 && git commit -m x', 'main'), '');
+});
+
+test('an unreadable cd keeps the branch it knew; ~ is expanded', () => {
+  assert.match(check('cd $WORKTREE && git commit -m x', 'main'), /commit on main/);
+  assert.match(check('git -C $WORKTREE commit -m x', 'main'), /commit on main/);
+  assert.match(check('cd ~ && git commit -m x', 'feature/x', 'main'), /commit on main/);
 });
 
 test('reads the branch where the command runs: cd and git -C', () => {

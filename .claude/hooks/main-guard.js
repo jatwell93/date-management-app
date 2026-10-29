@@ -16,10 +16,13 @@
  * directory, and after a `git switch`/`git checkout` earlier in the same line
  * (so `git switch -c feature/x && git commit ...` on main is allowed). A plain
  * `git checkout <name>` counts only when <name> is a branch or commit, not a
- * file. It is a guard against accidents, not a sandbox: it does not expand
- * variables, aliases or subshells.
+ * file, and `git checkout <rev> <path>` never does. Where the branch cannot be
+ * read (an unexpanded `$VAR` in `cd`), the last known branch stays. It is a
+ * guard against accidents, not a sandbox: it does not expand variables,
+ * aliases or subshells.
  */
 const { execFileSync } = require('child_process');
+const os = require('os');
 const path = require('path');
 
 const MAIN = 'main';
@@ -87,9 +90,19 @@ function switchTarget(args, isBranch) {
   if (!SWITCHES.has(sub) || rest.includes('--')) return '';
   const create = rest.findIndex((a) => CREATE.has(a));
   if (create !== -1) return rest[create + 1] || '';
-  const name = rest.find((a) => !a.startsWith('-')) || '';
-  return name && isBranch(name) ? name : '';
+  // `git checkout <rev> <path>...` restores files and stays on the branch.
+  const names = rest.filter((a) => !a.startsWith('-'));
+  return names.length === 1 && isBranch(names[0]) ? names[0] : '';
 }
+
+/**
+ * The directory a `cd` or `git -C` names, from `cwd`. `~` is expanded; a
+ * `$VAR` is not, so the caller keeps the branch it knew (resolveBranch).
+ */
+const dirFrom = (cwd, dir) => path.resolve(cwd, dir.replace(/^~(?=$|[\\/])/, os.homedir()));
+
+/** The branch in `dir`, or `fallback` when it cannot be read there. */
+const resolveBranch = (ctx, dir, fallback) => ctx.branchOf(dir) || fallback;
 
 const targetsMain = (refspec) => {
   const dest = refspec.replace(/^\+/, '').split(':').pop();
@@ -120,12 +133,12 @@ function callProblem(args, branch) {
 /** Apply one step to `state` ({ cwd, branch }); why it lands on main, or ''. */
 function advance(state, step, ctx) {
   if (step.cd) {
-    state.cwd = path.resolve(state.cwd, step.cd);
-    state.branch = ctx.branchOf(state.cwd);
+    state.cwd = dirFrom(state.cwd, step.cd);
+    state.branch = resolveBranch(ctx, state.cwd, state.branch);
     return '';
   }
-  const dir = step.dir ? path.resolve(state.cwd, step.dir) : state.cwd;
-  const here = step.dir ? ctx.branchOf(dir) : state.branch;
+  const dir = step.dir ? dirFrom(state.cwd, step.dir) : state.cwd;
+  const here = step.dir ? resolveBranch(ctx, dir, state.branch) : state.branch;
   const moved = switchTarget(step.args, (name) => ctx.isBranch(name, dir));
   if (!step.dir) state.branch = moved || state.branch;
   return callProblem(step.args, moved || here);
