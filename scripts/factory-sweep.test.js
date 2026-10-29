@@ -17,6 +17,7 @@ function deps({
   retrying = 0,
   perChange = true,
   tasks = '- [x] 1.1 Do it\n- [ ] 1.2 Next\n',
+  archived = false,
 } = {}) {
   const calls = { dispatch: [], markReady: [] };
   const view = {
@@ -42,6 +43,7 @@ function deps({
       checks: { pendingActions: [], fail: [], ...report.checks },
     }),
     branchTask: () => nextTask(tasks),
+    branchArchived: () => archived,
     markReady: (p, n) => calls.markReady.push(n),
     dispatch: (n) => calls.dispatch.push(n),
   };
@@ -85,8 +87,19 @@ test('a parked PR, or one whose change waits on a retry, is not dispatched', () 
   }
 });
 
-test('a PR with no task left is marked ready by the sweep itself, not dispatched', () => {
+test('a PR with no task left is dispatched for its archive run', () => {
   const d = deps({ tasks: '- [x] 1.1 Do it\n' });
+  assert.equal(sweep(d, quiet), 1);
+  assert.deepEqual(d.calls.dispatch, [9]);
+  assert.deepEqual(d.calls.markReady, []);
+});
+
+test('an archived PR is marked ready by the sweep itself, not dispatched', () => {
+  // The archived branch has no openspec/changes/<id>/tasks.md to read.
+  const d = deps({ tasks: '', archived: true });
+  d.branchTask = () => {
+    throw new Error('HTTP 404: Not Found');
+  };
   assert.equal(sweep(d, quiet), 0);
   assert.deepEqual(d.calls.markReady, [9]);
 });

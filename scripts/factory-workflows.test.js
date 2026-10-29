@@ -11,6 +11,7 @@ const read = (name) =>
     .readFileSync(path.join(__dirname, '..', '.github', 'workflows', name), 'utf8')
     .replace(/\r\n/g, '\n');
 
+const ROOT = path.join(__dirname, '..');
 const FACTORY = read('factory.yml');
 const GUARD = read('no-go-guard.yml');
 
@@ -106,7 +107,7 @@ test('a task on a per-change PR merges main first, unless main changed .github',
   );
   assert.match(
     merge,
-    /if: needs\.route\.outputs\.mode == 'task' && needs\.route\.outputs\.pr != ''/,
+    /if: \(needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.mode == 'archive'\) && needs\.route\.outputs\.pr != ''/,
   );
   assert.match(merge, /git diff --name-only HEAD\.\.\.origin\/main \| grep -q '\^\[\.\]github\/'/);
   assert.match(merge, /merge --no-edit origin\/main; then\n\s+git merge --abort/);
@@ -131,7 +132,7 @@ test('factory.yml queues tasks and per-change PRs per change, other passes per P
   const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'));
   assert.match(
     run,
-    /group: \$\{\{ \(needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.per_change == 'true'\) && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
+    /group: \$\{\{ \(needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.mode == 'archive' \|\| needs\.route\.outputs\.per_change == 'true'\) && format\('factory-\{0\}', needs\.route\.outputs\.change_id\) \|\| format\('factory-babysit-\{0\}', needs\.route\.outputs\.pr\) \}\}/,
   );
   assert.match(run, /^ {6}cancel-in-progress: false$/m);
 });
@@ -239,7 +240,26 @@ test('factory.yml runs Claude only after the router (which validates the change 
   assert.match(FACTORY, /^ {4}needs: route$/m);
   assert.match(
     FACTORY,
-    /if: needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.mode == 'babysit'/,
+    /if: needs\.route\.outputs\.mode == 'task' \|\| needs\.route\.outputs\.mode == 'archive' \|\| needs\.route\.outputs\.mode == 'babysit'/,
+  );
+});
+
+test("an archive run follows run-spec's archive section with the pinned openspec CLI", () => {
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'), FACTORY.indexOf('\n  escalate:\n'));
+  assert.match(
+    run,
+    /mode == 'archive' && format\('Use the run-spec skill[^']*`\{0\}`\. Every task is done: follow its "Archive a finished change" section\.'/,
+  );
+  const skill = fs.readFileSync(path.join(ROOT, '.claude/skills/run-spec/SKILL.md'), 'utf8');
+  assert.match(skill, /^## Archive a finished change$/m);
+  // `npx openspec` must resolve the local CLI, never the unrelated npm package `openspec`.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.match(pkg.devDependencies['@fission-ai/openspec'], /^[0-9]+\.[0-9]+\.[0-9]+$/);
+  // A babysit pass on a branch that holds the archived change still runs.
+  const check = run.slice(run.indexOf('- name: Check the change exists'));
+  assert.match(
+    check,
+    /\[ "\$MODE" = babysit \] && compgen -G "openspec\/changes\/archive\/\[0-9\]/,
   );
 });
 

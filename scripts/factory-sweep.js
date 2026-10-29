@@ -9,9 +9,10 @@
  * so a settled PR would sit idle. The sweep applies the router's step choice
  * (scripts/factory-route.js) to each open per-change PR:
  *
- *   babysit pass, task, owner task   dispatch factory.yml with `pr`, which
+ *   babysit pass, task, owner task,  dispatch factory.yml with `pr`, which
  *                                    routes the same step again in its own run
- *   no task left                     mark the PR ready (the router does it)
+ *     archive run
+ *   archived on the branch           mark the PR ready (the router does it)
  *   waiting, finished, parked        nothing
  *
  * A PR is parked by `needs-human` on the PR or its tracking issue, and skipped
@@ -25,7 +26,7 @@ const { execFileSync } = require('node:child_process');
 
 const { babysitRoute, changeFromLabels, defaultDeps } = require('./factory-route.js');
 
-const DISPATCHED = new Set(['babysit', 'task', 'escalate']);
+const DISPATCHED = new Set(['babysit', 'task', 'archive', 'escalate']);
 
 const gh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
 

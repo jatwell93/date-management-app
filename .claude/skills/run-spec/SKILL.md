@@ -34,10 +34,8 @@ merge is the only gate before production.
 
 - Read the first unchecked task (`- [ ]`) in `openspec/changes/<id>/tasks.md`,
   the `proposal.md` sections it cites, and `AGENTS.md`.
-- **No unchecked task left:** the change is complete. Comment on its tracking
-  issue (`node scripts/factory-issue.js <id>`) that every task is done and the
-  change is ready for the owner to archive, then stop. Never archive it
-  yourself.
+- **No unchecked task left:** archive the change ("Archive a finished change",
+  below) instead.
 - **Operator tasks are not yours.** A task for the owner (phase 0 style "Owner
   ..."), a vendor console, a production migration, a deploy, or anything needing
   production credentials: escalate. A task marked `(owner)` right after its
@@ -110,6 +108,49 @@ title>` and say in the body that later tasks land on this PR. Not a draft:
 - Push with `git push`, then update the PR body (`gh pr edit <n> --body-file`)
   to list the tasks done so far. Keep each task's `Closes #<n>` line from
   `scripts/factory-ticket.js`: the PR closes every ticket it lands.
+
+## Archive a finished change
+
+The prompt says when a run is an archive run: every numbered task in
+`tasks.md` is ticked. Archiving moves `openspec/changes/<id>/` to
+`openspec/changes/archive/<date>-<id>/` and merges its spec deltas into
+`openspec/specs/`.
+
+1. **Re-check.** `openspec/changes/<id>/tasks.md` must still exist and have no
+   unchecked numbered task. If not, print why and stop.
+2. **Branch.** On a per-change PR (the prompt names it), work on the checked-out
+   PR branch. Otherwise `git switch -c feature/factory-<id>-archive` from an
+   up-to-date `main`.
+3. **Check `no_go` first:** `node scripts/check-no-go.js --change <id>`. After
+   the archive, the change's own `no_go` list has moved and no longer applies,
+   so this is the last check against it. On any non-zero exit, escalate.
+4. **Reconcile the spec deltas.** For each `openspec/changes/<id>/specs/<capability>/spec.md`,
+   compare it with `openspec/specs/<capability>/spec.md` and with the code the
+   tasks built. Where the build differs from the delta, change the delta to
+   say what was built. Never change code here. A `MODIFIED` requirement must use
+   the exact header of the requirement in `openspec/specs/`, and must still
+   carry every scenario of it that holds. If the build and the delta disagree
+   on behaviour and you cannot tell which is right, escalate with both.
+5. **Validate:** `npx openspec validate <id> --strict`. Fix what it reports in
+   the delta, at most twice. If it still fails, escalate with its output and
+   push nothing.
+6. **Archive:** `npx openspec archive <id> -y`. Check that `git status` shows
+   the folder moved under `openspec/changes/archive/` and the merged
+   `openspec/specs/` files, then `npx openspec validate --specs --strict`.
+7. **Commit** `docs(openspec): archive <id>`. On a per-change PR, add the
+   trailer `Factory-Task: archive` (beside `Co-Authored-By`), so the archive
+   gets its own babysit rounds.
+8. **Push and PR.** Run `node scripts/check-no-go.js` again (the baseline), then
+   push.
+   - Per-change PR: `git push`, then update the PR body with
+     `gh pr edit <n> --body-file` to say the change is archived and add
+     `Closes #<tracking issue>` (`node scripts/factory-issue.js <id>`). Keep
+     every task's `Closes` line. The router drops `WIP:` and mentions the owner
+     once reviews settle.
+   - Otherwise: `gh pr create --base main --label "factory:<id>" --title "docs(openspec): archive <id>" --body-file <file>`.
+     The body says this is the factory's archive PR for `<id>`, lists the
+     spec deltas reconciled, and ends with `Closes #<tracking issue>`.
+9. Print the PR URL and stop.
 
 ## Escalate
 

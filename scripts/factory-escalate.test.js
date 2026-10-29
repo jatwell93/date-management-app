@@ -57,6 +57,7 @@ test('does nothing when the task is no longer the next owner task', () => {
   for (const tasks of [
     TASKS.replace('- [ ] 2.2', '- [x] 2.2'), // ticked meanwhile
     TASKS.replace('(owner) ', ''), // no longer an owner task
+    '', // archived meanwhile: tasks.md is gone (factory-tickets-and-autostart 5.1)
   ]) {
     const { gh, calls } = fakeGh();
     assert.equal(
@@ -65,6 +66,16 @@ test('does nothing when the task is no longer the next owner task', () => {
     );
     assert.equal(calls.length, 0, 'no label, issue or comment');
   }
+});
+
+test("main's tasks.md missing (the change archived on main) asks for nothing", () => {
+  // The real file reader, on a change with no folder: no throw, no gh call.
+  const lines = [];
+  assert.equal(
+    main(['no-such-change-archived', '2.2'], undefined, (l) => lines.push(l)),
+    0,
+  );
+  assert.match(lines[0], /no longer the next owner task/);
 });
 
 test('rejects an unsafe change id or task number before calling gh', () => {

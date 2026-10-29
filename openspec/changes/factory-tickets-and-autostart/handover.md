@@ -1,10 +1,12 @@
 # Handover: factory-tickets-and-autostart
 
-Updated: 2026-10-29 · main at d3941c77
+Updated: 2026-10-29 · main at cbc8cb09
 
 ## State
 
-Merged: 1.1 (#742), 2.1 git hooks (#743), 2.2 mem-log (#744), 4.1 factory-ready label (#745), 3.1 to-tickets skill (#746). 4.2 (plan-PR merge starts the build) is #747; 3.2 (`scripts/factory-ticket.js` writes `Closes #n`) is #748.
+Merged: 1.1 (#742), 2.1 git hooks (#743), 2.2 mem-log (#744), 4.1 factory-ready label (#745), 3.1 to-tickets skill (#746), 4.2 plan-PR merge (#747), 3.2 `Closes #n` (#748). 5.1 (archive mode) is on `feature/factory-tickets-5-1`.
+
+5.1 notes: `mode: archive` is a Claude run (run-spec's "Archive a finished change" section). A per-change PR gets it on the PR once no task is left; the router marks the PR ready only once the branch holds `openspec/changes/archive/<date>-<id>/` (`branchArchived`, contents API). A per-task change, or a per-change PR merged before its archive, gets one archive PR. `@fission-ai/openspec` 1.13.2 is now an exact root devDependency: `npx openspec` on the runner would otherwise fetch the unrelated npm package `openspec`.
 
 ## 1.1 findings (2026-10-29)
 
@@ -15,14 +17,14 @@ Merged: 1.1 (#742), 2.1 git hooks (#743), 2.2 mem-log (#744), 4.1 factory-ready 
 
 ## Next
 
-5.1 (archive mode; also handle `openspec/changes/archive/*-<id>/` in nextTask, the sweep, the escalate check and mergedRoute). 5.1 touches `scripts/factory-route.js` like 4.2, so start it after the 4.2 PR merges. Then 6.1, the live proof.
+6.1, the live proof: a throwaway two-task `pr: per-change` change from `/to-tickets` to its archive. Owner input: the quiz and the merges (plan PR, then the change PR). It needs 5.1 merged.
 
 Once 2.1 is proven in use, delete the `verify-branch-before-commit` auto-memory: the pre-commit hook now refuses commits on main.
 
 ## Open PRs
 
-- #747 (4.2), #748 (3.2).
+- The 5.1 PR (this branch).
 
 ## Waiting on the user
 
-- Merge #747 and #748.
+- Merge the 5.1 PR.
