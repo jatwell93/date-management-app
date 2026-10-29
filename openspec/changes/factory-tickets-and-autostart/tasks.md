@@ -4,7 +4,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 1. Checks
 
-- [ ] 1.1 Check what the plan depends on and record each answer in `handover.md`:
+- [x] 1.1 Check what the plan depends on and record each answer in `handover.md`:
   - `gh issue create --parent` and `--blocked-by` exist and work on this repo (local `gh` is 2.86.0; the article says 2.94+). Upgrade local `gh` and note the version the Actions runner ships.
   - The licence of mattpocock/skills allows adapting `to-tickets` into this repo, and what attribution it needs.
   - `openspec archive -y` runs headless in the factory job (no prompt, no network), and `openspec/specs/**` and `openspec/changes/archive/**` are outside the `no_go` baseline (they are as of 2026-10-29).
