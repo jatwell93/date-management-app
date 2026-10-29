@@ -84,7 +84,7 @@ Flow: `list` → `proposal` → edit `proposal.md` + `tasks.md` → `validate --
 
 ### Factory (unattended runs)
 
-`.github/workflows/factory.yml` runs one task of a change per run in the cloud (`run-spec` skill), opens a PR labelled `factory:<id>`, and babysits it. Start it with `gh workflow run factory.yml -f change_id=<id>`. Each merged factory PR starts the next unchecked task; the owner merges each one.
+`.github/workflows/factory.yml` runs one task of a change per run in the cloud (`run-spec` skill), opens a PR labelled `factory:<id>`, and babysits it. Start it by adding the label `factory-ready` to the change's tracking issue (owner only; `to-tickets` does this once you approve the plan), or with `gh workflow run factory.yml -f change_id=<id>`. Each merged factory PR starts the next unchecked task; the owner merges each one.
 
 - **Change id:** at most 42 characters, because every PR and tracking issue carries the label `factory:<id>` and GitHub caps labels at 50.
 - **`no_go`:** paths the factory must not edit. A fixed baseline always applies: workflows, migrations, the backup script, the agent's own rules (`.claude/**`, `AGENTS.md`, `CLAUDE.md`), the lint gates and the factory's own scripts. The authoritative list is `BASELINE` in `scripts/check-no-go.js`. A change's own entries add to it. The required `factory/no-go-guard` check fails a factory PR that touches one. A task that needs such a path, a product decision or operator access escalates instead.

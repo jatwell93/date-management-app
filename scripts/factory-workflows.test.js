@@ -315,8 +315,8 @@ test("the relay listens to exactly pr-feedback's CI_WORKFLOWS", () => {
   assert.deepEqual(listed.sort(), [...CI_WORKFLOWS].sort());
 });
 
-test('factory.yml resumes a change only from a needs-human removal', () => {
-  assert.match(FACTORY, /^ {2}issues:\n {4}types: \[unlabeled\]$/m);
+test('factory.yml takes issue events only for labels added or removed', () => {
+  assert.match(FACTORY, /^ {2}issues:\n {4}types: \[labeled, unlabeled\]$/m);
 });
 
 const DIGEST = read('factory-digest.yml');

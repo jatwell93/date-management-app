@@ -9,6 +9,8 @@ name: Factory
 #     dispatch with `pr`, from factory-ci-relay.yml)
 #   owner removes needs-human from the     -> run-spec: the held task     (3.1)
 #     change's tracking issue
+#   owner adds factory-ready to the        -> run-spec: the first task
+#     change's tracking issue                 (factory-tickets-and-autostart 4.1)
 #   any task route whose next task is      -> escalate job, no Claude run  (5.1)
 #     marked (owner)
 #   hourly schedule                        -> the one retry of a failed run (5.4):
@@ -68,9 +70,10 @@ on:
   pull_request_review_comment:
     types: [created]
   # The owner removing needs-human from a tracking issue resumes the change
-  # (task 3.1). The router ignores the removal unless the owner made it.
+  # (task 3.1); the owner adding factory-ready starts it (factory-tickets-and-
+  # autostart 4.1). The router ignores either unless the owner made it.
   issues:
-    types: [unlabeled]
+    types: [labeled, unlabeled]
   # The retry check (task 5.4): routes one failed run whose factory-retry label
   # is over an hour old. Route job only unless a retry is due.
   schedule:

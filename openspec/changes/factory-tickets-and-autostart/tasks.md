@@ -12,10 +12,10 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 2. Guards
 
-- [ ] 2.1 `.claude/hooks/main-guard.sh`, registered as a Bash PreToolUse hook in `.claude/settings.json`: block `git commit` and `git push` while `HEAD` is `main`, and any `git push` whose refspec targets `main` (`origin main`, `HEAD:main`, `:main`). Exit with a message naming the branch to create.
+- [x] 2.1 Git hooks in `.githooks/`, installed by the root `prepare` script (`scripts/install-git-hooks.js` sets `core.hooksPath`): `pre-commit` refuses a commit while the branch is `main`; `pre-push` refuses any push whose remote ref is `refs/heads/main`. Git reports the real branch and target ref, so nothing parses shell commands. (A PreToolUse command parser was tried first; Seer found a new bypass in each of four review rounds on #743, so the owner chose git hooks.) They also stop the owner's own commits and pushes to `main`; `--no-verify` skips them.
       Demo: on `main`, `git commit --allow-empty -m x` is refused; on a feature branch it runs.
       Acceptance: a test runs the hook on a `main` and a feature checkout and on each refspec form; removing the `main` check fails it. Remove the `verify-branch-before-commit` memory once merged.
-- [ ] 2.2 `scripts/mem-log.js` refuses to write while `HEAD` is `main` (exit 1, message: switch to the feature branch first). The `handover` skill (step 4 before step 5) and the `resume` skill's "When the task is done" log before committing, so the entry is in the task's commit.
+- [x] 2.2 `scripts/mem-log.js` refuses to write while `HEAD` is `main` (exit 1, message: switch to the feature branch first). The `handover` skill (step 4 before step 5) and the `resume` skill's "When the task is done" log before committing, so the entry is in the task's commit.
       Demo: on `main`, `node scripts/mem-log.js WORKFLOW a b` exits 1 and `memory.jsonl` is unchanged.
       Acceptance: mem-log test for `main` (refused, file untouched) and a feature branch (appended).
 
@@ -31,7 +31,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 4. Auto-start
 
-- [ ] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The label is `factory-ready`, not `factory:ready`: `changeFromLabels` would read `factory:ready` as the change id `ready`. The router routes `factory-ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
+- [x] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The label is `factory-ready`, not `factory:ready`: `changeFromLabels` would read `factory:ready` as the change id `ready`. The router routes `factory-ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
       Demo: adding the label starts the first task with no `gh workflow run`.
       Acceptance: router tests for each case; `factory-workflows.test.js` for the trigger. AGENTS.md "Factory" names the label as the way to start a change.
 - [ ] 4.2 The owner merging the plan PR starts the build. `tasks.md` must be on `main` before the router can read it, so a `factory-ready` label on the tracking issue added before the plan merges finds no task. Instead `to-tickets` labels its plan PR `factory:<id>` and `factory-ready`, and `mergedRoute` starts change `<id>` when such a PR merges with the owner as `merged_by`, whoever authored it. A factory PR keeps its current merge route; an unmerged or non-owner merge starts nothing. Found while writing 3.1 (2026-10-29).
