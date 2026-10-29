@@ -12,9 +12,9 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 2. Guards
 
-- [ ] 2.1 `.claude/hooks/main-guard.sh`, registered as a Bash PreToolUse hook in `.claude/settings.json`: block `git commit` and `git push` while `HEAD` is `main`, and any `git push` whose refspec targets `main` (`origin main`, `HEAD:main`, `:main`). Exit with a message naming the branch to create.
+- [x] 2.1 Git hooks in `.githooks/`, installed by the root `prepare` script (`scripts/install-git-hooks.js` sets `core.hooksPath`): `pre-commit` refuses a commit while the branch is `main`; `pre-push` refuses any push whose remote ref is `refs/heads/main`. Git reports the real branch and target ref, so nothing parses shell commands. (A PreToolUse command parser was tried first; Seer found a new bypass in each of four review rounds on #743, so the owner chose git hooks.) They also stop the owner's own commits and pushes to `main`; `--no-verify` skips them.
       Demo: on `main`, `git commit --allow-empty -m x` is refused; on a feature branch it runs.
-      Acceptance: a test runs the hook on a `main` and a feature checkout and on each refspec form; removing the `main` check fails it. Remove the `verify-branch-before-commit` memory once merged.
+      Acceptance: `scripts/git-hooks.test.js` runs both hooks in a temp repo with a bare remote (commit on `main` and a feature branch; push of `HEAD:main`, `feature/x:main`, `HEAD:refs/heads/main` and a feature branch); breaking either hook's check fails it. Remove the `verify-branch-before-commit` memory once merged.
 - [ ] 2.2 `scripts/mem-log.js` refuses to write while `HEAD` is `main` (exit 1, message: switch to the feature branch first). The `handover` skill (step 4 before step 5) and the `resume` skill's "When the task is done" log before committing, so the entry is in the task's commit.
       Demo: on `main`, `node scripts/mem-log.js WORKFLOW a b` exits 1 and `memory.jsonl` is unchanged.
       Acceptance: mem-log test for `main` (refused, file untouched) and a feature branch (appended).
