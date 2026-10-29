@@ -4,7 +4,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 1. Checks
 
-- [ ] 1.1 Check what the plan depends on and record each answer in `handover.md`:
+- [x] 1.1 Check what the plan depends on and record each answer in `handover.md`:
   - `gh issue create --parent` and `--blocked-by` exist and work on this repo (local `gh` is 2.86.0; the article says 2.94+). Upgrade local `gh` and note the version the Actions runner ships.
   - The licence of mattpocock/skills allows adapting `to-tickets` into this repo, and what attribution it needs.
   - `openspec archive -y` runs headless in the factory job (no prompt, no network), and `openspec/specs/**` and `openspec/changes/archive/**` are outside the `no_go` baseline (they are as of 2026-10-29).
@@ -12,7 +12,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 2. Guards
 
-- [ ] 2.1 `.claude/hooks/main-guard.sh`, registered as a Bash PreToolUse hook in `.claude/settings.json`: block `git commit` and `git push` while `HEAD` is `main`, and any `git push` whose refspec targets `main` (`origin main`, `HEAD:main`, `:main`). Exit with a message naming the branch to create.
+- [x] 2.1 Git hooks in `.githooks/`, installed by the root `prepare` script (`scripts/install-git-hooks.js` sets `core.hooksPath`): `pre-commit` refuses a commit while the branch is `main`; `pre-push` refuses any push whose remote ref is `refs/heads/main`. Git reports the real branch and target ref, so nothing parses shell commands. (A PreToolUse command parser was tried first; Seer found a new bypass in each of four review rounds on #743, so the owner chose git hooks.) They also stop the owner's own commits and pushes to `main`; `--no-verify` skips them.
       Demo: on `main`, `git commit --allow-empty -m x` is refused; on a feature branch it runs.
       Acceptance: a test runs the hook on a `main` and a feature checkout and on each refspec form; removing the `main` check fails it. Remove the `verify-branch-before-commit` memory once merged.
 - [x] 2.2 `scripts/mem-log.js` refuses to write while `HEAD` is `main` (exit 1, message: switch to the feature branch first). The `handover` skill (step 4 before step 5) and the `resume` skill's "When the task is done" log before committing, so the entry is in the task's commit.

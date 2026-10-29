@@ -39,6 +39,9 @@ const BASELINE = [
   'scripts/database-backup.sh',
   'scripts/check-no-go.js',
   '.claude/**',
+  // The git hooks that refuse commits and pushes to main, and their installer.
+  '.githooks/**',
+  'scripts/install-git-hooks.js',
   'AGENTS.md',
   'CLAUDE.md',
   // The lint gates the factory is judged by: adding itself to the complexity
