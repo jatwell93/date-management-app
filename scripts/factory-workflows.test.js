@@ -252,6 +252,8 @@ test("an archive run follows run-spec's archive section with the pinned openspec
   );
   const skill = fs.readFileSync(path.join(ROOT, '.claude/skills/run-spec/SKILL.md'), 'utf8');
   assert.match(skill, /^## Archive a finished change$/m);
+  // Strict validation rejects a change without deltas: such a change skips it.
+  assert.match(skill, /`npx openspec archive <id> -y --skip-specs`/);
   // `npx openspec` must resolve the local CLI, never the unrelated npm package `openspec`.
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   assert.match(pkg.devDependencies['@fission-ai/openspec'], /^[0-9]+\.[0-9]+\.[0-9]+$/);
