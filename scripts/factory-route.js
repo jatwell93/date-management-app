@@ -9,6 +9,9 @@
  *
  *   workflow_dispatch(change_id)    task on that change
  *   pull_request closed, merged     task on the next unchecked task of the change
+ *     (a factory PR, or a plan PR   (a plan PR: factory-tickets-and-autostart 4.2)
+ *     labelled factory-ready that
+ *     the owner merged)
  *   issues unlabeled needs-human    task: the owner answered an escalation (3.1)
  *     (by the owner, on an issue
  *     labelled factory:<id>)
@@ -103,7 +106,8 @@ function mergedRoute(event, deps) {
   const pr = event.pull_request || {};
   if (event.action !== 'closed' || !pr.merged) return none('not a merge');
   const id = changeFromLabels(pr.labels || []);
-  if (!id || !isAppAuthor(authorOf(pr))) return none('not a factory PR');
+  if (!id) return none('not a factory PR');
+  if (!isAppAuthor(authorOf(pr))) return planMergedRoute(event, id, deps);
   if (perChangeComplete(id, deps))
     return none(`#${pr.number} merged: per-change PR, change complete`);
   return { mode: 'task', change_id: id, reason: `#${pr.number} merged` };
@@ -270,6 +274,30 @@ function readyBlocker(event, id) {
   if (!id) return 'not a tracking issue';
   return sentByOwner(event) ? '' : `${READY_LABEL} added by someone other than the owner`;
 }
+
+/**
+ * The owner merging a plan PR starts its change (factory-tickets-and-autostart,
+ * task 4.2). to-tickets opens that PR labelled `factory:<id>` and
+ * `factory-ready`; its merge puts tasks.md on main, where the router reads it,
+ * so the merge rather than a label on the tracking issue starts the build.
+ * Whoever authored the PR, only the owner's merge counts.
+ */
+function planMergedRoute(event, id, deps) {
+  const pr = event.pull_request;
+  if (!hasLabel(pr, READY_LABEL)) return none('not a factory PR');
+  if (!mergedByOwner(event))
+    return none(`plan #${pr.number} merged by someone other than the owner`);
+  const open = deps.openFactoryPr(id);
+  if (open) return none(`${id} is already running on #${open}`);
+  return { mode: 'task', change_id: id, reason: `plan #${pr.number} merged by the owner` };
+}
+
+const hasLabel = (item, name) =>
+  (item.labels || []).some((l) => (typeof l === 'string' ? l : l.name) === name);
+
+/** True when the owner merged the event's PR. */
+const mergedByOwner = ({ pull_request, repository = {} }) =>
+  sentByOwner({ sender: pull_request.merged_by || {}, repository });
 
 /** An `issues` event: the owner starting a change, or resuming one. */
 const issuesRoute = (event, deps) =>

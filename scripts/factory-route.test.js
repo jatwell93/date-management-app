@@ -132,6 +132,44 @@ test('closed-unmerged, unlabelled or owner-authored PRs start nothing', () => {
     );
 });
 
+const OWNER_LOGIN = { login: 'jatwell93' };
+const READY = { name: 'factory-ready' };
+const planMerge = ({ labels = [LABEL, READY], mergedBy = OWNER_LOGIN } = {}) => ({
+  action: 'closed',
+  repository: { owner: OWNER_LOGIN },
+  pull_request: { number: 8, merged: true, labels, user: OWNER_LOGIN, merged_by: mergedBy },
+});
+
+test('the owner merging a plan PR labelled factory-ready starts its change', () => {
+  assert.deepEqual(route('pull_request', planMerge(), deps()), {
+    mode: 'task',
+    change_id: 'add-x',
+    reason: 'plan #8 merged by the owner',
+  });
+  const byApp = planMerge();
+  byApp.pull_request.user = { login: 'someone-else' };
+  assert.equal(route('pull_request', byApp, deps()).mode, 'task', 'any author');
+});
+
+test('a plan PR starts nothing unless the owner merged it, labelled, with nothing running', () => {
+  const byOther = route('pull_request', planMerge({ mergedBy: APP }), deps());
+  assert.match(byOther.reason, /someone other than the owner/);
+  const noMerger = route('pull_request', planMerge({ mergedBy: null }), deps());
+  assert.match(noMerger.reason, /someone other than the owner/);
+  const unready = route('pull_request', planMerge({ labels: [LABEL] }), deps());
+  assert.match(unready.reason, /not a factory PR/);
+  const noChange = route('pull_request', planMerge({ labels: [READY] }), deps());
+  assert.match(noChange.reason, /not a factory PR/);
+  const unmerged = planMerge();
+  unmerged.pull_request.merged = false;
+  assert.match(route('pull_request', unmerged, deps()).reason, /not a merge/);
+  const running = route('pull_request', planMerge(), deps({ openPr: 9 }));
+  assert.match(running.reason, /already running on #9/);
+  assert.match(route('pull_request', planMerge(), deps({ parked: 703 })).reason, /waiting on/);
+  const owner = route('pull_request', planMerge(), deps({ tasks: '- [ ] 1.1 (owner) Key\n' }));
+  assert.equal(owner.mode, 'escalate');
+});
+
 test('a review on a factory PR with actionable items starts a babysit pass', () => {
   const d = deps();
   const r = route('pull_request_review', { pull_request: { number: 9 } }, d);
