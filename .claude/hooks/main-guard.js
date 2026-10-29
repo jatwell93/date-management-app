@@ -18,45 +18,57 @@
 const { execFileSync } = require('child_process');
 
 const MAIN = 'main';
+const HEREDOC = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1/;
+const GLOBALS = new Set(['-c', '-C']);
+const SWITCHES = new Set(['switch', 'checkout']);
+const CREATE = new Set(['-c', '-C', '-b', '-B']);
+
+const heredocEnd = (line) => line.match(HEREDOC)?.[2] ?? null;
 
 /** The command with heredoc bodies removed, so their text is not parsed. */
 function stripHeredocs(command) {
-  const lines = command.split('\n');
   const out = [];
   let end = null;
-  for (const line of lines) {
-    if (end !== null) {
-      if (line.trim() === end) end = null;
-      continue;
+  for (const line of command.split('\n')) {
+    if (end === null) {
+      out.push(line);
+      end = heredocEnd(line);
+    } else if (line.trim() === end) {
+      end = null;
     }
-    out.push(line);
-    const m = line.match(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    if (m) end = m[2];
   }
   return out.join('\n');
 }
 
-/** Each simple command's words, with the leading `git` globals dropped. */
+/** Where `git` starts the words (directly or after `rtk`), or -1. */
+function gitIndex(words) {
+  const at = words.indexOf('git');
+  if (at <= 0) return at;
+  return words[at - 1] === 'rtk' ? at : -1;
+}
+
+/** The words after `git`, without its `-c`/`-C` globals, or null. */
+function gitArgs(words) {
+  const at = gitIndex(words);
+  if (at === -1) return null;
+  const rest = words.slice(at + 1);
+  while (GLOBALS.has(rest[0])) rest.splice(0, 2);
+  return rest;
+}
+
+/** Each simple command's git arguments, in order. */
 function gitCalls(command) {
   return stripHeredocs(command)
     .split(/&&|\|\||[;|\n]/)
-    .map((segment) => segment.trim().split(/\s+/).filter(Boolean))
-    .map((words) => {
-      const at = words.indexOf('git');
-      if (at === -1 || (at > 0 && words[at - 1] !== 'rtk')) return null;
-      const rest = words.slice(at + 1);
-      while (rest[0] === '-c' || rest[0] === '-C') rest.splice(0, 2);
-      return rest;
-    })
+    .map((segment) => gitArgs(segment.trim().split(/\s+/).filter(Boolean)))
     .filter(Boolean);
 }
 
 /** The branch a `git switch` or `git checkout` moves to, or ''. */
 function switchTarget(args) {
   const [sub, ...rest] = args;
-  if (sub !== 'switch' && sub !== 'checkout') return '';
-  if (rest.includes('--')) return '';
-  const create = rest.findIndex((a) => ['-c', '-C', '-b', '-B'].includes(a));
+  if (!SWITCHES.has(sub) || rest.includes('--')) return '';
+  const create = rest.findIndex((a) => CREATE.has(a));
   if (create !== -1) return rest[create + 1] || '';
   return rest.find((a) => !a.startsWith('-')) || '';
 }
@@ -66,29 +78,34 @@ const targetsMain = (refspec) => {
   return dest === MAIN || dest === `refs/heads/${MAIN}`;
 };
 
+const pushesCurrent = (refspecs) => refspecs.length === 0 || refspecs.includes('HEAD');
+
 /** Why a push lands on main from `branch`, or ''. */
 function pushProblem(args, branch) {
-  const positional = args.slice(1).filter((a) => !a.startsWith('-'));
-  const refspecs = positional.slice(1);
+  const refspecs = args
+    .slice(1)
+    .filter((a) => !a.startsWith('-'))
+    .slice(1);
   if (refspecs.some(targetsMain)) return 'pushes to main';
-  const onMain = branch === MAIN;
-  if (onMain && (refspecs.length === 0 || refspecs.includes('HEAD'))) {
-    return 'pushes the current branch, which is main';
-  }
+  if (branch === MAIN && pushesCurrent(refspecs)) return 'pushes the current branch, which is main';
   return '';
+}
+
+/** Why one git call lands on main from `branch`, or ''. */
+function callProblem(args, branch) {
+  if (args[0] === 'commit') return branch === MAIN ? 'git commit on main' : '';
+  if (args[0] !== 'push') return '';
+  const problem = pushProblem(args, branch);
+  return problem && `git push ${problem}`;
 }
 
 /** Why the command must not run, or '' to allow it. */
 function verdict(command, branch) {
   let current = branch;
   for (const args of gitCalls(command)) {
-    const moved = switchTarget(args);
-    if (moved) current = moved;
-    if (args[0] === 'commit' && current === MAIN) return 'git commit on main';
-    if (args[0] === 'push') {
-      const problem = pushProblem(args, current);
-      if (problem) return `git push ${problem}`;
-    }
+    current = switchTarget(args) || current;
+    const problem = callProblem(args, current);
+    if (problem) return problem;
   }
   return '';
 }
@@ -101,28 +118,29 @@ function currentBranch(cwd) {
   }
 }
 
-function main() {
-  let input = '';
-  process.stdin.on('data', (d) => (input += d));
-  process.stdin.on('end', () => {
-    let payload = {};
-    try {
-      payload = JSON.parse(input);
-    } catch {
-      process.exit(0);
-    }
-    const command = payload.tool_input?.command || '';
-    if (!/\bgit\b/.test(command)) process.exit(0);
-    const reason = verdict(command, currentBranch(payload.cwd || process.cwd()));
-    if (!reason) process.exit(0);
-    process.stderr.write(
-      `main-guard: blocked (${reason}). Work on a feature branch: ` +
-        '`git switch -c feature/<name>`, then commit and push there (AGENTS.md: never push to main).\n',
-    );
-    process.exit(2);
-  });
+/** The hook's exit code for one PreToolUse payload (2 blocks). */
+function guard(input) {
+  let payload;
+  try {
+    payload = JSON.parse(input);
+  } catch {
+    return 0;
+  }
+  const command = payload.tool_input?.command || '';
+  if (!/\bgit\b/.test(command)) return 0;
+  const reason = verdict(command, currentBranch(payload.cwd || process.cwd()));
+  if (!reason) return 0;
+  process.stderr.write(
+    `main-guard: blocked (${reason}). Work on a feature branch: ` +
+      '`git switch -c feature/<name>`, then commit and push there (AGENTS.md: never push to main).\n',
+  );
+  return 2;
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  let input = '';
+  process.stdin.on('data', (d) => (input += d));
+  process.stdin.on('end', () => process.exit(guard(input)));
+}
 
 module.exports = { gitCalls, stripHeredocs, switchTarget, verdict };
