@@ -12,6 +12,8 @@
  *   issues unlabeled needs-human    task: the owner answered an escalation (3.1)
  *     (by the owner, on an issue
  *     labelled factory:<id>)
+ *   issues labeled factory-ready    task: the owner approved the plan and starts
+ *     (same conditions)             the change (factory-tickets-and-autostart 4.1)
  *
  *   schedule (hourly)               the one retry of a failed run (5.4): babysit
  *                                   if the change has an open factory PR, else task
@@ -242,6 +244,37 @@ function resumeRoute(event) {
   return { mode: 'task', change_id: id, reason: `#${issue.number} resumed by the owner` };
 }
 
+/** The label the owner adds to a tracking issue to start its change. */
+const READY_LABEL = 'factory-ready';
+
+/**
+ * The owner adding `factory-ready` to a change's tracking issue starts its
+ * first unchecked task, as a dispatch does (factory-tickets-and-autostart,
+ * task 4.1). The label is not `factory:ready`: changeFromLabels would read
+ * that as the change id `ready`. A change with an open factory PR is already
+ * running, and its PR's own events drive it.
+ */
+function readyRoute(event, deps) {
+  const issue = event.issue || {};
+  const id = changeFromLabels(issue.labels || []);
+  const blocked = readyBlocker(event, id);
+  if (blocked) return none(blocked);
+  const open = deps.openFactoryPr(id);
+  if (open) return none(`${id} is already running on #${open}`);
+  return { mode: 'task', change_id: id, reason: `#${issue.number} marked ready by the owner` };
+}
+
+/** Why a `labeled` event does not start a change, or ''. */
+function readyBlocker(event, id) {
+  if ((event.label || {}).name !== READY_LABEL) return `not a ${READY_LABEL} label`;
+  if (!id) return 'not a tracking issue';
+  return sentByOwner(event) ? '' : `${READY_LABEL} added by someone other than the owner`;
+}
+
+/** An `issues` event: the owner starting a change, or resuming one. */
+const issuesRoute = (event, deps) =>
+  event.action === 'labeled' ? readyRoute(event, deps) : resumeRoute(event);
+
 /** True when the event's sender is the repository owner. */
 function sentByOwner({ sender = {}, repository = {} }) {
   const owner = (repository.owner || {}).login;
@@ -348,7 +381,7 @@ function route(eventName, event, deps) {
   if (relayedPr) return babysitRoute(prNumberOf(event), deps);
   if (eventName === 'workflow_dispatch') return activeOnly(dispatchRoute(event), deps);
   if (eventName === 'pull_request') return activeOnly(mergedRoute(event, deps), deps);
-  if (eventName === 'issues') return activeOnly(resumeRoute(event), deps);
+  if (eventName === 'issues') return activeOnly(issuesRoute(event, deps), deps);
   if (eventName === 'schedule') return retryRoute(deps);
   return babysitRoute(prNumberOf(event), deps);
 }

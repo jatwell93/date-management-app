@@ -249,6 +249,38 @@ test('only the owner can resume, and only by removing needs-human', () => {
   assert.equal(route('issues', unlabeled({ labels: [{ name: 'bug' }] }), deps()).mode, 'none');
 });
 
+const labeled = ({ label = 'factory-ready', sender = OWNER, labels = [LABEL] } = {}) => ({
+  ...unlabeled({ label, sender, labels }),
+  action: 'labeled',
+});
+
+test('the owner adding factory-ready to a tracking issue starts the change', () => {
+  assert.deepEqual(route('issues', labeled(), deps()), {
+    mode: 'task',
+    change_id: 'add-x',
+    reason: '#703 marked ready by the owner',
+  });
+});
+
+test('factory-ready starts nothing from anyone else, on another issue, or held', () => {
+  const byBot = route('issues', labeled({ sender: { login: 'claude[bot]' } }), deps());
+  assert.match(byBot.reason, /someone other than the owner/);
+  assert.match(route('issues', labeled({ label: 'bug' }), deps()).reason, /not a factory-ready/);
+  assert.match(
+    route('issues', labeled({ labels: [{ name: 'bug' }] }), deps()).reason,
+    /not a tracking issue/,
+  );
+  assert.match(route('issues', labeled(), deps({ parked: 703 })).reason, /waiting on the owner/);
+  assert.match(route('issues', labeled(), deps({ retry: 703 })).reason, /waiting to retry/);
+  assert.match(route('issues', labeled(), deps({ openPr: 9 })).reason, /already running on #9/);
+  assert.equal(changeFromLabels([{ name: 'factory-ready' }, LABEL]), 'add-x');
+});
+
+test('factory-ready on an owner task escalates instead of starting Claude', () => {
+  const r = route('issues', labeled(), deps({ tasks: '- [ ] 1.1 (owner) Rotate the key\n' }));
+  assert.equal(r.mode, 'escalate');
+});
+
 test('a resume still waits if another needs-human issue holds the change', () => {
   assert.equal(route('issues', unlabeled(), deps({ parked: 704 })).mode, 'none');
 });
