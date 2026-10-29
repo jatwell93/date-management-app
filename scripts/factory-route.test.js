@@ -7,6 +7,8 @@ const path = require('node:path');
 const {
   changeFromLabels,
   factoryIdProblem,
+  isArchiveOf,
+  missingAsEmpty,
   nextTask,
   route,
   toOutput,
@@ -25,6 +27,8 @@ function deps({
   openPr = 0,
   perChange = false,
   branchTasks = '- [x] 1.1 Do it\n- [ ] 1.2 Next\n',
+  archived = false,
+  exists = true,
 } = {}) {
   const calls = { feedback: 0, startRetry: [], dropRetry: [], branchTask: [], markReady: [] };
   return {
@@ -34,8 +38,9 @@ function deps({
       calls.branchTask.push([id, ref]);
       return nextTask(branchTasks);
     },
+    branchArchived: () => archived,
     markReady: (p, n) => calls.markReady.push(n),
-    changeExists: (id) => id !== 'gone',
+    changeExists: (id) => exists && id !== 'gone',
     parkedIssue: () => parked,
     retryIssue: () => retry,
     retryCandidates: () => candidates,
@@ -323,6 +328,26 @@ test('a resume still waits if another needs-human issue holds the change', () =>
   assert.equal(route('issues', unlabeled(), deps({ parked: 704 })).mode, 'none');
 });
 
+test('isArchiveOf matches only <date>-<id>', () => {
+  assert.equal(isArchiveOf('2026-10-29-add-x', 'add-x'), true);
+  assert.equal(isArchiveOf('2026-10-29-foo-add-x', 'add-x'), false);
+  assert.equal(isArchiveOf('2026-10-29-add-x-2', 'add-x'), false);
+  assert.equal(isArchiveOf('add-x', 'add-x'), false);
+  assert.equal(isArchiveOf('x026-10-29-add-x', 'add-x'), false);
+});
+
+test('missingAsEmpty turns a 404 into an empty file and rethrows anything else', () => {
+  const fail = (message) => () => {
+    throw Object.assign(new Error('Command failed'), { stderr: message });
+  };
+  assert.equal(missingAsEmpty(fail('gh: Not Found (HTTP 404)')), '');
+  assert.equal(
+    missingAsEmpty(() => 'text'),
+    'text',
+  );
+  assert.throws(() => missingAsEmpty(fail('HTTP 401: Bad credentials')), /Command failed/);
+});
+
 test('nextTask reads the first unchecked task and its (owner) marker', () => {
   const md = '- [x] 1.1 Done\n  - [ ] note\n- [ ] 1.2 (owner) Rotate the key\n- [ ] 1.3 Next\n';
   assert.deepEqual(nextTask(md), { number: '1.2', text: 'Rotate the key', owner: true });
@@ -385,6 +410,10 @@ test('the hourly schedule retries a failed task once its label is over an hour o
     retry: 714,
   });
   assert.deepEqual(d.calls.startRetry, [714], 'factory-retry swapped for factory-retrying');
+  const finished = '- [x] 1.1 Do it\n';
+  const archive = deps({ candidates: [RETRY_ISSUE('2026-10-26T10:30:00Z')], tasks: finished });
+  assert.equal(route('schedule', {}, archive).mode, 'archive', 'a failed archive run retries');
+  assert.equal(route('schedule', {}, archive).retry, 714);
   assert.equal(
     route('workflow_dispatch', { inputs: { change_id: 'add-x' } }, deps()).retry,
     undefined,
@@ -476,10 +505,40 @@ const PER_CHANGE_MERGE = {
   pull_request: { number: 7, merged: true, labels: [LABEL], user: APP },
 };
 
-test('a merged per-change PR starts nothing: the change is complete', () => {
-  const r = route('pull_request', PER_CHANGE_MERGE, perChange({ tasks: DONE }));
+test('a merged archive PR starts nothing: the change is archived on main', () => {
+  const r = route('pull_request', PER_CHANGE_MERGE, perChange({ tasks: DONE, exists: false }));
   assert.equal(r.mode, 'none');
-  assert.match(r.reason, /per-change PR, change complete/);
+  assert.match(r.reason, /archived or missing/);
+});
+
+test('a per-change PR merged with every task done but not archived starts an archive PR', () => {
+  const r = route('pull_request', PER_CHANGE_MERGE, perChange({ tasks: DONE }));
+  assert.deepEqual(r, {
+    mode: 'archive',
+    change_id: 'add-x',
+    reason: 'every task of add-x is done',
+  });
+});
+
+test('a per-task change with every task done on main archives once, on one PR', () => {
+  const merged = route('pull_request', PER_CHANGE_MERGE, deps({ tasks: DONE }));
+  assert.deepEqual(merged, {
+    mode: 'archive',
+    change_id: 'add-x',
+    reason: 'every task of add-x is done',
+  });
+  const dispatched = route(
+    'workflow_dispatch',
+    { inputs: { change_id: 'add-x' } },
+    deps({ tasks: DONE }),
+  );
+  assert.equal(dispatched.mode, 'archive');
+  const running = route('pull_request', PER_CHANGE_MERGE, deps({ tasks: DONE, openPr: 12 }));
+  assert.match(running.reason, /already running on #12/);
+  const held = route('pull_request', PER_CHANGE_MERGE, deps({ tasks: DONE, parked: 703 }));
+  assert.match(held.reason, /waiting on the owner/);
+  const archived = route('pull_request', PER_CHANGE_MERGE, deps({ tasks: DONE, exists: false }));
+  assert.match(archived.reason, /archived or missing/);
 });
 
 test('a per-change PR merged with a task left opens a new per-change PR for it', () => {
@@ -547,17 +606,38 @@ test("an (owner) next task on a per-change PR escalates with the PR's branch", (
   });
 });
 
-test('a per-change PR with no task left is marked ready once, then left for the merge', () => {
+test('a per-change PR with no task left gets an archive run on the PR, not marked ready', () => {
   // The last task was an (owner) task the owner ticked on the branch.
-  const wip = perChange({ branchTasks: DONE });
+  const d = perChange({ branchTasks: DONE });
+  assert.deepEqual(route('pull_request_review', REVIEW, d), {
+    mode: 'archive',
+    change_id: 'add-x',
+    pr: 9,
+    ref: 'feature/factory-add-x',
+    per_change: true,
+    reason: 'archive add-x on #9',
+  });
+  assert.deepEqual(d.calls.markReady, []);
+});
+
+test('an archived per-change PR is marked ready once, then left for the merge', () => {
+  // The archived branch has no openspec/changes/<id>/tasks.md: never read it.
+  const archived = (opts = {}) => {
+    const d = perChange({ archived: true, ...opts });
+    d.branchTask = () => {
+      throw new Error('HTTP 404: Not Found');
+    };
+    return d;
+  };
+  const wip = archived();
   assert.equal(route('pull_request_review', REVIEW, wip).reason, '#9 marked ready for the owner');
   assert.deepEqual(wip.calls.markReady, [9]);
 
-  const draft = perChange({ branchTasks: DONE, pr: { title: 'feat(x): add x', isDraft: true } });
+  const draft = archived({ pr: { title: 'feat(x): add x', isDraft: true } });
   route('pull_request_review', REVIEW, draft);
   assert.deepEqual(draft.calls.markReady, [9], 'a draft counts as unfinished too');
 
-  const ready = perChange({ branchTasks: DONE, pr: { title: 'feat(x): add x' } });
+  const ready = archived({ pr: { title: 'feat(x): add x' } });
   const r = route('pull_request_review', REVIEW, ready);
   assert.match(r.reason, /finished: waiting for the owner's merge/);
   assert.deepEqual(ready.calls.markReady, []);

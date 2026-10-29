@@ -162,17 +162,17 @@ jobs:
         run: node scripts/factory-sweep.js
 
   run:
-    name: Run one task or one babysit pass
+    name: Run one task, one archive or one babysit pass
     needs: route
-    if: needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'babysit'
+    if: needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive' || needs.route.outputs.mode == 'babysit'
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # New tasks queue per change and babysit passes per PR; every run on a
+    # New tasks and archive runs queue per change and babysit passes per PR; every run on a
     # per-change PR queues per change. A running job is never cancelled; GitHub
     # keeps only the newest queued one, which sees the latest state anyway.
     # run-spec exits if a per-task factory PR is still open.
     concurrency:
-      group: ${{ (needs.route.outputs.mode == 'task' || needs.route.outputs.per_change == 'true') && format('factory-{0}', needs.route.outputs.change_id) || format('factory-babysit-{0}', needs.route.outputs.pr) }}
+      group: ${{ (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive' || needs.route.outputs.per_change == 'true') && format('factory-{0}', needs.route.outputs.change_id) || format('factory-babysit-{0}', needs.route.outputs.pr) }}
       cancel-in-progress: false
     steps:
       - name: Checkout code
@@ -182,13 +182,13 @@ jobs:
           ref: ${{ needs.route.outputs.ref }}
           fetch-depth: 0
 
-      # A task on a per-change PR starts from the PR branch. Merge main into it
+      # A task or archive run on a per-change PR starts from the PR branch. Merge main into it
       # first, unless that brings in a workflow change: the Claude GitHub App
       # has no Workflows permission, so GitHub would reject the push. Before the
       # rules step below, whose skip-worktree files a merge cannot update.
       - name: Merge main into a per-change PR branch
         id: base
-        if: needs.route.outputs.mode == 'task' && needs.route.outputs.pr != ''
+        if: (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive') && needs.route.outputs.pr != ''
         shell: bash
         run: |
           git fetch --quiet origin main
@@ -220,10 +220,18 @@ jobs:
           git ls-files --others --exclude-standard -- "${rules[@]}" | sed 's#^#/#' >> .git/info/exclude
           git status --short
 
+      # A babysit pass on a per-change PR may find the change archived on the
+      # branch already (factory-tickets-and-autostart 5.1).
       - name: Check the change exists
         env:
           CHANGE_ID: ${{ needs.route.outputs.change_id }}
-        run: test -f "openspec/changes/$CHANGE_ID/tasks.md" || { echo "::error::no tasks.md for $CHANGE_ID"; exit 1; }
+          MODE: ${{ needs.route.outputs.mode }}
+        shell: bash
+        run: |
+          test -f "openspec/changes/$CHANGE_ID/tasks.md" && exit 0
+          if [ "$MODE" = babysit ] && compgen -G "openspec/changes/archive/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$CHANGE_ID" >/dev/null; then exit 0; fi
+          echo "::error::no tasks.md for $CHANGE_ID"
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -246,7 +254,7 @@ jobs:
           # change_id and pr come from the route job, which accepts only a plain
           # change id and a PR number.
           prompt: |
-            ${{ needs.route.outputs.mode == 'task' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`.', needs.route.outputs.change_id) || format('Use the babysit-pr skill (.claude/skills/babysit-pr/SKILL.md) in one-shot mode on PR #{0}, a factory PR for the OpenSpec change `{1}`.', needs.route.outputs.pr, needs.route.outputs.change_id) }}
+            ${{ needs.route.outputs.mode == 'archive' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`. Every task is done: follow its "Archive a finished change" section.', needs.route.outputs.change_id) || needs.route.outputs.mode == 'task' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`.', needs.route.outputs.change_id) || format('Use the babysit-pr skill (.claude/skills/babysit-pr/SKILL.md) in one-shot mode on PR #{0}, a factory PR for the OpenSpec change `{1}`.', needs.route.outputs.pr, needs.route.outputs.change_id) }}
             ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr == '' && 'The change runs as one PR (`pr: per-change`): this is its first task, so open that PR as the skill says for a first task.' || '' }}
             ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('The change runs as one PR (`pr: per-change`): this run is on PR #{0}, branch `{1}`, and its PR rules apply.', needs.route.outputs.pr, needs.route.outputs.ref) || '' }} ${{ needs.route.outputs.mode == 'task' && needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('Do task {0}. {1}', needs.route.outputs.task, steps.base.outputs.note) || '' }}
             You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.

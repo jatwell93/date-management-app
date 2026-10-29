@@ -20,7 +20,13 @@
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 
-const { OWNER, branchFile, factoryIdProblem, nextTask } = require('./factory-route.js');
+const {
+  OWNER,
+  branchFile,
+  factoryIdProblem,
+  missingAsEmpty,
+  nextTask,
+} = require('./factory-route.js');
 const { trackingIssue } = require('./factory-issue.js');
 
 const TASK_NUMBER = /^[0-9][0-9A-Za-z.]{0,19}$/;
@@ -52,7 +58,9 @@ const defaultDeps = {
   },
   tasks: (id, ref) => {
     const file = `openspec/changes/${id}/tasks.md`;
-    return ref ? branchFile(file, ref) : fs.readFileSync(file, 'utf8');
+    // An archived change has no tasks.md: no owner task is left to ask about.
+    if (ref) return missingAsEmpty(() => branchFile(file, ref));
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   },
 };
 

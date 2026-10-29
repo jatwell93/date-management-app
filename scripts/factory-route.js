@@ -4,7 +4,7 @@
  * add-spec-factory-runner, tasks 2.1 and 2.2). Run by the `route` job of
  * .github/workflows/factory.yml; prints $GITHUB_OUTPUT lines:
  *
- *   mode=task|babysit|escalate|none  change_id=<id>  pr=<n>  ref=<branch>
+ *   mode=task|babysit|archive|escalate|none  change_id=<id>  pr=<n>  ref=<branch>
  *   task=<n>  retry=<issue>  per_change=true|  reason=<text>
  *
  *   workflow_dispatch(change_id)    task on that change
@@ -35,8 +35,14 @@
  * PR (factory-per-change-pr, task 1.2). Every route that lands on that PR
  * advances it by one step: a babysit pass on actionable items, else, once the
  * PR is settled, the next task of the branch's tasks.md (escalated if it is an
- * `(owner)` task), else marking the PR ready for the owner. A merge of that
- * PR starts nothing: the change is complete.
+ * `(owner)` task), else an archive run that commits the archived change on
+ * the PR, else marking the PR ready for the owner. A merge of the archived PR
+ * starts nothing: the change is complete.
+ *
+ * A change with no unchecked task left on main and not yet archived routes
+ * `mode: archive` (factory-tickets-and-autostart, task 5.1): a Claude run that
+ * archives it on one archive PR. An archived change (no
+ * openspec/changes/<id>/tasks.md) routes to nothing.
  *
  * Only PRs authored by the Claude GitHub App AND labelled `factory:<id>` count
  * as factory PRs, which the factory babysits and continues: the factory can
@@ -111,17 +117,12 @@ function mergedRoute(event, deps) {
   const id = changeFromLabels(pr.labels || []);
   if (!id) return none('not a factory PR');
   if (!isAppAuthor(authorOf(pr))) return planMergedRoute(event, id, deps);
-  if (perChangeComplete(id, deps))
-    return none(`#${pr.number} merged: per-change PR, change complete`);
+  // activeOnly decides what the merge starts: nothing once the change is
+  // archived on main, else its next task, else an archive run. A per-change
+  // PR merged before its last task (the owner merged a WIP: PR) carries on:
+  // the next task opens a new per-change PR.
   return { mode: 'task', change_id: id, reason: `#${pr.number} merged` };
 }
-
-/**
- * True when a per-change change has no task left on main. A per-change PR
- * merged before its last task (the owner merged a WIP: PR) carries on: the
- * next task opens a new per-change PR.
- */
-const perChangeComplete = (id, deps) => deps.perChange(id) && !deps.nextTask(id);
 
 /**
  * PR number the event is about, or 0. A finished CI run reaches this workflow
@@ -222,9 +223,13 @@ function advanceRoute(number, pr, id, deps) {
 
 /**
  * On a settled per-change PR: the branch's next task (escalated if it is the
- * owner's), else mark the PR ready and tell the owner, once.
+ * owner's), else an archive run on the PR (factory-tickets-and-autostart,
+ * task 5.1), else, once the branch holds the archived change, mark the PR
+ * ready and tell the owner, once. The archived branch has no
+ * openspec/changes/<id>/tasks.md, so it is checked first.
  */
 function nextStepRoute(pr, base, deps) {
+  if (deps.branchArchived(base.change_id, pr.headRefName)) return handOverRoute(pr, base, deps);
   const task = deps.branchTask(base.change_id, pr.headRefName);
   if (task && task.owner) return { ...ownerTaskRoute(base, task), ref: base.ref, per_change: true };
   if (task)
@@ -234,10 +239,30 @@ function nextStepRoute(pr, base, deps) {
       task: task.number,
       reason: `task ${task.number} on #${base.pr}`,
     };
+  return { mode: 'archive', ...base, reason: `archive ${base.change_id} on #${base.pr}` };
+}
+
+/** A finished, archived per-change PR: mark it ready for the owner, once. */
+function handOverRoute(pr, base, deps) {
   if (!isWip(pr)) return none(`#${base.pr} is finished: waiting for the owner's merge`);
   deps.markReady(pr, base.pr);
   return none(`#${base.pr} marked ready for the owner`);
 }
+
+/**
+ * Every task of a change is done on main and it is not archived yet: one
+ * archive run, which opens an archive PR (task 5.1). While a factory PR of the
+ * change is open, its own events drive it.
+ */
+function archiveRoute(id, deps) {
+  const open = deps.openFactoryPr(id);
+  if (open) return none(`${id} is already running on #${open}`);
+  return { mode: 'archive', change_id: id, reason: `every task of ${id} is done` };
+}
+
+/** True when an archive folder name is change `id`'s: `<YYYY-MM-DD>-<id>`. */
+const isArchiveOf = (name, id) =>
+  /^[0-9]{4}-[0-9]{2}-[0-9]{2}-/.test(name) && name.slice(11) === id;
 
 /**
  * The owner taking `needs-human` off a change's tracking issue resumes it.
@@ -331,12 +356,22 @@ function activeOnly(result, deps) {
   }
   const held = changeHold(result.change_id, deps);
   if (held) return none(held);
-  const next = ownerTaskRoute(result, deps.nextTask(result.change_id));
-  if (!deps.perChange(result.change_id)) return next;
-  // A per-change change continues on its open PR; without one, this first
-  // task opens it, and the prompt must say so (per_change).
+  if (deps.perChange(result.change_id)) return perChangeStart(result, deps);
+  const task = deps.nextTask(result.change_id);
+  return task ? ownerTaskRoute(result, task) : archiveRoute(result.change_id, deps);
+}
+
+/**
+ * A per-change change continues on its open PR; without one, its next task
+ * opens it, and the prompt must say so (per_change). With no task left on
+ * main (the owner merged its PR before the archive), an archive PR follows.
+ */
+function perChangeStart(result, deps) {
   const open = deps.openFactoryPr(result.change_id);
-  return open ? babysitRoute(open, deps) : { ...next, per_change: true };
+  if (open) return babysitRoute(open, deps);
+  const task = deps.nextTask(result.change_id);
+  if (!task) return archiveRoute(result.change_id, deps);
+  return { ...ownerTaskRoute(result, task), per_change: true };
 }
 
 const HOUR = 60 * 60 * 1000;
@@ -380,7 +415,7 @@ function retryTarget(due, deps) {
  * no retry, so the label goes and no stale factory-retrying is left behind.
  */
 function settleRetry(number, result, deps) {
-  if (result.mode === 'task' || result.mode === 'babysit') {
+  if (CLAUDE_MODES.has(result.mode)) {
     deps.startRetry(number);
     // Marks this run as the retry: only it clears factory-retrying when it
     // succeeds, so a parallel success cannot reset the one-retry budget.
@@ -391,6 +426,9 @@ function settleRetry(number, result, deps) {
   if (result.mode === 'escalate') return result;
   return none(`retry from #${number} not needed: ${result.reason}`);
 }
+
+/** The modes that start a Claude run. */
+const CLAUDE_MODES = new Set(['task', 'babysit', 'archive']);
 
 const isRetryWait = (result) =>
   result.mode === 'none' &&
@@ -498,6 +536,11 @@ const defaultDeps = {
     return require('./factory-issue.js').perChangeFromProposal(text);
   },
   branchTask: (id, ref) => nextTask(branchFile(`openspec/changes/${id}/tasks.md`, ref)),
+  branchArchived: (id, ref) => {
+    const url = `repos/{owner}/{repo}/contents/openspec/changes/archive?ref=${encodeURIComponent(ref)}`;
+    const names = missingAsEmpty(() => gh(['api', url, '--jq', '.[].name']));
+    return names.split('\n').some((name) => isArchiveOf(name.trim(), id));
+  },
   markReady: (pr, n) => {
     if (pr.isDraft) gh(['pr', 'ready', String(n)]);
     const title = pr.title.replace(/^WIP:\s*/i, '');
@@ -513,6 +556,20 @@ const defaultDeps = {
 function branchFile(file, ref) {
   const url = `repos/{owner}/{repo}/contents/${file}?ref=${encodeURIComponent(ref)}`;
   return gh(['api', '-H', 'Accept: application/vnd.github.raw', url]);
+}
+
+/**
+ * `read()`, or '' when the file is not there (a 404 from the contents API):
+ * an archived change has no openspec/changes/<id>/ on its branch. Any other
+ * error is thrown.
+ */
+function missingAsEmpty(read) {
+  try {
+    return read();
+  } catch (error) {
+    if (/HTTP 404|Not Found/.test(String(error.stderr || error.message))) return '';
+    throw error;
+  }
 }
 
 const OWNER = '@jatwell93';
@@ -539,6 +596,8 @@ module.exports = {
   changeFromLabels,
   defaultDeps,
   factoryIdProblem,
+  isArchiveOf,
+  missingAsEmpty,
   nextTask,
   route,
   toOutput,
