@@ -68,6 +68,8 @@ const unset = () => {
 };
 
 const SECRETS_HOOK = '#!/usr/bin/env bash\ngit secrets --pre_commit_hook -- "$@"\n';
+// setup-git-secrets.sh copies this script to .git/hooks/pre-commit.
+const COPIED_SECRETS = fs.readFileSync(path.join(__dirname, 'pre-commit-secrets.sh'), 'utf8');
 
 /**
  * Fake git, directory listing and file reads for the installer. Hooks named in
@@ -118,6 +120,9 @@ test('install replaces the git-secrets hooks, which .githooks runs itself', () =
   assert.match(install(secrets), /^git hooks installed/);
   const mixed = installDeps({ files: ['pre-push'], secrets: ['pre-commit'] });
   assert.match(install(mixed), /already has hooks \(pre-push\)/);
+  const copied = installDeps({ files: ['pre-commit'] });
+  copied.read = () => COPIED_SECRETS;
+  assert.match(install(copied), /^git hooks installed/);
   for (const hook of ['pre-commit', 'commit-msg', 'prepare-commit-msg']) {
     const text = fs.readFileSync(path.join(HOOKS, hook), 'utf8');
     assert.match(text, /git-secrets --\w+_hook -- "\$@"/, hook);

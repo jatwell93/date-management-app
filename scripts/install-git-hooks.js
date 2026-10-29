@@ -25,10 +25,12 @@ const defaultDeps = {
 };
 
 /**
- * True for a hook that `git secrets --install` wrote (scripts/setup-git-secrets.sh).
- * .githooks/ runs the same git-secrets checks, so replacing it loses nothing.
+ * True for a hook scripts/setup-git-secrets.sh installed: one `git secrets
+ * --install` wrote (`git secrets --<name>_hook`), or its copy of
+ * scripts/pre-commit-secrets.sh (`git secrets --scan`). .githooks/ runs the
+ * same git-secrets checks, so replacing either loses nothing.
  */
-const isGitSecretsHook = (text) => /^git secrets --\w+_hook\b/m.test(text);
+const isGitSecretsHook = (text) => /^\s*(if )?git secrets --(\w+_hook|scan)\b/m.test(text);
 
 /** The configured core.hooksPath, or ''. */
 function configuredPath(git) {
