@@ -31,7 +31,7 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 4. Auto-start
 
-- [ ] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The label is `factory-ready`, not `factory:ready`: `changeFromLabels` would read `factory:ready` as the change id `ready`. The router routes `factory-ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
+- [x] 4.1 `factory.yml` adds `issues: [labeled]` (beside `unlabeled`). The label is `factory-ready`, not `factory:ready`: `changeFromLabels` would read `factory:ready` as the change id `ready`. The router routes `factory-ready` added by the owner on a `factory:<id>` tracking issue as a dispatch of `<id>`, and ignores it from anyone else, on an issue without `factory:<id>`, or while `needs-human` or `factory-retry` is on it. A change with an open factory PR routes to `none` (the PR's own events drive it).
       Demo: adding the label starts the first task with no `gh workflow run`.
       Acceptance: router tests for each case; `factory-workflows.test.js` for the trigger. AGENTS.md "Factory" names the label as the way to start a change.
 
