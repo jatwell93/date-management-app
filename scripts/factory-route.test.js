@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const {
   changeFromLabels,
+  changeTitle,
   factoryIdProblem,
   isArchiveOf,
   missingAsEmpty,
@@ -30,7 +31,14 @@ function deps({
   archived = false,
   exists = true,
 } = {}) {
-  const calls = { feedback: 0, startRetry: [], dropRetry: [], branchTask: [], markReady: [] };
+  const calls = {
+    feedback: 0,
+    startRetry: [],
+    dropRetry: [],
+    branchTask: [],
+    markReady: [],
+    readyIds: [],
+  };
   return {
     calls,
     perChange: () => perChange,
@@ -39,7 +47,10 @@ function deps({
       return nextTask(branchTasks);
     },
     branchArchived: () => archived,
-    markReady: (p, n) => calls.markReady.push(n),
+    markReady: (p, n, id) => {
+      calls.markReady.push(n);
+      calls.readyIds.push(id);
+    },
     changeExists: (id) => exists && id !== 'gone',
     parkedIssue: () => parked,
     retryIssue: () => retry,
@@ -326,6 +337,38 @@ test('factory-ready on an owner task escalates instead of starting Claude', () =
 
 test('a resume still waits if another needs-human issue holds the change', () => {
   assert.equal(route('issues', unlabeled(), deps({ parked: 704 })).mode, 'none');
+});
+
+test('changeTitle names a finished per-change PR after its change', () => {
+  const proposal = '# Proposal: Prove tickets to archive\n\n## Why\n';
+  const wip = 'WIP: docs(openspec): start the tickets proof file (factory-tickets-proof 1.1)';
+  const id = 'factory-tickets-proof';
+  assert.equal(
+    changeTitle(wip, proposal, id),
+    'docs(openspec): prove tickets to archive (factory-tickets-proof)',
+  );
+  assert.equal(
+    changeTitle('feat: a', proposal, id),
+    'feat: prove tickets to archive (factory-tickets-proof)',
+  );
+  assert.equal(
+    changeTitle('feat(x)!: a', proposal, id),
+    'feat(x)!: prove tickets to archive (factory-tickets-proof)',
+  );
+  assert.equal(changeTitle('WIP: feat: a', '# Add x', id), 'feat: add x (factory-tickets-proof)');
+  assert.equal(changeTitle('feat: a', '# API keys', id), 'feat: API keys (factory-tickets-proof)');
+});
+
+test('changeTitle only drops WIP: without a prefix or a heading', () => {
+  const proposal = '# Proposal: Prove tickets to archive\n';
+  assert.equal(changeTitle('WIP: Start the proof', proposal, 'p'), 'Start the proof');
+  for (const text of ['', '## Why\n', '# Proposal:\n', '# Proposal:   \n']) {
+    assert.equal(
+      changeTitle('WIP: docs(x): start', text, 'p'),
+      'docs(x): start',
+      JSON.stringify(text),
+    );
+  }
 });
 
 test('isArchiveOf matches only <date>-<id>', () => {
@@ -634,6 +677,7 @@ test('an archived per-change PR is marked ready once, then left for the merge', 
   const wip = archived();
   assert.equal(route('pull_request_review', REVIEW, wip).reason, '#9 marked ready for the owner');
   assert.deepEqual(wip.calls.markReady, [9]);
+  assert.deepEqual(wip.calls.readyIds, ['add-x'], 'the change id names the PR title');
 
   const draft = archived({ pr: { title: 'feat(x): add x', isDraft: true } });
   route('pull_request_review', REVIEW, draft);

@@ -245,7 +245,7 @@ function nextStepRoute(pr, base, deps) {
 /** A finished, archived per-change PR: mark it ready for the owner, once. */
 function handOverRoute(pr, base, deps) {
   if (!isWip(pr)) return none(`#${base.pr} is finished: waiting for the owner's merge`);
-  deps.markReady(pr, base.pr);
+  deps.markReady(pr, base.pr, base.change_id);
   return none(`#${base.pr} marked ready for the owner`);
 }
 
@@ -536,14 +536,10 @@ const defaultDeps = {
     return require('./factory-issue.js').perChangeFromProposal(text);
   },
   branchTask: (id, ref) => nextTask(branchFile(`openspec/changes/${id}/tasks.md`, ref)),
-  branchArchived: (id, ref) => {
-    const url = `repos/{owner}/{repo}/contents/openspec/changes/archive?ref=${encodeURIComponent(ref)}`;
-    const names = missingAsEmpty(() => gh(['api', url, '--jq', '.[].name']));
-    return names.split('\n').some((name) => isArchiveOf(name.trim(), id));
-  },
-  markReady: (pr, n) => {
+  branchArchived: (id, ref) => Boolean(archiveDir(id, ref)),
+  markReady: (pr, n, id) => {
     if (pr.isDraft) gh(['pr', 'ready', String(n)]);
-    const title = pr.title.replace(/^WIP:\s*/i, '');
+    const title = changeTitle(pr.title, archivedProposal(id, pr.headRefName), id);
     if (title !== pr.title) gh(['pr', 'edit', String(n), '--title', title]);
     gh(['pr', 'comment', String(n), '--body', readyComment()]);
   },
@@ -572,6 +568,42 @@ function missingAsEmpty(read) {
   }
 }
 
+/** The branch's `openspec/changes/archive/<date>-<id>` folder name, or ''. */
+function archiveDir(id, ref) {
+  const url = `repos/{owner}/{repo}/contents/openspec/changes/archive?ref=${encodeURIComponent(ref)}`;
+  const names = missingAsEmpty(() => gh(['api', url, '--jq', '.[].name']));
+  return (
+    names
+      .split('\n')
+      .map((name) => name.trim())
+      .find((name) => isArchiveOf(name, id)) || ''
+  );
+}
+
+/** The archived change's proposal.md on the branch, or '' when it is not there. */
+function archivedProposal(id, ref) {
+  const dir = archiveDir(id, ref);
+  if (!dir) return '';
+  return missingAsEmpty(() => branchFile(`openspec/changes/archive/${dir}/proposal.md`, ref));
+}
+
+/**
+ * The title of a finished per-change PR (factory-per-change-pr-title): the
+ * current title's conventional prefix, the proposal's heading and the change
+ * id, so the squash commit names the change rather than its first task.
+ * Without a prefix or a heading, the current title with `WIP:` dropped.
+ */
+function changeTitle(title, proposal, id) {
+  const bare = title.replace(/^WIP:\s*/i, '');
+  const prefix = /^[a-z]+(\([^)]*\))?!?:/.exec(bare);
+  const heading = /^# (.+)$/m.exec(proposal || '');
+  const name = heading ? heading[1].replace(/^Proposal:/i, '').trim() : '';
+  if (!prefix || !name) return bare;
+  // Keep an acronym ("API ...") as written; lowercase an ordinary first word.
+  const lead = /^[A-Z](?![A-Z])/.test(name) ? name[0].toLowerCase() + name.slice(1) : name;
+  return `${prefix[0]} ${lead} (${id})`;
+}
+
 const OWNER = '@jatwell93';
 
 function readyComment() {
@@ -594,6 +626,7 @@ module.exports = {
   babysitRoute,
   branchFile,
   changeFromLabels,
+  changeTitle,
   defaultDeps,
   factoryIdProblem,
   isArchiveOf,
