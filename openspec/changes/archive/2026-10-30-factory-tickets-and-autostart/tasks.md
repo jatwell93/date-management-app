@@ -48,5 +48,5 @@ Built in interactive sessions: every task touches a `no_go` path.
 
 ## 6. Live proof
 
-- [ ] 6.1 A throwaway two-task `pr: per-change` change goes from `/to-tickets` to an archived change: the owner approves the slices, the label starts it, both tasks and the archive land on one PR, the merge closes both tickets and the tracking issue. Owner input: the quiz and one merge.
+- [x] 6.1 A throwaway two-task `pr: per-change` change goes from `/to-tickets` to an archived change: the owner approves the slices, the label starts it, both tasks and the archive land on one PR, the merge closes both tickets and the tracking issue. Owner input: the quiz and one merge.
       Blocked by: 2.1, 2.2, 3.2, 4.1, 4.2, 5.1.
