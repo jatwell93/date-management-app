@@ -496,7 +496,7 @@ npm run test:db
 npm run diagnose:webhook
 
 # View recent logs
-npx wrangler tail --env production --format pretty | grep ERROR
+npm run tail:prod --prefix workers | grep ERROR
 
 # Database backup: scheduled by .github/workflows/database-backup.yml (see database-backup-runbook.md)
 
