@@ -3,7 +3,7 @@ name: handover
 description: >-
   Write or update the handover file for an OpenSpec change
   (openspec/changes/<id>/handover.md) so the next session can pick the work up with
-  /resume instead of a pasted prompt. Use when the user asks for "a handover", "a
+  /resume-change instead of a pasted prompt. Use when the user asks for "a handover", "a
   prompt for the next agent", "write up where we are", before /compact or ending a
   long session, and after each task of a change merges. Do NOT use for work that is
   not tracked in an OpenSpec change; log a WORKFLOW memory entry for that instead.
@@ -13,7 +13,7 @@ description: >-
 
 The handover lives in the repository, next to the change it describes:
 `openspec/changes/<change-id>/handover.md`. It replaces the prose prompt the user
-used to copy between sessions. The next session reads it with `/resume`.
+used to copy between sessions. The next session reads it with `/resume-change`.
 
 ## Steps
 

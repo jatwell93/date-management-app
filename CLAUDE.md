@@ -12,7 +12,7 @@ Quick non-negotiables:
   (There is no root `npm test` / `npm run build` — it errors by design.)
 - Track non-trivial work in OpenSpec (`openspec list`); no ad-hoc TODO/planning files.
 - Conventional commits (`feat(workers): ...`). Push and open the PR yourself once the gate passes, then run `babysit-pr`; the user merges (AGENTS.md §4).
-- Resume an OpenSpec change with `/resume <id>`; record state with the `handover` skill.
+- Resume an OpenSpec change with `/resume-change <id>`; record state with the `handover` skill.
 - Use Context7 for current library/API docs without being asked.
 - Workers also need `(cd workers && npm run typecheck)` (CI type-checks test files).
 - Express (`backend/`) is retired: the API is `workers/` on Neon Postgres. The last Express revision is the tag `express-sqlite-last` (see `docs/express-retirement-recovery.md`).

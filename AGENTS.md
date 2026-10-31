@@ -79,7 +79,7 @@ openspec archive <change-id> --yes      # archive after all tasks complete + mer
 
 Flow: `list` → `proposal` → edit `proposal.md` + `tasks.md` → `validate --strict` → implement tasks sequentially (checking `[x]`) → `archive`. Don't archive with incomplete tasks; don't skip `--strict` validation.
 
-- **Handover:** each active change keeps `openspec/changes/<id>/handover.md` (state, next task, open PRs, decisions waiting on the user). Update it with the `handover` skill when a task merges or a session ends; start the next session with `/resume <id>`. It replaces pasted handover prompts.
+- **Handover:** each active change keeps `openspec/changes/<id>/handover.md` (state, next task, open PRs, decisions waiting on the user). Update it with the `handover` skill when a task merges or a session ends; start the next session with `/resume-change <id>`. It replaces pasted handover prompts.
 - **Autonomy:** `proposal.md` may carry an `## Autonomy` section (a fenced `yaml` block) with `merge: auto` or `merge: human` (default), an optional `issue: N` and an optional `no_go` list. No agent merges, whatever `merge` says: every merge to `main` deploys production, so the owner merges. Migrations, billing, auth and anything touching production data stay `merge: human`.
 
 ### Factory (unattended runs)

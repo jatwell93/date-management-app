@@ -1,10 +1,10 @@
 ---
-name: resume
+name: resume-change
 description: >-
   Start a session on an OpenSpec change from its committed handover instead of a
   pasted prompt: read openspec/changes/<id>/handover.md and tasks.md, check open PRs
   and the local checkout, then report the state and continue with the next task. Use
-  when the user says "/resume <change-id>", "pick up <change>", "carry on with
+  when the user says "/resume-change <change-id>", "pick up <change>", "carry on with
   <change>", "where were we", or starts a session by naming an OpenSpec change.
 ---
 
