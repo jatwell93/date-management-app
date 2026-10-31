@@ -34,8 +34,9 @@ describes half a feature.
 - The API is `workers/` (Cloudflare Workers) on Neon Postgres; the frontend is
   `frontend/`; shared code is `shared/`. Express (`backend/`) is retired:
   never document it as current. Only `workers/src/index-minimal.ts` is
-  deployed, so `workers/src/middleware/*` and other unreferenced Worker files
-  are dead code, not surface to document.
+  deployed. Before documenting a Worker file, confirm it is reachable from
+  that entry (grep for its imports, following re-exports); an unreachable file
+  is dead code, not surface to document.
 - `docs/DOCUMENTATION_QUICK_REFERENCE.md` is the docs index. Completed
   implementation summaries and phase reports belong in OpenSpec archives, not
   in `docs/`.
@@ -282,7 +283,8 @@ Check each document before committing. Fix every failure.
 2. Run `npm run lint`.
 3. Commit with a conventional message: `docs: <scope>` with a one-line summary
    and the kinds produced in the body.
-4. Push and open the PR with the `pr` skill's template. Add a
+4. Push and open the PR with a body that follows
+   `.github/PULL_REQUEST_TEMPLATE.md`. Add a
    `## Documentation` table listing each new, regenerated, deleted or moved
    file, its Diataxis kind and a one-line description. Then run `babysit-pr`.
    The owner merges.
