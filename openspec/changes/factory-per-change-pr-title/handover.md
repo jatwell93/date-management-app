@@ -1,19 +1,23 @@
 # Handover: factory-per-change-pr-title
 
-Updated: 2026-10-30 · main at b3bee34e
+Updated: 2026-10-31 · main at e025f034
 
 ## State
 
-1.1 is on `feature/factory-pr-title-1-1`. `changeTitle(title, proposal, id)` in `scripts/factory-route.js` builds the finished PR's title. `markReady(pr, n, id)` reads the archived `proposal.md` from the PR branch: `archiveDir` finds `openspec/changes/archive/<date>-<id>`, which `branchArchived` now shares, and `archivedProposal` reads the file through `branchFile` and `missingAsEmpty`. The first letter of the heading is lowercased unless the heading starts with an acronym ("API keys" stays as written). All 8 mutations of `changeTitle` and of the id passed to `markReady` fail the tests.
+1.1 merged (#761). `changeTitle(title, proposal, id)` in `scripts/factory-route.js` builds the finished PR's title. `markReady(pr, n, id)` reads the archived `proposal.md` from the PR branch: `archiveDir` finds `openspec/changes/archive/<date>-<id>`, which `branchArchived` shares, and `archivedProposal` reads the file through `branchFile` and `missingAsEmpty`. Copilot did not review #761 (the review quota had run out).
+
+## Decisions
+
+- 2026-10-31: the owner chose to check 2.1 on the next real `pr: per-change` change rather than run a throwaway proof.
 
 ## Next
 
-2.1, the live check: the next per-change PR that the factory finishes should get the change title, and its squash commit on `main` should use it. It needs 1.1 merged, and it waits until a `pr: per-change` change runs.
+2.1 waits for the next real change whose `## Autonomy` block says `pr: per-change`. When the factory marks its PR ready, check the PR title, and after the owner's merge check the squash commit on `main`. Then tick 2.1 and archive this change.
 
 ## Open PRs
 
-- The 1.1 PR (this branch).
+- None.
 
 ## Waiting on the user
 
-- Merge the 1.1 PR.
+- Nothing. 2.1 waits for a `pr: per-change` change to run.
