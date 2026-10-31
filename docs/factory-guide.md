@@ -58,7 +58,7 @@ no_go:
 
 ## What the factory will not do
 
-It never merges, never touches production, and never edits the protected paths: workflows, migrations, the backup script, the agent's own rules (`.claude/**`, `AGENTS.md`, `CLAUDE.md`), the lint gates and the factory's own scripts. The list is `BASELINE` in `scripts/check-no-go.js`; run `node scripts/check-no-go.js --change <id>` to see it for one change.
+It never merges, never touches production, and never edits the protected paths: workflows, migrations, the backup script, the agent's own rules (`.claude/**`, `AGENTS.md`, `CLAUDE.md`), the lint gates and the factory's own scripts. The list is `BASELINE` in `scripts/check-no-go.js`, plus the `no_go` entries in the change's `proposal.md`. `node scripts/check-no-go.js --change <id>` checks a branch's changes against both and names any protected path they touch; it does not print the list itself.
 
 A task that needs a protected path, a vendor console, or production access is an **owner task**: write it `- [ ] 2.3 (owner) ...`. The factory stops there and asks you. Anything that needs a migration ends up this way, because `database/migrations/**` is protected. Billing, auth and production-data work is also best planned as owner tasks.
 

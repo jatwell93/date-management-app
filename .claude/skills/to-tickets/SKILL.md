@@ -35,8 +35,8 @@ Look for prefactoring: "make the change easy, then make the easy change".
 - Each task fits **one factory run**: one fresh context window that has never
   seen this conversation, about 30 to 60 minutes of work, inside the Claude
   job's timeout. Prefactoring goes first.
-- A task that needs a `no_go` path (`node scripts/check-no-go.js --change <id>`
-  lists them), a vendor console or production access is an `(owner)` task, or
+- A task that needs a `no_go` path (`BASELINE` in `scripts/check-no-go.js`
+  plus the proposal's `no_go` list), a vendor console or production access is an `(owner)` task, or
   the change is not for the factory at all.
 - **Wide refactors** (one mechanical change whose blast radius spans the
   codebase) use expand-migrate-contract instead: expand (new form beside the
