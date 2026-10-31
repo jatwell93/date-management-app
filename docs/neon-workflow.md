@@ -240,8 +240,7 @@ psql $branch_db_url -c "SELECT COUNT(*) FROM subscriptions;"
 npm run test:db
 
 # Prove the Worker's read queries resolve against the feature branch (read-only)
-node scripts/verify-app-against-branch.js
-# See the header of that script for the connection-string input it expects.
+node scripts/verify-app-against-branch.js --url "<feature-branch-connection-string>"
 ```
 
 ### Load Testing Migration
@@ -249,8 +248,9 @@ node scripts/verify-app-against-branch.js
 ```bash
 # Load test data on the branch (no npm seed script exists; use your own SQL)
 
-# Test with realistic data volume
-DATABASE_URL=$(neon connection-string feature-subscription --project-id demo-prod) \
+# Load test: npm run test:load runs artillery.yml against its fixed target (a dev Worker).
+# It does not read DATABASE_URL, so it does not exercise this branch unless a Worker
+# deployed against the branch is the target.
 npm run test:load
 
 # Monitor: Check query performance
@@ -279,7 +279,7 @@ Before merging to main:
 # Run final tests on feature branch
 branch_db_url=$(neon connection-string feature-subscription)
 npm run test:db
-node scripts/verify-app-against-branch.js
+node scripts/verify-app-against-branch.js --url "$branch_db_url"
 
 # Check for conflicts with main
 neon branches diff feature-subscription main --project-id demo-prod
@@ -323,7 +323,8 @@ main_db_url=$(neon connection-string main --project-id demo-prod)
 # Verify new schema
 psql $main_db_url -c "\dt"
 
-# Test with production data
+# Test with production data (set WORKER_URL to the deployed Worker, e.g. https://<worker-host>)
+WORKER_URL="https://<worker-host>"
 curl -s "$WORKER_URL/health"
 ```
 

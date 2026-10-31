@@ -500,8 +500,8 @@ npx wrangler tail --env production --format pretty | grep ERROR
 
 # Database backup: scheduled by .github/workflows/database-backup.yml (see database-backup-runbook.md)
 
-# Check test suite
-npm test -- --testPathPattern="integration"
+# Check test suite (there is no root npm test)
+npm run test:db
 ```
 
 ---

@@ -293,7 +293,7 @@ FROM products;
 npm run test:db
 
 # Prove the Worker's queries resolve against the restored branch (read-only)
-node scripts/verify-app-against-branch.js
+node scripts/verify-app-against-branch.js --url "<restore-branch-connection-string>"
 
 # Check application logs for errors
 pm2 logs | tail -50

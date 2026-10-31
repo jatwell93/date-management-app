@@ -1,8 +1,8 @@
 # Subscription Tiers and Limits
 
 Reference for the tiers an organization can be on, the caps each tier carries, and how the Worker
-applies them. Every number below comes from `shared/types/subscription.ts` and
-`workers/src/utils/usage-limits.ts`. Trial behaviour is in [trial-system.md](./trial-system.md);
+applies them. Numbers come from `workers/src/utils/usage-limits.ts` (what the Worker enforces and reports)
+and `shared/types/subscription.ts` (prices, and a second copy of the caps). Trial behaviour is in [trial-system.md](./trial-system.md);
 Stripe plumbing is in [stripe-integration.md](./stripe-integration.md).
 
 > **Provisional numbers.** The caps are provisional until the in-store usage trial has produced
@@ -29,10 +29,10 @@ The Worker works with four launch tiers (`LaunchTier` in `usage-limits.ts`).
   number is ignored and the default applies (`parsePositiveIntEnv`).
 - Seats have no env override.
 - Storage has no per-organization column. The cap comes from the tier alone
-  (`STORAGE_LIMIT_BYTES_BY_TIER`). `shared/types/subscription.ts` lists 100 GB for `professional`
-  and `enterprise`; the Worker uses the 1/10/1000 GB line above because the usage endpoint
-  already reports it. The two sources disagree, and the code comments record that this was left
-  open as a product decision.
+  (`STORAGE_LIMIT_BYTES_BY_TIER`). **The Worker's 1/10/1000 GB values are the enforced ones.**
+  `TIER_LIMITS.storage_bytes` in `shared/types/subscription.ts` lists 100 GB for `professional`
+  and `enterprise`; treat that value as legacy and not enforced by the Worker. The code comments
+  record the disagreement as an open product decision, so nothing here is contractual.
 
 ### Prices
 
