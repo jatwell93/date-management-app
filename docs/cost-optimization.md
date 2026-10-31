@@ -246,7 +246,7 @@ With Hyperdrive:
 - Connection overhead: <5ms (cached)
 - Cost: Dramatically reduced
 
-**Usage already optimized** in `workers/src/index.ts`
+**Usage already optimized** in `workers/src/index-minimal.ts`
 
 ### 4. Archive Old Data
 
@@ -450,8 +450,7 @@ neon projects list | grep compute
 # 3. Stripe MRR
 # https://dashboard.stripe.com → Billing → Overview
 
-# Create simple script for automated reporting
-npm run report:costs
+# No automated cost report script exists yet; record these figures by hand
 ```
 
 ---

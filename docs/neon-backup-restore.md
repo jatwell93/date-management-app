@@ -289,11 +289,11 @@ FROM products;
 ### 3.2 Application-Level Verification
 
 ```bash
-# After restore, run application test suite
-npm test
+# After restore, run the Worker test suites (there is no root npm test)
+npm run test:db
 
-# Run integration tests against restored database
-npm run test:integration
+# Prove the Worker's queries resolve against the restored branch (read-only)
+node scripts/verify-app-against-branch.js --url "<restore-branch-connection-string>"
 
 # Check application logs for errors
 pm2 logs | tail -50
@@ -398,8 +398,8 @@ npx ts-node scripts/verify-neon-backups.ts
 ### 4.3 Scheduled Backup Verification (Cron)
 
 ```bash
-# In ecosystem.config.js or crontab, run weekly:
-0 2 * * 1 cd /home/date-management-app && npx ts-node backend/scripts/verify-neon-backups.ts >> logs/backup-verification.log 2>&1
+# Optional, only if you add the script above locally. Scheduled backups themselves run in .github/workflows/database-backup.yml. Weekly crontab entry:
+0 2 * * 1 cd /home/date-management-app && npx ts-node scripts/verify-neon-backups.ts >> logs/backup-verification.log 2>&1
 ```
 
 ---

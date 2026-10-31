@@ -319,7 +319,7 @@ npx http-server -p 443 -S build
 ## Link to Manifest in HTML
 
 ```html
-<!-- frontend/public/index.html -->
+<!-- frontend/index.html -->
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -410,7 +410,7 @@ npx web-manifest-validator public/manifest.json
 ## Related Configuration Files
 
 - **Service Worker:** `frontend/src/service-worker.ts`
-- **HTML Head:** `frontend/public/index.html`
+- **HTML Head:** `frontend/index.html`
 - **App Context:** `frontend/src/contexts/HandheldContext.tsx` (sets `display: 'standalone'`)
 - **Start URL Logic:** `frontend/src/App.tsx` (routes to `/scan` on handheld)
 

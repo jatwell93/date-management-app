@@ -236,25 +236,21 @@ psql $branch_db_url -c "SELECT COUNT(*) FROM subscriptions;"
 ### Run Tests Against Branch
 
 ```bash
-# Point tests at feature branch
-DATABASE_URL=$(neon connection-string feature-subscription --project-id demo-prod) \
-npm run test:prod
+# Real-SQL Worker tests run on an in-process Postgres (pglite) and ignore DATABASE_URL
+npm run test:db
 
-# Or with .env
-echo "DATABASE_URL=$(neon connection-string feature-subscription --project-id demo-prod)" > .env.feature
-
-# Run tests
-npm run test:prod
+# Prove the Worker's read queries resolve against the feature branch (read-only)
+node scripts/verify-app-against-branch.js --url "<feature-branch-connection-string>"
 ```
 
 ### Load Testing Migration
 
 ```bash
-# Generate test data on branch
-npm run seed:feature-branch
+# Load test data on the branch (no npm seed script exists; use your own SQL)
 
-# Test with realistic data volume
-DATABASE_URL=$(neon connection-string feature-subscription --project-id demo-prod) \
+# Load test: npm run test:load runs artillery.yml against its fixed target (a dev Worker).
+# It does not read DATABASE_URL, so it does not exercise this branch unless a Worker
+# deployed against the branch is the target.
 npm run test:load
 
 # Monitor: Check query performance
@@ -268,7 +264,7 @@ Before merging to main:
 - [ ] Schema changes applied successfully
 - [ ] All new tables/columns created
 - [ ] Constraints and indexes in place
-- [ ] Tests pass: `npm run test:prod`
+- [ ] Tests pass: `npm run test:db`
 - [ ] Performance acceptable (queries <200ms)
 - [ ] No data loss in migration
 - [ ] Rollback plan documented
@@ -282,7 +278,8 @@ Before merging to main:
 ```bash
 # Run final tests on feature branch
 branch_db_url=$(neon connection-string feature-subscription)
-DATABASE_URL=$branch_db_url npm run test:prod
+npm run test:db
+node scripts/verify-app-against-branch.js --url "$branch_db_url"
 
 # Check for conflicts with main
 neon branches diff feature-subscription main --project-id demo-prod
@@ -326,8 +323,9 @@ main_db_url=$(neon connection-string main --project-id demo-prod)
 # Verify new schema
 psql $main_db_url -c "\dt"
 
-# Test with production data
-DATABASE_URL=$main_db_url npm run health-check
+# Test with production data (set WORKER_URL to the deployed Worker, e.g. https://<worker-host>)
+WORKER_URL="https://<worker-host>"
+curl -s "$WORKER_URL/health"
 ```
 
 ### Step 5: Update Downstream Services
@@ -530,7 +528,7 @@ neon roles list --project-id <id>
 - ✅ Delete merged branches to keep project clean
 - ✅ Back up main branch before major merges
 - ✅ Document migration in commit message
-- ✅ Run tests: `npm run test:prod` before merge
+- ✅ Run tests: `npm run test:db` before merge
 - ✅ Keep branches focused on single feature
 
 ### DON'T ❌

@@ -363,7 +363,7 @@ for await (const row of csvStream) {
 
 Before pushing to production:
 
-- [ ] Local tests pass: `npm run test:workers`
+- [ ] Local tests pass: `npm run test:db`
 - [ ] Bundle size acceptable: `npm run build:workers` (< 500KB)
 - [ ] No console.errors in Dev build
 - [ ] Secrets set in Wrangler: `wrangler secret list --env production`
@@ -496,22 +496,18 @@ npm run test:db
 npm run diagnose:webhook
 
 # View recent logs
-npm run logs | grep ERROR
+npm run tail:prod --prefix workers | grep ERROR
 
-# Database backup
-npm run backup:database
+# Database backup: scheduled by .github/workflows/database-backup.yml (see database-backup-runbook.md)
 
-# Check test suite
-npm test -- --testPathPattern="integration"
+# Check test suite (there is no root npm test)
+npm run test:db
 ```
 
 ---
 
 ## Related Documentation
 
-- [Architecture Decision Records](../docs/adr/)
-- [API Documentation](../docs/api/)
-- [Feature Flags](../docs/feature-flags.md)
 - [Stripe Integration](../docs/stripe-integration.md)
 
 ---
