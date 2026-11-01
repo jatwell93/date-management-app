@@ -9,6 +9,7 @@ Use this file as the entry point for durable project documentation. Completed im
 3. [developer-guide.md](developer-guide.md) - daily workflow, debugging, and contribution flow
 4. [TESTING.md](TESTING.md) - root-level Worker, database and frontend test commands
 5. [local-expect-qa.md](local-expect-qa.md) - local Expect QA setup
+6. [factory-guide.md](factory-guide.md) - how a change goes from plan to merge with the factory
 
 ## Architecture And Data
 
