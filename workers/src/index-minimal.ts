@@ -15,11 +15,6 @@ import { createWorkersDatabase } from './database';
 import { runScheduledTick } from './scheduled/dispatcher';
 import * as Sentry from '@sentry/cloudflare';
 import {
-  resolveInventoryFields,
-  getDeprecatedSnakeCaseFields,
-  InventoryItemRequestBody,
-} from './utils/inventory-field-mapping';
-import {
   applyCorsHeaders,
   csvResponse,
   errorResponse,
@@ -3233,18 +3228,13 @@ async function handleCreateInventoryItem(
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
-  const body = (await request.json()) as InventoryItemRequestBody;
-
-  // Support both camelCase and snake_case for backward compatibility
-  const { productId, expiryDate, locationId } = resolveInventoryFields(body);
-
-  // Log deprecation warnings whenever deprecated snake_case fields are present
-  const deprecatedFields = getDeprecatedSnakeCaseFields(body);
-  if (deprecatedFields.length > 0) {
-    console.warn(
-      `DEPRECATION: snake_case fields are deprecated. Please migrate: ${deprecatedFields.join(', ')}`,
-    );
-  }
+  const body = (await request.json()) as {
+    productId?: number;
+    expiryDate?: string;
+    locationId?: number;
+    status?: string;
+  };
+  const { productId, expiryDate, locationId } = body;
 
   if (productId === undefined || !Number.isInteger(productId) || productId < 1) {
     return errorResponse('Missing or invalid productId', 400, env);

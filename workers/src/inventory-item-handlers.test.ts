@@ -327,8 +327,8 @@ describe('POST /api/inventory-items', () => {
     );
   });
 
-  it('still accepts the deprecated snake_case field names', async () => {
-    const createInventoryItem = vi.fn().mockResolvedValue(item);
+  it('rejects a body with only the snake_case field names', async () => {
+    const createInventoryItem = vi.fn();
 
     const response = await dispatch(
       'POST',
@@ -341,11 +341,27 @@ describe('POST /api/inventory-items', () => {
       },
     );
 
+    expect(response?.status).toBe(400);
+    await expect(response?.json()).resolves.toMatchObject({ error: 'Missing or invalid productId' });
+    expect(createInventoryItem).not.toHaveBeenCalled();
+  });
+
+  it('ignores a snake_case field sent beside a valid camelCase field', async () => {
+    const createInventoryItem = vi.fn().mockResolvedValue(item);
+
+    const response = await dispatch(
+      'POST',
+      '/api/inventory-items',
+      database({ createInventoryItem }),
+      { ...validCreate, product_id: 99, expiry_date: LATER_DATE, location_id: 98 },
+    );
+
     expect(response?.status).toBe(201);
-    expect(createInventoryItem.mock.calls[0][2]).toMatchObject({
+    expect(createInventoryItem.mock.calls[0][2]).toEqual({
       productId: 3,
       expiryDate: FUTURE_DATE,
       locationId: 4,
+      status: undefined,
     });
   });
 

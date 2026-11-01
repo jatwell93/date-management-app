@@ -1,6 +1,6 @@
 ## 1. Inventory
 
-- [ ] 1.1 Inventory item create takes camelCase only (#768): the create handler reads `productId`, `expiryDate` and `locationId` only, and the snake_case fallback, its deprecation warning and its helper are removed.
+- [x] 1.1 Inventory item create takes camelCase only (#768): the create handler reads `productId`, `expiryDate` and `locationId` only, and the snake_case fallback, its deprecation warning and its helper are removed.
       Demo: a create request with only `product_id`, `expiry_date` and `location_id` returns 400 `Missing or invalid productId`; a camelCase request creates the item; a stray `product_id` beside a valid `productId` is ignored.
       Acceptance: the Worker contract and handler tests assert rejection and ignoring; the Worker gate and lint pass.
 
