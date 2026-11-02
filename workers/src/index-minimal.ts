@@ -1317,14 +1317,11 @@ async function handleRecordBayCheck(request: Request, db: Database, env: Env): P
 
   const body = (await request.json()) as {
     storeAreaId?: number;
-    store_area_id?: number;
     checkedAt?: string;
-    checked_at?: string;
     itemsAddedCount?: number;
-    items_added_count?: number;
     notes?: string | null;
   };
-  const storeAreaId = body.storeAreaId ?? body.store_area_id;
+  const storeAreaId = body.storeAreaId;
   if (!Number.isInteger(storeAreaId) || Number(storeAreaId) <= 0) {
     return errorResponse('Missing required field: storeAreaId', 400, env);
   }
@@ -1332,8 +1329,8 @@ async function handleRecordBayCheck(request: Request, db: Database, env: Env): P
   try {
     const check = await db.recordBayCheck(auth.organizationId, auth.userId, {
       storeAreaId: Number(storeAreaId),
-      checkedAt: body.checkedAt ?? body.checked_at,
-      itemsAddedCount: body.itemsAddedCount ?? body.items_added_count,
+      checkedAt: body.checkedAt,
+      itemsAddedCount: body.itemsAddedCount,
       notes: body.notes,
     });
     return jsonResponse(check, 201, env);
@@ -3409,27 +3406,18 @@ async function handleCreateStoreArea(request: Request, db: Database, env: Env): 
   const body = (await request.json()) as {
     name?: string;
     subDepartment?: string | null;
-    sub_department?: string | null;
     parentId?: number | null;
-    parent_id?: number | null;
   };
 
   if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
     return errorResponse('Missing required field: name', 400, env);
   }
 
-  const subDepartment =
-    body.subDepartment !== undefined
-      ? body.subDepartment
-      : body.sub_department !== undefined
-        ? body.sub_department
-        : null;
-
   try {
     const area = await db.createStoreArea(auth.organizationId, {
       name: body.name.trim(),
-      subDepartment: subDepartment ?? null,
-      parentId: body.parentId ?? body.parent_id ?? null,
+      subDepartment: body.subDepartment ?? null,
+      parentId: body.parentId ?? null,
     });
     return jsonResponse(area, 201, env);
   } catch (error) {
@@ -3462,23 +3450,13 @@ async function handleUpdateStoreArea(
   const body = (await request.json()) as {
     name?: string;
     subDepartment?: string | null;
-    sub_department?: string | null;
     parentId?: number | null;
-    parent_id?: number | null;
   };
 
   const data: { name?: string; subDepartment?: string | null; parentId?: number | null } = {};
   if (typeof body.name === 'string') data.name = body.name.trim();
-  if (body.subDepartment !== undefined) {
-    data.subDepartment = body.subDepartment ?? null;
-  } else if (body.sub_department !== undefined) {
-    data.subDepartment = body.sub_department ?? null;
-  }
-  if (body.parentId !== undefined) {
-    data.parentId = body.parentId;
-  } else if (body.parent_id !== undefined) {
-    data.parentId = body.parent_id;
-  }
+  if (body.subDepartment !== undefined) data.subDepartment = body.subDepartment ?? null;
+  if (body.parentId !== undefined) data.parentId = body.parentId;
 
   let updated: StoreArea | null;
   try {

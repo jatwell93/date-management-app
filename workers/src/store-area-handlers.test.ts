@@ -87,7 +87,7 @@ describe('POST /api/store-areas', () => {
 
     const response = await send('POST', '/api/store-areas', database({ createStoreArea }), {
       name: '  Aisle 1  ',
-      sub_department: 'Dairy',
+      subDepartment: 'Dairy',
     });
 
     expect(response?.status).toBe(201);
@@ -95,6 +95,22 @@ describe('POST /api/store-areas', () => {
     expect(createStoreArea).toHaveBeenCalledWith('org_123', {
       name: 'Aisle 1',
       subDepartment: 'Dairy',
+      parentId: null,
+    });
+  });
+
+  it('ignores snake_case sub_department and parent_id', async () => {
+    const createStoreArea = vi.fn().mockResolvedValue({ id: 3 });
+
+    await send('POST', '/api/store-areas', database({ createStoreArea }), {
+      name: 'Aisle 1',
+      sub_department: 'Dairy',
+      parent_id: 9,
+    });
+
+    expect(createStoreArea).toHaveBeenCalledWith('org_123', {
+      name: 'Aisle 1',
+      subDepartment: null,
       parentId: null,
     });
   });
@@ -154,6 +170,26 @@ describe('PUT /api/store-areas/:id', () => {
     expect(response?.status).toBe(404);
     expect(updateStoreArea).toHaveBeenCalledWith('org_123', 3, { name: 'Aisle 1' });
   });
+
+  it('ignores snake_case fields and reads camelCase ones', async () => {
+    const updateStoreArea = vi.fn().mockResolvedValue({ id: 3 });
+
+    await send('PUT', '/api/store-areas/3', database({ updateStoreArea }), {
+      sub_department: 'Frozen',
+      parent_id: 9,
+    });
+    await send('PUT', '/api/store-areas/3', database({ updateStoreArea }), {
+      subDepartment: 'Dairy',
+      parentId: 4,
+      parent_id: 9,
+    });
+
+    expect(updateStoreArea).toHaveBeenNthCalledWith(1, 'org_123', 3, {});
+    expect(updateStoreArea).toHaveBeenNthCalledWith(2, 'org_123', 3, {
+      subDepartment: 'Dairy',
+      parentId: 4,
+    });
+  });
 });
 
 describe('POST /api/store-areas/check-cycles', () => {
@@ -191,11 +227,11 @@ describe('POST /api/store-areas/bay-checks', () => {
     expectRefusedBeforeWrite('/api/store-areas/bay-checks', 'recordBayCheck', body),
   );
 
-  it('records the check for the caller organization and user, accepting snake_case', async () => {
+  it('records the check for the caller organization and user from camelCase fields', async () => {
     const recordBayCheck = vi.fn().mockResolvedValue({ id: 5 });
 
     const response = await post(
-      { store_area_id: 3, items_added_count: 2 },
+      { storeAreaId: 3, itemsAddedCount: 2 },
       database({ recordBayCheck }),
     );
 
@@ -205,6 +241,35 @@ describe('POST /api/store-areas/bay-checks', () => {
       7,
       expect.objectContaining({ storeAreaId: 3, itemsAddedCount: 2 }),
     );
+  });
+
+  it('refuses a snake_case-only body with Missing required field: storeAreaId', async () => {
+    const recordBayCheck = vi.fn();
+
+    const response = await post(
+      { store_area_id: 3, items_added_count: 2 },
+      database({ recordBayCheck }),
+    );
+
+    expect(response?.status).toBe(400);
+    expect(await response?.text()).toContain('Missing required field: storeAreaId');
+    expect(recordBayCheck).not.toHaveBeenCalled();
+  });
+
+  it('ignores snake_case fields beside a valid camelCase body', async () => {
+    const recordBayCheck = vi.fn().mockResolvedValue({ id: 5 });
+
+    await post(
+      { storeAreaId: 3, store_area_id: 9, checked_at: '2020-01-01', items_added_count: 8 },
+      database({ recordBayCheck }),
+    );
+
+    expect(recordBayCheck).toHaveBeenCalledWith('org_123', 7, {
+      storeAreaId: 3,
+      checkedAt: undefined,
+      itemsAddedCount: undefined,
+      notes: undefined,
+    });
   });
 
   it.each([

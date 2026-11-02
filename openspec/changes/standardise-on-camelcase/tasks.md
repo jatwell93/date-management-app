@@ -6,7 +6,7 @@
 
 ## 2. Store areas and store walks
 
-- [ ] 2.1 Store area and store walk check take camelCase only (#769): area create and update read only `subDepartment` and `parentId`; walk check create reads only `storeAreaId`, `checkedAt` and `itemsAddedCount`.
+- [x] 2.1 Store area and store walk check take camelCase only (#769): area create and update read only `subDepartment` and `parentId`; walk check create reads only `storeAreaId`, `checkedAt` and `itemsAddedCount`.
       Demo: creating an area with only `parent_id` gives an area with no parent; a walk check with only `store_area_id` returns 400 `Missing required field: storeAreaId`.
       Acceptance: handler tests cover rejection and ignoring of the snake_case form; the Worker gate and lint pass.
 
