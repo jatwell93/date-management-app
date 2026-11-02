@@ -12,6 +12,6 @@
 
 ## 3. Frontend contract
 
-- [ ] 3.1 Frontend contract test asserts snake_case rejection (#770): the frontend API contract test no longer accepts snake_case and matches the Worker contract.
+- [x] 3.1 Frontend contract test asserts snake_case rejection (#770): the frontend API contract test no longer accepts snake_case and matches the Worker contract.
       Demo: the frontend diff gate is green and no case accepts snake_case.
       Acceptance: a case asserts a snake_case-only body is not valid; the frontend diff gate and lint pass.
