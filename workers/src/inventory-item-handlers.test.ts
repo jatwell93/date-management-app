@@ -342,7 +342,9 @@ describe('POST /api/inventory-items', () => {
     );
 
     expect(response?.status).toBe(400);
-    await expect(response?.json()).resolves.toMatchObject({ error: 'Missing or invalid productId' });
+    await expect(response?.json()).resolves.toMatchObject({
+      error: 'Missing or invalid productId',
+    });
     expect(createInventoryItem).not.toHaveBeenCalled();
   });
 
