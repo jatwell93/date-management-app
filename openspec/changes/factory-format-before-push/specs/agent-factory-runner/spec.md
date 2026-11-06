@@ -2,7 +2,7 @@
 
 ### Requirement: Worker changes are formatted with the package script before a push
 
-When a factory task run or a review-fix pass changes files under `workers/`, the run SHALL format them with `npm run format --prefix workers` before it commits or pushes. It SHALL NOT format Worker files with an inline `npx prettier`, so the write command matches the `npm run format:check` command CI runs. The command SHALL be one the runner's `--allowedTools` list permits without approval.
+When a factory task run or a review-fix pass changes files under `workers/`, the run SHALL format them with `npm run format --prefix workers` before it commits or pushes. It SHALL NOT format Worker files with an inline `npx prettier`, so the write command matches the `npm run format:check` command CI runs. The runner's `--allowedTools` list SHALL permit the command without approval.
 
 #### Scenario: Task changes a Worker test file
 

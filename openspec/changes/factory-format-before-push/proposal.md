@@ -8,7 +8,8 @@ The runner already has a command it may run: `npm run format` in `workers/packag
 
 ## What changes
 
-- The gate step in `.claude/skills/run-spec/SKILL.md` adds, for a change that touches `workers/`, `npm run format --prefix workers` before the commit, and says not to use `npx prettier` there. - `.claude/skills/babysit-pr/SKILL.md` adds the same command to its one-shot review-fix pass, before it pushes, because that pass is a separate skill and can otherwise push an unformatted Worker fix.
+- The gate step in `.claude/skills/run-spec/SKILL.md` adds, for a change that touches `workers/`, `npm run format --prefix workers` before the commit, and says not to use `npx prettier` there.
+- `.claude/skills/babysit-pr/SKILL.md` adds the same command to its one-shot review-fix pass, before it pushes, because that pass is a separate skill and can otherwise push an unformatted Worker fix.
 - `AGENTS.md` §4 (the quality gate) lists the same command for Workers changes, so interactive sessions and the factory share one gate.
 - The `agent-factory-runner` spec records that a Worker change is formatted with the package's own script before it is pushed.
 - No workflow change: the allowlist already permits `npm run`.
