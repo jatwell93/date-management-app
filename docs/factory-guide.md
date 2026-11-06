@@ -31,7 +31,7 @@ How a change goes from an idea to merged code with you giving input only at the 
 
 ## Your part, in order
 
-1. **Plan.** Ask Claude for the change. It needs `proposal.md` with an `## Autonomy` block (see below), spec deltas in `specs/`, and a passing `openspec validate <id> --strict`. The change id is at most 42 characters.
+1. **Plan.** Ask Claude for the change. It needs `proposal.md` with an `## Autonomy` block (see below), spec deltas in `specs/`, and a passing `openspec validate <id> --strict`. The change id is lowercase letters, digits and hyphens only (the router rejects capitals), and at most 42 characters.
 2. **Slice.** Run `/to-tickets <id>`. Claude proposes the tasks, each with a demo and what blocks it. Say whether the slices are too big or too small. Nothing is written until you approve.
 3. **Go.** Merge the plan PR. It carries the labels `factory:<id>` and `factory-ready`; that merge starts task 1. You do not dispatch anything.
 4. **Merge each factory PR** when it is green and reviewed. How many PRs there are depends on the `pr:` key:
