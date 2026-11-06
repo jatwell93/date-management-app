@@ -38,37 +38,37 @@ describe('API Contract Compatibility', () => {
       expect(apiService.post).toHaveBeenCalledWith('/inventory-items', itemData, 'mock_token');
     });
 
-    it('should accept snake_case field names (backward compatibility)', async () => {
-      const mockResponse = { id: 1, message: 'Item created successfully' };
-      (apiService.post as jest.Mock).mockResolvedValue(mockResponse);
+    it('should reject a snake_case-only body (Worker reads camelCase only)', async () => {
+      // Mirrors the Worker: only productId is read, so snake_case-only is invalid.
+      (apiService.post as jest.Mock).mockImplementation(
+        async (_path: string, body: Record<string, unknown>) =>
+          Number.isInteger(body.productId) ? { id: 1 } : { error: 'Missing or invalid productId' },
+      );
 
-      const itemData = {
+      const snakeCaseBody = {
         product_id: 1,
         expiry_date: '2026-12-31',
         location_id: 1,
         status: 'active',
       };
 
-      await apiService.post('/inventory-items', itemData, 'mock_token');
+      const result = await apiService.post('/inventory-items', snakeCaseBody, 'mock_token');
 
-      expect(apiService.post).toHaveBeenCalledWith('/inventory-items', itemData, 'mock_token');
+      expect(result).toEqual({ error: 'Missing or invalid productId' });
     });
 
-    it('should handle mixed field names (camelCase takes precedence)', async () => {
-      const mockResponse = { id: 1, message: 'Item created successfully' };
-      (apiService.post as jest.Mock).mockResolvedValue(mockResponse);
+    it('should ignore snake_case fields next to camelCase ones', async () => {
+      (apiService.post as jest.Mock).mockImplementation(
+        async (_path: string, body: Record<string, unknown>) => ({ productId: body.productId }),
+      );
 
-      const itemData = {
-        productId: 2, // camelCase should take precedence
-        product_id: 1, // snake_case should be ignored
-        expiryDate: '2026-12-31',
-        locationId: 1,
-        status: 'active',
-      };
+      const result = await apiService.post(
+        '/inventory-items',
+        { productId: 2, product_id: 1, expiryDate: '2026-12-31', locationId: 1 },
+        'mock_token',
+      );
 
-      await apiService.post('/inventory-items', itemData, 'mock_token');
-
-      expect(apiService.post).toHaveBeenCalledWith('/inventory-items', itemData, 'mock_token');
+      expect(result).toEqual({ productId: 2 });
     });
 
     it('should validate required fields in camelCase format', async () => {
@@ -79,25 +79,6 @@ describe('API Contract Compatibility', () => {
         // Missing productId
         expiryDate: '2026-12-31',
         locationId: 1,
-      };
-
-      await apiService.post('/inventory-items', invalidItemData, 'mock_token');
-
-      expect(apiService.post).toHaveBeenCalledWith(
-        '/inventory-items',
-        invalidItemData,
-        'mock_token',
-      );
-    });
-
-    it('should validate required fields in snake_case format', async () => {
-      const mockResponse = { error: 'Missing or invalid productId' };
-      (apiService.post as jest.Mock).mockResolvedValue(mockResponse);
-
-      const invalidItemData = {
-        // Missing product_id
-        expiry_date: '2026-12-31',
-        location_id: 1,
       };
 
       await apiService.post('/inventory-items', invalidItemData, 'mock_token');
