@@ -2,13 +2,19 @@
 
 ### Requirement: The factory is distributed as a versioned public repo
 
-The factory SHALL be published in the public repository `software-factory` with version tags. A consumer repo SHALL reference the factory by a pinned tag or commit SHA, and SHALL hold no copy of the factory's scripts, skills or reusable workflows. A factory release SHALL NOT change what runs in a consumer until the consumer changes its pin.
+The factory SHALL be published in the public repository `software-factory` with version tags. A consumer repo SHALL reference the factory by a commit SHA, or by a release tag that the factory repo protects against being moved or deleted, and SHALL hold no copy of the factory's scripts, skills or reusable workflows. A factory release SHALL NOT change what runs in a consumer until the consumer changes its pin.
 
 #### Scenario: A release does not reach a consumer by itself
 
 - **GIVEN** a consumer pinned to a SHA
 - **WHEN** a new factory version is tagged
 - **THEN** the consumer's workflows still run the pinned SHA
+
+#### Scenario: A tag cannot be moved
+
+- **GIVEN** a release tag a consumer pins
+- **WHEN** anyone tries to move or delete the tag
+- **THEN** the factory repo's tag rule refuses, and `doctor` warns about a consumer pinned to a branch or an unprotected tag
 
 #### Scenario: The agent cannot edit the factory
 
@@ -36,7 +42,7 @@ The protected baseline built into the factory SHALL be only `.github/**`, `.clau
 
 ### Requirement: Spec frameworks plug in through an adapter
 
-The factory SHALL read and update a change only through a spec-source adapter that can: list active changes; list a change's tasks with their done, owner and blocked-by marks; read the change's autonomy settings; tick a task; archive a change; and scaffold a new change. The factory SHALL ship the OpenSpec adapter, and a consumer SHALL select its adapter in `factory.config.yml`. Adding another adapter SHALL NOT require a change to the router, the guard or the workflows.
+The factory SHALL read and update a change only through a spec-source adapter that can: list active changes; list a change's tasks with their done, owner and blocked-by marks; read the change's autonomy settings; tick a task; archive a change; scaffold a new change; and run the adapter's own project setup (for OpenSpec, `openspec init`), which `init` calls. The factory SHALL ship the OpenSpec adapter, and a consumer SHALL select its adapter in `factory.config.yml`. Adding another adapter SHALL NOT require a change to the router, the guard or the workflows.
 
 #### Scenario: OpenSpec behaves as before
 
@@ -52,7 +58,7 @@ The factory SHALL read and update a change only through a spec-source adapter th
 
 ### Requirement: One command sets a project up and checks it
 
-`npx software-factory init` SHALL detect the project's stack, propose gate commands, write the config, the caller workflows and a marked pointer block in `AGENTS.md`, run the chosen adapter's setup, and create the labels. It SHALL print or apply the ruleset and secret steps and SHALL NOT write a secret itself. `doctor` SHALL check the secret, labels, ruleset, GitHub App, config and pin, and name each missing item with the command that fixes it. `upgrade` SHALL change the pin and show the diff. Running `init` twice SHALL change nothing the second time.
+`npx github:jatwell93/software-factory#<pinned-ref> init` SHALL detect the project's stack, propose gate commands, write the config, the caller workflows and a marked pointer block in `AGENTS.md`, run the chosen adapter's setup, and create the labels. It SHALL print or apply the ruleset and secret steps and SHALL NOT write a secret itself. `doctor` SHALL check the secret, labels, ruleset, GitHub App, config and pin, and name each missing item with the command that fixes it. `upgrade` SHALL change the pin and show the diff. Running `init` twice SHALL change nothing the second time.
 
 #### Scenario: Fresh repo
 
@@ -78,7 +84,7 @@ The factory SHALL read and update a change only through a spec-source adapter th
 
 ### Requirement: Late reviews and bad change ids are caught before merge
 
-The factory SHALL publish a `factory/reviews-settled` commit status on factory PRs that is pending until the quiet window has ended and every configured review bot has posted, and success after. The factory SHALL reject a change id that is not lowercase letters, digits and hyphens, or is longer than the configured limit, when the plan is written, not when a run starts. The digest SHALL report cost and duration for each run.
+The factory SHALL publish a `factory/reviews-settled` commit status on factory PRs that is pending until the quiet window has ended and every configured review bot has posted, and success after. It SHALL also become success once the configured timeout (`reviews_timeout_minutes`, default 30, counted from the last push) has passed, with a description naming the bots that never posted, so a bot that is down or has nothing to say cannot hold the status forever. The factory SHALL reject a change id that is not lowercase letters, digits and hyphens, or is longer than the configured limit, at the points where a plan is written: `new-change`, `to-tickets` before it writes `tasks.md`, and a CI check on any PR that adds a change folder. A bad id SHALL NOT first be caught when a run starts. The digest SHALL report cost and duration for each run.
 
 #### Scenario: Copilot has not reviewed yet
 
@@ -86,8 +92,20 @@ The factory SHALL publish a `factory/reviews-settled` commit status on factory P
 - **WHEN** the owner looks at the PR checks
 - **THEN** `factory/reviews-settled` is pending
 
-#### Scenario: Capital letter in a change id
+#### Scenario: Bot never posts
 
-- **GIVEN** a change folder named `Fix-Thing`
-- **WHEN** the id check runs
+- **GIVEN** a factory PR where a configured bot has not posted and the timeout has passed
+- **WHEN** the status is recomputed
+- **THEN** `factory/reviews-settled` is success and its description names the bot
+
+#### Scenario: Capital letter in a change id at scaffold time
+
+- **GIVEN** a request to scaffold a change named `Fix-Thing`
+- **WHEN** `new-change` runs
+- **THEN** it refuses and writes nothing
+
+#### Scenario: Capital letter in a change id on a PR
+
+- **GIVEN** a PR that adds a change folder named `Fix-Thing`
+- **WHEN** the id check runs in CI
 - **THEN** it fails and names the folder

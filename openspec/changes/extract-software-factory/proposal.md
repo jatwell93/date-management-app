@@ -24,12 +24,12 @@ The same retro also found four gaps that touch files which move anyway, so they 
 ## What changes
 
 - **A new public repo, `software-factory`** (owner: jatwell93). It holds the workflows, scripts, skills, tests and docs, released with version tags. It is the single source of the factory.
-- **A `factory.config.yml` in each target repo** replaces every hardcoded value: gate commands per package, extra protected paths, review bots, runner setup steps (Node version, install command), spend cap, branch prefix, label names, default branch, and which spec source to use. The built-in protected baseline keeps only generic paths: `.github/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md` and `factory.config.yml`. Migrations, the backup script and lint gates become config entries in this repo.
-- **Pinned checkout, not copied files.** A target repo holds thin caller workflows that use the factory's reusable workflows at a pinned tag or SHA. The runner checks the factory's scripts and skills out into a temp directory. The agent cannot edit them, so the list of factory scripts leaves the baseline, and `upgrade` is a one-line pin bump. Required check names stay stable across the move.
+- **A `factory.config.yml` in each target repo** replaces every hardcoded value: gate commands per package, extra protected paths, review bots and their wait timeout, runner setup steps (Node version, install command), spend cap, branch prefix, label names, default branch, and which spec source to use. The built-in protected baseline keeps only generic paths: `.github/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md` and `factory.config.yml`. Migrations, the backup script and lint gates become config entries in this repo.
+- **Pinned checkout, not copied files.** A target repo holds thin caller workflows that use the factory's reusable workflows at a pinned commit SHA, or at a release tag that the factory repo protects against moving or deletion (task 1.1 sets the tag rule; `doctor` warns about a branch or an unprotected tag). The runner checks the factory's scripts and skills out into a temp directory. The agent cannot edit them, so the list of factory scripts leaves the baseline, and `upgrade` is a one-line pin bump. Required check names stay stable across the move.
 - **A spec-source adapter.** The factory no longer reads OpenSpec directly. It reads a small interface: list the active changes, list a change's tasks with their done, owner and blocked-by marks, read a change's autonomy settings, tick a task, archive a change. Each spec framework supplies an adapter.
   - **OpenSpec** is the only adapter in this change. It is the current behaviour moved behind the interface, with no change for this repo.
   - **PAUL, GSD and a bespoke setup** are planned adapters. They are not built here. This change only fixes the interface they need and records what each would require (task 6.1), so adding one later is a new change in the factory repo, not a rewrite. The format of PAUL and GSD has not been checked yet, so no field mapping is promised here.
-- **A setup CLI**, `npx software-factory`:
+- **A setup CLI**, run straight from the GitHub repo at a pinned ref, `npx github:jatwell93/software-factory#<sha-or-protected-tag> <command>` (nothing is published to npm, so a bare `npx software-factory` is not used anywhere):
   - `init` detects the stack, proposes gate commands, writes `factory.config.yml`, the caller workflows and a marked pointer block in `AGENTS.md`, runs the chosen adapter's setup (`openspec init` for OpenSpec), creates the labels, and prints or applies the ruleset and the secret steps (`claude setup-token`, `gh secret set`, the Claude GitHub App link).
   - `doctor` checks the secret, labels, ruleset, app, config and pin, and names what is missing.
   - `upgrade` bumps the pin and shows what changed.
@@ -43,14 +43,15 @@ The same retro also found four gaps that touch files which move anyway, so they 
 - The protected baseline can be added to by a config or a change, never shrunk by either. The no-go guard still runs the default branch's copy of the check, now from the pinned factory ref, so a PR cannot change it.
 - Moving to a public repo exposes the factory's workflows, scripts and skills. Nothing in them is secret, but task 1.2 checks that the inventory has no token, hostname, internal URL or tenant data before the first push.
 - Pinned reusable workflows run with the caller's permissions. The caller workflows keep today's explicit `permissions:` blocks, and the pin is a SHA, so a factory release cannot change what runs in a target repo until the owner bumps it.
-- Every file moved is in `.github/**`, `.claude/**` or `scripts/factory-*`, which are `no_go`. This change is built in interactive sessions with the owner, not by the factory.
+- Most files moved are on this repo's `no_go` baseline: `.github/**`, `.claude/**`, `scripts/check-no-go.js`, `scripts/babysit-round.js`, `scripts/pr-feedback.js` and the `scripts/factory-*.js` scripts. Tasks 1.2, 1.3, 5.2 and 6.1 edit only `design.md`, new-repo files and docs, which are not protected. This change is built in interactive sessions with the owner by choice, not by the baseline, and it is never started with `factory-ready`.
+- `factory/reviews-settled` cannot hang: it also turns to success once a configured timeout (`reviews_timeout_minutes`, default 30, counted from the last push) has passed, and names the bots that never posted.
 
 ## Out of scope
 
 - PAUL, GSD and bespoke adapters (a follow-up change each, after task 6.1).
 - Non-GitHub hosts and non-Claude agents.
 - Agents merging, parallel tasks, and a hosted or paid service.
-- Publishing to npm beyond what `npx` from the GitHub repo needs.
+- Publishing to npm. The CLI runs from the GitHub repo at a pinned ref.
 
 ## Autonomy
 
