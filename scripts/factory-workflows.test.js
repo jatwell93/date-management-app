@@ -210,7 +210,8 @@ test("the Claude step's timeout is below its job's, so a timeout fails the job",
 });
 
 test("the Claude step caps spend and bounds its API capacity retries below the step's timeout", () => {
-  const claude = FACTORY.slice(FACTORY.indexOf('- name: Run Claude'));
+  const run = FACTORY.slice(FACTORY.indexOf('\n  run:\n'), FACTORY.indexOf('\n  escalate:\n'));
+  const claude = run.slice(run.indexOf('- name: Run Claude'));
   assert.match(claude, /^ {12}--max-budget-usd 20$/m);
   assert.match(claude, /^ {10}CLAUDE_CODE_RETRY_WATCHDOG: '1'$/m);
   const wait = Number(/^ {10}CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: '(\d+)'$/m.exec(claude)[1]);
