@@ -7,7 +7,8 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 - [ ] 1.1 (owner) Create the public repo `jatwell93/software-factory` with a licence, branch protection on `main` and the same required-review rule as this repo.
       Demo: the repo exists, is public, and an empty PR cannot merge without review.
 - [ ] 1.2 Inventory every line in this repo's factory files that is specific to this repo, and check every file that will move for secrets, hostnames, internal URLs and tenant data. Write the result into `design.md`: one row per coupling with its config key, plus a clean-scan result.
-      Demo: `design.md` lists each coupling named in the proposal with a config key, and states the scan found nothing sensitive.- [ ] 1.3 Define the `factory.config.yml` schema and the spec-source adapter interface in `design.md`, with a JSON schema file and a typed adapter contract in the new repo.
+      Demo: `design.md` lists each coupling named in the proposal with a config key, and states the scan found nothing sensitive.
+- [ ] 1.3 Define the `factory.config.yml` schema and the spec-source adapter interface in `design.md`, with a JSON schema file and a typed adapter contract in the new repo.
       Demo: a sample config for this repo validates against the schema; a stub adapter that implements the contract passes the contract test.
       Blocked by: 1.2.
 
