@@ -4,9 +4,9 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 1. Ground work
 
-- [ ] 1.1 (owner) Create the public repo `jatwell93/software-factory` with a licence, branch protection on `main`, the same required-review rule as this repo, and a tag rule that blocks moving or deleting `v*` release tags.
+- [x] 1.1 (owner) Create the public repo `jatwell93/software-factory` with a licence, branch protection on `main`, the same required-review rule as this repo, and a tag rule that blocks moving or deleting `v*` release tags.
       Demo: the repo exists, is public, an empty PR cannot merge without review, and moving a `v*` tag is refused.
-- [ ] 1.2 Inventory every line in this repo's factory files that is specific to this repo, and check every file that will move for secrets, hostnames, internal URLs and tenant data. Write the result into `design.md`: one row per coupling with its config key, plus a clean-scan result.
+- [x] 1.2 Inventory every line in this repo's factory files that is specific to this repo, and check every file that will move for secrets, hostnames, internal URLs and tenant data. Write the result into `design.md`: one row per coupling with its config key, plus a clean-scan result.
       Demo: `design.md` lists each coupling named in the proposal with a config key, and states the scan found nothing sensitive.
 - [ ] 1.3 Define the `factory.config.yml` schema and the spec-source adapter interface in `design.md`, with a JSON schema file and a typed adapter contract in the new repo. The contract includes the adapter's project setup operation that `init` calls.
       Demo: a sample config for this repo validates against the schema; a stub adapter that implements the contract passes the contract test.
@@ -14,7 +14,7 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 2. Extract
 
-- [ ] 2.1 Move the factory scripts and their tests into the new repo. Make `check-no-go` take its baseline from the generic six paths (`.github/**`, `.claude/**`, `.githooks/**`, `AGENTS.md`, `CLAUDE.md`, `factory.config.yml`) plus the config. Move the main-branch git hooks with it, so `init` installs them. Add the change-id check as a function and as a CI check on PRs that add a change folder.
+- [ ] 2.1 Move the factory scripts and their tests into the new repo. Make `check-no-go` take its baseline from the generic six paths (`.github/**`, `.claude/**`, `.githooks/**`, `AGENTS.md`, `CLAUDE.md`, `factory.config.yml`) plus the config. Move the main-branch git hooks (`pre-commit`, `pre-push`) and a rewritten installer with it, so `init` installs them: no git-secrets case in the installer, any extra hook chained from `hooks.chain` in config. The git-secrets scripts and relay hooks stay in the consumer (`design.md` row 21). Add the change-id check as a function and as a CI check on PRs that add a change folder.
       Demo: `check-no-go` on a fixture with a config-listed path fails and names it; a config that removes a baseline path is a usage error; a PR adding a capitalised change folder fails the id check.
       Blocked by: 1.3.
 - [ ] 2.2 Move the OpenSpec reads and writes in `factory-route`, `factory-issue`, `factory-ticket` and `run-spec` behind the adapter interface, and ship the OpenSpec adapter.
