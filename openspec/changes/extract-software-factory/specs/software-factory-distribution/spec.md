@@ -26,7 +26,7 @@ The factory SHALL be published in the public repository `software-factory` with 
 
 A consumer SHALL configure the factory in `factory.config.yml` at its root. The file SHALL set the gate commands, extra protected paths, review bots, runner setup steps, spend cap, branch prefix, label names, default branch and spec source. The factory SHALL contain no value that belongs to one consumer.
 
-The protected baseline built into the factory SHALL be only `.github/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md` and `factory.config.yml`. A config or a change SHALL be able to add paths and SHALL NOT be able to remove a baseline path.
+The protected baseline built into the factory SHALL be only `.github/**`, `.claude/**`, `.githooks/**`, `AGENTS.md`, `CLAUDE.md` and `factory.config.yml`. The git hooks that refuse commits and pushes to the default branch SHALL ship with the factory, be installed by `init`, and stay on the baseline. A config or a change SHALL be able to add paths and SHALL NOT be able to remove a baseline path.
 
 #### Scenario: Extra protected path
 
