@@ -2,7 +2,7 @@
 
 ### Requirement: A factory run has a spend cap and waits out API capacity errors for a bounded time
 
-The factory's Claude step SHALL stop when its estimated spend reaches a fixed cap, set with `--max-budget-usd` in `claude_args`. The step SHALL set `CLAUDE_CODE_RETRY_WATCHDOG` to `1` so that `429` and `529` capacity errors are retried, and SHALL set `CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS` so that one request cannot wait until the step timeout. A run that ends on the cap or on an exhausted wait SHALL fail the step, so the existing one-retry rule and escalation apply to it.
+The factory's Claude step SHALL stop when its estimated spend reaches a fixed cap, set with `--max-budget-usd 20` in `claude_args`. The step SHALL set `CLAUDE_CODE_RETRY_WATCHDOG` to `1` so that `429` and `529` capacity errors are retried, and SHALL set `CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS` to `600000` (10 minutes), which is below the step's timeout, so that one request cannot wait until the step timeout. Changing the cap or the wait SHALL be a change to this requirement. A run that ends on the cap or on an exhausted wait SHALL fail the step, so the existing one-retry rule and escalation apply to it.
 
 #### Scenario: Run reaches the spend cap
 
