@@ -247,6 +247,13 @@ jobs:
         # Below the job's 90: a step timeout fails the job, so the report job
         # records it for a retry. A job timeout can end the run `cancelled`.
         timeout-minutes: 80
+        # Ride out 429/529 capacity errors instead of failing after the default
+        # retries, but bound one request's wait (10 min) so an outage ends the step
+        # long before the 80 minute timeout and the one factory retry takes over.
+        # Unbounded, the watchdog waits as long as the API keeps failing.
+        env:
+          CLAUDE_CODE_RETRY_WATCHDOG: '1'
+          CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: '600000'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Review events come from these bots; the action refuses other bot actors.
@@ -258,8 +265,12 @@ jobs:
             ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr == '' && 'The change runs as one PR (`pr: per-change`): this is its first task, so open that PR as the skill says for a first task.' || '' }}
             ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('The change runs as one PR (`pr: per-change`): this run is on PR #{0}, branch `{1}`, and its PR rules apply.', needs.route.outputs.pr, needs.route.outputs.ref) || '' }} ${{ needs.route.outputs.mode == 'task' && needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('Do task {0}. {1}', needs.route.outputs.task, steps.base.outputs.note) || '' }}
             You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.
+          # --max-budget-usd is an estimated-spend cap: a first value, not tuned,
+          # because past runs recorded no cost. No comments inside the block below:
+          # it is the raw argument string.
           claude_args: |
             --max-turns 200
+            --max-budget-usd 20
             --allowedTools "Read,Edit,Write,Glob,Grep,Skill,TodoWrite,Bash(git:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr checks:*),Bash(gh issue:*),Bash(gh label create:*),Bash(gh label list:*),Bash(gh run view:*),Bash(npm ci:*),Bash(npm run:*),Bash(npx openspec:*),Bash(npx prettier:*),Bash(node:*),Bash(cd:*)"
             --disallowedTools "Bash(gh pr merge:*),Bash(gh pr review:*),Bash(gh api:*),Bash(git push --force:*),Bash(git push -f:*),Bash(npm run test:prod:*),Bash(doppler:*),Bash(curl:*),Bash(wget:*)"
 

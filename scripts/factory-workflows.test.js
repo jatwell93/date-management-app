@@ -209,6 +209,16 @@ test("the Claude step's timeout is below its job's, so a timeout fails the job",
   assert.ok(step < job, `step ${step} < job ${job}`);
 });
 
+test("the Claude step caps spend and bounds its API capacity retries below the step's timeout", () => {
+  const claude = FACTORY.slice(FACTORY.indexOf('- name: Run Claude'));
+  assert.match(claude, /^ {12}--max-budget-usd 20$/m);
+  assert.match(claude, /^ {10}CLAUDE_CODE_RETRY_WATCHDOG: '1'$/m);
+  const wait = Number(/^ {10}CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: '(\d+)'$/m.exec(claude)[1]);
+  const stepMinutes = Number(/^ {8}timeout-minutes: (\d+)$/m.exec(claude)[1]);
+  assert.equal(wait, 600000);
+  assert.ok(wait < stepMinutes * 60000, `wait ${wait} ms < step ${stepMinutes} min`);
+});
+
 test('factory.yml escalates an owner task from main with the job token, no Claude run', () => {
   const escalate = FACTORY.slice(FACTORY.indexOf('\n  escalate:\n'));
   assert.ok(escalate.length > 1, 'escalate job present');
