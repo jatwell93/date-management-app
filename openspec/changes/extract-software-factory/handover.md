@@ -8,7 +8,7 @@ Group 1 is done: the public repo `jatwell93/software-factory` exists with a `v*`
 
 ## Next
 
-Task 2.1, remaining parts, in `C:\Users\josha\software-factory` (a separate clone, branch off `main`): port the other scripts and their tests (`pr-feedback`, `babysit-round`, `factory-route`, `factory-issue`, `factory-ticket`, `factory-escalate`, `factory-retry`, `factory-sweep`, `factory-digest`, `cleanup-merged`) and the main-branch git hooks with a rewritten installer (`design.md` row 21). Keep the OpenSpec reads in `lib/openspec-reads.js` until 2.2.
+Task 2.1, remaining parts, in the `jatwell93/software-factory` repo (clone it next to this repo and branch off `main`): port the other scripts and their tests (`pr-feedback`, `babysit-round`, `factory-route`, `factory-issue`, `factory-ticket`, `factory-escalate`, `factory-retry`, `factory-sweep`, `factory-digest`, `cleanup-merged`) and the main-branch git hooks with a rewritten installer (`design.md` row 21). Keep the OpenSpec reads in `lib/openspec-reads.js` until 2.2. The id check is only a script after 2.1; running it on PRs that add a change folder is part of 2.3 (`tasks.md`), so do not treat that as left over from 2.1.
 
 ## Open PRs
 
