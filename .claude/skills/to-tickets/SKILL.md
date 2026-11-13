@@ -1,23 +1,32 @@
 ---
 name: to-tickets
 description: >-
-  Slice an OpenSpec change into tracer-bullet tasks the factory can build one per
-  run, quiz the owner on the breakdown, then write them into the change's
+  Slice a spec change (OpenSpec) into tracer-bullet tasks the factory can build one
+  per run, quiz the owner on the breakdown, then write them into the change's
   tasks.md and publish them as GitHub sub-issues of the change's tracking issue
   with native blocking links. Use when the user says "/to-tickets <change-id>",
   "break this change into tickets", "slice the tasks", or has just written a
   proposal that the factory should build. Do NOT use for a change that fits one
-  run (write a one-task tasks.md instead), or for work outside OpenSpec.
+  run (write a one-task tasks.md instead), or for work outside a spec change.
 disable-model-invocation: true
 ---
 
 # To tickets
 
-Turn an OpenSpec change into **tasks**: tracer-bullet vertical slices, each
+Turn a spec change into **tasks**: tracer-bullet vertical slices, each
 declaring the tasks that **block** it. `tasks.md` stays the source of truth: the
 factory router, `(owner)` escalation, per-change ticking and `no_go` all read
 it. The GitHub issues are a published copy that shows the plan and its blocking
 edges, and each one closes when the PR that lands its task merges.
+
+## Settings
+
+Read `factory.config.yml`: `labels.change_prefix` (default `factory:`; a change's
+label is `<prefix><id>`, written `<change-label>` below), `labels.ready` (default
+`factory-ready`), `change_id_max_length` and `default_branch`.
+
+The factory's scripts are in `$FACTORY_DIR/scripts`. The runner sets
+`$FACTORY_DIR`; locally, set it to a checkout of the factory first.
 
 ## 1. Read the change
 
@@ -26,18 +35,24 @@ Read `openspec/changes/<id>/proposal.md` (including its `## Autonomy` block),
 `tasks.md`. Read the code the change touches, using the repository's own names.
 Look for prefactoring: "make the change easy, then make the easy change".
 
+Run `node "$FACTORY_DIR/scripts/check-change-ids.js"`. It fails when the change's id
+is one the factory cannot run (a bad character, or longer than
+`change_id_max_length`). Rename the change folder before you go on, because a
+change the factory cannot run never starts.
+
 ## 2. Draft vertical slices
 
 - Each task cuts a narrow but **complete** path through every layer it needs
-  (schema, Worker route, UI, tests), not one layer of the change.
+  (schema, API route, UI, tests), not one layer of the change.
 - Each task is **demoable** on its own: name what you can show when it lands.
   A task with no demo is a horizontal slice; rework it.
 - Each task fits **one factory run**: one fresh context window that has never
-  seen this conversation, about 30 to 60 minutes of work, inside the Claude
-  job's timeout. Prefactoring goes first.
-- A task that needs a `no_go` path (`BASELINE` in `scripts/check-no-go.js`
-  plus the proposal's `no_go` list), a vendor console or production access is an `(owner)` task, or
-  the change is not for the factory at all.
+  seen this conversation, about 30 to 60 minutes of work, inside the runner's
+  `timeout_minutes`. Prefactoring goes first.
+- A task that needs a `no_go` path (the factory's baseline, the config's
+  `protected_paths` and the proposal's `no_go` list), a vendor console or
+  production access is an `(owner)` task, or the change is not for the factory
+  at all.
 - **Wide refactors** (one mechanical change whose blast radius spans the
   codebase) use expand-migrate-contract instead: expand (new form beside the
   old), migrate in batches sized by blast radius, each blocked by the expand,
@@ -78,8 +93,8 @@ decision (a schema, a state machine) more exactly than prose can.
 
 ## 5. Publish the tickets
 
-1. Tracking issue: `n=$(node scripts/factory-issue.js <id>)` (it finds, adopts
-   or creates the one labelled `factory:<id>`).
+1. Tracking issue: `n=$(node "$FACTORY_DIR/scripts/factory-issue.js" <id>)` (it finds, adopts
+   or creates the one labelled `<change-label>`).
 2. For each task in file order (blockers first, so their numbers exist):
 
    ```bash
@@ -88,18 +103,18 @@ decision (a schema, a state machine) more exactly than prose can.
    ```
 
    Body: `## What to build` (end-to-end behaviour), `## Demo`, `## Acceptance
-criteria` as a checklist, and the line `Task <number> of OpenSpec change
+criteria` as a checklist, and the line `Task <number> of spec change
 <id>; tasks.md is the source of truth.` The blocking edges are native, so
    the body has no `Blocked by` section.
 
-   **Never label a ticket `factory:<id>`.** That label marks the tracking
-   issue; `scripts/factory-issue.js` and the router take the first open issue
+   **Never label a ticket `<change-label>`.** That label marks the tracking
+   issue; `factory-issue.js` and the router take the first open issue
    carrying it.
 
 3. Append each ticket's number to its task line as soon as the issue exists,
    before creating the next one: `- [ ] 1.2 <title> (#812): ...`. `run-spec`
    writes `Closes #812` into the PR that lands the task. Keep this exact
-   `(#<n>):` form: `scripts/factory-ticket.js` reads only the first `(#<n>):` on
+   `(#<n>):` form: `factory-ticket.js` reads only the first `(#<n>):` on
    the line, so an issue cited in the title as `(#734)` is never closed.
 
 If a run stops partway, re-run this step: skip every task whose line already
@@ -110,13 +125,14 @@ Do not close or edit the tracking issue.
 
 ## 6. Hand the plan to the owner
 
-Commit the change folder on a `feature/*` branch
-(`docs(openspec): tickets for <id>`) and push. Make sure the label exists
-(`gh label create factory-ready --color 0e8a16 --description "Owner approved: the factory may start this change" --force`;
-`factory-issue.js` already made `factory:<id>`), then open the PR labelled
-`factory:<id>` and `factory-ready` and run `babysit-pr`. The owner merging it
-is the approval that starts the build: the factory picks up the first task once
-the plan is on `main`. Report the PR, the tracking issue and the ticket numbers.
+Commit the change folder on a feature branch
+(`docs(openspec): tickets for <id>`) and push. Make sure the `ready` label exists
+(`gh label create <ready label> --color 0e8a16 --description "Owner approved: the factory may start this change" --force`;
+`factory-issue.js` already made `<change-label>`), then open the PR labelled
+`<change-label>` and with the `ready` label and run `babysit-pr`. The owner
+merging it is the approval that starts the build: the factory picks up the first
+task once the plan is on the default branch. Report the PR, the tracking issue
+and the ticket numbers.
 
 ---
 

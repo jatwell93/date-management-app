@@ -1,74 +1,31 @@
 name: Factory CI relay
 
-# When a CI workflow on a factory PR finishes, ask factory.yml for a babysit
-# pass by dispatching it with the PR number (OpenSpec change
-# add-spec-factory-runner, task 2.2).
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand.
 #
-# Why a relay: a workflow_run job runs with the base repository's write token,
-# and checking out the PR's code there is the "untrusted checkout in a
-# privileged context" pattern CodeQL rejects. This job checks out nothing and
-# runs no PR code; it only reads the PR's author and dispatches. A dispatch made
-# with GITHUB_TOKEN does start a workflow (workflow_dispatch is the exception to
-# the rule that GITHUB_TOKEN events start no runs).
+# The trigger lists the project's CI workflows, copied from `ci_workflows` in
+# factory.config.yml: a workflow_run trigger cannot read config, so `doctor`
+# fails when the two lists differ. Rerun `init` after changing `ci_workflows`.
 
 on:
   workflow_run:
-    # The CI workflows that run on pull requests. Must match CI_WORKFLOWS in
-    # scripts/pr-feedback.js (a test checks it): a babysit pass waits only for
-    # checks this relay reports. Not check_suite: GitHub does not start
-    # workflows from check suites that Actions itself created.
     workflows:
       - 'CodeQL Advanced'
-      - Database Conformance
-      - Deploy Frontend to Cloudflare Pages
-      - Deploy Workers API
-      - Frontend Test & Coverage
-      - Migrations E2E (real PostgreSQL)
-      - Secrets Scan
-      - Workers Bundle Size Check
-      - Workers Test
+      - 'Database Conformance'
+      - 'Deploy Frontend to Cloudflare Pages'
+      - 'Deploy Workers API'
+      - 'Frontend Test & Coverage'
+      - 'Migrations E2E (real PostgreSQL)'
+      - 'Secrets Scan'
+      - 'Workers Bundle Size Check'
+      - 'Workers Test'
     types: [completed]
 
 permissions:
-  actions: write # gh workflow run factory.yml and no-go-guard.yml
-  pull-requests: read # gh pr view (author)
-  statuses: read # the head's factory/no-go-guard status
+  actions: write
+  pull-requests: read
+  statuses: read
 
 jobs:
   relay:
-    name: Relay to the factory
-    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].number
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Dispatch a babysit pass for a factory PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
-        run: |
-          author=$(gh pr view "$PR" --repo "$REPO" --json author --jq .author.login)
-          if [ "$author" != "app/claude" ]; then
-            echo "PR #$PR is not a factory PR (author $author); nothing to relay"
-            exit 0
-          fi
-          gh workflow run factory.yml --repo "$REPO" -f pr="$PR"
-
-      # pull_request_target does not always fire on a push (#717), and then the
-      # required factory/no-go-guard status never arrives. CI has finished by
-      # now, so a head still without it was missed: run the guard for it.
-      - name: Re-run the no-go guard if the head has no status
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
-        run: |
-          author=$(gh pr view "$PR" --repo "$REPO" --json author --jq .author.login)
-          [ "$author" = "app/claude" ] || exit 0
-          head=$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)
-          seen=$(gh api "repos/$REPO/commits/$head/statuses?per_page=100" \
-            --jq '[.[] | select(.context == "factory/no-go-guard")] | length')
-          if [ "$seen" = 0 ]; then
-            echo "PR #$PR head $head has no factory/no-go-guard status; dispatching the guard"
-            gh workflow run no-go-guard.yml --repo "$REPO" --ref main -f pr="$PR"
-          fi
+    uses: jatwell93/software-factory/.github/workflows/factory-ci-relay.yml@7b9a691b7d817c4448c36d8ca7eda6cb0e2bbd37

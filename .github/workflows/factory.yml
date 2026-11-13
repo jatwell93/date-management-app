@@ -1,65 +1,21 @@
 name: Factory
 
-# Runs OpenSpec changes unattended (OpenSpec change add-spec-factory-runner).
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand. The triggers live here
+# because a reusable workflow cannot carry its own.
 #
-#   workflow_dispatch(change_id)          -> run-spec: one task, one PR
-#   factory PR merged                      -> run-spec: the next task      (2.1)
-#   review, review comment, or CI finished -> babysit-pr: one-shot pass   (2.2)
-#     on a factory PR (CI runs arrive as a
-#     dispatch with `pr`, from factory-ci-relay.yml)
-#   owner removes needs-human from the     -> run-spec: the held task     (3.1)
-#     change's tracking issue
-#   owner adds factory-ready to the        -> run-spec: the first task
-#     change's tracking issue                 (factory-tickets-and-autostart 4.1)
-#   any task route whose next task is      -> escalate job, no Claude run  (5.1)
-#     marked (owner)
-#   hourly schedule                        -> the one retry of a failed run (5.4):
-#                                             babysit-pr if the change has an open
-#                                             factory PR, else run-spec; then the
-#                                             sweep of per-change PRs
-#
-# A change with `pr: per-change` in its Autonomy block keeps every task on one
-# PR (factory-per-change-pr, task 1.2). Each event on that PR advances it one
-# step: a babysit pass, the next task on the same branch, an owner task's
-# escalation, or marking it ready (the route job does that, no Claude run).
-# Its merge starts nothing. scripts/factory-sweep.js, run hourly, dispatches a
-# run for any per-change PR that has a step to take but no event to start it.
-#
-# No Claude run starts while the tracking issue has needs-human or
-# factory-retry. The report job labels a failed run's issue factory-retry
-# (scripts/factory-retry.js); a failed retry escalates instead.
-#
-# The `route` job (scripts/factory-route.js) decides which, if any, and skips
-# events with nothing to do (Actions checks still running, nothing actionable,
-# PR parked with needs-human) before a Claude run starts. Only PRs authored by
-# the Claude GitHub App AND labelled factory:<id> count.
-#
-# Why it cannot reach production:
-#   * Its only secret is CLAUDE_CODE_OAUTH_TOKEN. No Doppler, Neon, Stripe or
-#     Cloudflare credential is passed to it (scripts/factory-workflows.test.js
-#     fails if one is added).
-#   * It never merges. The main ruleset requires an approving review and the
-#     Claude GitHub App, which authors factory PRs, cannot approve its own PR.
-#     The deny-list below also blocks gh pr merge, gh pr review and gh api.
-#   * Protected paths (scripts/check-no-go.js) are checked before every push and
-#     again by the no-go-guard workflow, which runs main's copy of the check.
-#   * The Claude GitHub App has no Workflows write permission, so a factory PR
-#     cannot change this file, which review events on its PR run from.
-#
-# The action pushes as the Claude GitHub App, so CI runs on factory PRs (a push
-# made with the default GITHUB_TOKEN would not trigger other workflows).
+# The secret CLAUDE_CODE_OAUTH_TOKEN must exist in the repository's secrets. It is
+# the only secret this workflow gets.
 
 on:
   workflow_dispatch:
     inputs:
       change_id:
-        description: OpenSpec change id (a folder under openspec/changes/) to start a task on
+        description: Change id to start a task on
         required: false
         type: string
       pr:
-        # Set by factory-ci-relay.yml when a CI run on a factory PR finishes.
-        # The relay exists so that no workflow_run job here checks out PR code
-        # with this workflow's write token.
+        # Set by the CI relay when a CI run on a factory PR finishes.
         description: Factory PR number for a babysit pass
         required: false
         type: string
@@ -69,276 +25,30 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
-  # The owner removing needs-human from a tracking issue resumes the change
-  # (task 3.1); the owner adding factory-ready starts it (factory-tickets-and-
-  # autostart 4.1). The router ignores either unless the owner made it.
+  # The owner removing needs-human from a tracking issue resumes the change; the
+  # owner adding factory-ready starts it. The router ignores either unless the
+  # owner made it.
   issues:
     types: [labeled, unlabeled]
-  # The retry check (task 5.4): routes one failed run whose factory-retry label
-  # is over an hour old. Route job only unless a retry is due.
+  # The retry check: routes one failed run whose retry label is over an hour old.
   schedule:
     - cron: '23 * * * *'
 
+# The most any job of the reusable workflow may have. The reusable workflow
+# narrows it per job (only its sweep job gets actions: write).
 permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write # the action's OIDC login to the Claude GitHub App
-  actions: read # gh run view --log-failed
-  checks: read # gh pr checks (pr-feedback.js)
-  statuses: read # commit statuses such as factory/no-go-guard
+  id-token: write
+  actions: write
+  checks: read
+  statuses: read
 
 jobs:
-  route:
-    name: Route the event
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      mode: ${{ steps.route.outputs.mode }}
-      change_id: ${{ steps.route.outputs.change_id }}
-      pr: ${{ steps.route.outputs.pr }}
-      ref: ${{ steps.route.outputs.ref }}
-      task: ${{ steps.route.outputs.task }}
-      retry: ${{ steps.route.outputs.retry }}
-      per_change: ${{ steps.route.outputs.per_change }}
-    steps:
-      # Always main, never the PR: review events default to the PR's merge ref,
-      # and a factory PR must not be able to rewrite its own router.
-      - name: Checkout main
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Decide what this event needs
-        id: route
-        # bash, not the default `bash -e`: adds pipefail, so a crash in the
-        # router fails the step instead of being hidden by tee.
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node scripts/factory-route.js | tee -a "$GITHUB_OUTPUT"
-
-  # Its own job, so a failed sweep never fails the route job: that would skip
-  # a retry run whose label the router already swapped to factory-retrying.
-  # After the route job, so the sweep sees that label and leaves the change to
-  # the retry.
-  sweep:
-    name: Sweep the per-change PRs
-    needs: route
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # actions: write for `gh workflow run`; no Claude run happens in this job.
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: read
-      actions: write
-      checks: read
-      statuses: read
-    steps:
-      # main's copy, like the route job: no Claude run and no PR code here.
-      - name: Checkout main
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Dispatch a run for each per-change PR with a step to take
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/factory-sweep.js
-
-  run:
-    name: Run one task, one archive or one babysit pass
-    needs: route
-    if: needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive' || needs.route.outputs.mode == 'babysit'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    # New tasks and archive runs queue per change and babysit passes per PR; every run on a
-    # per-change PR queues per change. A running job is never cancelled; GitHub
-    # keeps only the newest queued one, which sees the latest state anyway.
-    # run-spec exits if a per-task factory PR is still open.
-    concurrency:
-      group: ${{ (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive' || needs.route.outputs.per_change == 'true') && format('factory-{0}', needs.route.outputs.change_id) || format('factory-babysit-{0}', needs.route.outputs.pr) }}
-      cancel-in-progress: false
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-        with:
-          # The PR branch for a babysit pass; main for a new task.
-          ref: ${{ needs.route.outputs.ref }}
-          fetch-depth: 0
-
-      # A task or archive run on a per-change PR starts from the PR branch. Merge main into it
-      # first, unless that brings in a workflow change: the Claude GitHub App
-      # has no Workflows permission, so GitHub would reject the push. Before the
-      # rules step below, whose skip-worktree files a merge cannot update.
-      - name: Merge main into a per-change PR branch
-        id: base
-        if: (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive') && needs.route.outputs.pr != ''
-        shell: bash
-        run: |
-          git fetch --quiet origin main
-          if git diff --name-only HEAD...origin/main | grep -q '^[.]github/'; then
-            echo "note=main changed .github since this branch; the task works on the older base, so say so in the PR body" >> "$GITHUB_OUTPUT"
-          elif ! git -c user.name='claude[bot]' -c user.email='209825114+claude[bot]@users.noreply.github.com' merge --no-edit origin/main; then
-            git merge --abort
-            echo "note=merging main conflicts; the task works on the older base, so say so in the PR body" >> "$GITHUB_OUTPUT"
-          fi
-
-      # A babysit pass works on the PR branch, but follows main's skills and
-      # checks: a factory PR that edited them (which no-go-guard blocks from
-      # merging) must not steer its own review passes before the merge.
-      # The restored files must never reach a commit: git checkout stages them,
-      # so unstage them and hide them from `git add` (skip-worktree for tracked
-      # files, .git/info/exclude for files only main has). Otherwise a pass on a
-      # branch behind main would commit main's newer rules, and check-no-go
-      # would park the PR for a protected-path edit it never made.
-      - name: Use main's copy of the factory's own rules
-        shell: bash
-        run: |
-          rules=(.claude AGENTS.md CLAUDE.md scripts/check-no-go.js scripts/babysit-round.js
-                 scripts/pr-feedback.js scripts/factory-route.js scripts/factory-issue.js scripts/factory-ticket.js
-                 scripts/factory-escalate.js scripts/factory-retry.js)
-          git fetch --quiet origin main
-          git checkout origin/main -- "${rules[@]}"
-          git reset --quiet -- "${rules[@]}"
-          git ls-files -z -- "${rules[@]}" | xargs -0 -r git update-index --skip-worktree
-          git ls-files --others --exclude-standard -- "${rules[@]}" | sed 's#^#/#' >> .git/info/exclude
-          git status --short
-
-      # A babysit pass on a per-change PR may find the change archived on the
-      # branch already (factory-tickets-and-autostart 5.1).
-      - name: Check the change exists
-        env:
-          CHANGE_ID: ${{ needs.route.outputs.change_id }}
-          MODE: ${{ needs.route.outputs.mode }}
-        shell: bash
-        run: |
-          test -f "openspec/changes/$CHANGE_ID/tasks.md" && exit 0
-          if [ "$MODE" = babysit ] && compgen -G "openspec/changes/archive/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$CHANGE_ID" >/dev/null; then exit 0; fi
-          echo "::error::no tasks.md for $CHANGE_ID"
-          exit 1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Run Claude
-        uses: anthropics/claude-code-action@v1
-        # Below the job's 90: a step timeout fails the job, so the report job
-        # records it for a retry. A job timeout can end the run `cancelled`.
-        timeout-minutes: 80
-        # Ride out 429/529 capacity errors instead of failing after the default
-        # retries, but bound one request's wait (10 min) so an outage ends the step
-        # long before the 80 minute timeout and the one factory retry takes over.
-        # Unbounded, the watchdog waits as long as the API keeps failing.
-        env:
-          CLAUDE_CODE_RETRY_WATCHDOG: '1'
-          CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: '600000'
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Review events come from these bots; the action refuses other bot actors.
-          allowed_bots: 'sentry[bot],codescene-delta-analysis[bot],copilot-pull-request-reviewer[bot],claude[bot],github-actions[bot]'
-          # change_id and pr come from the route job, which accepts only a plain
-          # change id and a PR number.
-          prompt: |
-            ${{ needs.route.outputs.mode == 'archive' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`. Every task is done: follow its "Archive a finished change" section.', needs.route.outputs.change_id) || needs.route.outputs.mode == 'task' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the OpenSpec change `{0}`.', needs.route.outputs.change_id) || format('Use the babysit-pr skill (.claude/skills/babysit-pr/SKILL.md) in one-shot mode on PR #{0}, a factory PR for the OpenSpec change `{1}`.', needs.route.outputs.pr, needs.route.outputs.change_id) }}
-            ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr == '' && 'The change runs as one PR (`pr: per-change`): this is its first task, so open that PR as the skill says for a first task.' || '' }}
-            ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('The change runs as one PR (`pr: per-change`): this run is on PR #{0}, branch `{1}`, and its PR rules apply.', needs.route.outputs.pr, needs.route.outputs.ref) || '' }} ${{ needs.route.outputs.mode == 'task' && needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('Do task {0}. {1}', needs.route.outputs.task, steps.base.outputs.note) || '' }}
-            You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.
-          # --max-budget-usd is an estimated-spend cap: a first value, not tuned,
-          # because past runs recorded no cost. No comments inside the block below:
-          # it is the raw argument string.
-          claude_args: |
-            --max-turns 200
-            --max-budget-usd 20
-            --allowedTools "Read,Edit,Write,Glob,Grep,Skill,TodoWrite,Bash(git:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr checks:*),Bash(gh issue:*),Bash(gh label create:*),Bash(gh label list:*),Bash(gh run view:*),Bash(npm ci:*),Bash(npm run:*),Bash(npx openspec:*),Bash(npx prettier:*),Bash(node:*),Bash(cd:*)"
-            --disallowedTools "Bash(gh pr merge:*),Bash(gh pr review:*),Bash(gh api:*),Bash(git push --force:*),Bash(git push -f:*),Bash(npm run test:prod:*),Bash(doppler:*),Bash(curl:*),Bash(wget:*)"
-
-  escalate:
-    name: Ask the owner to do an owner task
-    needs: route
-    if: needs.route.outputs.mode == 'escalate'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Same group as the change's task runs, so it never races one.
-    concurrency:
-      group: ${{ format('factory-{0}', needs.route.outputs.change_id) }}
-      cancel-in-progress: false
-    steps:
-      # main's copy, like the route job: no Claude run and no PR code here.
-      - name: Checkout main
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Label the tracking issue and comment the task
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CHANGE_ID: ${{ needs.route.outputs.change_id }}
-          TASK: ${{ needs.route.outputs.task }}
-          # The PR branch, for a per-change PR: its tasks.md has the task.
-          REF: ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.ref || '' }}
-        run: node scripts/factory-escalate.js "$CHANGE_ID" "$TASK" ${REF:+"$REF"}
-
-  report:
-    name: Record the run for a retry
-    needs: [route, run]
-    # A cancelled or skipped run records nothing.
-    if: always() && (needs.run.result == 'failure' || needs.run.result == 'success')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      # main's copy, like the route job: no Claude run and no PR code here.
-      - name: Checkout main
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Label the tracking issue for a retry, or clear it
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CHANGE_ID: ${{ needs.route.outputs.change_id }}
-          RESULT: ${{ needs.run.result }}
-          # Set only when this run is the scheduled retry (the route's `retry`).
-          RETRY: ${{ needs.route.outputs.retry }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          if [ "$RESULT" = failure ]; then
-            node scripts/factory-retry.js fail "$CHANGE_ID" "$RUN_URL"
-          elif [ -n "$RETRY" ]; then
-            # Only the retry itself ends factory-retrying; a parallel success
-            # must not reset the one-retry budget.
-            node scripts/factory-retry.js ok "$CHANGE_ID"
-          fi
+  factory:
+    uses: jatwell93/software-factory/.github/workflows/factory.yml@7b9a691b7d817c4448c36d8ca7eda6cb0e2bbd37
+    with:
+      factory_ref: 7b9a691b7d817c4448c36d8ca7eda6cb0e2bbd37
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
