@@ -1,26 +1,9 @@
 name: No-go guard
 
-# Fails a factory PR that touches a protected path (OpenSpec change
-# add-spec-factory-runner, task 1.2a). The factory's own check before each push
-# is only an instruction; this workflow is the gate.
-#
-# pull_request_target runs main's copy of this workflow and of
-# scripts/check-no-go.js, so a PR cannot edit the check that judges it. Every
-# active change's no_go list is read from main's copy of its proposal.md for the
-# same reason. NEVER check out or run the PR's code here: this trigger has a
-# write-capable token and runs on PRs from any branch.
-#
-# The result is posted as the commit status `factory/no-go-guard` on the PR head,
-# because a pull_request_target job's own check run is attached to the base
-# commit. Require `factory/no-go-guard` in the main ruleset. Non-factory PRs get
-# a success status, so the owner's own PRs are never blocked by it.
-
-#
-# pull_request_target does not always fire: on #717 a factory push started every
-# pull_request workflow but no run of this one. So factory-ci-relay.yml also
-# dispatches this workflow with `pr` when a CI run finishes on a factory PR whose
-# head has no `factory/no-go-guard` status. A dispatch reads the PR's head,
-# author and labels from the API, and runs only from main.
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand. See the reusable
+# workflow for why this triggers on pull_request_target and what it never checks
+# out. Require the status `factory/no-go-guard` in the default branch's ruleset.
 
 on:
   pull_request_target:
@@ -42,67 +25,7 @@ concurrency:
 
 jobs:
   guard:
-    name: No-go guard
-    # A dispatch from another branch would run that branch's copy of this file.
-    if: github.event_name == 'pull_request_target' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      REPO: ${{ github.repository }}
-      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      AUTHOR: ${{ github.event.pull_request.user.login }}
-      LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-    steps:
-      - name: Checkout main (never the PR head)
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Read the PR's head, author and labels (dispatch)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-            echo "pr must be a PR number, got '$PR_NUMBER'" >&2
-            exit 1
-          fi
-          gh api "repos/$REPO/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr.json"
-          {
-            echo "HEAD_SHA=$(jq -r .head.sha "$RUNNER_TEMP/pr.json")"
-            echo "AUTHOR=$(jq -r .user.login "$RUNNER_TEMP/pr.json")"
-            echo "LABELS=$(jq -c '[.labels[].name]' "$RUNNER_TEMP/pr.json")"
-          } >> "$GITHUB_ENV"
-
-      - name: Decide whether this is a factory PR
-        id: scope
-        run: node scripts/check-no-go.js scope >> "$GITHUB_OUTPUT"
-
-      - name: Mark non-factory PRs as passing
-        if: steps.scope.outputs.factory != 'true'
-        run: |
-          gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=success \
-            -f context=factory/no-go-guard -f description="Not a factory PR"
-
-      - name: Check the PR's files against no_go
-        if: steps.scope.outputs.factory == 'true'
-        run: |
-          gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate \
-            --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/pr-files.txt"
-          # A dispatch read the head first: if a push landed since, the files
-          # are the new head's, and that push's own run judges it.
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] &&
-            [ "$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)" != "$HEAD_SHA" ]; then
-            echo "PR #$PR_NUMBER moved past $HEAD_SHA; not posting a status for it"
-            exit 0
-          fi
-          # --change all: every active change's no_go list applies. Labels are
-          # editable by the factory, so they must not choose a narrower list.
-          if node scripts/check-no-go.js --change all --files "$RUNNER_TEMP/pr-files.txt"; then
-            gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=success \
-              -f context=factory/no-go-guard -f description="No protected path touched"
-          else
-            gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
-              -f context=factory/no-go-guard -f description="Factory PR touches a no_go path"
-            exit 1
-          fi
+    uses: jatwell93/software-factory/.github/workflows/no-go-guard.yml@7b9a691b7d817c4448c36d8ca7eda6cb0e2bbd37
+    with:
+      factory_ref: 7b9a691b7d817c4448c36d8ca7eda6cb0e2bbd37
+      pr: ${{ inputs.pr }}
