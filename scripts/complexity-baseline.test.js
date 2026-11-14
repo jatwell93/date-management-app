@@ -4,8 +4,8 @@
 //
 // When you fix a file and remove it from eslint.complexity-baseline.js, lower
 // MAX_ENTRIES to the new length. Never raise it: fix the new code instead.
-// Factory runs cannot edit either file (both are on the no_go baseline in
-// scripts/check-no-go.js).
+// Factory runs cannot edit either file (both are in `protected_paths` in
+// factory.config.yml).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -13,7 +13,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const BASELINE = require('../eslint.complexity-baseline.js');
-const MAX_ENTRIES = 61;
+const MAX_ENTRIES = 58;
 
 test('every complexity-baseline entry is an existing file', () => {
   const missing = BASELINE.filter((f) => !fs.existsSync(path.join(ROOT, f)));
