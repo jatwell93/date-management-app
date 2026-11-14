@@ -4,15 +4,15 @@ Updated: 2026-11-14 · main at 33f03455
 
 ## State
 
-Task 1.1 is done on branch `feature/factory-factory-pinned-proof-1.1`: `proof.md` created with its heading and the 1.1 line. The change runs as one per-change PR (`pr: per-change`), opened by task 1.1 as `WIP:`. Tracking issue is #788, with no owner decision pending.
+Tasks 1.1 and 1.2 are done on branch `feature/factory-factory-pinned-proof-1.1`: `proof.md` has its heading and the 1.1 and 1.2 lines. The change runs as one per-change PR (`pr: per-change`), #789. Tracking issue is #788, with no owner decision pending. Task 1.2 ran on an older base: the default branch changed `.github` after this branch was cut.
 
 ## Next
 
-Task 1.2: append `- 1.2: second task, same branch and PR.` to `openspec/changes/factory-pinned-proof/proof.md`, committed on this PR's branch with a `Factory-Task: 1.2` trailer.
+No unchecked task is left. The next run archives the change.
 
 ## Open PRs
 
-- The task 1.1 PR (`WIP: docs(openspec): ...`): checks pending at the time of writing, no review items yet.
+- #789 (`WIP: docs(openspec): ...`): carries both tasks, awaiting reviews and the owner's merge.
 
 ## Waiting on the user
 
