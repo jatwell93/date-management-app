@@ -1,22 +1,21 @@
 # Handover: extract-software-factory
 
-Updated: 2026-11-14 · main at 44b1b0fcd
+Updated: 2026-11-14 · main at 7c84e68cc
 
 ## State
 
-Groups 1 and 2 and task 3.1 are done. `jatwell93/software-factory` (main at `1b55a79`, 21 PRs) holds the config schema, the adapter contract and OpenSpec adapter, every script ported onto them, the reusable workflows, the five skills and the run-record digest. This repo runs it: `factory.yml` and five other workflows are thin callers pinned to `1b55a7946865384265a3fe07b8f53f400420f6e1` (#782, then pin bumps #785, #786, #787, #790); `factory.config.yml` is in place. The live proof ran on the pinned ref: change `factory-pinned-proof` went route, task 1.1, task 1.2, archive, `WIP:` dropped. Its PR #789 is open and waiting for the owner's approval and merge. The vendored scripts, skills and tests are still here (task 3.2).
+Groups 1 and 2 and tasks 3.1 and 3.2 are done. `jatwell93/software-factory` (main at `1b55a79`, 21 PRs) holds the config schema, the adapter contract and OpenSpec adapter, every script ported onto them, the reusable workflows, the five skills and the run-record digest. This repo runs it: `factory.yml` and five other workflows are thin callers pinned to `1b55a7946865384265a3fe07b8f53f400420f6e1` (#782, then pin bumps #785, #786, #787, #790); `factory.config.yml` is in place. The live proof ran on the pinned ref: change `factory-pinned-proof` went route, task 1.1, task 1.2, archive, `WIP:` dropped. Its PR #789 merged. Task 3.2 removed the 11 vendored factory scripts and their tests (`babysit-round`, `check-no-go`, `cleanup-merged`, `factory-*`, `pr-feedback`), their `test:tooling` entries, their `eslint.complexity-baseline.js` and `.claude/settings.json` allow entries, and shrank the `AGENTS.md` factory section to a pointer. The five skills stay as installed copies. `scripts/install-git-hooks.js`, `.githooks/**` and `git-hooks.test.js` stay: `prepare` runs the installer and the hooks chain this repo's secret scan.
 
 ## Next
 
-Task 3.2: delete the vendored factory scripts, tests and skills from this repo and shrink the `AGENTS.md` factory section to a pointer. Start after #789 merges. First `git grep` every importer of the scripts (`scripts/factory-*.js`, `pr-feedback.js`, `babysit-round.js`, `check-no-go.js`, `cleanup-merged.js`, `install-git-hooks.js`, which `package.json`'s `prepare` runs) and move that `prepare` hook to the factory's installer before deleting it. Then 4.1 `init` in the factory repo.
+Task 4.1 in the `jatwell93/software-factory` repo: `init` (detect stack, propose gates, write config, caller workflows, skills and the `AGENTS.md` block, run the adapter setup, create labels, print the ruleset and secret steps; idempotent). It must also adopt a project's own `.githooks` (this repo's) so a later change can drop `install-git-hooks.js` here. The ticked-in-passing items to carry into `init`/`doctor`: the label set (`factory-ready`, `factory-digest`, `factory-retry`, `factory-retrying`, `needs-human`), the `FACTORY_DIR` local setup, and the Actions approval policy.
 
 ## Open PRs
 
-- #789 docs(openspec): prove the factory on its pinned ref: CI green, `WIP:` dropped, needs one approving review (ruleset) and the owner's merge. Merging closes tracking issue #788.
+- None for this change besides the 3.2 PR (see the PR list).
 
 ## Waiting on the user
 
-- Approve and merge #789.
 - Rulesets: also require `factory/change-ids` (and optionally `factory/reviews-settled`, after it refreshes itself, see Learnings); enable "Block force pushes" on `main`.
 - Actions approval gate: later pushes by `github-actions[bot]` on a factory PR run as `action_required` until the owner clicks "Approve and run workflows". Same in #755 and #756, so not caused by the extraction. `approval_policy` is `first_time_contributors`; `first_time_contributors_new_to_github` may stop it (unchecked). Owner's call.
 - Whether a run that ends with denied tool calls and no PR should fail the job (today it reads `success`).

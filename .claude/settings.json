@@ -1,13 +1,6 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(node scripts/pr-feedback.js:*)",
-      "Bash(node scripts/check-no-go.js:*)",
-      "Bash(node scripts/cleanup-merged.js:*)",
-      "Bash(gh pr checks:*)",
-      "Bash(gh pr view:*)",
-      "Bash(gh run view:*)"
-    ]
+    "allow": ["Bash(gh pr checks:*)", "Bash(gh pr view:*)", "Bash(gh run view:*)"]
   },
   "hooks": {
     "PreToolUse": [

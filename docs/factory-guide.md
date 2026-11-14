@@ -58,7 +58,7 @@ no_go:
 
 ## What the factory will not do
 
-It never merges, never touches production, and never edits the protected paths: workflows, migrations, the backup script, the agent's own rules (`.claude/**`, `AGENTS.md`, `CLAUDE.md`), the lint gates and the factory's own scripts. The list is `BASELINE` in `scripts/check-no-go.js`, plus the `no_go` entries in the change's `proposal.md`. `node scripts/check-no-go.js --change <id>` checks a branch's changes against both and names any protected path they touch; it does not print the list itself.
+It never merges, never touches production, and never edits the protected paths: workflows, migrations, the backup script, the agent's own rules (`.claude/**`, `AGENTS.md`, `CLAUDE.md`), the lint gates and what `npm ci` runs (`package.json`, `package-lock.json`, `.npmrc`). The list is the factory's fixed baseline (`BASELINE` in `lib/baseline.js` of `jatwell93/software-factory`), plus `protected_paths` in `factory.config.yml`, plus the `no_go` entries in the change's `proposal.md`. With `FACTORY_DIR` set to a checkout of that repo, `node "$FACTORY_DIR/scripts/check-no-go.js" --change <id>` checks a branch's changes against all three and names any protected path they touch; it does not print the list itself.
 
 A task that needs a protected path, a vendor console, or production access is an **owner task**: write it `- [ ] 2.3 (owner) ...`. The factory stops there and asks you. Anything that needs a migration ends up this way, because `database/migrations/**` is protected. Billing, auth and production-data work is also best planned as owner tasks.
 
@@ -68,7 +68,7 @@ A task that needs a protected path, a vendor console, or production access is an
 |---|---|---|
 | A comment from the factory that mentions you, and `needs-human` on the tracking issue | It hit a question it should not guess | Answer in a comment, then **remove the `needs-human` label** |
 | `factory-retry` on the tracking issue | A run failed; one retry is queued | Wait. A second failure escalates with both run links |
-| Nothing happens for hours | The hourly check (`schedule`) is late; GitHub delays it | Wait. Check state with `node scripts/pr-feedback.js <pr>` |
+| Nothing happens for hours | The hourly check (`schedule`) is late; GitHub delays it | Wait. Check state with `node "$FACTORY_DIR/scripts/pr-feedback.js" <pr>`. A per-change PR gets no event when its quiet window ends: `gh workflow run factory.yml -f pr=<pr>` moves it on |
 | An owner task is next | The factory escalated it on purpose | Do it, tick it in `tasks.md`, remove `needs-human` |
 | "Branch is out of date" on a PR | `main` moved on | Use "Update branch", then merge |
 
@@ -82,7 +82,7 @@ To pause a change on purpose, add `needs-human` to its tracking issue. To start 
 | The tracking issue | The open issue labelled `factory:<id>` |
 | One ticket per task | Sub-issues of the tracking issue |
 | What the factory is allowed to do | `.claude/skills/run-spec/SKILL.md` |
-| Progress of a PR | `node scripts/pr-feedback.js <pr> --summary` |
+| Progress of a PR | `node "$FACTORY_DIR/scripts/pr-feedback.js" <pr> --summary` |
 | Finished changes | `openspec/changes/archive/` |
 
 ## Related
