@@ -38,13 +38,13 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 4. Setup CLI
 
-- [ ] 4.1 `init`: detect stack, propose gates, write config, caller workflows and the `AGENTS.md` block, run the adapter setup, create labels, print the ruleset and secret steps. Idempotent.
+- [x] 4.1 `init`: detect stack, propose gates, write config, caller workflows and the `AGENTS.md` block, run the adapter setup, create labels, print the ruleset and secret steps. Idempotent. (software-factory #23: `scripts/factory-init.js`. It also writes the skills and hooks; a project's own hooks are replaced only with `--adopt-hooks`, so this repo's `install-git-hooks.js` can be dropped once `hooks.chain` covers its secret scan.)
       Demo: on an empty fixture repo `init` writes the files; a second run changes nothing.
       Blocked by: 2.4.
-- [ ] 4.2 `doctor` and `upgrade`: `doctor` checks secret, labels, ruleset, app, config and pin (warning on a branch or unprotected tag) and prints the fix command for each gap; `upgrade` bumps the pin and shows the diff.
+- [x] 4.2 `doctor` and `upgrade`: `doctor` checks secret, labels, ruleset, app, config and pin (warning on a branch or unprotected tag) and prints the fix command for each gap; `upgrade` bumps the pin and shows the diff. (software-factory #24: `factory-doctor.js`, `factory-upgrade.js`. The app cannot be checked from a script, so `doctor` reports it as skipped.)
       Demo: `doctor` on a half-set-up fixture lists exactly the missing items.
       Blocked by: 4.1.
-- [ ] 4.3 `new-change`: scaffold a change folder through the adapter, refusing an invalid id. `to-tickets` already runs `check-change-ids.js` before it slices (task 2.4), so this task adds only `new-change`.
+- [x] 4.3 `new-change`: scaffold a change folder through the adapter, refusing an invalid id. `to-tickets` already runs `check-change-ids.js` before it slices (task 2.4), so this task adds only `new-change`. (software-factory #25: `factory-new-change.js`. It also refuses an archived id and a title with a line break.)
       Demo: it creates a valid change for OpenSpec with no shell redirects; `new-change Fix-Thing` refuses and writes nothing.
       Blocked by: 2.2.
 
