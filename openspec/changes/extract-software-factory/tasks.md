@@ -32,9 +32,9 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 - [x] 3.1 Add `factory.config.yml` to this repo with its gates, migrations, backup script and lint gates as config, and switch its workflows to the pinned reusable ones. Keep `factory/no-go-guard` and `Workers CI Gate` as the check names.
       Demo: a factory run on a small change in this repo opens a PR with the same checks and labels as before.
       Blocked by: 2.3, 2.4.
-- [ ] 3.2 Delete the vendored factory scripts, skills and tests from this repo, and shrink the `AGENTS.md` factory section to a pointer to the factory docs.
+- [x] 3.2 Delete the vendored factory scripts and tests from this repo, and shrink the `AGENTS.md` factory section to a pointer to the factory docs. The five skills stay: the runner reads them from `.claude/skills/`, so they are installed copies of the factory's now, not vendored code. `scripts/install-git-hooks.js`, `.githooks/**` and `git-hooks.test.js` stay until `init` (4.1) can adopt this repo's own hooks (they chain its secret scan).
       Demo: `npm run test:tooling` and `npm run lint` pass; `git grep factory-route` finds no script.
-      Blocked by: 3.1 and one clean factory run on the pinned ref.
+      Blocked by: 3.1 and one clean factory run on the pinned ref (`factory-pinned-proof`, #789).
 
 ## 4. Setup CLI
 
