@@ -56,3 +56,37 @@ The new repo starts from a fresh history: files are copied, not pushed with this
 - **Config schema and adapter contract:** task 1.3 turns the keys above into a JSON schema, and the adapter operations in the spec into a typed contract.
 - **Gates are by changed path, not by package.** `gates[].when` takes globs, so a monorepo can run `test:db` only for `workers/**` while a single-package repo has one entry with no `when`.
 - **Bot profiles are not built.** `review_bots` names the bots and the skill's notes are generic (row 8). If one bot's behaviour ever needs code, the profile belongs in the factory, not config, and adding it is a factory release; naming an unknown bot needs no release.
+
+## 4. PAUL and GSD adapter research (task 6.1)
+
+Read on 2026-11-19 through `gh api` only; nothing installed or run. Sources: PAUL `ChristopherKahler/paul` (`src/templates/{PLAN,STATE,ROADMAP,milestone-archive}.md`, `src/references/plan-format.md`, `src/workflows/complete-milestone.md`); GSD `open-gsd/gsd-core` branch `next` (`gsd-core/templates/{state,roadmap,phase-prompt,milestone-archive,summary-standard}.md`). Findings come from templates and workflows, not from running either tool, so a "yes" means the format carries the data, not that it was tried.
+
+The two share one shape. Both keep `ROADMAP.md` with phases (`### Phase N: name`, decimals for insertions) and plan checkboxes (`- [ ] 01-01: description`). Each plan is `phases/<NN-slug>/<phase>-<plan>-PLAN.md` with YAML frontmatter. Done is recorded by a `SUMMARY.md` beside the plan and a ticked roadmap line. A shipped milestone is archived under `milestones/`. Roots differ: PAUL `.paul/`, GSD `.planning/`.
+
+Mapping choice: change = phase (its directory slug is lowercase-hyphen and fits the id rule; a milestone version such as `v1.0` does not). Task = plan.
+
+| Method | PAUL | GSD | Gap |
+|---|---|---|---|
+| `listChanges` | yes: phase dirs not in a shipped milestone | yes: same | "Active" needs a rule: phase not listed in any `milestones/` archive |
+| `listTasks` | yes: roadmap plan lines; `depends_on` gives `blockedBy` | yes: same | Plan ids (`01-02`) are not dotted like `2.1`; the contract only needs a string |
+| `owner` flag | partial: `autonomous: false` means a checkpoint needs the user | partial: same field | A checkpoint is not the same as "only the owner can do it"; needs a sidecar or a marker |
+| `readAutonomy` | no | no | No `merge`, `pr`, `noGo` or `issue` field in either; defaults plus a sidecar file or factory config |
+| `tickTask` | partial: tick roadmap line | partial: tick roadmap line | Both tools expect UNIFY or a `SUMMARY.md` to close a plan; a bare tick leaves STATE.md out of step |
+| `archive` | no per phase | no per phase | Only a whole milestone archives; archiving one phase has no native form |
+| `scaffold` | partial | partial | Needs a roadmap entry plus a phase directory; no PLAN.md can be empty and valid (`requirements` must be non-empty in GSD) |
+| `setup` | yes: `.paul/` init | yes: `.planning/` init | Both ship an installer. Do not call it: GSD's guidance says read, never run |
+| `isArchived` | partial | partial | True when the milestone archive lists the phase; ties to the `archive` gap |
+| `archivedTitle` | yes: phase name from the archive | yes: same | None |
+| `changesIn` | yes: path prefix `.paul/phases/<dir>/` | yes: `.planning/phases/<dir>/` | None |
+
+Verdict: both fit the read half of the interface (list, tasks, `changesIn`, title). Neither fits the write half without a decision: `readAutonomy`, per-change `archive` and a safe `tickTask`.
+
+What a bespoke adapter needs for either:
+
+- A rule for "active change" that does not depend on running the tool.
+- Autonomy and `owner` in a sidecar file (for example `factory.yml` beside the phase), since the format has no field.
+- `tickTask` that edits the roadmap line only, and a factory step that asks the agent to run the tool's own close step (UNIFY, or GSD summary) before the tick.
+- A decision on `archive`: either map change to milestone (and cope with `v1.0` ids) or leave per-phase archive as a no-op and let `isArchived` follow the milestone.
+- GSD only: its format moves fast (schema-generated STATE frontmatter, many ADRs). Pin a tested commit.
+
+Follow-up changes, one per adapter, are opened under `openspec/changes/` as `add-paul-adapter` and `add-gsd-adapter`.

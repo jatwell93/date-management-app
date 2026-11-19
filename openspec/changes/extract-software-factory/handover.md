@@ -15,7 +15,7 @@ A second change on time-planner is being planned in the builder session, to prov
 1. Task 5.1 close: after the second time-planner change merges, read the log, write "5.1 gaps" here, tick 5.1 in `tasks.md`.
 2. Factory follow-ups, small PRs in software-factory: `docs/owner-setup.md` says the first factory push on a private repo needs "Approve and run workflows" (no automatic fix); `init` lists the files `openspec init` created (it lists only its own).
 3. Task 5.2: quickstart, and move `docs/factory-guide.md` into the factory repo, using the 5.1 gaps.
-4. Task 6.1: PAUL and GSD research. Use `https://github.com/open-gsd/gsd-core` for GSD only: an older GSD distribution is retired and may be compromised. Read, never install or run anything from it: no `npx`, no install script. Read its files through `gh api` or a web fetch, write the findings (task, status and archive formats; what the adapter interface covers or lacks), build no adapter.
+4. Task 6.1: DONE on branch `feature/extract-software-factory-6-1-research` (design.md section 4; follow-ups `add-paul-adapter` and `add-gsd-adapter` open). Read-only research, nothing installed.
 5. Move this repo's pin: run `upgrade` from a factory checkout at the target commit (it raises permissions and the change-ids trigger). Do it after the proof, not mid-run.
 
 ## Open PRs
