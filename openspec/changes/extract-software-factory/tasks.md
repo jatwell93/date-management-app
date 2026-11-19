@@ -50,7 +50,7 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 5. Proof
 
-- [ ] 5.1 (owner) Choose a second repo, ideally not a monorepo and with a different gate. Run `init`, complete the owner steps `doctor` lists, and run one small change through the factory. Count every time you touch the keyboard and write the gaps into `handover.md`.
+- [x] 5.1 (owner) Choose a second repo, ideally not a monorepo and with a different gate. Run `init`, complete the owner steps `doctor` lists, and run one small change through the factory. Count every time you touch the keyboard and write the gaps into `handover.md`.
       Demo: one change merged in the second repo with the owner only planning, merging and doing the listed setup steps.
       Blocked by: 4.2, 3.1.
 - [ ] 5.2 Write the quickstart (install, `init`, first change) and move `docs/factory-guide.md` into the new repo.
