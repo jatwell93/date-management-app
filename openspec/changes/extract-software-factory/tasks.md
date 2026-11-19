@@ -59,6 +59,6 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 6. Next adapters
 
-- [ ] 6.1 Research PAUL and GSD: read each one's real task, status and archive format and write, for each, whether the adapter interface covers it and what it lacks. Draft what a bespoke adapter needs. Open one follow-up change per adapter. Build none here.
+- [x] 6.1 Research PAUL and GSD: read each one's real task, status and archive format and write, for each, whether the adapter interface covers it and what it lacks. Draft what a bespoke adapter needs. Open one follow-up change per adapter. Build none here.
       Demo: `design.md` has a section per framework with a yes or no for each interface method, and the follow-up changes are open.
       Blocked by: 1.3.
