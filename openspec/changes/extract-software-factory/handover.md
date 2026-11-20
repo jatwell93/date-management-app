@@ -1,10 +1,10 @@
 # Handover: extract-software-factory
 
-Updated: 2026-11-20 · main at a4579cab9 · software-factory main at `8791ba1`
+Updated: 2026-11-20 · main at 631ae8633 · software-factory main at `07a9dca`
 
 ## State
 
-Groups 1 to 4 are done. `jatwell93/software-factory` (public, GPL-3.0) holds the schema, adapter contract, OpenSpec adapter, scripts, reusable workflows, five skills, digest and the setup CLI. This repo runs it pinned to `1b55a7946865384265a3fe07b8f53f400420f6e1` and needs `upgrade` to move (see Next).
+Groups 1 to 4 are done. `jatwell93/software-factory` (public, GPL-3.0) holds the schema, adapter contract, OpenSpec adapter, scripts, reusable workflows, five skills, digest and the setup CLI. This repo runs it pinned to `07a9dcac600ccda4f52a59961eb5ab2d99bbf42f` (#797). The `docs/` folder now has the quickstart, the factory guide (moved in, generalised) and owner setup (#38).
 
 Task 5.1 ran on the private Python repo `jatwell93/time-planner`: `init`, `doctor`, the owner steps, plan PR #8, then change `weekly-plan-model` ran to a merged PR #9 (tasks 1.1 to 1.3 and the archive on one per-change PR). It found six factory bugs, all fixed and live in time-planner at pin `c099f2c`: private-repo token scopes (software-factory #31), no OpenSpec CLI on a project without `package.json` (#32), the factory not asked after reviews settle (#33), required statuses never posted for a head (#34), plus earlier #29 (owner-setup doc) and CRLF compare. The full log, one entry per gap, is `C:\Users\josha\proof-5-1-log.md` (outside both repos: copy it into "5.1 gaps" below when the proof ends).
 
@@ -12,10 +12,11 @@ The second change, `habit-tracking`, ran to a merged per-change PR #19 (tasks 1.
 
 ## Next
 
-1. Factory follow-ups, small PRs in software-factory: `docs/owner-setup.md` says the first factory push on a private repo needs "Approve and run workflows" (no automatic fix); `init` lists the files `openspec init` created (it lists only its own); an owner task that edits a protected path needs a documented route (own PR to `main`) or a guard exemption; `to-tickets` is invisible to the `Skill` tool (`disable-model-invocation`); `factory-new-change` scaffolds no `pr:` key.
-2. Task 5.2: quickstart, and move `docs/factory-guide.md` into the factory repo, using the 5.1 gaps.
-3. Move this repo's pin: run `upgrade` from a factory checkout at the target commit (full 40-character SHA; it raises permissions and the change-ids trigger). Do it after 5.2 starts, not mid-run.
+1. Task 5.2 demo (owner): someone who has not seen the repo follows `docs/quickstart.md` in software-factory to a first factory PR, on a scratch repo. Tick 5.2 when it works, and write what they stumbled on into the quickstart. The quickstart and the guide are written (software-factory #38); the demo is the only part left.
+2. Remove this repo's own copy `docs/factory-guide.md` (or shrink it to a link to the factory repo's) once the demo passes. It is a copy now.
+3. Live check of the new pin: the first factory PR here is the first babysit pass with the CI snapshot (#35) and `allowed_bots` `*`. Read `denied:` lines and the "Save the PR's CI state" step if it misbehaves.
 4. Follow-up changes `add-paul-adapter` and `add-gsd-adapter` (task 6.1 is done; design.md section 4).
+5. Smaller factory follow-ups, none blocking: a guard exemption for an owner edit of a protected path (the own-PR route is documented), the stale statuses after a revert push (cause unknown), and a second-PR hint for the ruleset picker.
 
 ## Open PRs
 
@@ -23,7 +24,8 @@ The second change, `habit-tracking`, ran to a merged per-change PR #19 (tasks 1.
 
 ## Waiting on the user
 
-- Actions approval policy in this repo (`first_time_contributors_new_to_github` may stop the click); also require `factory/change-ids` in this repo's ruleset and enable "Block force pushes" on `main`, if not done.
+- Actions approval policy in this repo (`first_time_contributors_new_to_github` may stop the click); also require `factory/change-ids` in this repo's `main` ruleset (it requires `factory/no-go-guard` but not `factory/change-ids`; `doctor` fails on it; time-planner already requires both) and enable "Block force pushes" on `main`, if not done.
+- Swap Sentry for Cursor Bugbot in `review_bots` (own PR, protected path) when the Sentry subscription ends. Sentry posts a review on few PRs, so every PR waits the 30-minute timeout for it today. Confirm Bugbot's login (`cursor`) and that it reviews factory PRs (authored by `claude[bot]`) before listing it.
 - Whether a run that ends with denied tool calls and no PR should fail the job (today `success`).
 - Confirm the Claude GitHub App covers time-planner (done: it does).
 
@@ -51,11 +53,16 @@ Fixed in software-factory:
 - The owner-setup doc was missing (#29).
 - The Claude action runs the agent with the Claude GitHub App's token, not the workflow's, so the babysit pass could not read checks on a private repo ("Resource not accessible by integration"). The workflow now saves the CI state first and `pr-feedback.js` reads it (#35). Checked after: the save step ran on the archive pass with no denied calls and no error. A babysit pass that needs it has not run since.
 
-Open (follow-ups, item 1 of Next):
+Closed after the proof (software-factory #36, #37, #38, #39):
 
-- The first factory push on a private repo needs the owner's "Approve and run workflows" click.
-- `init` does not list the files `openspec init` wrote (config, specs and changes `.gitkeep`, 6 commands, 6 skills).
-- The owner step "require the checks in a ruleset" does not say the checks exist only after a second PR has run; the picker is empty until then.
-- The no-go guard fails an owner's own edit of a protected path on a factory-labelled PR. Today's route: an own PR to `main`.
+- The first factory push on a private repo needs the owner's "Approve and run workflows" click: no automatic fix; documented in `owner-setup.md` and the quickstart.
+- `init` did not list the files `openspec init` wrote: it now does (`created <path> (adapter setup)`).
+- An owner task that edits a protected path: the own-PR route is documented in `owner-setup.md`. The guard still has no exemption, by design.
+- `to-tickets` was not in the `Skill` tool's list: `disable-model-invocation` removed. `factory-new-change` now writes a commented `# pr: per-change` hint.
+- A review from a bot that `review_bots` did not name failed the run (the action refused the actor) and queued a retry: `allowed_bots` is now every bot by default, with an optional list; `init --review-bot` writes `review_bots`. The bot logins seen so far are in `owner-setup.md`.
+
+Still open:
+
+- The owner step "require the checks in a ruleset" says the checks exist only after a second PR has run (the quickstart says so too); no automatic help, and `doctor` cannot tell you the picker is empty.
 - After the revert push on PR #19 the guard and change-ids statuses did not turn green; close and reopen fixed it. Cause not found.
-- `to-tickets` is not in the `Skill` tool's list; `factory-new-change` writes no `pr:` key; the Sentry login (`sentry`) was not findable from the repo.
+- The Sentry login (`sentry`) was not findable from the repo; the owner-setup doc now explains how to read a login from a PR.
