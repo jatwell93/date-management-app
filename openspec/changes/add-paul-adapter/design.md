@@ -1,6 +1,6 @@
 # Design: PAUL adapter
 
-Decisions for task 1.1. Each answers a gap listed in section 4 of `extract-software-factory/design.md`. Formats were read on 2026-11-23 from `ChristopherKahler/paul` through `gh api` (`src/templates/{ROADMAP,PLAN,STATE,milestone-archive}.md`, `src/workflows/{complete-milestone,unify-phase}.md`); nothing was installed or run. A "yes" means the format carries the data, not that a PAUL project was tried (that is task 1.3).
+Decisions for task 1.1. Each answers a gap listed in section 4 of `extract-software-factory/design.md`. Formats were read on 2026-11-23 from `ChristopherKahler/paul` through `gh api` (`src/templates/{ROADMAP,PLAN,STATE,milestone-archive}.md`, `src/workflows/{complete-milestone,unify-phase}.md`); nothing was installed or run. A "yes" means the format carries the data, not that a PAUL project was tried (that is task 1.5).
 
 ## Layout the adapter reads
 
@@ -67,6 +67,6 @@ A path under `.paul/phases/<dir>/` is a touch of that phase, if the phase is act
 
 ## Open (not decided here)
 
-- **Skills.** The five agent skills are written for OpenSpec (`openspec validate`, `openspec archive`, `tasks.md`). A PAUL run needs its own steps: run PAUL's close step before the tick, and an archive step that writes the marker. This is a change to the skills, not to the adapter: record it as task 1.4, decide it with the owner before 1.3.
+- **Skills.** The five agent skills are written for OpenSpec (`openspec validate`, `openspec archive`, `tasks.md`). A PAUL run needs its own steps: run PAUL's close step before the tick, and an archive step that writes the marker. This is a change to the skills, not to the adapter: the owner decides it in task 1.3 (an owner task, so no automated run takes it), it is built in task 1.4, and both come before the real-project run in task 1.5.
 - **Contract fixture.** The shared suite's fixture (`fix-one`, tasks `1.1` to `1.3`) is satisfied by the mapping above, with no change to the contract: phase directory `01-fix-one`, plans `01-01` to `01-03`.
 - **The `.paul/` roadmap table.** `ROADMAP.md` carries a status table and a "Current Milestone" block that PAUL maintains. The adapter never edits them; a tick that leaves the table stale is PAUL's close step's to fix.
