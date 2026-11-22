@@ -65,8 +65,20 @@ The adapter does not run PAUL's installer (non-goal). `setup` checks that `.paul
 
 A path under `.paul/phases/<dir>/` is a touch of that phase, if the phase is active. The roadmap and the milestone archives belong to no change.
 
+## Skills for a PAUL project (decided in task 1.3, 2026-11-23)
+
+The five agent skills are written for OpenSpec (`openspec validate`, `openspec archive`, `tasks.md`, `handover.md`). PAUL has no proposal or handover file; its equivalents are the plan's objective and `.paul/STATE.md`, and its own loop is PLAN, APPLY, UNIFY. Options weighed: the adapter supplies the instructions (A), a variant per source (B), conditional prose in one skill (C), delegation to PAUL's own loop (D). The owner chose:
+
+- **B for `run-spec` only, written in the style of D.** `skills/paul/run-spec/SKILL.md` builds one plan by following PAUL's `apply.md` then `unify.md` (command files read from the project's local `.claude/commands/paul/`; PAUL's global install in a home folder is not visible to a runner), runs the gates, ticks the roadmap line and opens the PR.
+- **Two skills, not five.** A PAUL project installs `run-spec` (its variant) and the shared `babysit-pr`. `to-tickets`, `handover` and `resume-change` stay OpenSpec-only: a PAUL project plans and resumes with PAUL's commands, and the factory takes its tasks from the roadmap through the adapter. `init`, `upgrade` and `doctor` install and check the set that matches `spec_source`.
+- **Planning stays with the owner.** A plan with no `PLAN.md` is escalated ("run `/paul:plan`"), as is a plan with `autonomous: false` or listed under `owner` in `factory.yml`. An APPLY checkpoint that needs a person escalates too.
+- **Archive does both** the marker and the state record: it writes `<phase-dir>/ARCHIVED` and sets "Last activity" and "Stopped at" in `STATE.md`, after checking every plan has its `SUMMARY.md` (a plan ticked without one was not UNIFYed; the run escalates instead of writing the summary).
+- `doctor` fails a PAUL project whose `.claude/commands/paul/apply.md` or `unify.md` is missing.
+
+Option A (the adapter supplies the instructions) stays the long-term candidate once the GSD adapter shows what the two share.
+
 ## Open (not decided here)
 
-- **Skills.** The five agent skills are written for OpenSpec (`openspec validate`, `openspec archive`, `tasks.md`). A PAUL run needs its own steps: run PAUL's close step before the tick, and an archive step that writes the marker. This is a change to the skills, not to the adapter: the owner decides it in task 1.3 (an owner task, so no automated run takes it), it is built in task 1.4, and both come before the real-project run in task 1.5.
+- **Unattended PAUL.** Whether an agent on a runner can follow PAUL's command files without the interactive session they were written for is unknown until task 1.5.
 - **Contract fixture.** The shared suite's fixture (`fix-one`, tasks `1.1` to `1.3`) is satisfied by the mapping above, with no change to the contract: phase directory `01-fix-one`, plans `01-01` to `01-03`.
 - **The `.paul/` roadmap table.** `ROADMAP.md` carries a status table and a "Current Milestone" block that PAUL maintains. The adapter never edits them; a tick that leaves the table stale is PAUL's close step's to fix.
