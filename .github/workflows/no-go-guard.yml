@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   guard:
-    uses: jatwell93/software-factory/.github/workflows/no-go-guard.yml@07a9dcac600ccda4f52a59961eb5ab2d99bbf42f
+    uses: jatwell93/software-factory/.github/workflows/no-go-guard.yml@074c6f7d76fc0ee0ac52ca8b03009df95f81e93c
     with:
-      factory_ref: 07a9dcac600ccda4f52a59961eb5ab2d99bbf42f
+      factory_ref: 074c6f7d76fc0ee0ac52ca8b03009df95f81e93c
       pr: ${{ inputs.pr }}
