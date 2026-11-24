@@ -11,6 +11,6 @@
 - [x] 1.4 Build the skill changes decided in 1.3, in the software-factory repo.
       Demo: `run-spec` on a PAUL fixture project ticks a plan and archives a phase without an `openspec` call.
       Blocked by: 1.3. (software-factory #41.)
-- [ ] 1.5 (owner) Run one small change on a real PAUL project through the factory.
+- [x] 1.5 (owner) Run one small change on a real PAUL project through the factory.
       Demo: a merged PR on that project.
-      Blocked by: 1.4.
+      Blocked by: 1.4. (review-radar #23, phase `security-alerts`: the factory built plan 05-01, ticked it, and escalated the owner plan 05-02 on issue #22. The `ARCHIVED` marker step is not yet seen live: it runs after 05-02.)
