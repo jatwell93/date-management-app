@@ -47,8 +47,8 @@ permissions:
 
 jobs:
   factory:
-    uses: jatwell93/software-factory/.github/workflows/factory.yml@25bb8bd9be4c8a87d71000a0727b20900128f905
+    uses: jatwell93/software-factory/.github/workflows/factory.yml@aa00aa5ca281dfee62b12bdc2c25fa65506746aa
     with:
-      factory_ref: 25bb8bd9be4c8a87d71000a0727b20900128f905
+      factory_ref: aa00aa5ca281dfee62b12bdc2c25fa65506746aa
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
