@@ -38,19 +38,19 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 4. Setup CLI
 
-- [ ] 4.1 `init`: detect stack, propose gates, write config, caller workflows and the `AGENTS.md` block, run the adapter setup, create labels, print the ruleset and secret steps. Idempotent.
+- [x] 4.1 `init`: detect stack, propose gates, write config, caller workflows and the `AGENTS.md` block, run the adapter setup, create labels, print the ruleset and secret steps. Idempotent. (software-factory #23: `scripts/factory-init.js`. It also writes the skills and hooks; a project's own hooks are replaced only with `--adopt-hooks`, so this repo's `install-git-hooks.js` can be dropped once `hooks.chain` covers its secret scan.)
       Demo: on an empty fixture repo `init` writes the files; a second run changes nothing.
       Blocked by: 2.4.
-- [ ] 4.2 `doctor` and `upgrade`: `doctor` checks secret, labels, ruleset, app, config and pin (warning on a branch or unprotected tag) and prints the fix command for each gap; `upgrade` bumps the pin and shows the diff.
+- [x] 4.2 `doctor` and `upgrade`: `doctor` checks secret, labels, ruleset, app, config and pin (warning on a branch or unprotected tag) and prints the fix command for each gap; `upgrade` bumps the pin and shows the diff. (software-factory #24: `factory-doctor.js`, `factory-upgrade.js`. The app cannot be checked from a script, so `doctor` reports it as skipped.)
       Demo: `doctor` on a half-set-up fixture lists exactly the missing items.
       Blocked by: 4.1.
-- [ ] 4.3 `new-change`: scaffold a change folder through the adapter, refusing an invalid id. `to-tickets` already runs `check-change-ids.js` before it slices (task 2.4), so this task adds only `new-change`.
+- [x] 4.3 `new-change`: scaffold a change folder through the adapter, refusing an invalid id. `to-tickets` already runs `check-change-ids.js` before it slices (task 2.4), so this task adds only `new-change`. (software-factory #25: `factory-new-change.js`. It also refuses an archived id and a title with a line break.)
       Demo: it creates a valid change for OpenSpec with no shell redirects; `new-change Fix-Thing` refuses and writes nothing.
       Blocked by: 2.2.
 
 ## 5. Proof
 
-- [ ] 5.1 (owner) Choose a second repo, ideally not a monorepo and with a different gate. Run `init`, complete the owner steps `doctor` lists, and run one small change through the factory. Count every time you touch the keyboard and write the gaps into `handover.md`.
+- [x] 5.1 (owner) Choose a second repo, ideally not a monorepo and with a different gate. Run `init`, complete the owner steps `doctor` lists, and run one small change through the factory. Count every time you touch the keyboard and write the gaps into `handover.md`.
       Demo: one change merged in the second repo with the owner only planning, merging and doing the listed setup steps.
       Blocked by: 4.2, 3.1.
 - [ ] 5.2 Write the quickstart (install, `init`, first change) and move `docs/factory-guide.md` into the new repo.
@@ -59,6 +59,6 @@ Built in interactive sessions: every task moves or edits a `no_go` path. Tasks i
 
 ## 6. Next adapters
 
-- [ ] 6.1 Research PAUL and GSD: read each one's real task, status and archive format and write, for each, whether the adapter interface covers it and what it lacks. Draft what a bespoke adapter needs. Open one follow-up change per adapter. Build none here.
+- [x] 6.1 Research PAUL and GSD: read each one's real task, status and archive format and write, for each, whether the adapter interface covers it and what it lacks. Draft what a bespoke adapter needs. Open one follow-up change per adapter. Build none here.
       Demo: `design.md` has a section per framework with a yes or no for each interface method, and the follow-up changes are open.
       Blocked by: 1.3.
