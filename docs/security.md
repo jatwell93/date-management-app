@@ -386,6 +386,8 @@ bash scripts/setup-git-secrets.sh
 # Creates pre-commit hook and configures patterns
 ```
 
+`npm install` points git at `.githooks/` (`core.hooksPath`), so git skips the hook this script writes to `.git/hooks`. `.githooks/pre-commit` runs the git-secrets scan itself whenever `git-secrets` is on `PATH`, so installing git-secrets and registering its patterns is enough.
+
 **Patterns Scanned**:
 
 - AWS access keys: `AKIA*`
@@ -400,7 +402,7 @@ bash scripts/setup-git-secrets.sh
 
 ```bash
 # Option 1: Manual scan (recommended before git commit)
-npm run secrets-scan
+git secrets --scan
 
 # Option 2: Automatic hook (runs on every commit)
 # Pre-commit hook blocks commits if secrets detected
@@ -660,7 +662,7 @@ If a vulnerability cannot be resolved safely, document the advisory, affected pa
 
 ```bash
 # Before committing:
-npm run secrets-scan
+git secrets --scan
 # If no errors → Safe to commit
 ```
 
@@ -733,7 +735,7 @@ npm run lint
 ubs src/
 
 # Secrets scanning
-npm run secrets-scan
+git secrets --scan
 
 # NPM dependency source policy
 npm run security:npm-supply-chain

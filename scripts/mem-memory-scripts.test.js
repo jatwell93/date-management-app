@@ -258,6 +258,28 @@ test('mem-log refuses a secret and writes nothing', () => {
   assert.equal(fs.existsSync(memoryJsonl), false);
 });
 
+test('mem-log refuses on main and appends on a feature branch', () => {
+  const repo = makeTempDir();
+  spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: repo });
+  const memoryJsonl = path.join(repo, 'memory.jsonl');
+  fs.writeFileSync(memoryJsonl, '');
+  const log = () =>
+    runNode('mem-log.js', ['WORKFLOW', 'Branch check', 'logged before the commit'], {
+      MEMORY_JSONL_PATH: memoryJsonl,
+      MEMORY_FILE_PATH: path.join(repo, 'project-memory.mv2'),
+    });
+
+  const onMain = log();
+  assert.equal(onMain.status, 1);
+  assert.match(onMain.stderr, /Refusing to log on main/);
+  assert.equal(fs.readFileSync(memoryJsonl, 'utf8'), '');
+
+  spawnSync('git', ['switch', '-q', '-c', 'feature/x'], { cwd: repo });
+  const onFeature = log();
+  assert.equal(onFeature.status, 0, onFeature.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(memoryJsonl, 'utf8')).title, 'Branch check');
+});
+
 function hasCommand(command) {
   return spawnSync(command, ['--version'], { encoding: 'utf8' }).status === 0;
 }

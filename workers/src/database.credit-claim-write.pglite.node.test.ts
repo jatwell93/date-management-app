@@ -448,6 +448,41 @@ describe('Workers credit-claim writes (real SQL)', () => {
       expect((await db.findCreditClaim(ORG, mine.value.id))?.id).toBe(mine.value.id);
     });
 
+    it('returns every timestamp as ISO-8601 UTC for the stored instant', async () => {
+      const built = await buildOneLine();
+      expect(built.ok).toBe(true);
+      if (!built.ok) return;
+      await sql`
+        UPDATE credit_claims
+        SET status = 'CREDITED', sent_at = '2026-09-22 10:00:00.123',
+            next_follow_up_at = '2026-09-29 10:00:00.456',
+            settled_at = '2026-10-01 08:30:00.789'
+        WHERE id = ${built.value.id}`;
+      await sql`UPDATE suppliers SET policy_updated_at = '2026-09-01 07:15:00.321'`;
+      await sql`UPDATE credit_claim_events SET created_at = '2026-09-22 10:00:01.654'`;
+
+      const claim = await db.findCreditClaim(ORG, built.value.id);
+
+      const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+      const expected: Array<[string | Date | null | undefined, string]> = [
+        [claim?.sentAt, '2026-09-22T10:00:00.123Z'],
+        [claim?.nextFollowUpAt, '2026-09-29T10:00:00.456Z'],
+        [claim?.settledAt, '2026-10-01T08:30:00.789Z'],
+        [claim?.supplier.policyUpdatedAt, '2026-09-01T07:15:00.321Z'],
+        [claim?.events[0].createdAt, '2026-09-22T10:00:01.654Z'],
+      ];
+      for (const [actual, instant] of expected) {
+        expect(actual).toMatch(iso);
+        expect(Date.parse(String(actual))).toBe(Date.parse(instant));
+      }
+    });
+
+    it('parses the ISO ...Z shape and the old zoneless text shape to the same instant', () => {
+      const instant = '2026-09-22T10:00:00.123Z';
+      expect(parseDbTimestamp(instant).toISOString()).toBe(instant);
+      expect(parseDbTimestamp('2026-09-22 10:00:00.123').toISOString()).toBe(instant);
+    });
+
     it('filters the list by the status partition it is given', async () => {
       const built = await buildOneLine();
       expect(built.ok).toBe(true);
