@@ -28,4 +28,4 @@ permissions:
 
 jobs:
   relay:
-    uses: jatwell93/software-factory/.github/workflows/factory-ci-relay.yml@aa00aa5ca281dfee62b12bdc2c25fa65506746aa
+    uses: jatwell93/software-factory/.github/workflows/factory-ci-relay.yml@6a8b03fa15d18ea0be199e04d33d0720715c8d9c
