@@ -1,6 +1,6 @@
 # Handover: extract-software-factory
 
-Updated: 2026-11-20 · main at 631ae8633 · software-factory main at `07a9dca`
+Updated: 2026-11-24 · main at 0b7f85bf0 · software-factory main at `efb8435` (this repo's pin is still `07a9dca`: move it with `factory-upgrade.js --ref efb843562248e144610a0b05aefa5aa8fc4fbb58` on a plain PR)
 
 ## State
 
@@ -15,8 +15,13 @@ The second change, `habit-tracking`, ran to a merged per-change PR #19 (tasks 1.
 1. Task 5.2 demo (owner): someone who has not seen the repo follows `docs/quickstart.md` in software-factory to a first factory PR, on a scratch repo. Tick 5.2 when it works, and write what they stumbled on into the quickstart. The quickstart and the guide are written (software-factory #38); the demo is the only part left.
 2. Remove this repo's own copy `docs/factory-guide.md` (or shrink it to a link to the factory repo's) once the demo passes. It is a copy now.
 3. Live check of the new pin: the first factory PR here is the first babysit pass with the CI snapshot (#35) and `allowed_bots` `*`. Read `denied:` lines and the "Save the PR's CI state" step if it misbehaves.
-4. Follow-up changes `add-paul-adapter` and `add-gsd-adapter` (task 6.1 is done; design.md section 4).
-5. Smaller factory follow-ups, none blocking: a guard exemption for an owner edit of a protected path (the own-PR route is documented), the stale statuses after a revert push (cause unknown), and a second-PR hint for the ruleset picker.
+4. `add-paul-adapter` is done and archived (#803), run live on review-radar. `add-gsd-adapter` is skipped for now (design.md section 4).
+5. Factory follow-ups found on the review-radar run, none blocking (software-factory):
+   - The PAUL `run-spec` archive step overwrote `STATE.md` "Last activity" and "Stopped at" while another phase was in progress (fixed by hand on review-radar #31). It should leave them alone when another phase is active.
+   - A new file in a gitignored folder is dropped silently by `git add`: review-radar ignored `backend/routers/` and `backend/services/`, so `url_validation.py` never reached #23 and `main` broke until #26. Add a `run-spec` check on `git status --ignored` and a `doctor` check for an ignore pattern that matches tracked source folders.
+   - A `tsc` gate run from the repo root needs `-p <dir>`: `doctor` or `init` could try each gate once.
+   - `reviews-settled`: the 15-minute `schedule` did not fire on a new repo (dispatch with `pr` re-evaluates), and a listed bot that never posts holds every PR for the full timeout.
+6. Smaller factory follow-ups, none blocking: a guard exemption for an owner edit of a protected path (the own-PR route is documented), the stale statuses after a revert push (cause unknown), and a second-PR hint for the ruleset picker.
 
 ## Open PRs
 

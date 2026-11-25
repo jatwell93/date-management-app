@@ -23,6 +23,6 @@ concurrency:
 
 jobs:
   digest:
-    uses: jatwell93/software-factory/.github/workflows/factory-digest.yml@07a9dcac600ccda4f52a59961eb5ab2d99bbf42f
+    uses: jatwell93/software-factory/.github/workflows/factory-digest.yml@aa00aa5ca281dfee62b12bdc2c25fa65506746aa
     with:
-      factory_ref: 07a9dcac600ccda4f52a59961eb5ab2d99bbf42f
+      factory_ref: aa00aa5ca281dfee62b12bdc2c25fa65506746aa

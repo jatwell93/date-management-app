@@ -66,3 +66,6 @@ timeout_minutes: 80
 hooks:
   chain:
     - scripts/pre-commit-secrets.sh
+# Sentry comments only on findings; its Seer check ends on every PR, so count that as its review.
+review_bot_checks:
+  sentry: Seer Code Review
