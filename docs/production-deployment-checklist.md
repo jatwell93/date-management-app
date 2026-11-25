@@ -56,7 +56,7 @@ This checklist ensures all critical systems are verified before deploying to pro
 
 - [x] **organizationId validation audited**
   - Verify: All Workers handlers validate organizationId from JWT
-  - Review: `workers/src/middleware/auth.ts` checks org scope
+  - Review: `authenticateApiRequest` in `workers/src/index-minimal.ts` resolves the organization from the Clerk session
   - Test: Attempt to access other org's data, verify 403 Unauthorized
 
 - [x] **CORS properly configured**

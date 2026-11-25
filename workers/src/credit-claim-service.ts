@@ -82,11 +82,12 @@ function toBase64(bytes: ArrayBuffer): string {
 }
 
 /**
- * Parse a timestamp read back from the DB. `sent_at::text` on a `timestamp(3)`
- * column has no timezone designator, and `new Date` reads such a string as *local*
- * time — correct on Workers only because its clock is UTC. Pin UTC explicitly so the
- * follow-up schedule does not depend on the runtime's timezone (the pglite harness
- * uses TIMESTAMPTZ and does emit an offset, so both shapes must work).
+ * Parse a timestamp read back from the DB. The credit-claim reads now return
+ * ISO 8601 `...Z` strings, which carry their own zone. The parser still accepts the
+ * old `sent_at::text` shape: a `timestamp(3)` column cast to text has no timezone
+ * designator, and `new Date` reads such a string as *local* time. Pin UTC explicitly
+ * so the follow-up schedule does not depend on the runtime's timezone (the pglite
+ * harness uses TIMESTAMPTZ and does emit an offset, so every shape must work).
  */
 export function parseDbTimestamp(value: string): Date {
   const hasZone = /(?:[Zz]|[+-]\d{2}:?\d{2})$/.test(value.trim());

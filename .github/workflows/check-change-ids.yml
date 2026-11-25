@@ -1,0 +1,31 @@
+name: Change ids
+
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand. Require the status
+# `factory/change-ids` in the default branch's ruleset: the workflow posts it on
+# the PR head, because a pull_request_target check run attaches to the base commit.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number whose head has no factory/change-ids status'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: change-ids-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  change-ids:
+    uses: jatwell93/software-factory/.github/workflows/check-change-ids.yml@aa00aa5ca281dfee62b12bdc2c25fa65506746aa
+    with:
+      factory_ref: aa00aa5ca281dfee62b12bdc2c25fa65506746aa
+      pr: ${{ inputs.pr }}

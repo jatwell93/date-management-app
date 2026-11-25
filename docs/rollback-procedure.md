@@ -4,7 +4,7 @@
 
 Use this procedure when a production deploy of the Worker (`workers/`) is causing errors and you need to return to a known-good state.
 
-The Worker is the only API. There is no fallback server. The earlier VPS/Express rollback target is retired; the last Express revision is the tag `express-sqlite-last` and is for reading or recovery only, not for serving traffic (see [`express-retirement-recovery.md`](./express-retirement-recovery.md)). The March 2026 drill of the old VPS procedure is kept unedited as a dated record in [`rollback-drill-2026-03-07.md`](./rollback-drill-2026-03-07.md).
+The Worker is the only API. There is no fallback server. The earlier VPS/Express rollback target is retired; the last Express revision is the tag `express-sqlite-last` and is for reading or recovery only, not for serving traffic (see [`express-retirement-recovery.md`](./express-retirement-recovery.md)).
 
 Rollback has three layers. Work them in order, and stop at the first one that fixes the problem:
 

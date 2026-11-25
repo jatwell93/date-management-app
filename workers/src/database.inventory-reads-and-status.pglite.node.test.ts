@@ -197,6 +197,19 @@ describe('inventory reads and derived status (real SQL)', () => {
       expect(two[1].locationName).toBe('Aisle 2');
     });
 
+    it('returns createdAt as ISO-8601 UTC for the stored instant', async () => {
+      await seedItem({
+        location: aisle1,
+        expiry: '2099-01-01',
+        createdAt: '2026-03-04T05:06:07.089Z',
+      });
+
+      const [item] = await makeDb().findRecentInventoryItemsByProductId(ORG, productId, 1);
+
+      expect(item.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(Date.parse(item.createdAt)).toBe(Date.parse('2026-03-04T05:06:07.089Z'));
+    });
+
     it("never returns another organization's items", async () => {
       const own = await seedItem({
         org: ORG,

@@ -194,8 +194,10 @@ neon branches create main --project-id <id>
 # Projects → Select project → Connection details → Reset password
 
 # 4. Update connection string
-DATABASE_URL=postgresql://new-user:new-pass@host/db?sslmode=require
-npm run migrate:prod
+export DATABASE_URL_UNPOOLED="postgresql://new-user:new-pass@host/db?sslmode=require"
+# Also set MIGRATION_TARGET_KIND, MIGRATION_ROLE and the other guard variables
+# listed in migrations.md, then:
+npm run migrate:status
 ```
 
 ### Neon: SSL/TLS connection errors
