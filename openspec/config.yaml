@@ -1,20 +1,38 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project-wide facts shown to the AI when creating artifacts.
+# Migrated from the retired openspec/project.md (see git history).
+context: |
+  Monorepo: frontend/, workers/, shared/. The API is the Cloudflare Worker in
+  workers/ on Neon Postgres. Express/SQLite is retired (last revision: tag
+  express-sqlite-last). Logic shared with the frontend lives in shared/domain/*.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Multi-tenancy golden rules:
+  1. Never take organizationId from client payloads; derive org from auth claims.
+  2. Service boundary = tenant boundary: every tenant-data method takes
+     organizationId as its first, required parameter and filters organization_id.
+  3. Deletes cascade: FK relations use onDelete CASCADE to prevent orphan data.
+  4. Logs and metrics include organizationId.
+  5. One API, one source of truth. SQL-dependent behaviour (including row order)
+     is covered by a real-SQL test: npm run test:db (pglite).
+  6. Schema changes go through one migration path: a numbered pair
+     database/migrations/NNNN_*.up.sql and .down.sql, applied by the runner in
+     src/database/migrations/ (the authority). Update the manifest and catalog
+     fingerprint with it; npm run test:migrations checks both.
+
+  Worker patterns: authenticateApiRequest verifies the Clerk token and reads
+  organization_id and role from the users row (workers/src/index-minimal.ts);
+  checkOrganizationEntitlement gates on subscription state before the handler.
+  Frontend: useActiveOrg() provides orgId and role; query keys include orgId.
+  Database naming: plural snake_case tables; tenant key organization_id (indexed),
+  mapped to organizationId in Worker results.
+
+# Per-artifact rules
+rules:
+  specs:
+    - Tenant-data requirements must state that organization is derived from auth claims, never client input.
+  design:
+    - Any schema change must name the migration pair and the manifest and fingerprint updates it needs.
+  tasks:
+    - Include a tenant-isolation test task for any new tenant-data query; it seeds a second organization's rows and asserts they never appear (npm run test:db).
+    - Mutation-verify the isolation test by removing the organization_id predicate and confirming it fails.
