@@ -133,5 +133,5 @@ Rollback: the down migration drops the added columns and indexes. Products creat
 
 ## Open Questions
 
-- Is `Metro $` the cost a store pays, or does the owner prefer a separate `Cost $` column? This design adds `Cost $` and leaves `Metro $` alone. If the two should be unified, only the seeder mapping changes.
+- Resolved: the base list carries its own `Cost $` column and `Metro $` keeps its current meaning.
 - Should the department-template button also be hidden for stores that already have many departments? This is a UI nicety and can be decided during implementation.

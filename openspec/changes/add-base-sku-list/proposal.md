@@ -35,3 +35,11 @@ A new store must upload a POS export (FRED, Z-office, ...) before the app shows 
 - **Frontend:** a first-run choice step (base list or own upload, then supplier), a store-areas "start from base list departments" dialog, and an over-plan banner.
 - **Tenancy:** every new query derives the organization from auth claims. Each new tenant-data query needs a real-SQL isolation test (`npm run test:db`).
 - **Out of scope:** a price-history table, a Worker upload endpoint for the owner (CLI only), custom supplier choice, and auto-push of prices to stores.
+
+## Autonomy
+
+```yaml
+merge: human
+```
+
+Tasks marked `(owner)` need a protected path, production access, a vendor console or data only the owner has. Everything else is built by the factory.
