@@ -4,12 +4,12 @@ Tasks are tracer-bullet slices: each one lands its own tests and docs and leaves
 
 ## 1. Schema and the owner's sheet
 
-- [ ] 1.1 Migration `0021_add_base_sku_list` (`.up.sql` and `.down.sql`). It adds `master_catalogue_entries.cost_price` and `base_rank` (partial unique index where not null), `products.retail_price`, `catalogue_entry_id` (FK, `ON DELETE SET NULL`), `base_list_cost_price`, `base_list_retail_price` and `locked_over_plan`, and `organizations.base_list_supplier` (CHECK `API`/`SIGMA`/`CH2`) and `base_list_adopted_at`. Update `manifest.json`, `catalog-fingerprint.json`, the prod-schema artifact and the three id lists (see the adding-a-migration checklist). Update the pglite harness schema if it is hand-written.
+- [ ] 1.1 Migration `0021_add_base_sku_list` (`.up.sql` and `.down.sql`). It adds `master_catalogue_entries.cost_price` and `base_rank` (non-unique partial index on active ranked rows), `products.catalogue_entry_id` (FK, `ON DELETE SET NULL`), `base_list_cost_price`, `base_list_retail_price` and `locked_over_plan`, and `organizations.base_list_supplier` (CHECK `API`/`SIGMA`/`CH2`) and `base_list_adopted_at`. Update `manifest.json`, `catalog-fingerprint.json`, the prod-schema artifact and the three id lists (see the adding-a-migration checklist). Update the pglite harness schema if it is hand-written.
       Demo: the migration applies and rolls back cleanly on a scratch database.
       Acceptance: `npm run test:migrations` and `npm run test:db` pass; a pglite test shows the down migration restores the prior columns.
 - [ ] 1.2 Extend the seeder (`src/operations/master-catalogue-seed.ts`, CLI, tests) with the new-layout headers `Department`, `Category`, `Cost $` and `Base Rank`. The layout is chosen by the presence of `Department` (design decision 2). Validate unique positive ranks, non-negative cost, and cost and `RRP $` present on ranked rows. Include the new fields in the blank-value guard and the dry-run diff.
       Demo: a dry run on a sample new-layout workbook prints added, changed and retired counts, and a legacy workbook still publishes unchanged.
-      Acceptance: `npm run test:operations` passes with cases for duplicate rank, missing cost on a ranked row, legacy layout, blank-guard refusal and retirement of a ranked entry (excluded from the allowance). Document the new sheet columns and the quarterly refresh steps in `docs/csv-upload-format.md` or a sibling doc.
+      Acceptance: `npm run test:operations` passes with cases for duplicate rank, missing cost on a ranked row, legacy layout, blank-guard refusal and retirement of a ranked entry (rank cleared, excluded from the allowance) and a rank swap between two rows in one run. Document the new sheet columns and the quarterly refresh steps in `docs/csv-upload-format.md` or a sibling doc.
 
 ## 2. Adopt the base list
 

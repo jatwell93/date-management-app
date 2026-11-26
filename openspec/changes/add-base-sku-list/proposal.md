@@ -11,7 +11,7 @@ A new store must upload a POS export (FRED, Z-office, ...) before the app shows 
 - **Top-up and price sync.** An admin or manager can top up from the base list after a tier upgrade. They can also apply the owner's quarterly price refresh on demand. Sync only touches prices the store has not edited. Nothing is ever deleted.
 - **Downgrade freeze.** If a store holds more SKUs than its tier allows, nothing is deleted. Base-list products past the allowance are locked and hidden from product lookup and new-expiry entry. Adoption, top-up and sync are blocked until the store is back under its limit. Products the store uploaded or edited itself are never locked.
 - **Store-area starter set.** A second, optional setup action on the store-areas page offers the list's departments as an editable checklist (rename, untick, add). Confirming it creates top-level department areas. The store then adds bays with the existing bay feature, for example "Cold and flu" then "Bay one".
-- **Retail price on products.** `products` gains a nullable `retail_price` so the list's retail price has somewhere to live.
+- **Retail price on products.** The list's retail price lands in the existing `products.retail_price` column (added in `0003`). This change adds no retail column.
 
 ## Capabilities
 
@@ -28,7 +28,7 @@ A new store must upload a POS export (FRED, Z-office, ...) before the app shows 
 
 - **Schema** (one migration pair, with manifest, fingerprint and prod schema updates).
   - `master_catalogue_entries`: `cost_price`, `base_rank`.
-  - `products`: `retail_price`, `catalogue_entry_id`, `base_list_cost_price`, `base_list_retail_price`, `locked_over_plan`.
+  - `products`: `catalogue_entry_id`, `base_list_cost_price`, `base_list_retail_price`, `locked_over_plan`.
   - `organizations`: `base_list_supplier`, `base_list_adopted_at`.
 - **Operator CLI:** `src/operations/master-catalogue-seed.ts` and `seed-master-catalogue-cli.ts`, plus their tests and the sheet format docs.
 - **Worker:** new `/api/base-list/*` and `/api/store-areas/department-templates` handlers in `workers/src/`, a lock-reconcile step on tier change (Stripe persistence path), and lock filters on product lookup.

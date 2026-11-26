@@ -5,7 +5,7 @@
 See `proposal.md` for motivation. Current state that shapes the approach:
 
 - `master_catalogue_entries` (migration `0006`, `retired_at` from `0009`) is global, keyed by unique `barcode`. It has `api_sku`, `sigma_sku`, `ch2_sku`, `category`, `sub_category`, `rrp` and `metro_price`. `src/operations/master-catalogue-seed.ts` upserts it from a workbook (`npm run seed:master-catalogue`). It reads headers by exact name: `API PDE`, `Sigma PDE`, `CH2 PDE`, `Category`, `Sub-Category`, `RRP $`, `Metro $`. It retires rows the sheet drops, refuses runs over a retire or blank threshold, supports `dryRun`, and logs a `catalogue_seed_runs` row.
-- `products` has `organization_id`, `barcode`, `sku` (NOT NULL), `name` and `cost_price`. It has unique indexes on `(organization_id, sku)` and `(organization_id, barcode)`. It has no retail column.
+- `products` has `organization_id`, `barcode`, `sku` (NOT NULL), `name` and `cost_price`. It has unique indexes on `(organization_id, sku)` and `(organization_id, barcode)`. It also has a nullable `retail_price` (migration `0003`, used by the markdown matrix); this change reuses it and neither adds nor drops it.
 - SKU caps are enforced by counting live rows (`workers/src/utils/usage-limits.ts`, `LAUNCH_TIER_LIMITS`: 500 / 5,000 / 50,000 / 250,000). A usage counter was tried and abandoned because it failed open. This design follows the counting rule.
 - `store_areas` is a two-level hierarchy: `parent_id` NULL is a department, set is a bay. Inventory references the bay. The unique index on `(organization_id, name, sub_department)` does not stop duplicates when `sub_department` is NULL (known gap), so duplicate handling must be explicit.
 - Only `workers/src/index-minimal.ts` is deployed. Uploads are limited to admin and manager. Organization identity comes from the authenticated `users` row.
@@ -29,7 +29,7 @@ See `proposal.md` for motivation. Current state that shapes the approach:
 
 ### 1. Extend the master catalogue; one ranked list, not three CSVs
 
-Add `cost_price` and `base_rank` (nullable, unique where not null) to `master_catalogue_entries`. Retail price reuses the existing `rrp`. A tier's allowance is `base_rank <= limit`, computed on the server. This keeps one source of truth and means Free is always a strict subset of Starter and Professional.
+Add `cost_price` and `base_rank` (nullable; indexed where not null but not unique, see below) to `master_catalogue_entries`. Retail price reuses the existing `rrp`. A tier's allowance is `base_rank <= limit`, computed on the server. This keeps one source of truth and means Free is always a strict subset of Starter and Professional.
 
 *Rejected:*
 - Three tier tables or CSVs would drift (an item on Free but not on Starter).
@@ -47,7 +47,7 @@ New headers `Department`, `Cost $` and `Base Rank` are optional. `Category` in t
 
 DB columns are not renamed. This avoids the six-artifact migration blast radius and leaves import enrichment untouched. The mismatch (DB `category` means department) is documented in the migration comment and the sheet-format doc.
 
-New validation: `Base Rank` must be a unique positive integer, `Cost $` must be a non-negative price, and a ranked row needs `Cost $` and `RRP $`. Ranked rows are included in the existing blank-value guard, so a refresh that wipes prices is refused.
+New validation: `Base Rank` must be a positive integer, unique across the whole sheet (checked by the seeder before any write, not by a database unique index: the seeder upserts in batches of 1,000, so a rank swap would trip an immediate unique constraint mid-run), `Cost $` must be a non-negative price, and a ranked row needs `Cost $` and `RRP $`. Retiring an entry also clears its `base_rank`, so a retired row never holds a rank another row reuses. Ties, if any slip through, break by `id` in every ordering. Ranked rows are included in the existing blank-value guard, so a refresh that wipes prices is refused.
 
 *Rejected:* renaming the columns, which touches every reader, test, manifest and fingerprint for no behaviour change.
 
@@ -55,7 +55,7 @@ New validation: `Base Rank` must be a unique positive integer, `Cost $` must be 
 
 Adoption and top-up run as a single `INSERT INTO products ... SELECT ... FROM master_catalogue_entries` in the Worker. They filter `retired_at IS NULL`, `base_rank IS NOT NULL`, `base_rank <= tierLimit` and the chosen supplier's SKU `IS NOT NULL`. They exclude rows the organization already holds by barcode or SKU. Rows are ordered by `base_rank`, with `LIMIT` set to the limit minus the live product count, and `ON CONFLICT DO NOTHING` covers both unique indexes. Nothing is streamed through the Worker, so there are no 50,000-row CPU or subrequest problems. The statement is idempotent.
 
-Brands: the same request first inserts the org's missing brands from the selected entries' `brand_name`, as `source = catalogue`, then links `products.brand_id`. This mirrors what enrichment does today, and it creates no tenant Supplier (the `brand-supplier-mapping` rule stays).
+Brands: the same request first inserts the org's missing brands from the selected entries' `brand_name`, with `source = 'REFERENCE'` (the existing catalogue-derived value allowed by the `brands` check constraint from `0006`), then links `products.brand_id`. This mirrors what enrichment does today, and it creates no tenant Supplier (the `brand-supplier-mapping` rule stays).
 
 Skipped counts come from a second COUNT: allowed rows lacking the chosen supplier SKU, and allowed rows not imported because the limit was reached.
 
@@ -119,7 +119,7 @@ The quarterly flow is: edit the sheet, run `npm run seed:master-catalogue` with 
 One additive migration `0021_add_base_sku_list` (`.up.sql` and `.down.sql`):
 
 - Adds nullable columns and the CHECK constraints listed in the proposal Impact.
-- Adds a partial unique index on `master_catalogue_entries(base_rank) WHERE base_rank IS NOT NULL`.
+- Adds a non-unique partial index on `master_catalogue_entries(base_rank) WHERE base_rank IS NOT NULL AND retired_at IS NULL`.
 - Adds an index on `products(organization_id, locked_over_plan)` and one on `products(catalogue_entry_id)`.
 - Makes no existing row change, so deploy needs no data backfill.
 
